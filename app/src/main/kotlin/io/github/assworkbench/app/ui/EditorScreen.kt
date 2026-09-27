@@ -1,0 +1,242 @@
+package io.github.assworkbench.app.ui
+
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Redo
+import androidx.compose.material.icons.automirrored.filled.Undo
+import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material.icons.filled.FontDownload
+import androidx.compose.material.icons.filled.Movie
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.SaveAs
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.Divider
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import io.github.assworkbench.app.EditorState
+import io.github.assworkbench.app.EditorViewModel
+import io.github.assworkbench.domain.AssEvent
+import io.github.assworkbench.fonts.FontMatchStatus
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun EditorScreen(
+    state: EditorState,
+    viewModel: EditorViewModel,
+    onOpenVideo: () -> Unit,
+    onOpenSubtitle: () -> Unit,
+    onImportFont: () -> Unit,
+    onSave: () -> Unit,
+    onSaveAs: () -> Unit,
+) {
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = {
+                    Column {
+                        Text(state.project.title + if (state.dirty) " *" else "")
+                        Text(
+                            "ASS · ${state.document.events.size} events · libass preview",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                },
+                actions = {
+                    IconButton(onClick = onOpenVideo) { Icon(Icons.Filled.Movie, "打开/更换视频") }
+                    IconButton(onClick = onOpenSubtitle) { Icon(Icons.Filled.FolderOpen, "打开/更换字幕") }
+                    IconButton(onClick = onImportFont) { Icon(Icons.Filled.FontDownload, "导入 TTF/OTF 字体") }
+                    IconButton(onClick = onSave, enabled = state.subtitleLoaded) { Icon(Icons.Filled.Save, "保存") }
+                    IconButton(onClick = onSaveAs, enabled = state.subtitleLoaded) { Icon(Icons.Filled.SaveAs, "另存为") }
+                    IconButton(onClick = viewModel::undo, enabled = state.canUndo) { Icon(Icons.AutoMirrored.Filled.Undo, "撤销") }
+                    IconButton(onClick = viewModel::redo, enabled = state.canRedo) { Icon(Icons.AutoMirrored.Filled.Redo, "重做") }
+                },
+            )
+        },
+        bottomBar = {
+            Text(
+                state.status,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        },
+    ) { padding ->
+        BoxWithConstraints(Modifier.fillMaxSize().padding(padding)) {
+            val horizontal = maxWidth >= 720.dp
+            ResizableSplitPane(
+                ratio = state.project.splitRatio,
+                horizontal = horizontal,
+                onRatioChange = viewModel::setSplitRatio,
+                first = { modifier ->
+                    VideoPreview(
+                        videoUri = state.project.videoUri,
+                        document = state.document,
+                        seekRequestMs = state.seekRequestMs,
+                        seekRequestNonce = state.seekRequestNonce,
+                        onPosition = viewModel::setPlaybackPosition,
+                        configDir = viewModel.rendererConfigDir(),
+                        fontsDir = viewModel.rendererFontsDir(),
+                        fontRevision = state.fontRevision,
+                        initialPositionMs = state.playbackPositionMs,
+                        modifier = modifier,
+                    )
+                },
+                second = { modifier -> SubtitleWorkbench(state, viewModel, onImportFont, modifier) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun SubtitleWorkbench(
+    state: EditorState,
+    viewModel: EditorViewModel,
+    onImportFont: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val focused = state.document.events.firstOrNull { it.id == state.focusedEventId }
+    Column(modifier.padding(8.dp)) {
+        OutlinedTextField(
+            value = state.query,
+            onValueChange = viewModel::setQuery,
+            singleLine = true,
+            label = { Text("搜索字幕") },
+            modifier = Modifier.fillMaxWidth(),
+        )
+        FontStatusRow(state, onImportFont)
+        Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("字幕总览", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+            Text("${state.filteredEvents.size}/${state.document.events.size}", style = MaterialTheme.typography.labelMedium)
+        }
+        LazyColumn(Modifier.weight(1f).fillMaxWidth()) {
+            items(state.filteredEvents, key = { it.id }) { event ->
+                SubtitleRow(
+                    event = event,
+                    checked = event.id in state.selectedEventIds,
+                    focused = event.id == state.focusedEventId,
+                    onCheck = { viewModel.toggleSelected(event.id) },
+                    onFocus = { viewModel.focusEvent(event.id, seek = false) },
+                    onJump = { viewModel.focusEvent(event.id, seek = true) },
+                )
+                Divider()
+            }
+        }
+        focused?.let { event ->
+            Divider()
+            FocusedEventEditor(event, viewModel)
+        }
+    }
+}
+
+@Composable
+private fun FontStatusRow(state: EditorState, onImportFont: () -> Unit) {
+    val exact = state.fontDiagnostics.count { it.status == FontMatchStatus.EXACT_IMPORTED }
+    val missing = state.fontDiagnostics.count { it.status == FontMatchStatus.MISSING }
+    val fallback = state.fontDiagnostics.count { it.status == FontMatchStatus.FALLBACK_ONLY }
+    Row(
+        Modifier.fillMaxWidth().padding(top = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(
+            "字体：${state.importedFonts.size} imported · $exact exact · $fallback fallback · $missing missing",
+            style = MaterialTheme.typography.labelSmall,
+            color = if (missing > 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(1f),
+        )
+        androidx.compose.material3.TextButton(onClick = onImportFont) { Text("导入字体") }
+    }
+}
+
+@Composable
+private fun SubtitleRow(
+    event: AssEvent,
+    checked: Boolean,
+    focused: Boolean,
+    onCheck: () -> Unit,
+    onFocus: () -> Unit,
+    onJump: () -> Unit,
+) {
+    Row(
+        Modifier.fillMaxWidth().clickable(onClick = onFocus).padding(vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Checkbox(checked = checked, onCheckedChange = { onCheck() })
+        Text("#${event.id}", modifier = Modifier.width(44.dp), style = MaterialTheme.typography.labelSmall)
+        Column(Modifier.width(104.dp)) {
+            Text(event.start.toAss(), style = MaterialTheme.typography.labelSmall)
+            Text(event.end.toAss(), style = MaterialTheme.typography.labelSmall)
+            Text("L${event.layer}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Text(
+            event.text,
+            modifier = Modifier.weight(1f),
+            maxLines = if (focused) 3 else 2,
+            overflow = TextOverflow.Ellipsis,
+            color = if (focused) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+        )
+        IconButton(onClick = onJump) { Icon(Icons.Filled.PlayArrow, "跳转") }
+    }
+}
+
+@Composable
+private fun FocusedEventEditor(event: AssEvent, viewModel: EditorViewModel) {
+    var startText by remember(event.id, event.start) { mutableStateOf(event.start.toAss()) }
+    var endText by remember(event.id, event.end) { mutableStateOf(event.end.toAss()) }
+
+    Column(Modifier.fillMaxWidth().padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text("当前字幕 · Style ${event.style} · Layer ${event.layer}", style = MaterialTheme.typography.titleSmall)
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            OutlinedTextField(
+                value = startText,
+                onValueChange = { startText = it },
+                label = { Text("开始") },
+                singleLine = true,
+                modifier = Modifier.weight(1f),
+            )
+            OutlinedTextField(
+                value = endText,
+                onValueChange = { endText = it },
+                label = { Text("结束") },
+                singleLine = true,
+                modifier = Modifier.weight(1f),
+            )
+        }
+        androidx.compose.material3.TextButton(onClick = { viewModel.updateFocusedTimes(startText, endText) }) { Text("应用时间") }
+        OutlinedTextField(
+            value = event.text,
+            onValueChange = viewModel::updateFocusedText,
+            label = { Text("文本（保留 ASS override tags）") },
+            modifier = Modifier.fillMaxWidth().heightIn(min = 84.dp, max = 180.dp),
+        )
+    }
+}
