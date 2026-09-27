@@ -5,7 +5,7 @@ plugins {
 
 android {
     namespace = "io.github.assworkbench.app"
-    compileSdk = 37
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "io.github.assworkbench.app"
