@@ -1,23 +1,19 @@
 # Roadmap
 
-## 0.4 — Foundation repair + explicit font assignment
-- [x] Fix split-pane divider accumulation; no snap-back during drag.
-- [x] Wire Adaptive Icon resources.
-- [x] Tri-state select-all for the current filtered result set.
-- [x] Imported-font picker for the focused Style.
-- [x] Selected events can apply one imported family to all referenced Styles in one undoable edit.
-- [x] Show exact/fallback/missing font status for the focused Style.
-- [ ] Real-device verify CJK rendering after explicitly assigning the imported family to Style.
-
-## 0.5 — Typesetting Workspace
-- [ ] Generalize HSR layout capabilities: font size/emphasis/colors/outline/shadow/blur.
-- [ ] Nine-grid alignment, margins and spacing.
-- [ ] Safe-area, collision and overflow diagnostics.
-- [ ] Fade and restrained soft-entry controls.
-- [ ] Bilingual layout presets including the HSR 60/40 model.
+## 0.5 — Typesetting Workspace (current)
+- [x] Focused Style typesetting panel.
+- [x] Font size, bold, italic, underline and strikeout.
+- [x] Character spacing, outline depth and shadow depth.
+- [x] Raw ASS primary/outline/back color editing.
+- [x] Nine-grid ASS alignment.
+- [x] Margin L/R/V editing.
+- [x] Preview safe-area overlay.
+- [x] Generalized HSR 3%/5% safe-area and 60/40 bilingual geometry preset.
+- [x] Source/target Style selection for the 60/40 preset.
+- [ ] Blur/fade/soft-entry remain Event-override work; they are intentionally not faked as Style fields.
 
 ## 0.6 — Bilingual + Review Workspace
-- [ ] Paired bilingual view so two ASS Events may render as one UI row.
+- [ ] Paired bilingual view so two ASS Events can render as one UI row.
 - [ ] Grouping layer so event count can double without list count doubling.
 - [ ] Generalize HSR source/reference/final proofreading.
 - [ ] Filters for modified, missing, timing mismatch and unreviewed.
@@ -31,6 +27,15 @@
 - [ ] Keep ordinary reference-video mode separate.
 
 ## 0.8 — Event overrides + visual placement
+- [ ] Blur, fade and restrained soft-entry tags.
+- [ ] Per-event override model and raw override view.
+- [ ] Drag preview to position and X/Y nudge.
+
 ## 0.9 — Batch + project/recovery
+- [ ] Range/sweep selection for touch.
+- [ ] Batch style/alignment/time operations.
+- [ ] Project binding and crash-recovery journal.
+- [ ] Divider ratio persistence.
+
 ## 0.10 — Round-trip and device audit
 ## 1.0 — Product acceptance

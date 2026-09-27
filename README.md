@@ -2,11 +2,11 @@
 
 A focused Android ASS subtitle workbench for phones and tablets.
 
-**Current version: 0.3.0**
+**Current version: 0.5.0**
 
 The app edits **ASS subtitles** while a local video is used only as reference media. It does **not** encode hard-subbed video and does **not** mux subtitles into containers.
 
-## 0.3 status
+## 0.5 status
 
 - independent reference-video and ASS file selection;
 - tablet preview-left / subtitle-list-right split with draggable divider;
@@ -35,3 +35,10 @@ JDK 17+ and Android SDK 35 are expected. CI installs Gradle 8.9 and builds a deb
 The authoritative preview uses `libmpvKt` 0.3.0, which bundles mpv/FFmpeg/libass. Because the distributed native binaries are GPL, this repository is licensed under **GPL-3.0-or-later**.
 
 See `docs/PRODUCT_SPEC_1_0.md`, `docs/ROADMAP.md`, and `THIRD_PARTY_NOTICES.md`.
+
+
+## 0.5 Typesetting Workspace
+
+The focused ASS Style now has a dedicated typesetting panel for size, emphasis, spacing, outline, shadow, colors, nine-grid alignment and margins. A preview guide can show the safe area and the two central bilingual boundaries. The 60/40 bilingual geometry is generalized from the HSR layout workbench: 3% horizontal safe margins, 5% vertical safe margins, a protected central gap, 60% of the remaining safe height for the source region above and 40% for the target region below.
+
+Blur, fade and transform-based soft entry are not represented as fake Style properties; they remain planned Event override work.

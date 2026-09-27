@@ -110,6 +110,7 @@ fun EditorScreen(
                         fontsDir = viewModel.rendererFontsDir(),
                         fontRevision = state.fontRevision,
                         initialPositionMs = state.playbackPositionMs,
+                        showLayoutGuides = state.showLayoutGuides,
                         modifier = modifier,
                     )
                 },
@@ -127,6 +128,8 @@ private fun SubtitleWorkbench(
     modifier: Modifier = Modifier,
 ) {
     val focused = state.document.events.firstOrNull { it.id == state.focusedEventId }
+    val focusedStyle = focused?.let { event -> state.document.styles.firstOrNull { it.name == event.style } }
+    var typesettingOpen by remember { mutableStateOf(false) }
     Column(modifier.padding(8.dp)) {
         OutlinedTextField(
             value = state.query,
@@ -136,6 +139,16 @@ private fun SubtitleWorkbench(
             modifier = Modifier.fillMaxWidth(),
         )
         FontStatusRow(state, viewModel, onImportFont)
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text("工作区", style = MaterialTheme.typography.labelMedium, modifier = Modifier.weight(1f))
+            androidx.compose.material3.TextButton(
+                onClick = { typesettingOpen = !typesettingOpen },
+                enabled = focusedStyle != null,
+            ) { Text(if (typesettingOpen) "收起排版" else "排版") }
+        }
+        if (typesettingOpen && focusedStyle != null) {
+            TypesettingPanel(state, viewModel, focusedStyle)
+        }
         val visibleIds = state.filteredEvents.map { it.id }
         val visibleSelected = visibleIds.count { it in state.selectedEventIds }
         val selectState = when {

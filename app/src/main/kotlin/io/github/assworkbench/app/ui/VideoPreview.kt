@@ -1,5 +1,6 @@
 package io.github.assworkbench.app.ui
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -7,6 +8,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.matchParentSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Pause
@@ -27,10 +29,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import io.github.assworkbench.domain.AssCodec
 import io.github.assworkbench.domain.AssDocument
+import io.github.assworkbench.domain.TypesettingMath
 import io.github.yuroyami.libmpvkt.MpvCommands
 import io.github.yuroyami.libmpvkt.MpvPlaybackState
 import io.github.yuroyami.libmpvkt.MpvProperties
@@ -52,6 +56,7 @@ fun VideoPreview(
     fontsDir: File,
     fontRevision: Long,
     initialPositionMs: Long,
+    showLayoutGuides: Boolean,
     modifier: Modifier = Modifier,
 ) {
     key(fontRevision) {
@@ -64,6 +69,7 @@ fun VideoPreview(
             configDir = configDir,
             fontsDir = fontsDir,
             initialPositionMs = initialPositionMs,
+            showLayoutGuides = showLayoutGuides,
             modifier = modifier,
         )
     }
@@ -79,6 +85,7 @@ private fun AuthoritativeMpvPreview(
     configDir: File,
     fontsDir: File,
     initialPositionMs: Long,
+    showLayoutGuides: Boolean,
     modifier: Modifier,
 ) {
     val context = LocalContext.current
@@ -152,6 +159,9 @@ private fun AuthoritativeMpvPreview(
                 Text("未选择参考视频", color = Color.White)
             } else {
                 MpvSurface(mpv, Modifier.fillMaxSize())
+                if (showLayoutGuides) {
+                    LayoutGuideOverlay(document, Modifier.matchParentSize())
+                }
             }
         }
         PlaybackBar(
@@ -201,4 +211,38 @@ private fun formatClock(seconds: Double): String {
     val m = (totalSeconds % 3600) / 60
     val s = totalSeconds % 60
     return if (h > 0) "%d:%02d:%02d".format(h, m, s) else "%02d:%02d".format(m, s)
+}
+
+
+@Composable
+private fun LayoutGuideOverlay(document: AssDocument, modifier: Modifier = Modifier) {
+    val layout = TypesettingMath.bilingual6040(document.playResX, document.playResY)
+    Canvas(modifier) {
+        val sx = size.width / layout.playResX.toFloat().coerceAtLeast(1f)
+        val sy = size.height / layout.playResY.toFloat().coerceAtLeast(1f)
+        val left = layout.marginHorizontal * sx
+        val right = size.width - layout.marginHorizontal * sx
+        val top = layout.marginVertical * sy
+        val bottom = size.height - layout.marginVertical * sy
+        val sourceY = layout.sourceBoundaryY * sy
+        val targetY = layout.targetBoundaryY * sy
+        drawRect(
+            color = Color.White.copy(alpha = 0.55f),
+            topLeft = androidx.compose.ui.geometry.Offset(left, top),
+            size = androidx.compose.ui.geometry.Size((right - left).coerceAtLeast(0f), (bottom - top).coerceAtLeast(0f)),
+            style = Stroke(width = 1.5.dp.toPx()),
+        )
+        drawLine(
+            color = Color.Cyan.copy(alpha = 0.75f),
+            start = androidx.compose.ui.geometry.Offset(left, sourceY),
+            end = androidx.compose.ui.geometry.Offset(right, sourceY),
+            strokeWidth = 1.5.dp.toPx(),
+        )
+        drawLine(
+            color = Color.Magenta.copy(alpha = 0.75f),
+            start = androidx.compose.ui.geometry.Offset(left, targetY),
+            end = androidx.compose.ui.geometry.Offset(right, targetY),
+            strokeWidth = 1.5.dp.toPx(),
+        )
+    }
 }

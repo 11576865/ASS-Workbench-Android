@@ -6,6 +6,7 @@ import androidx.lifecycle.AndroidViewModel
 import io.github.assworkbench.domain.AssCodec
 import io.github.assworkbench.domain.AssDocument
 import io.github.assworkbench.domain.SubTime
+import io.github.assworkbench.domain.TypesettingMath
 import io.github.assworkbench.domain.UndoHistory
 import io.github.assworkbench.fonts.FontDiagnostics
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -136,6 +137,86 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         editDocument("已将字体 " + family + " 应用到 " + styleNames.size + " 个 Style。") { doc ->
             doc.copy(styles = doc.styles.map { style ->
                 if (style.name in styleNames) style.copy(fontName = family) else style
+            })
+        }
+    }
+
+    fun toggleLayoutGuides() = _state.update { it.copy(showLayoutGuides = !it.showLayoutGuides) }
+
+    fun updateStyleTypography(
+        styleName: String,
+        fontSize: Double,
+        bold: Boolean,
+        italic: Boolean,
+        underline: Boolean,
+        strikeOut: Boolean,
+        spacing: Double,
+        outline: Double,
+        shadow: Double,
+        alignment: Int,
+        marginL: Int,
+        marginR: Int,
+        marginV: Int,
+        primaryColor: String,
+        outlineColor: String,
+        backColor: String,
+    ) {
+        editDocument("已更新 Style " + styleName + " 的排版。") { doc ->
+            if (doc.styles.none { it.name == styleName }) return@editDocument doc
+            doc.copy(styles = doc.styles.map { style ->
+                if (style.name != styleName) {
+                    style
+                } else {
+                    style.copy(
+                        fontSize = fontSize.coerceIn(6.0, 240.0),
+                        bold = bold,
+                        italic = italic,
+                        underline = underline,
+                        strikeOut = strikeOut,
+                        spacing = spacing.coerceIn(-20.0, 100.0),
+                        outline = outline.coerceIn(0.0, 20.0),
+                        shadow = shadow.coerceIn(0.0, 20.0),
+                        alignment = alignment.coerceIn(1, 9),
+                        marginL = marginL.coerceIn(0, 9999),
+                        marginR = marginR.coerceIn(0, 9999),
+                        marginV = marginV.coerceIn(0, 9999),
+                        primaryColor = primaryColor.trim().ifBlank { style.primaryColor },
+                        outlineColor = outlineColor.trim().ifBlank { style.outlineColor },
+                        backColor = backColor.trim().ifBlank { style.backColor },
+                    )
+                }
+            })
+        }
+    }
+
+    fun applyBilingual6040Preset(sourceStyleName: String, targetStyleName: String) {
+        if (sourceStyleName.isBlank() || targetStyleName.isBlank() || sourceStyleName == targetStyleName) return
+        editDocument("已应用双语 60/40 排版预设。") { doc ->
+            val names = doc.styles.map { it.name }.toSet()
+            if (sourceStyleName !in names || targetStyleName !in names) return@editDocument doc
+            val layout = TypesettingMath.bilingual6040(doc.playResX, doc.playResY)
+            doc.copy(styles = doc.styles.map { style ->
+                when (style.name) {
+                    sourceStyleName -> style.copy(
+                        fontSize = 42.0,
+                        alignment = 2,
+                        marginL = layout.marginHorizontal,
+                        marginR = layout.marginHorizontal,
+                        marginV = layout.sourceMarginV,
+                        outline = 3.0,
+                        shadow = 2.0,
+                    )
+                    targetStyleName -> style.copy(
+                        fontSize = 48.0,
+                        alignment = 8,
+                        marginL = layout.marginHorizontal,
+                        marginR = layout.marginHorizontal,
+                        marginV = layout.targetMarginV,
+                        outline = 3.0,
+                        shadow = 2.0,
+                    )
+                    else -> style
+                }
             })
         }
     }
