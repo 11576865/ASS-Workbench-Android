@@ -23,6 +23,8 @@ import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.SaveAs
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Divider
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -30,6 +32,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TriStateCheckbox
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -39,6 +42,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.unit.dp
 import io.github.assworkbench.app.EditorState
 import io.github.assworkbench.app.EditorViewModel
@@ -131,10 +135,29 @@ private fun SubtitleWorkbench(
             label = { Text("搜索字幕") },
             modifier = Modifier.fillMaxWidth(),
         )
-        FontStatusRow(state, onImportFont)
-        Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+        FontStatusRow(state, viewModel, onImportFont)
+        val visibleIds = state.filteredEvents.map { it.id }
+        val visibleSelected = visibleIds.count { it in state.selectedEventIds }
+        val selectState = when {
+            visibleIds.isEmpty() || visibleSelected == 0 -> ToggleableState.Off
+            visibleSelected == visibleIds.size -> ToggleableState.On
+            else -> ToggleableState.Indeterminate
+        }
+        Row(
+            Modifier.fillMaxWidth().padding(vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            TriStateCheckbox(
+                state = selectState,
+                onClick = viewModel::toggleSelectAllVisible,
+                enabled = visibleIds.isNotEmpty(),
+            )
             Text("字幕总览", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
-            Text("${state.filteredEvents.size}/${state.document.events.size}", style = MaterialTheme.typography.labelMedium)
+            if (state.selectedEventIds.isNotEmpty()) {
+                Text("已选 " + state.selectedEventIds.size, style = MaterialTheme.typography.labelMedium)
+            }
+            Text(state.filteredEvents.size.toString() + "/" + state.document.events.size, style = MaterialTheme.typography.labelMedium)
         }
         LazyColumn(Modifier.weight(1f).fillMaxWidth()) {
             items(state.filteredEvents, key = { it.id }) { event ->
@@ -157,22 +180,80 @@ private fun SubtitleWorkbench(
 }
 
 @Composable
-private fun FontStatusRow(state: EditorState, onImportFont: () -> Unit) {
+private fun FontStatusRow(state: EditorState, viewModel: EditorViewModel, onImportFont: () -> Unit) {
     val exact = state.fontDiagnostics.count { it.status == FontMatchStatus.EXACT_IMPORTED }
     val missing = state.fontDiagnostics.count { it.status == FontMatchStatus.MISSING }
     val fallback = state.fontDiagnostics.count { it.status == FontMatchStatus.FALLBACK_ONLY }
-    Row(
-        Modifier.fillMaxWidth().padding(top = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Text(
-            "字体：${state.importedFonts.size} imported · $exact exact · $fallback fallback · $missing missing",
-            style = MaterialTheme.typography.labelSmall,
-            color = if (missing > 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.weight(1f),
-        )
-        androidx.compose.material3.TextButton(onClick = onImportFont) { Text("导入字体") }
+    var menuOpen by remember { mutableStateOf(false) }
+    val focusedStyleName = state.focusedEventId?.let { id -> state.document.events.firstOrNull { it.id == id }?.style }
+    val focusedStyle = focusedStyleName?.let { name -> state.document.styles.firstOrNull { it.name == name } }
+
+    Column(Modifier.fillMaxWidth().padding(top = 6.dp)) {
+        Row(
+            Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                "字体：" + state.importedFonts.size + " imported · " + exact + " exact · " + fallback + " fallback · " + missing + " missing",
+                style = MaterialTheme.typography.labelSmall,
+                color = if (missing > 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f),
+            )
+            androidx.compose.material3.TextButton(onClick = onImportFont) { Text("导入字体") }
+        }
+        if (focusedStyle != null) {
+            Row(
+                Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Text(
+                    "Style " + focusedStyle.name + "：" + focusedStyle.fontName,
+                    style = MaterialTheme.typography.labelMedium,
+                    modifier = Modifier.weight(1f),
+                )
+                androidx.compose.material3.TextButton(
+                    onClick = { menuOpen = true },
+                    enabled = state.importedFonts.isNotEmpty(),
+                ) { Text("选择字体") }
+                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                    state.importedFonts.forEach { asset ->
+                        DropdownMenuItem(
+                            text = {
+                                Column {
+                                    Text(asset.metadata.family)
+                                    Text(asset.fileName, style = MaterialTheme.typography.labelSmall)
+                                }
+                            },
+                            onClick = {
+                                menuOpen = false
+                                if (state.selectedEventIds.isEmpty()) {
+                                    viewModel.setStyleFont(focusedStyle.name, asset.metadata.family)
+                                } else {
+                                    viewModel.applyFontToSelectedStyles(asset.metadata.family)
+                                }
+                            },
+                        )
+                    }
+                }
+            }
+            val diagnostic = state.fontDiagnostics.firstOrNull {
+                it.requestedFamily.equals(focusedStyle.fontName, ignoreCase = true)
+            }
+            if (diagnostic != null) {
+                val diagnosticText = when (diagnostic.status) {
+                    FontMatchStatus.EXACT_IMPORTED -> "libass 字体状态：EXACT → " + diagnostic.matchedFamily
+                    FontMatchStatus.FALLBACK_ONLY -> "libass 字体状态：FALLBACK → " + diagnostic.matchedFamily
+                    FontMatchStatus.MISSING -> "libass 字体状态：MISSING"
+                }
+                Text(
+                    diagnosticText,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (diagnostic.status == FontMatchStatus.EXACT_IMPORTED) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                )
+            }
+        }
     }
 }
 

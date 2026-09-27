@@ -96,6 +96,50 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    fun toggleSelectAllVisible() {
+        _state.update { state ->
+            val visibleIds = state.filteredEvents.mapTo(linkedSetOf()) { it.id }
+            if (visibleIds.isEmpty()) return@update state
+            val next = state.selectedEventIds.toMutableSet()
+            val allVisibleSelected = visibleIds.all { it in next }
+            if (allVisibleSelected) next.removeAll(visibleIds) else next.addAll(visibleIds)
+            state.copy(
+                selectedEventIds = next,
+                status = if (allVisibleSelected) "已取消选择当前筛选结果。" else "已选择当前筛选结果 " + visibleIds.size + " 条。",
+            )
+        }
+    }
+
+    fun setStyleFont(styleName: String, family: String) {
+        if (family.isBlank()) return
+        editDocument("Style " + styleName + " 已改用字体 " + family + "。") { doc ->
+            if (doc.styles.none { it.name == styleName }) return@editDocument doc
+            doc.copy(styles = doc.styles.map { style ->
+                if (style.name == styleName) style.copy(fontName = family) else style
+            })
+        }
+    }
+
+    fun applyFontToSelectedStyles(family: String) {
+        if (family.isBlank()) return
+        val state = _state.value
+        val styleNames = if (state.selectedEventIds.isEmpty()) {
+            val styleName = state.focusedEventId?.let { id -> state.document.events.firstOrNull { it.id == id }?.style }
+            if (styleName == null) emptySet() else setOf(styleName)
+        } else {
+            state.document.events.asSequence()
+                .filter { it.id in state.selectedEventIds }
+                .map { it.style }
+                .toSet()
+        }
+        if (styleNames.isEmpty()) return
+        editDocument("已将字体 " + family + " 应用到 " + styleNames.size + " 个 Style。") { doc ->
+            doc.copy(styles = doc.styles.map { style ->
+                if (style.name in styleNames) style.copy(fontName = family) else style
+            })
+        }
+    }
+
     fun focusEvent(id: Long, seek: Boolean = true) {
         val event = _state.value.document.events.firstOrNull { it.id == id } ?: return
         _state.update {

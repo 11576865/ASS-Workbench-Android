@@ -22,7 +22,7 @@ data class EditorState(
     val fontDiagnostics: List<FontDiagnostic> = emptyList(),
     val fallbackFontFamily: String? = null,
     val fontRevision: Long = 0L,
-    val status: String = "打开视频和 ASS 开始编辑。",
+    val status: String = "可先打开 ASS，也可先选择参考视频；两者互不依赖。",
 ) {
     val filteredEvents get() = document.events.filter {
         query.isBlank() || it.text.contains(query, ignoreCase = true) || it.name.contains(query, ignoreCase = true)

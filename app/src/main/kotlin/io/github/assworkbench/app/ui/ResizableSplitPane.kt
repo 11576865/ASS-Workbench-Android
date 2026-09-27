@@ -13,6 +13,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
@@ -28,7 +30,8 @@ fun ResizableSplitPane(
 ) {
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val density = LocalDensity.current
-        val divider = 8.dp
+        val divider = 10.dp
+        val latestRatio by rememberUpdatedState(ratio)
         if (horizontal) {
             val totalPx = with(density) { maxWidth.toPx() }.coerceAtLeast(1f)
             Row(Modifier.fillMaxSize()) {
@@ -37,10 +40,15 @@ fun ResizableSplitPane(
                     Modifier.width(divider).fillMaxHeight()
                         .background(MaterialTheme.colorScheme.outlineVariant)
                         .pointerInput(totalPx) {
-                            detectDragGestures { change, drag ->
-                                change.consume()
-                                onRatioChange(ratio + drag.x / totalPx)
-                            }
+                            var workingRatio = latestRatio
+                            detectDragGestures(
+                                onDragStart = { workingRatio = latestRatio },
+                                onDrag = { change, drag ->
+                                    change.consume()
+                                    workingRatio = (workingRatio + drag.x / totalPx).coerceIn(0.28f, 0.78f)
+                                    onRatioChange(workingRatio)
+                                },
+                            )
                         },
                 )
                 second(Modifier.weight(1f - ratio).fillMaxHeight())
@@ -53,10 +61,15 @@ fun ResizableSplitPane(
                     Modifier.height(divider).fillMaxWidth()
                         .background(MaterialTheme.colorScheme.outlineVariant)
                         .pointerInput(totalPx) {
-                            detectDragGestures { change, drag ->
-                                change.consume()
-                                onRatioChange(ratio + drag.y / totalPx)
-                            }
+                            var workingRatio = latestRatio
+                            detectDragGestures(
+                                onDragStart = { workingRatio = latestRatio },
+                                onDrag = { change, drag ->
+                                    change.consume()
+                                    workingRatio = (workingRatio + drag.y / totalPx).coerceIn(0.28f, 0.78f)
+                                    onRatioChange(workingRatio)
+                                },
+                            )
                         },
                 )
                 second(Modifier.weight(1f - ratio).fillMaxWidth())

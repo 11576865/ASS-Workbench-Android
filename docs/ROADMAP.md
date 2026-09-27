@@ -1,85 +1,36 @@
 # Roadmap
 
-## 0.1 — Editing skeleton
-- [x] pure Kotlin ASS document/event/style model
-- [x] parser/writer with unknown-section preservation
-- [x] undo/redo history
-- [x] SAF video/subtitle selection
-- [x] independent video/subtitle binding in editor state
-- [x] searchable subtitle list
-- [x] overlapping events and Layer in the model
-- [x] multi-select checkboxes
-- [x] selected-line text/time editor
-- [x] resizable split-pane layout
-- [x] Save / Save As ASS
+## 0.4 — Foundation repair + explicit font assignment
+- [x] Fix split-pane divider accumulation; no snap-back during drag.
+- [x] Wire Adaptive Icon resources.
+- [x] Tri-state select-all for the current filtered result set.
+- [x] Imported-font picker for the focused Style.
+- [x] Selected events can apply one imported family to all referenced Styles in one undoable edit.
+- [x] Show exact/fallback/missing font status for the focused Style.
+- [ ] Real-device verify CJK rendering after explicitly assigning the imported family to Style.
 
-## 0.2 — Authoritative preview + font registry (current)
-- [x] replace Compose approximation with mpv + libass authoritative preview
-- [x] edit debounce writes one preview ASS and `sub-reload` updates it without restarting video
-- [x] `content://` reference video support through Android ContentResolver stream provider
-- [x] imported TTF/OTF directory wired directly to mpv `sub-fonts-dir`
-- [x] OpenType `name` table parser; filename is never treated as font family
-- [x] font SHA-256 + aliases + family/subfamily/PostScript metadata
-- [x] basic exact/fallback/missing diagnostics for ASS Style font families
-- [x] importing a font rebuilds only the preview core and restores the current playback position
-- [ ] real-device audit of font reload behavior on several OEM Android builds
+## 0.5 — Typesetting Workspace
+- [ ] Generalize HSR layout capabilities: font size/emphasis/colors/outline/shadow/blur.
+- [ ] Nine-grid alignment, margins and spacing.
+- [ ] Safe-area, collision and overflow diagnostics.
+- [ ] Fade and restrained soft-entry controls.
+- [ ] Bilingual layout presets including the HSR 60/40 model.
 
-## 0.3 — Font-path repair + independent import + app identity
-- [x] move imported fonts into mpv `config-dir/fonts/`
-- [x] install the most recently imported TTF/OTF as `subfont.ttf` fallback
-- [x] preserve original ASS Fontname values; renderer fallback does not rewrite the source document
-- [x] subtitle and reference-video import remain independent and errors are surfaced in the status bar
-- [x] add launcher icon
-- [ ] verify CJK font rendering on the user's tablet
+## 0.6 — Bilingual + Review Workspace
+- [ ] Paired bilingual view so two ASS Events may render as one UI row.
+- [ ] Grouping layer so event count can double without list count doubling.
+- [ ] Generalize HSR source/reference/final proofreading.
+- [ ] Filters for modified, missing, timing mismatch and unreviewed.
+- [ ] Store pair/group relations as project metadata, not ASS syntax.
 
-## 0.4 — Styles
-- [ ] complete ASS Style editor
-- [ ] colors and alpha
-- [ ] outline/shadow/blur
-- [ ] nine-grid alignment
-- [ ] margins and spacing
-- [ ] browse registry and assign a font to a Style
+## 0.7 — MKV Container Bridge
+- [ ] Open MKV as a subtitle project.
+- [ ] Enumerate ASS tracks and font attachments.
+- [ ] Register attached fonts for preview.
+- [ ] Save edited ASS back by remuxing with video/audio stream copy.
+- [ ] Keep ordinary reference-video mode separate.
 
-## 0.5 — Event overrides and visual placement
-- [ ] per-event style override model
-- [ ] drag subtitle on preview -> `\\pos`
-- [ ] X/Y nudge
-- [ ] per-event alignment
-- [ ] per-event `\\fad`
-- [ ] raw ASS tag view
-
-## 0.6 — Batch workflow
-- [ ] batch style apply
-- [ ] batch font/alignment/position operations
-- [ ] batch time shift
-- [ ] duplicate/delete/insert/split/merge events
-- [ ] one batch action = one undo step
-
-## 0.7 — Project/recovery
-- [ ] saved project binds video URI + subtitle URI + editor state
-- [ ] crash recovery journal
-- [ ] explicit Save vs Save As
-- [ ] atomic source-file replacement where provider supports it
-
-## 0.8 — ASS round-trip hardening
-- [ ] fixtures from real-world ASS files
-- [ ] preserve unsupported sections/tags/comments where possible
-- [ ] PlayRes resampling behavior
-- [ ] malformed-file warnings
-
-## 0.9 — Tablet/phone polish
-- [ ] persist divider ratio
-- [ ] landscape/portrait restoration
-- [ ] keyboard/mouse support
-- [ ] large-file list performance
-
-## 0.10 — Real-device audit
-- [ ] Android 8–15 representative devices
-- [ ] large files
-- [ ] multiple fonts/weights
-- [ ] overlapping/layered events
-- [ ] rotation/background lifecycle
-- [ ] content:// provider variations
-
-## 1.0
-- [ ] satisfy PRODUCT_SPEC_1_0.md without adding encoding/muxing scope
+## 0.8 — Event overrides + visual placement
+## 0.9 — Batch + project/recovery
+## 0.10 — Round-trip and device audit
+## 1.0 — Product acceptance
