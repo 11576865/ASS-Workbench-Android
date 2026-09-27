@@ -56,7 +56,16 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
 
     fun importFont(uri: Uri) {
         val asset = fontStore.import(uri)
-        refreshFonts(initial = false, status = "已导入字体 ${asset.metadata.family}；libass 预览将重新初始化字体目录。")
+        refreshFonts(
+            initial = false,
+            status = "已导入字体 ${asset.metadata.family}；已作为 libass 项目字体与预览 fallback 重新加载。",
+        )
+    }
+
+    fun reportError(prefix: String, error: Throwable) {
+        _state.update {
+            it.copy(status = "$prefix：${error.message ?: error::class.java.simpleName}")
+        }
     }
 
     fun saveTo(uri: Uri) {

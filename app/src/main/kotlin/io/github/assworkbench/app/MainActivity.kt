@@ -27,18 +27,21 @@ class MainActivity : ComponentActivity() {
         uri ?: return@registerForActivityResult
         persist(uri, read = true, write = true)
         runCatching { viewModel.openSubtitle(uri) }
+            .onFailure { viewModel.reportError("字幕导入失败", it) }
     }
 
     private val importFont = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri ?: return@registerForActivityResult
         persist(uri, read = true, write = false)
         runCatching { viewModel.importFont(uri) }
+            .onFailure { viewModel.reportError("字体导入失败", it) }
     }
 
     private val saveSubtitleAs = registerForActivityResult(ActivityResultContracts.CreateDocument("text/x-ssa")) { uri ->
         uri ?: return@registerForActivityResult
         persist(uri, read = true, write = true)
         runCatching { viewModel.saveTo(uri) }
+            .onFailure { viewModel.reportError("字幕保存失败", it) }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {

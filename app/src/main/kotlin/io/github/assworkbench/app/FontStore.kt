@@ -10,8 +10,10 @@ import java.io.File
 
 class FontStore(private val context: Context) {
     val rootDir: File = File(context.filesDir, "ass-fonts").apply { mkdirs() }
-    val importedDir: File = File(rootDir, "imported").apply { mkdirs() }
     val mpvConfigDir: File = File(context.filesDir, "mpv").apply { mkdirs() }
+    // mpv/libass scans config-dir/fonts even when Android has no system font provider.
+    // Keep imported project fonts here so the UI registry and renderer consume the same files.
+    val importedDir: File = File(mpvConfigDir, "fonts").apply { mkdirs() }
 
     fun listImported(): List<FontAsset> = importedDir.listFiles()
         .orEmpty()
@@ -33,6 +35,13 @@ class FontStore(private val context: Context) {
         val safeStem = metadata.family.replace(Regex("[^A-Za-z0-9._-]+"), "_").trim('_').ifBlank { "font" }
         val target = File(importedDir, "${safeStem}-${sha.take(10)}.$ext")
         if (!target.exists()) target.writeBytes(bytes)
+
+        // libmpvKt documents subfont.ttf as the reliable fallback when sub-font-provider=none.
+        // Point fallback at the most recently imported font so CJK glyphs do not fall back
+        // to the bundled Latin-only Roboto copy.
+        val fallback = File(mpvConfigDir, "subfont.ttf")
+        fallback.writeBytes(bytes)
+
         return FontAsset(target.name, sha, metadata)
     }
 

@@ -91,6 +91,7 @@ private fun AuthoritativeMpvPreview(
                 "sub-ass-override" to "no",
                 "embeddedfonts" to "yes",
                 "sub-fonts-dir" to fontsDir.absolutePath,
+                "sub-font-provider" to "none",
             ),
         )
     }
@@ -119,6 +120,8 @@ private fun AuthoritativeMpvPreview(
     }
 
     LaunchedEffect(mpv, videoUri, document, protocolReady) {
+        // Parsing/editing is independent from video. Rendering waits for reference media
+        // only because there is no video surface to composite onto otherwise.
         if (!protocolReady || videoUri.isNullOrBlank()) return@LaunchedEffect
         delay(120)
         val tmp = File(previewFile.parentFile, "current.ass.tmp")

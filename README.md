@@ -2,11 +2,11 @@
 
 A focused Android ASS subtitle workbench for phones and tablets.
 
-**Current version: 0.2.0**
+**Current version: 0.3.0**
 
 The app edits **ASS subtitles** while a local video is used only as reference media. It does **not** encode hard-subbed video and does **not** mux subtitles into containers.
 
-## 0.2 status
+## 0.3 status
 
 - independent reference-video and ASS file selection;
 - tablet preview-left / subtitle-list-right split with draggable divider;
@@ -17,9 +17,12 @@ The app edits **ASS subtitles** while a local video is used only as reference me
 - Save / Save As `.ass`;
 - **mpv + libass authoritative video/subtitle preview**;
 - edited ASS is reloaded without restarting the reference video;
-- TTF/OTF import into one renderer font directory;
+- TTF/OTF import into the mpv config `fonts/` directory used by libass;
+- the most recently imported font is also installed as `subfont.ttf` fallback for provider-less Android libass;
 - OpenType name-table parsing (family name is not inferred from filename);
-- font exact/fallback/missing diagnostics.
+- font exact/fallback/missing diagnostics;
+- ASS and reference video can be opened in either order;
+- dedicated launcher icon.
 
 ## Product boundary
 
