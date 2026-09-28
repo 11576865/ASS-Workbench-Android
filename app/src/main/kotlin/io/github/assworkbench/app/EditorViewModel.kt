@@ -80,6 +80,36 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         StartupProbe.mark(application, "viewmodel_constructed", "success")
     }
 
+    fun newSubtitleProject() {
+        val document = AssDocument()
+        history.reset(document)
+        _state.update {
+            it.copy(
+                project = it.project.copy(
+                    title = "Untitled.ass",
+                    subtitleUri = null,
+                ),
+                document = document,
+                subtitleLoaded = true,
+                subtitleTextEncoding = AssTextEncoding.UTF8,
+                selectedEventIds = emptySet(),
+                selectionAnchorId = null,
+                focusedEventId = null,
+                dirty = false,
+                canUndo = false,
+                canRedo = false,
+                reviewSourceStyle = "",
+                reviewTargetStyle = "",
+                originalTextById = emptyMap(),
+                confirmedReviewIds = emptySet(),
+                reviewFilter = "all",
+                container = ContainerBridgeState(),
+                status = "已新建空白 ASS；可在当前播放位置添加第一条字幕。",
+            )
+        }
+        refreshFontDiagnostics()
+    }
+
     fun openMkvProject(uri: Uri) {
         _state.update {
             it.copy(

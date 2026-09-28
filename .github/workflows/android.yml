@@ -109,25 +109,5 @@ jobs:
           path: ASS-Workbench-Android-${{ steps.version.outputs.version }}-debug.apk
           if-no-files-found: error
 
-      - name: Publish GitHub prerelease
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ steps.version.outputs.version }}
-        shell: bash
-        run: |
-          TAG="v$VERSION"
-          APK="ASS-Workbench-Android-$VERSION-debug.apk"
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" "$APK" --clobber
-            gh release edit "$TAG" \
-              --title "ASS Workbench Android $VERSION" \
-              --prerelease \
-              --notes "Automated Android debug build from main. This is a test build, not a stable 1.0 release."
-          else
-            gh release create "$TAG" "$APK" \
-              --target "$GITHUB_SHA" \
-              --title "ASS Workbench Android $VERSION" \
-              --prerelease \
-              --notes "Automated Android debug build from main. This is a test build, not a stable 1.0 release."
-          fi
+      # Release publication is owned by the Fontconfig renderer workflow.
+      # This fast workflow remains the compile/unit-test gate and uploads a diagnostic APK artifact.

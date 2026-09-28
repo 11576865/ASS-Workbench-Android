@@ -47,4 +47,10 @@ class AssInlineSyntaxTest {
         assertTrue(analysis.hasErrors)
         assertTrue(analysis.issues.any { "孤立" in it.message })
     }
+
+    @Test
+    fun visibleTextStripsOverridesAndResolvesTextEscapes() {
+        val text = "{\\fnHYRunYuan}{\\fs56}第一行\\N第二行\\h尾"
+        assertEquals("第一行\n第二行 尾", AssInlineSyntax.visibleText(text))
+    }
 }

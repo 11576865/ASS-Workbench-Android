@@ -2,6 +2,7 @@ package io.github.assworkbench.app.ui
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,6 +23,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -72,6 +74,7 @@ fun VideoPreview(
     fontRevision: Long,
     initialPositionMs: Long,
     showLayoutGuides: Boolean,
+    onOpenVideo: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var normalPreview by remember { mutableStateOf(!BuildConfig.ASSWB_RENDERER_EXPERIMENTAL) }
@@ -111,6 +114,7 @@ fun VideoPreview(
             fontsDir = fontsDir,
             initialPositionMs = resumePositionMs,
             showLayoutGuides = showLayoutGuides,
+            onOpenVideo = onOpenVideo,
             modifier = modifier,
         )
     }
@@ -382,6 +386,7 @@ private fun AuthoritativeMpvPreview(
     fontsDir: File,
     initialPositionMs: Long,
     showLayoutGuides: Boolean,
+    onOpenVideo: () -> Unit,
     modifier: Modifier,
 ) {
     val context = LocalContext.current
@@ -508,7 +513,34 @@ private fun AuthoritativeMpvPreview(
             contentAlignment = Alignment.Center,
         ) {
             if (videoUri.isNullOrBlank()) {
-                Text("未选择参考视频", color = Color.White)
+                Surface(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clickable(onClick = onOpenVideo),
+                    color = Color.Black,
+                ) {
+                    Column(
+                        Modifier.fillMaxSize(),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center,
+                    ) {
+                        Icon(
+                            Icons.Filled.PlayArrow,
+                            contentDescription = null,
+                            tint = Color.White.copy(alpha = 0.70f),
+                        )
+                        Text(
+                            "未选择参考视频",
+                            color = Color.White,
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                        Text(
+                            "点击此处选择视频 · 选择后这里恢复为纯预览区",
+                            color = Color.White.copy(alpha = 0.60f),
+                            style = MaterialTheme.typography.labelSmall,
+                        )
+                    }
+                }
             } else {
                 MpvSurface(mpv, Modifier.fillMaxSize())
                 if (showLayoutGuides) {
@@ -525,14 +557,17 @@ private fun AuthoritativeMpvPreview(
                 }
             }
         }
-        PlaybackBar(
-            playback = playback,
-            onPlayPause = {
-                val shouldPause = playback.status == MpvPlaybackState.Status.Playing || playback.status == MpvPlaybackState.Status.Buffering
-                mpv[MpvProperties.Pause] = shouldPause
-            },
-            onSeek = { seconds -> mpv.command("seek", seconds.toString(), "absolute+exact") },
-        )
+        if (!videoUri.isNullOrBlank()) {
+            PlaybackBar(
+                playback = playback,
+                onPlayPause = {
+                    val shouldPause = playback.status == MpvPlaybackState.Status.Playing ||
+                        playback.status == MpvPlaybackState.Status.Buffering
+                    mpv[MpvProperties.Pause] = shouldPause
+                },
+                onSeek = { seconds -> mpv.command("seek", seconds.toString(), "absolute+exact") },
+            )
+        }
     }
 }
 

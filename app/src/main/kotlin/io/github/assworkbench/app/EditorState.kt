@@ -1,6 +1,7 @@
 package io.github.assworkbench.app
 
 import io.github.assworkbench.domain.AssDocument
+import io.github.assworkbench.domain.AssInlineSyntax
 import io.github.assworkbench.domain.AssTextEncoding
 import io.github.assworkbench.domain.SubtitleProject
 import io.github.assworkbench.fonts.FontAsset
@@ -40,6 +41,9 @@ data class EditorState(
     val status: String = "可先打开 ASS，也可先选择参考视频；两者互不依赖。",
 ) {
     val filteredEvents get() = document.events.filter {
-        query.isBlank() || it.text.contains(query, ignoreCase = true) || it.name.contains(query, ignoreCase = true)
+        query.isBlank() ||
+            AssInlineSyntax.visibleText(it.text).contains(query, ignoreCase = true) ||
+            it.name.contains(query, ignoreCase = true) ||
+            it.style.contains(query, ignoreCase = true)
     }
 }
