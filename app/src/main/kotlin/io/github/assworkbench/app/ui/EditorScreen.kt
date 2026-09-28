@@ -803,6 +803,7 @@ private fun ProjectInspector(
     onSaveMkv: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    var diagnosticsOpen by rememberSaveable { mutableStateOf(false) }
     Column(
         modifier.verticalScroll(rememberScrollState()).padding(10.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -860,15 +861,28 @@ private fun ProjectInspector(
         Divider()
         QualityCheckSummary(state, viewModel)
         Divider()
-        Text("Renderer 诊断", style = MaterialTheme.typography.labelMedium)
-        if (state.rendererDiagnostics.isEmpty()) {
-            Text(
-                "等待 mpv/libass 字体选择与预览字幕来源日志。",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        } else {
-            state.rendererDiagnostics.takeLast(8).forEach { line ->
+        Row(
+            Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("Renderer 诊断", style = MaterialTheme.typography.labelMedium, modifier = Modifier.weight(1f))
+            TextButton(onClick = { diagnosticsOpen = !diagnosticsOpen }) {
+                Text(if (diagnosticsOpen) "收起" else "详细")
+            }
+        }
+        Text(
+            if (state.rendererDiagnostics.isEmpty()) {
+                "暂无 renderer 日志"
+            } else {
+                state.rendererDiagnostics.last()
+            },
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = if (diagnosticsOpen) 3 else 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        if (diagnosticsOpen) {
+            state.rendererDiagnostics.dropLast(1).takeLast(7).forEach { line ->
                 Text(
                     line,
                     style = MaterialTheme.typography.labelSmall,
