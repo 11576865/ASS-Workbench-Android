@@ -79,7 +79,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             runCatching {
                 withContext(Dispatchers.IO) {
                     val stream = app.contentResolver.openInputStream(uri) ?: error("无法读取 MKV")
-                    stream.use {
+                    val scan = stream.use {
                         MatroskaReader().scan(
                             input = it,
                             retainAttachments = false,
@@ -95,6 +95,10 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                             },
                         )
                     }
+                    if (imported > 0) {
+                        fontStore.refreshFontconfig(pruneOldCaches = true)
+                    }
+                    scan
                 }
             }.onSuccess { scan ->
                 containerScan = scan
@@ -113,9 +117,6 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                         ),
                         status = "MKV：发现 " + tracks.size + " 个 ASS 轨；注册字体 " + imported + " 个。",
                     )
-                }
-                if (imported > 0) {
-                    runCatching { fontStore.refreshFontconfig(pruneOldCaches = true) }
                 }
                 refreshFonts(initial = false)
                 if (tracks.size == 1) selectContainerTrack(tracks.single().number)
