@@ -12,10 +12,11 @@
 - [x] Restore/discard recovery controls on startup.
 - [ ] Freehand sweep selection is deferred until range-selection ergonomics are tested.
 - [ ] Review pair metadata/confirmation persistence still needs a project sidecar.
-- [ ] MKV remux-back remains pending.
+- [x] MKV subtitle write-back is available through the bundled mkvgo bridge with video/audio stream copy.
 
 ## 0.10 — Round-trip + container completion
-- [ ] Complete MKV remux-back with video/audio stream-copy and attachment preservation.
+- [x] Replace the edited ASS track without re-encoding video/audio.
+- [ ] Audit attachment preservation and track metadata across a broader MKV corpus.
 - [ ] Preserve unsupported ASS content under repeated edit/save cycles.
 - [ ] Project sidecar for review/group metadata.
 - [ ] CJK/font-family device diagnostics.
