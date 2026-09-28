@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -40,6 +39,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.dp
 import io.github.assworkbench.app.EditorState
 import io.github.assworkbench.app.EditorViewModel
+import io.github.assworkbench.domain.AssInlineSyntax
 import io.github.assworkbench.domain.AssStyle
 import io.github.assworkbench.domain.TypesettingMath
 import kotlinx.coroutines.delay
@@ -83,14 +83,11 @@ fun TypesettingPanel(
     val geometry = TypesettingMath.bilingual6040(state.document.playResX, state.document.playResY)
 
     val focusedEvent = state.focusedEventId?.let { id -> state.document.events.firstOrNull { it.id == id } }
-    val hasInlineStyleOverrides = focusedEvent?.text?.let { text ->
-        Regex("""\\(?:fn|fs(?!c)|b-?\d|i-?\d|u-?\d|s-?\d|fsp|bord|shad|an[1-9]|a\d+|pos\(|move\(|r|c&H|1c&H|3c&H|4c&H)""", RegexOption.IGNORE_CASE)
-            .containsMatchIn(text)
-    } == true
+    val focusedSources = focusedEvent?.let(::styleOverrideSources).orEmpty()
+    val hasInlineStyleOverrides = focusedSources.isNotEmpty()
     val hasEventMarginOverrides = focusedEvent?.let {
         it.marginL > 0 || it.marginR > 0 || it.marginV > 0
     } == true
-    val focusedSources = focusedEvent?.let(::styleOverrideSources).orEmpty()
     val selectedOverrideCount = state.document.events.count { event ->
         event.id in state.selectedEventIds &&
             (styleOverrideSources(event).isNotEmpty() || event.marginL > 0 || event.marginR > 0 || event.marginV > 0)
@@ -147,11 +144,10 @@ fun TypesettingPanel(
         )
     }
 
-    Card(modifier.fillMaxSize()) {
-        LazyColumn(
-            Modifier.fillMaxSize().padding(10.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
+    LazyColumn(
+        modifier.fillMaxSize().padding(horizontal = 6.dp, vertical = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
             item {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
@@ -362,7 +358,6 @@ fun TypesettingPanel(
                 ) { Text("应用 60/40 几何预设") }
             }
         }
-    }
 }
 
 @Composable
@@ -576,23 +571,25 @@ private fun formatAssColor(value: AssRgba): String =
     )
 
 private fun styleOverrideSources(event: io.github.assworkbench.domain.AssEvent): List<String> {
-    val text = event.text
-    val checks = listOf(
-        "字体" to Regex("""\\fn""", RegexOption.IGNORE_CASE),
-        "字号" to Regex("""\\fs(?!c)""", RegexOption.IGNORE_CASE),
-        "粗体" to Regex("""\\b-?\d""", RegexOption.IGNORE_CASE),
-        "斜体" to Regex("""\\i-?\d""", RegexOption.IGNORE_CASE),
-        "下划线" to Regex("""\\u-?\d""", RegexOption.IGNORE_CASE),
-        "删除线" to Regex("""\\s-?\d""", RegexOption.IGNORE_CASE),
-        "字距" to Regex("""\\fsp""", RegexOption.IGNORE_CASE),
-        "描边" to Regex("""\\bord""", RegexOption.IGNORE_CASE),
-        "阴影" to Regex("""\\shad""", RegexOption.IGNORE_CASE),
-        "对齐" to Regex("""\\(?:an[1-9]|a\d+)""", RegexOption.IGNORE_CASE),
-        "位置" to Regex("""\\(?:pos|move|org)\(""", RegexOption.IGNORE_CASE),
-        "颜色" to Regex("""\\(?:c|1c|3c|4c)&H""", RegexOption.IGNORE_CASE),
-        "Style 重置" to Regex("""\\r(?:[^\\}]*)""", RegexOption.IGNORE_CASE),
-    )
-    return checks.mapNotNull { (label, regex) -> label.takeIf { regex.containsMatchIn(text) } }
+    val names = AssInlineSyntax.analyze(event.text).tagNames
+    fun has(vararg tags: String) = tags.any { it.lowercase() in names }
+
+    return buildList {
+        if (has("fn")) add("字体")
+        if (has("fs")) add("字号")
+        if (has("b")) add("粗体")
+        if (has("i")) add("斜体")
+        if (has("u")) add("下划线")
+        if (has("s")) add("删除线")
+        if (has("fsp")) add("字距")
+        if (has("bord", "xbord", "ybord")) add("描边")
+        if (has("shad", "xshad", "yshad")) add("阴影")
+        if (has("an", "a")) add("对齐")
+        if (has("pos", "move", "org")) add("位置")
+        if (has("c", "1c", "2c", "3c", "4c", "alpha", "1a", "2a", "3a", "4a")) add("颜色/透明度")
+        if (has("r")) add("Style 重置")
+        if (has("fscx", "fscy", "fr", "frx", "fry", "frz", "fax", "fay")) add("变换")
+    }
 }
 
 @Composable
