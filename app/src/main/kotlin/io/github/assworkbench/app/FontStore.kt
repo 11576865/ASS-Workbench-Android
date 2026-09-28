@@ -17,6 +17,10 @@ class FontStore(private val context: Context) {
     // Keep imported project fonts here so the UI registry and renderer consume the same files.
     val importedDir: File = File(mpvConfigDir, "fonts").apply { mkdirs() }
 
+    init {
+        writeFontconfig()
+    }
+
     fun listImported(): List<FontAsset> = importedDir.listFiles()
         .orEmpty()
         .filter { it.isFile && it.extension.lowercase() in setOf("ttf", "otf") }
@@ -99,6 +103,41 @@ class FontStore(private val context: Context) {
         }
         return if (target.isFile) runCatching { OpenTypeNameReader.read(target.readBytes()) }.getOrNull() else null
     }
+
+    private fun writeFontconfig() {
+        val cacheDir = File(context.cacheDir, "fontconfig").apply { mkdirs() }
+        val config = buildString {
+            appendLine("<?xml version=\"1.0\"?>")
+            appendLine("<!DOCTYPE fontconfig SYSTEM \"fonts.dtd\">")
+            appendLine("<fontconfig>")
+            appendLine("  <dir>/system/fonts</dir>")
+            appendLine("  <dir>/product/fonts</dir>")
+            appendLine("  <dir>/system_ext/fonts</dir>")
+            appendLine("  <dir>" + xmlEscape(importedDir.absolutePath) + "</dir>")
+            appendLine("  <cachedir>" + xmlEscape(cacheDir.absolutePath) + "</cachedir>")
+            appendLine("  <alias>")
+            appendLine("    <family>sans-serif</family>")
+            appendLine("    <prefer><family>Roboto</family><family>Noto Sans</family></prefer>")
+            appendLine("  </alias>")
+            appendLine("  <alias>")
+            appendLine("    <family>serif</family>")
+            appendLine("    <prefer><family>Noto Serif</family></prefer>")
+            appendLine("  </alias>")
+            appendLine("  <alias>")
+            appendLine("    <family>monospace</family>")
+            appendLine("    <prefer><family>Droid Sans Mono</family><family>Noto Sans Mono</family></prefer>")
+            appendLine("  </alias>")
+            appendLine("</fontconfig>")
+        }
+        File(mpvConfigDir, "fonts.conf").writeText(config, Charsets.UTF_8)
+    }
+
+    private fun xmlEscape(value: String): String = value
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace("\"", "&quot;")
+        .replace("'", "&apos;")
 
     private fun queryName(uri: Uri): String? {
         val projection = arrayOf(OpenableColumns.DISPLAY_NAME)
