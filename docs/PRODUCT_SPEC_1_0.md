@@ -20,7 +20,7 @@ On an Android phone or tablet, a user can open local video and ASS independently
 
 ### Editing
 - ASS first-class and canonical.
-- Event list: start/end/layer/style/text.
+- Event list: start/end/layer/style/text, with syntax-aware ASS rendering rather than destructive or hidden simplification of override tags.
 - Multiple events may overlap in time.
 - Search and jump to event.
 - Multi-select and batch operations.
@@ -62,7 +62,7 @@ On an Android phone or tablet, a user can open local video and ASS independently
 
 ### ASS safety
 - Preserve unknown sections and unsupported tags where possible.
-- Raw Event/override view hidden by default but available.
+- Event Text is a first-class professional editing surface: raw ASS override blocks remain visible/directly editable, but syntax highlighting and structured controls distinguish control syntax from dialogue text.
 - Script resolution (PlayResX/Y) is explicit.
 - Validation warns rather than silently rewriting questionable content.
 
