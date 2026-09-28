@@ -2,7 +2,7 @@
 
 A focused Android ASS subtitle workbench for phones and tablets.
 
-**Current version: 0.18.0**
+**Current version: 0.19.0**
 
 ASS Workbench treats ASS as the primary editable document. A local video may be attached as reference media, or an MKV can be opened as a subtitle project.
 
@@ -86,6 +86,18 @@ An MKV can be opened as a subtitle project. The reader scans Matroska tracks and
 The original MKV is never modified in place. The write-back path copies the source into app-private storage and writes one new result container; it no longer creates a second full-size intermediate container.
 
 ## Current hardening work
+
+0.19.0 batches a larger tablet-usability and diagnostics pass instead of another single-issue hotfix:
+
+- subtitle rows show readable dialogue text without leading ASS override tags while keeping raw text editable in the inspector;
+- the focused subtitle inspector exposes event-level Margin L/R/V directly, including a one-tap reset to Style inheritance;
+- selected subtitles can bulk-clear style/position overrides instead of repeating the action one event at a time;
+- the Style inspector reports which effective properties are coming from inline ASS overrides versus the shared Style;
+- the Style panel uses the full inspector height instead of a fixed 430dp internal cap;
+- the Project inspector surfaces PlayRes, ScaledBorderAndShadow, optional LayoutRes/YCbCr fields, and the count of events carrying style/position overrides;
+- playback scrubbing no longer issues an exact seek for every slider movement; the seek is committed when the drag finishes;
+- guide mode now draws the mpv-reported video rectangle separately from the ASS safe area, making geometry mismatch visible immediately.
+
 
 0.18.0 focuses on ASS style fidelity and editor semantics:
 
