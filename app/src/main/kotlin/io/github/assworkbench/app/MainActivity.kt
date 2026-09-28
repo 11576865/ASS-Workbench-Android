@@ -8,10 +8,23 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import io.github.assworkbench.app.ui.EditorScreen
 
 class MainActivity : ComponentActivity() {
@@ -56,28 +69,74 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        StartupProbe.mark(this, "activity_onCreate", "starting")
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        StartupProbe.mark(this, "activity_setContent", "starting")
         setContent {
-            val state by viewModel.state.collectAsState()
             MaterialTheme(colorScheme = darkColorScheme()) {
-                EditorScreen(
-                    state = state,
-                    viewModel = viewModel,
-                    onOpenVideo = { openVideo.launch(arrayOf("video/*")) },
-                    onOpenMkvProject = { openMkvProject.launch(arrayOf("video/x-matroska", "video/*", "application/octet-stream")) },
-                    onOpenSubtitle = { openSubtitle.launch(arrayOf("text/*", "application/x-ass", "application/x-ssa")) },
-                    onImportFont = { importFont.launch(arrayOf("font/ttf", "font/otf", "application/x-font-ttf", "application/x-font-opentype", "application/octet-stream")) },
-                    onSave = {
-                        if (!viewModel.saveCurrent()) saveSubtitleAs.launch(defaultFileName(state.project.title))
-                    },
-                    onSaveAs = { saveSubtitleAs.launch(defaultFileName(state.project.title)) },
-                    onSaveMkv = {
-                        saveMkvAs.launch(defaultMkvFileName(state.container.name.ifBlank { state.project.title }))
-                    },
-                )
+                var editorReady by rememberSaveable {
+                    mutableStateOf(!BuildConfig.ASSWB_RENDERER_EXPERIMENTAL)
+                }
+                var startupError by remember { mutableStateOf<String?>(null) }
+                var breadcrumb by remember { mutableStateOf(StartupProbe.read(this@MainActivity)) }
+
+                if (BuildConfig.ASSWB_RENDERER_EXPERIMENTAL && !editorReady) {
+                    Column(
+                        modifier = Modifier.fillMaxSize().padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Text("ASS Workbench FC 安全启动")
+                        Text("此页面尚未创建 EditorViewModel，也不会加载 mpv/libass/Fontconfig。")
+                        Text("上次启动记录：\n$breadcrumb")
+                        startupError?.let { Text("初始化错误：$it") }
+                        Button(
+                            onClick = {
+                                StartupProbe.mark(this@MainActivity, "activity_request_viewmodel", "starting")
+                                runCatching { viewModel.state }
+                                    .onSuccess {
+                                        StartupProbe.mark(this@MainActivity, "activity_request_viewmodel", "success")
+                                        breadcrumb = StartupProbe.read(this@MainActivity)
+                                        editorReady = true
+                                    }
+                                    .onFailure { error ->
+                                        startupError = "${error::class.java.simpleName}: ${error.message ?: "无消息"}"
+                                        StartupProbe.mark(
+                                            this@MainActivity,
+                                            "activity_request_viewmodel",
+                                            "failure",
+                                            startupError.orEmpty(),
+                                        )
+                                        breadcrumb = StartupProbe.read(this@MainActivity)
+                                    }
+                            },
+                        ) {
+                            Text("初始化编辑器")
+                        }
+                    }
+                } else {
+                    val state by viewModel.state.collectAsState()
+                    StartupProbe.mark(this@MainActivity, "editor_compose", "success")
+                    EditorScreen(
+                        state = state,
+                        viewModel = viewModel,
+                        onOpenVideo = { openVideo.launch(arrayOf("video/*")) },
+                        onOpenMkvProject = { openMkvProject.launch(arrayOf("video/x-matroska", "video/*", "application/octet-stream")) },
+                        onOpenSubtitle = { openSubtitle.launch(arrayOf("text/*", "application/x-ass", "application/x-ssa")) },
+                        onImportFont = { importFont.launch(arrayOf("font/ttf", "font/otf", "application/x-font-ttf", "application/x-font-opentype", "application/octet-stream")) },
+                        onSave = {
+                            if (!viewModel.saveCurrent()) saveSubtitleAs.launch(defaultFileName(state.project.title))
+                        },
+                        onSaveAs = { saveSubtitleAs.launch(defaultFileName(state.project.title)) },
+                        onSaveMkv = {
+                            saveMkvAs.launch(defaultMkvFileName(state.container.name.ifBlank { state.project.title }))
+                        },
+                    )
+                }
             }
         }
+        StartupProbe.mark(this, "activity_setContent", "success")
     }
 
     private fun persist(uri: Uri, read: Boolean, write: Boolean) {

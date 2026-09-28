@@ -30,12 +30,24 @@ import java.io.File
 
 class EditorViewModel(application: Application) : AndroidViewModel(application) {
     private val app get() = getApplication<Application>()
-    private val history = UndoHistory(AssDocument(), limit = 80)
-    private val fontStore = FontStore(application)
-    private val mkvGoTool = MkvGoTool(application)
-    private val prefs = application.getSharedPreferences("ass_workbench_editor", Context.MODE_PRIVATE)
-    private val recoveryStore = RecoveryStore(application)
-    private val reviewStateStore = ReviewStateStore(application)
+    private val history = StartupProbe.stage(application, "viewmodel_history") {
+        UndoHistory(AssDocument(), limit = 80)
+    }
+    private val fontStore = StartupProbe.stage(application, "viewmodel_fontstore") {
+        FontStore(application)
+    }
+    private val mkvGoTool = StartupProbe.stage(application, "viewmodel_mkvgo") {
+        MkvGoTool(application)
+    }
+    private val prefs = StartupProbe.stage(application, "viewmodel_prefs") {
+        application.getSharedPreferences("ass_workbench_editor", Context.MODE_PRIVATE)
+    }
+    private val recoveryStore = StartupProbe.stage(application, "viewmodel_recovery_store") {
+        RecoveryStore(application)
+    }
+    private val reviewStateStore = StartupProbe.stage(application, "viewmodel_review_store") {
+        ReviewStateStore(application)
+    }
     private var recoveryJob: Job? = null
     private var reviewPersistJob: Job? = null
     private var containerScan: MatroskaScanResult? = null
@@ -58,7 +70,10 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     )
 
     init {
-        refreshFonts(initial = true)
+        StartupProbe.stage(application, "viewmodel_initial_refresh") {
+            refreshFonts(initial = true)
+        }
+        StartupProbe.mark(application, "viewmodel_constructed", "success")
     }
 
     fun openMkvProject(uri: Uri) {
