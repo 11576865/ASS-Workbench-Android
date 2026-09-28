@@ -40,11 +40,34 @@ class FontBindingRewriterTest {
                     id = 1,
                     start = SubTime.ZERO,
                     end = SubTime(1000),
-                    text = "{\\fnFace A}A{\\fn}B{\\fnFace B}C",
+                    text = "{\\fnFace A}A{\\fn}B{\\fnFace B}C literal \\fnNotATag",
                 ),
             ),
         )
 
         assertEquals(setOf("Face A", "Face B"), FontBindingRewriter.explicitFamilies(document))
+    }
+
+    @Test
+    fun doesNotRewriteLiteralBackslashFnOutsideOverrideBlocks() {
+        val document = AssDocument(
+            styles = listOf(AssStyle(name = "Default", fontName = "Old")),
+            events = listOf(
+                AssEvent(
+                    id = 1,
+                    start = SubTime.ZERO,
+                    end = SubTime(1000),
+                    style = "Default",
+                    text = "literal \\fnVisible {\\fnActual}styled",
+                ),
+            ),
+        )
+
+        val rewritten = FontBindingRewriter.forceFamily(document, "Renderer Family")
+
+        assertEquals(
+            "literal \\fnVisible {\\fnRenderer Family}styled",
+            rewritten.events.single().text,
+        )
     }
 }
