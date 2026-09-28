@@ -25,6 +25,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -225,6 +226,7 @@ private fun ExperimentalRendererStartupProbe(
                                         "force-window" to "no",
                                         "idle" to "yes",
                                         "sub-auto" to "no",
+                                        "sub-ass-use-video-data" to "all",
                                         "sid" to "no",
                                         "secondary-sid" to "no",
                                         "embeddedfonts" to "yes",
@@ -284,6 +286,7 @@ private fun ExperimentalRendererStartupProbe(
                                     extra = mapOf(
                                         "sub-auto" to "no",
                                         "sub-ass-override" to "no",
+                                        "sub-ass-use-video-data" to "all",
                                         "embeddedfonts" to "yes",
                                         "sub-fonts-dir" to fontsDir.absolutePath,
                                         "sub-font-provider" to BuildConfig.ASSWB_RENDERER_FONT_PROVIDER,
@@ -387,6 +390,7 @@ private fun AuthoritativeMpvPreview(
             extra = mapOf(
                 "sub-auto" to "no",
                 "sub-ass-override" to "no",
+                "sub-ass-use-video-data" to "all",
                 "sid" to "no",
                 "secondary-sid" to "no",
                 "embeddedfonts" to "yes",
@@ -401,8 +405,12 @@ private fun AuthoritativeMpvPreview(
     val playback by mpv.playback.collectAsState()
     var protocolReady by remember(mpv) { mutableStateOf(false) }
     var subtitleAttached by remember(mpv, videoUri) { mutableStateOf(false) }
-    var videoDisplayWidth by remember(mpv, videoUri) { mutableLongStateOf(0L) }
-    var videoDisplayHeight by remember(mpv, videoUri) { mutableLongStateOf(0L) }
+    var osdWidth by remember(mpv, videoUri) { mutableIntStateOf(0) }
+    var osdHeight by remember(mpv, videoUri) { mutableIntStateOf(0) }
+    var osdMarginTop by remember(mpv, videoUri) { mutableIntStateOf(0) }
+    var osdMarginBottom by remember(mpv, videoUri) { mutableIntStateOf(0) }
+    var osdMarginLeft by remember(mpv, videoUri) { mutableIntStateOf(0) }
+    var osdMarginRight by remember(mpv, videoUri) { mutableIntStateOf(0) }
     var lastReportedPositionMs by remember(mpv) { mutableLongStateOf(initialPositionMs.coerceAtLeast(0L)) }
     val previewFile = remember(mpv) { File(context.cacheDir, "ass-preview/current.ass").apply { parentFile?.mkdirs() } }
 
@@ -435,9 +443,15 @@ private fun AuthoritativeMpvPreview(
 
     LaunchedEffect(mpv, videoUri, protocolReady, playback.durationSeconds) {
         if (!protocolReady || videoUri.isNullOrBlank() || playback.durationSeconds == null) return@LaunchedEffect
-        delay(120)
-        videoDisplayWidth = mpv[MpvProperties.Dwidth].getOrNull()?.coerceAtLeast(0L) ?: 0L
-        videoDisplayHeight = mpv[MpvProperties.Dheight].getOrNull()?.coerceAtLeast(0L) ?: 0L
+        delay(160)
+        mpv[MpvProperties.OsdDimensions].getOrNull()?.let { osd ->
+            osdWidth = osd.width.coerceAtLeast(0)
+            osdHeight = osd.height.coerceAtLeast(0)
+            osdMarginTop = osd.marginTop.coerceAtLeast(0)
+            osdMarginBottom = osd.marginBottom.coerceAtLeast(0)
+            osdMarginLeft = osd.marginLeft.coerceAtLeast(0)
+            osdMarginRight = osd.marginRight.coerceAtLeast(0)
+        }
     }
 
     LaunchedEffect(mpv, videoUri, document, protocolReady) {
@@ -460,7 +474,10 @@ private fun AuthoritativeMpvPreview(
         onRendererDiagnostics(
             readRendererFontDiagnostics(rendererLogFile) +
                 "Preview subtitle：sid=$activeSid · " +
-                (previewSource?.let { "external=$it" } ?: "external source 未报告")
+                (previewSource?.let { "external=$it" } ?: "external source 未报告") +
+                "ASS canvas：${document.playResX}×${document.playResY} · " +
+                "OSD=${osdWidth}×${osdHeight} margins=" +
+                "${osdMarginLeft},${osdMarginTop},${osdMarginRight},${osdMarginBottom}"
         )
     }
 
@@ -489,8 +506,12 @@ private fun AuthoritativeMpvPreview(
                 if (showLayoutGuides) {
                     LayoutGuideOverlay(
                         document = document,
-                        videoDisplayWidth = videoDisplayWidth,
-                        videoDisplayHeight = videoDisplayHeight,
+                        osdWidth = osdWidth,
+                        osdHeight = osdHeight,
+                        marginTop = osdMarginTop,
+                        marginBottom = osdMarginBottom,
+                        marginLeft = osdMarginLeft,
+                        marginRight = osdMarginRight,
                         modifier = Modifier.fillMaxSize(),
                     )
                 }
@@ -548,43 +569,32 @@ private fun formatClock(seconds: Double): String {
 @Composable
 private fun LayoutGuideOverlay(
     document: AssDocument,
-    videoDisplayWidth: Long,
-    videoDisplayHeight: Long,
+    osdWidth: Int,
+    osdHeight: Int,
+    marginTop: Int,
+    marginBottom: Int,
+    marginLeft: Int,
+    marginRight: Int,
     modifier: Modifier = Modifier,
 ) {
     val layout = TypesettingMath.bilingual6040(document.playResX, document.playResY)
     Canvas(modifier) {
-        val contentLeft: Float
-        val contentTop: Float
-        val contentWidth: Float
-        val contentHeight: Float
-        if (videoDisplayWidth > 0L && videoDisplayHeight > 0L && size.width > 0f && size.height > 0f) {
-            val videoAspect = videoDisplayWidth.toFloat() / videoDisplayHeight.toFloat()
-            val boxAspect = size.width / size.height
-            if (boxAspect > videoAspect) {
-                contentHeight = size.height
-                contentWidth = contentHeight * videoAspect
-                contentLeft = (size.width - contentWidth) / 2f
-                contentTop = 0f
-            } else {
-                contentWidth = size.width
-                contentHeight = contentWidth / videoAspect
-                contentLeft = 0f
-                contentTop = (size.height - contentHeight) / 2f
-            }
-        } else {
-            contentLeft = 0f
-            contentTop = 0f
-            contentWidth = size.width
-            contentHeight = size.height
-        }
+        val scaleX = if (osdWidth > 0) size.width / osdWidth.toFloat() else 1f
+        val scaleY = if (osdHeight > 0) size.height / osdHeight.toFloat() else 1f
+
+        val contentLeft = marginLeft * scaleX
+        val contentTop = marginTop * scaleY
+        val contentRight = size.width - marginRight * scaleX
+        val contentBottom = size.height - marginBottom * scaleY
+        val contentWidth = (contentRight - contentLeft).coerceAtLeast(0f)
+        val contentHeight = (contentBottom - contentTop).coerceAtLeast(0f)
 
         val sx = contentWidth / layout.playResX.toFloat().coerceAtLeast(1f)
         val sy = contentHeight / layout.playResY.toFloat().coerceAtLeast(1f)
         val left = contentLeft + layout.marginHorizontal * sx
-        val right = contentLeft + contentWidth - layout.marginHorizontal * sx
+        val right = contentRight - layout.marginHorizontal * sx
         val top = contentTop + layout.marginVertical * sy
-        val bottom = contentTop + contentHeight - layout.marginVertical * sy
+        val bottom = contentBottom - layout.marginVertical * sy
         val sourceY = contentTop + layout.sourceBoundaryY * sy
         val targetY = contentTop + layout.targetBoundaryY * sy
         drawRect(

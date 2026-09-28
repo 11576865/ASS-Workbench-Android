@@ -1,13 +1,17 @@
 package io.github.assworkbench.app.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
@@ -15,6 +19,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -27,6 +32,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import io.github.assworkbench.app.EditorState
 import io.github.assworkbench.app.EditorViewModel
@@ -67,8 +73,11 @@ fun TypesettingPanel(
 
     val focusedEvent = state.focusedEventId?.let { id -> state.document.events.firstOrNull { it.id == id } }
     val hasInlineStyleOverrides = focusedEvent?.text?.let { text ->
-        Regex("""\\(?:fn|fs(?!c)|b-?\d|i-?\d|u-?\d|s-?\d|fsp|bord|shad|an[1-9]|c&H|1c&H|3c&H|4c&H)""", RegexOption.IGNORE_CASE)
+        Regex("""\\(?:fn|fs(?!c)|b-?\d|i-?\d|u-?\d|s-?\d|fsp|bord|shad|an[1-9]|a\d+|pos\(|move\(|r|c&H|1c&H|3c&H|4c&H)""", RegexOption.IGNORE_CASE)
             .containsMatchIn(text)
+    } == true
+    val hasEventMarginOverrides = focusedEvent?.let {
+        it.marginL > 0 || it.marginR > 0 || it.marginV > 0
     } == true
 
     LaunchedEffect(
@@ -124,6 +133,18 @@ fun TypesettingPanel(
                     Text("安全区导引")
                     Switch(checked = state.showLayoutGuides, onCheckedChange = { viewModel.toggleLayoutGuides() })
                 }
+                val styleUseCount = state.document.events.count { it.style == style.name }
+                Text(
+                    "作用域：这个 Style 被 " + styleUseCount + " 条字幕共用；修改 Style 会同时影响它们。",
+                )
+                if (state.selectedEventIds.isNotEmpty()) {
+                    OutlinedButton(
+                        onClick = { viewModel.makeSelectedStyleIndependent(style.name) },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("仅让已选字幕使用独立 Style（" + state.selectedEventIds.size + " 条已选）")
+                    }
+                }
             }
             item {
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -165,19 +186,45 @@ fun TypesettingPanel(
                 }
             }
             item {
-                SmallField("PrimaryColour", primaryColor, { primaryColor = it }, Modifier.fillMaxWidth())
-                SmallField("OutlineColour", outlineColor, { outlineColor = it }, Modifier.fillMaxWidth())
-                SmallField("BackColour", backColor, { backColor = it }, Modifier.fillMaxWidth())
-                Text("ASS 颜色格式：&HAABBGGRR")
+                Text("颜色")
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    AssColorControl(
+                        label = "文字",
+                        value = primaryColor,
+                        onValue = { primaryColor = it },
+                        modifier = Modifier.weight(1f),
+                    )
+                    AssColorControl(
+                        label = "描边",
+                        value = outlineColor,
+                        onValue = { outlineColor = it },
+                        modifier = Modifier.weight(1f),
+                    )
+                    AssColorControl(
+                        label = "阴影/背景",
+                        value = backColor,
+                        onValue = { backColor = it },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
             }
             item {
                 Text("排版参数会自动应用到 Style；数值输入停止约 220 ms 后刷新预览。")
-                if (hasInlineStyleOverrides) {
-                    Text("当前字幕含有内联 ASS 排版覆盖（例如 \\fs / \\bord / \\an / \\fn），它会优先于 Style，因此部分改动可能看不出来。")
+                if (hasInlineStyleOverrides || hasEventMarginOverrides) {
+                    val reasons = buildList {
+                        if (hasInlineStyleOverrides) add("内联 ASS 标签")
+                        if (hasEventMarginOverrides) add("事件级 Margin")
+                    }.joinToString("、")
+                    Text(
+                        "当前字幕存在 $reasons，会覆盖同名 Style 属性。你的文件中像 \\fs56、\\b0、\\i0、\\bord6、\\an2 这类标签就是这种情况。",
+                    )
                     OutlinedButton(
                         onClick = viewModel::clearFocusedStyleOverrides,
                         modifier = Modifier.fillMaxWidth(),
-                    ) { Text("让当前字幕改由 Style 控制") }
+                    ) { Text("让当前字幕完全继承 Style") }
                 }
             }
             item {
@@ -240,6 +287,139 @@ private fun Flag(label: String, checked: Boolean, onChecked: (Boolean) -> Unit) 
         Text(label)
     }
 }
+
+@Composable
+private fun AssColorControl(
+    label: String,
+    value: String,
+    onValue: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var open by remember { mutableStateOf(false) }
+    val rgba = remember(value) { parseAssColor(value) }
+    OutlinedButton(
+        onClick = { open = true },
+        modifier = modifier,
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Box(
+                Modifier.size(18.dp).background(
+                    Color(
+                        red = rgba.red / 255f,
+                        green = rgba.green / 255f,
+                        blue = rgba.blue / 255f,
+                        alpha = (255 - rgba.assAlpha) / 255f,
+                    )
+                )
+            )
+            Text(label)
+        }
+    }
+    if (open) {
+        AssColorDialog(
+            label = label,
+            initial = rgba,
+            onDismiss = { open = false },
+            onConfirm = { picked ->
+                onValue(formatAssColor(picked))
+                open = false
+            },
+        )
+    }
+}
+
+private data class AssRgba(
+    val red: Int,
+    val green: Int,
+    val blue: Int,
+    val assAlpha: Int,
+)
+
+@Composable
+private fun AssColorDialog(
+    label: String,
+    initial: AssRgba,
+    onDismiss: () -> Unit,
+    onConfirm: (AssRgba) -> Unit,
+) {
+    var red by remember(initial) { mutableIntStateOf(initial.red) }
+    var green by remember(initial) { mutableIntStateOf(initial.green) }
+    var blue by remember(initial) { mutableIntStateOf(initial.blue) }
+    var opacity by remember(initial) { mutableIntStateOf(255 - initial.assAlpha) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("选择" + label + "颜色") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Box(
+                    Modifier.fillMaxWidth().heightIn(min = 42.dp).background(
+                        Color(red / 255f, green / 255f, blue / 255f, opacity / 255f)
+                    )
+                )
+                ColorSlider("R", red) { red = it }
+                ColorSlider("G", green) { green = it }
+                ColorSlider("B", blue) { blue = it }
+                ColorSlider("不透明度", opacity) { opacity = it }
+                Text(
+                    "ASS：" + formatAssColor(AssRgba(red, green, blue, 255 - opacity)),
+                    style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onConfirm(AssRgba(red, green, blue, 255 - opacity)) },
+            ) { Text("确定") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("取消") }
+        },
+    )
+}
+
+@Composable
+private fun ColorSlider(
+    label: String,
+    value: Int,
+    onValue: (Int) -> Unit,
+) {
+    Column {
+        Row(Modifier.fillMaxWidth()) {
+            Text(label, modifier = Modifier.weight(1f))
+            Text(value.toString())
+        }
+        Slider(
+            value = value.toFloat(),
+            onValueChange = { onValue(it.toInt().coerceIn(0, 255)) },
+            valueRange = 0f..255f,
+        )
+    }
+}
+
+private fun parseAssColor(value: String): AssRgba {
+    val hex = value.trim()
+        .removePrefix("&H")
+        .removeSuffix("&")
+        .padStart(8, '0')
+        .takeLast(8)
+    val a = hex.substring(0, 2).toIntOrNull(16) ?: 0
+    val b = hex.substring(2, 4).toIntOrNull(16) ?: 0
+    val g = hex.substring(4, 6).toIntOrNull(16) ?: 0
+    val r = hex.substring(6, 8).toIntOrNull(16) ?: 255
+    return AssRgba(r, g, b, a)
+}
+
+private fun formatAssColor(value: AssRgba): String =
+    "&H%02X%02X%02X%02X".format(
+        value.assAlpha.coerceIn(0, 255),
+        value.blue.coerceIn(0, 255),
+        value.green.coerceIn(0, 255),
+        value.red.coerceIn(0, 255),
+    )
 
 @Composable
 private fun StylePicker(
