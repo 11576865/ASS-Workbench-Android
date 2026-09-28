@@ -271,6 +271,13 @@ fun TypesettingPanel(
                                     styleManageMode = StyleManageMode.DELETE
                                 },
                             )
+                            DropdownMenuItem(
+                                text = { Text("清理未使用 Style") },
+                                onClick = {
+                                    styleMenuOpen = false
+                                    viewModel.deleteUnusedStyles()
+                                },
+                            )
                         }
                     }
                     Text("安全区")
