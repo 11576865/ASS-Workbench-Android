@@ -87,6 +87,7 @@ import io.github.assworkbench.domain.AssQualityCheck
 import io.github.assworkbench.domain.AssQcSeverity
 import io.github.assworkbench.domain.AssInlineSyntax
 import io.github.assworkbench.domain.SubTime
+import io.github.assworkbench.domain.EventFormatPasteMode
 import io.github.assworkbench.fonts.FontMatchStatus
 import androidx.window.core.layout.WindowSizeClass.Companion.WIDTH_DP_EXPANDED_LOWER_BOUND
 import androidx.window.core.layout.WindowSizeClass.Companion.WIDTH_DP_MEDIUM_LOWER_BOUND
@@ -946,9 +947,38 @@ private fun SubtitleDock(
                                 onClick = { actionsOpen = false; viewModel.mergeSelected(useLineBreak = false) },
                             )
                             DropdownMenuItem(
-                                text = { Text("复制当前字幕格式到选中字幕") },
+                                text = { Text("直接复制当前格式到选中字幕") },
                                 enabled = state.focusedEventId != null && state.selectedEventIds.any { it != state.focusedEventId },
                                 onClick = { actionsOpen = false; viewModel.copyFocusedFormattingToSelected() },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("复制当前格式到格式剪贴板") },
+                                enabled = state.focusedEventId != null,
+                                onClick = { actionsOpen = false; viewModel.copyFocusedFormatToClipboard() },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("粘贴格式剪贴板 · 全部") },
+                                onClick = { actionsOpen = false; viewModel.pasteFormatClipboardToSelected(EventFormatPasteMode.ALL) },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("粘贴 · Style") },
+                                onClick = { actionsOpen = false; viewModel.pasteFormatClipboardToSelected(EventFormatPasteMode.STYLE) },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("粘贴 · Margin") },
+                                onClick = { actionsOpen = false; viewModel.pasteFormatClipboardToSelected(EventFormatPasteMode.MARGINS) },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("粘贴 · 位置") },
+                                onClick = { actionsOpen = false; viewModel.pasteFormatClipboardToSelected(EventFormatPasteMode.POSITION) },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("粘贴 · Override") },
+                                onClick = { actionsOpen = false; viewModel.pasteFormatClipboardToSelected(EventFormatPasteMode.OVERRIDES) },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("粘贴 · 效果") },
+                                onClick = { actionsOpen = false; viewModel.pasteFormatClipboardToSelected(EventFormatPasteMode.EFFECTS) },
                             )
                             DropdownMenuItem(
                                 text = { Text("批量查找 / 替换…") },
