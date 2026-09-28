@@ -157,6 +157,7 @@ fun EditorScreen(
             onImportFont = onImportFont,
             onSaveMkv = onSaveMkv,
             onOpenVideo = onOpenVideo,
+            onOpenSubtitle = onOpenSubtitle,
             modifier = Modifier.fillMaxSize().padding(padding).navigationBarsPadding(),
         )
     }
@@ -260,39 +261,32 @@ private fun EditorWorkspace(
     onImportFont: () -> Unit,
     onSaveMkv: () -> Unit,
     onOpenVideo: () -> Unit,
+    onOpenSubtitle: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val windowSizeClass = currentWindowAdaptiveInfo(supportLargeAndXLargeWidth = true).windowSizeClass
     Box(modifier) {
-        when {
-            windowSizeClass.isWidthAtLeastBreakpoint(WIDTH_DP_EXPANDED_LOWER_BOUND) ->
-                ExpandedEditorWorkspace(
-                    state,
-                    viewModel,
-                    section,
-                    onSectionChange,
-                    onImportFont,
-                    onSaveMkv,
-                    onOpenVideo,
-                )
-            windowSizeClass.isWidthAtLeastBreakpoint(WIDTH_DP_MEDIUM_LOWER_BOUND) ->
-                TabletEditorWorkspace(
-                    state,
-                    viewModel,
-                    section,
-                    onSectionChange,
-                    onImportFont,
-                    onSaveMkv,
-                    onOpenVideo,
-                )
-            else -> CompactEditorWorkspace(
-                state,
-                viewModel,
-                section,
-                onSectionChange,
-                onImportFont,
-                onSaveMkv,
-                onOpenVideo,
+        if (windowSizeClass.isWidthAtLeastBreakpoint(WIDTH_DP_MEDIUM_LOWER_BOUND)) {
+            TabletEditorWorkspace(
+                state = state,
+                viewModel = viewModel,
+                section = section,
+                onSectionChange = onSectionChange,
+                onImportFont = onImportFont,
+                onSaveMkv = onSaveMkv,
+                onOpenVideo = onOpenVideo,
+                onOpenSubtitle = onOpenSubtitle,
+            )
+        } else {
+            CompactEditorWorkspace(
+                state = state,
+                viewModel = viewModel,
+                section = section,
+                onSectionChange = onSectionChange,
+                onImportFont = onImportFont,
+                onSaveMkv = onSaveMkv,
+                onOpenVideo = onOpenVideo,
+                onOpenSubtitle = onOpenSubtitle,
             )
         }
     }
@@ -320,7 +314,12 @@ private fun ExpandedEditorWorkspace(
         Column(Modifier.weight(1f).fillMaxHeight()) {
             PreviewPane(state, viewModel, onOpenVideo, section == WorkspaceSection.EFFECTS, Modifier.fillMaxWidth())
             Divider()
-            SubtitleDock(state, viewModel, Modifier.weight(1f).fillMaxWidth())
+            SubtitleDock(
+                state = state,
+                viewModel = viewModel,
+                onOpenSubtitle = onOpenSubtitle,
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+            )
         }
         Box(
             Modifier.width(1.dp).fillMaxHeight()
@@ -359,20 +358,20 @@ private fun TabletEditorWorkspace(
     onImportFont: () -> Unit,
     onSaveMkv: () -> Unit,
     onOpenVideo: () -> Unit,
+    onOpenSubtitle: () -> Unit,
 ) {
     var inspectorVisible by rememberSaveable { mutableStateOf(true) }
-    val inspectorWeight = when (section) {
-        WorkspaceSection.SUBTITLES -> 0.36f
-        WorkspaceSection.STYLE -> 0.50f
-        WorkspaceSection.EFFECTS -> 0.44f
-        WorkspaceSection.REVIEW -> 0.50f
-        WorkspaceSection.PROJECT -> 0.44f
-    }
+    val inspectorWeight = 0.50f
     Column(Modifier.fillMaxSize()) {
         PreviewPane(state, viewModel, onOpenVideo, section == WorkspaceSection.EFFECTS, Modifier.fillMaxWidth())
         Divider()
         Row(Modifier.weight(1f).fillMaxWidth()) {
-            SubtitleDock(state, viewModel, Modifier.weight(1f - inspectorWeight).fillMaxHeight())
+            SubtitleDock(
+                state = state,
+                viewModel = viewModel,
+                onOpenSubtitle = onOpenSubtitle,
+                modifier = Modifier.weight(1f - inspectorWeight).fillMaxHeight(),
+            )
             Box(
                 Modifier.width(1.dp).fillMaxHeight()
                     .background(MaterialTheme.colorScheme.outlineVariant),
@@ -411,6 +410,7 @@ private fun CompactEditorWorkspace(
     onImportFont: () -> Unit,
     onSaveMkv: () -> Unit,
     onOpenVideo: () -> Unit,
+    onOpenSubtitle: () -> Unit,
 ) {
     Column(Modifier.fillMaxSize()) {
         PreviewPane(state, viewModel, onOpenVideo, section == WorkspaceSection.EFFECTS, Modifier.fillMaxWidth())
@@ -867,6 +867,7 @@ private fun ProjectInspector(
 private fun SubtitleDock(
     state: EditorState,
     viewModel: EditorViewModel,
+    onOpenSubtitle: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val visibleIds = state.filteredEvents.map { it.id }
@@ -1052,13 +1053,14 @@ private fun SubtitleDock(
 
                 if (!state.subtitleLoaded) {
                     Column(
-                        Modifier.weight(1f).fillMaxWidth(),
+                        Modifier.weight(1f).fillMaxWidth()
+                            .clickable(onClick = onOpenSubtitle),
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center,
                     ) {
                         Text("未选择 ASS 字幕", style = MaterialTheme.typography.titleSmall)
                         Text(
-                            "可从顶部文件夹图标打开现有 ASS，或在 ⋮ → 新建空白 ASS 后直接开始。",
+                            "点击此处选择 .ass · 或从 ⋮ 新建空白 ASS",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -1525,21 +1527,21 @@ private fun SubtitleRow(
                 onCheckedChange = { onCheck() },
                 modifier = Modifier.width(26.dp).height(26.dp),
             )
-            Column(Modifier.width(132.dp)) {
+            Column(Modifier.width(158.dp)) {
                 Text(
-                    "#${event.id}  ${event.start.toAss()}–${event.end.toAss()}",
-                    style = MaterialTheme.typography.labelSmall,
-                    maxLines = 1,
-                )
-                Text(
-                    "L${event.layer} · ${event.style}" +
+                    "#${event.id} · L${event.layer} · ${event.style}" +
                         if (event.comment) " · Comment" else "" +
                         if (issueCount > 0) " · ⚠$issueCount" else "",
                     style = MaterialTheme.typography.labelSmall,
-                    color = if (issueCount > 0) MaterialTheme.colorScheme.tertiary
-                        else MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    event.start.toAss().removePrefix("0:") + "–" +
+                        event.end.toAss().removePrefix("0:"),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
                 )
             }
             Column(Modifier.weight(1f)) {
