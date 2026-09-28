@@ -47,6 +47,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -80,7 +81,8 @@ fun EditorScreen(
     onSaveAs: () -> Unit,
     onSaveMkv: () -> Unit,
 ) {
-    var section by remember { mutableStateOf(WorkspaceSection.SUBTITLES) }
+    var sectionName by rememberSaveable { mutableStateOf(WorkspaceSection.SUBTITLES.name) }
+    val section = WorkspaceSection.entries.firstOrNull { it.name == sectionName } ?: WorkspaceSection.SUBTITLES
     var overflowOpen by remember { mutableStateOf(false) }
 
     Scaffold(
@@ -163,7 +165,7 @@ fun EditorScreen(
             state = state,
             viewModel = viewModel,
             section = section,
-            onSectionChange = { section = it },
+            onSectionChange = { sectionName = it.name },
             onImportFont = onImportFont,
             onSaveMkv = onSaveMkv,
             modifier = Modifier.fillMaxSize().padding(padding),
@@ -333,16 +335,28 @@ private fun WorkspaceTabs(
     Row(
         modifier.fillMaxWidth()
             .horizontalScroll(rememberScrollState())
-            .padding(horizontal = 8.dp, vertical = 6.dp),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+            .padding(horizontal = 6.dp, vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         WorkspaceSection.entries.forEach { item ->
-            FilterChip(
-                selected = section == item,
-                onClick = { onSectionChange(item) },
-                label = { Text(item.label) },
-            )
+            val selected = section == item
+            Surface(
+                color = if (selected) MaterialTheme.colorScheme.secondaryContainer
+                    else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                shape = MaterialTheme.shapes.small,
+            ) {
+                TextButton(
+                    onClick = { onSectionChange(item) },
+                    modifier = Modifier.height(40.dp),
+                ) {
+                    Text(
+                        item.label,
+                        color = if (selected) MaterialTheme.colorScheme.onSecondaryContainer
+                            else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
         }
     }
 }
@@ -584,7 +598,7 @@ private fun SubtitleDock(
                     value = state.query,
                     onValueChange = viewModel::setQuery,
                     singleLine = true,
-                    label = { Text("搜索字幕") },
+                    placeholder = { Text("搜索正文 / Actor / Style") },
                     modifier = Modifier.weight(1f),
                 )
                 TriStateCheckbox(
@@ -772,31 +786,43 @@ private fun SubtitleRow(
     onJump: () -> Unit,
 ) {
     Row(
-        Modifier.fillMaxWidth().combinedClickable(onClick = onFocus, onLongClick = onLongPress).padding(vertical = 6.dp),
+        Modifier.fillMaxWidth()
+            .background(
+                if (focused) MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.28f)
+                else MaterialTheme.colorScheme.surface,
+            )
+            .combinedClickable(onClick = onFocus, onLongClick = onLongPress)
+            .padding(vertical = 3.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Checkbox(checked = checked, onCheckedChange = { onCheck() })
-        Text("#${event.id}", modifier = Modifier.width(44.dp), style = MaterialTheme.typography.labelSmall)
-        Column(Modifier.width(104.dp)) {
-            Text(event.start.toAss(), style = MaterialTheme.typography.labelSmall)
-            Text(event.end.toAss(), style = MaterialTheme.typography.labelSmall)
-            Text("L${event.layer}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Column(Modifier.width(138.dp)) {
+            Text(
+                "#${event.id}  ${event.start.toAss()}–${event.end.toAss()}",
+                style = MaterialTheme.typography.labelSmall,
+                maxLines = 1,
+            )
+            Text(
+                "L${event.layer} · ${event.style}",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
         Column(Modifier.weight(1f)) {
             Text(
                 text = rememberAssAnnotatedText(event.text),
-                maxLines = if (focused) 4 else 3,
+                maxLines = if (focused) 3 else 2,
                 overflow = TextOverflow.Ellipsis,
+                style = MaterialTheme.typography.bodyMedium,
             )
-            if (focused) {
+            if (focused && (event.marginL > 0 || event.marginR > 0 || event.marginV > 0)) {
                 Text(
-                    "Style ${event.style}" +
-                        if (event.marginL > 0 || event.marginR > 0 || event.marginV > 0)
-                            " · Event Margin ${event.marginL}/${event.marginR}/${event.marginV}"
-                        else "",
+                    "Event Margin ${event.marginL}/${event.marginR}/${event.marginV}",
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = MaterialTheme.colorScheme.tertiary,
                 )
             }
         }
