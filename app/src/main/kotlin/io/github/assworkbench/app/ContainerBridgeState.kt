@@ -15,5 +15,7 @@ data class ContainerBridgeState(
     val selectedTrackNumber: Long? = null,
     val extractedFontCount: Int = 0,
     val skippedAttachmentCount: Int = 0,
+    val writeBackAvailable: Boolean = false,
+    val writeBackBusy: Boolean = false,
     val error: String? = null,
 )

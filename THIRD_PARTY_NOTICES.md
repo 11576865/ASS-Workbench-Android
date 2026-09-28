@@ -26,3 +26,11 @@ ASS Workbench Android 0.2 uses the following major third-party components.
 - Apache-2.0 components.
 
 This file is a project notice, not a replacement for the upstream license texts. Release packaging should retain the corresponding upstream notices and source-offer obligations required by the final dependency set.
+
+
+## mkvgo
+
+- Project: `gravity-zero/mkvgo`
+- Pinned source revision for the Android helper: `085894ba0df6d14fb4dc4d41bab9aeb3283b3743`
+- License: MIT.
+- Used only for lossless Matroska container write-back. It does not transcode video or audio.

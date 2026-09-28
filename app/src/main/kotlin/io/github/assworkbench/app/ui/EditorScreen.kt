@@ -60,6 +60,7 @@ fun EditorScreen(
     onImportFont: () -> Unit,
     onSave: () -> Unit,
     onSaveAs: () -> Unit,
+    onSaveMkv: () -> Unit,
 ) {
     Scaffold(
         topBar = {
@@ -116,7 +117,7 @@ fun EditorScreen(
                         modifier = modifier,
                     )
                 },
-                second = { modifier -> SubtitleWorkbench(state, viewModel, onImportFont, modifier) },
+                second = { modifier -> SubtitleWorkbench(state, viewModel, onImportFont, onSaveMkv, modifier) },
             )
         }
     }
@@ -127,6 +128,7 @@ private fun SubtitleWorkbench(
     state: EditorState,
     viewModel: EditorViewModel,
     onImportFont: () -> Unit,
+    onSaveMkv: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val focused = state.document.events.firstOrNull { it.id == state.focusedEventId }
@@ -142,7 +144,7 @@ private fun SubtitleWorkbench(
             label = { Text("搜索字幕") },
             modifier = Modifier.fillMaxWidth(),
         )
-        ContainerBridgePanel(state.container, viewModel)
+        ContainerBridgePanel(state.container, viewModel, onSaveMkv)
         FontStatusRow(state, viewModel, onImportFont)
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text("工作区", style = MaterialTheme.typography.labelMedium, modifier = Modifier.weight(1f))

@@ -43,6 +43,11 @@ class MainActivity : ComponentActivity() {
             .onFailure { viewModel.reportError("字体导入失败", it) }
     }
 
+    private val saveMkvAs = registerForActivityResult(ActivityResultContracts.CreateDocument("video/x-matroska")) { uri ->
+        uri ?: return@registerForActivityResult
+        viewModel.saveMkvTo(uri)
+    }
+
     private val saveSubtitleAs = registerForActivityResult(ActivityResultContracts.CreateDocument("text/x-ssa")) { uri ->
         uri ?: return@registerForActivityResult
         persist(uri, read = true, write = true)
@@ -67,6 +72,9 @@ class MainActivity : ComponentActivity() {
                         if (!viewModel.saveCurrent()) saveSubtitleAs.launch(defaultFileName(state.project.title))
                     },
                     onSaveAs = { saveSubtitleAs.launch(defaultFileName(state.project.title)) },
+                    onSaveMkv = {
+                        saveMkvAs.launch(defaultMkvFileName(state.container.name.ifBlank { state.project.title }))
+                    },
                 )
             }
         }
@@ -77,6 +85,11 @@ class MainActivity : ComponentActivity() {
         if (read) flags = flags or Intent.FLAG_GRANT_READ_URI_PERMISSION
         if (write) flags = flags or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
         runCatching { contentResolver.takePersistableUriPermission(uri, flags) }
+    }
+
+    private fun defaultMkvFileName(title: String): String {
+        val stem = title.substringBeforeLast('.').ifBlank { "updated" }
+        return stem + "-edited.mkv"
     }
 
     private fun defaultFileName(title: String): String {

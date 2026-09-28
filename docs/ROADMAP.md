@@ -1,25 +1,29 @@
 # Roadmap
 
-## 0.8 — Event overrides + visual placement (current)
-- [x] Managed per-event `\\pos`, `\\blur` and `\\fad` editing.
-- [x] Restrained 98% → 100% soft-entry transform.
-- [x] Preserve unrelated leading override tags when managed tags are changed.
-- [x] X/Y numeric entry and ±5 px nudge.
-- [x] When no `\\pos` exists, nudge starts from the Style alignment/margin anchor.
-- [x] Raw Event Text / override view hidden by default.
-- [ ] Direct drag-on-video positioning remains pending until mpv Surface pointer arbitration is proven stable.
+## 0.7.1 — MKV Container Bridge write-back (current)
+- [x] Stream-scan MKV without decoding video/audio.
+- [x] Enumerate embedded S_TEXT/ASS tracks.
+- [x] Reconstruct editable ASS from CodecPrivate + subtitle Blocks.
+- [x] Extract TTF/OTF attachments into the shared Font Registry.
+- [x] Use the original MKV as reference video automatically.
+- [x] Bundle a pinned pure-Go mkvgo helper for arm64 Android.
+- [x] Replace the selected ASS track through lossless Matroska remux.
+- [x] Preserve inherited attachments while rewriting.
+- [x] Save as a new MKV; never overwrite the source container in place.
+- [ ] Expand the mkvgo helper to armeabi-v7a/x86_64 after arm64 real-device verification.
+- [ ] Avoid the temporary full source copy by adding a SAF-aware streaming filesystem bridge.
+- [ ] Preserve original subtitle default/forced flags when replacing a track.
+
+## 0.8 — Event overrides + visual placement
+- [ ] Blur, fade and restrained soft-entry tags.
+- [ ] Per-event override model and raw override view.
+- [ ] Drag preview to position and X/Y nudge.
 
 ## 0.9 — Batch + project/recovery
 - [ ] Range/sweep selection for touch.
 - [ ] Batch style/alignment/time operations.
 - [ ] Project sidecar and crash-recovery journal.
 - [ ] Persist review confirmation/pair metadata and divider ratio.
-- [ ] Complete MKV remux-back with stream-copy and attachment preservation.
 
 ## 0.10 — Round-trip and device audit
-- [ ] Preserve unsupported ASS content under repeated edit/save cycles.
-- [ ] CJK/font-family device diagnostics.
-- [ ] Large files, many overlapping events, rotation and lifecycle.
-- [ ] MKV scanner/remux real-world corpus.
-
 ## 1.0 — Product acceptance

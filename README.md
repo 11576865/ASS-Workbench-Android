@@ -47,3 +47,12 @@ Blur, fade and transform-based soft entry are not represented as fake Style prop
 ## 0.8 Event overrides
 
 The focused event has a non-destructive managed override panel for position, blur, fade and a restrained soft-entry transform. Existing unrelated leading ASS override tags are preserved. Position nudging converts alignment/margin placement to explicit `\\pos` only when the user asks for event-level movement. Raw Event Text remains available behind an explicit disclosure control.
+
+
+## 0.7 Container Bridge
+
+MKV can now be opened as a subtitle project. The Android reader scans Matroska sequentially, ignores video/audio payloads, reconstructs embedded `S_TEXT/ASS`, and registers attached TTF/OTF fonts in the same Font Registry used by libass preview.
+
+On arm64 builds, a pinned pure-Go `mkvgo` helper provides lossless write-back. “Save as new MKV” removes the selected embedded ASS track and merges the edited ASS back into a new container while carrying the source video/audio blocks and attachments without transcoding. The original MKV is never modified in place.
+
+The first write-back implementation uses app-private temporary files, so it needs enough free storage for large containers.

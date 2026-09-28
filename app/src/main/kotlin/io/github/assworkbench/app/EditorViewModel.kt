@@ -25,6 +25,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     private val app get() = getApplication<Application>()
     private val history = UndoHistory(AssDocument(), limit = 80)
     private val fontStore = FontStore(application)
+    private val mkvGoTool = MkvGoTool(application)
     private var containerScan: MatroskaScanResult? = null
     private val _state = MutableStateFlow(EditorState())
     val state: StateFlow<EditorState> = _state.asStateFlow()
@@ -40,6 +41,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                     uri = uri.toString(),
                     name = displayName(uri) ?: "Matroska project",
                     loading = true,
+                    writeBackAvailable = mkvGoTool.isAvailable(),
                 ),
                 status = "正在扫描 MKV 字幕轨与字体附件……",
             )
@@ -121,6 +123,78 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             )
         }
         refreshFontDiagnostics()
+    }
+
+    fun saveMkvTo(outputUri: Uri) {
+        val snapshot = _state.value
+        val sourceUri = snapshot.container.uri?.let(Uri::parse) ?: run {
+            reportError("MKV 写回失败", IllegalStateException("没有已打开的 MKV 工程"))
+            return
+        }
+        val trackNumber = snapshot.container.selectedTrackNumber ?: run {
+            reportError("MKV 写回失败", IllegalStateException("尚未选择 ASS 轨"))
+            return
+        }
+        val scanTrack = containerScan?.subtitleTracks?.firstOrNull { it.number == trackNumber }
+        if (!mkvGoTool.isAvailable()) {
+            reportError("MKV 写回失败", IllegalStateException("当前设备 ABI 没有 MKV 写回工具"))
+            return
+        }
+
+        _state.update {
+            it.copy(
+                container = it.container.copy(writeBackBusy = true),
+                status = "正在无重编码更新 MKV；大文件可能需要一些时间……",
+            )
+        }
+
+        viewModelScope.launch {
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    val work = File(app.cacheDir, "container-writeback").apply {
+                        deleteRecursively()
+                        mkdirs()
+                    }
+                    val source = File(work, "source.mkv")
+                    app.contentResolver.openInputStream(sourceUri)?.use { input ->
+                        source.outputStream().buffered().use { output -> input.copyTo(output, 1024 * 1024) }
+                    } ?: error("无法重新读取源 MKV")
+
+                    val editedAss = File(work, "edited.ass")
+                    editedAss.writeText(AssCodec.write(_state.value.document), Charsets.UTF_8)
+                    val result = File(work, "updated.mkv")
+
+                    mkvGoTool.replaceAss(
+                        source = source,
+                        trackNumber = trackNumber,
+                        editedAss = editedAss,
+                        output = result,
+                        language = scanTrack?.language.orEmpty(),
+                        name = scanTrack?.name.orEmpty(),
+                    )
+
+                    app.contentResolver.openOutputStream(outputUri, "w")?.use { output ->
+                        result.inputStream().buffered().use { input -> input.copyTo(output, 1024 * 1024) }
+                    } ?: error("无法写入目标 MKV")
+                    result.length()
+                }
+            }.onSuccess { bytes ->
+                _state.update {
+                    it.copy(
+                        dirty = false,
+                        container = it.container.copy(writeBackBusy = false),
+                        status = "新 MKV 已保存；视频/音频未重新编码，输出 " + (bytes / (1024 * 1024)) + " MiB。",
+                    )
+                }
+            }.onFailure { error ->
+                _state.update {
+                    it.copy(
+                        container = it.container.copy(writeBackBusy = false),
+                        status = "MKV 写回失败：" + (error.message ?: error::class.java.simpleName),
+                    )
+                }
+            }
+        }
     }
 
     fun attachVideo(uri: Uri) {

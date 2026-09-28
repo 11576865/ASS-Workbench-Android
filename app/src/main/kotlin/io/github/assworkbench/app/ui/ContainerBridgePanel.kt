@@ -25,6 +25,7 @@ import io.github.assworkbench.app.EditorViewModel
 fun ContainerBridgePanel(
     state: ContainerBridgeState,
     viewModel: EditorViewModel,
+    onSaveMkv: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     if (state.uri == null) return
@@ -73,7 +74,25 @@ fun ContainerBridgePanel(
                             }
                         }
                     }
-                    Text("当前 0.7.0：MKV 导入/字体附件桥接已工作；无重编码回写 MKV 将在 0.7.x 接上。")
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Text(
+                            if (state.writeBackAvailable) "无重编码 MKV 写回可用" else "当前 ABI 暂无 MKV 写回工具",
+                            modifier = Modifier.weight(1f),
+                        )
+                        TextButton(
+                            onClick = onSaveMkv,
+                            enabled = state.writeBackAvailable &&
+                                !state.writeBackBusy &&
+                                state.selectedTrackNumber != null,
+                        ) {
+                            Text(if (state.writeBackBusy) "处理中…" else "保存为新 MKV")
+                        }
+                    }
+                    Text("写回会替换所选 ASS 轨并保留视频、音频及附件；源 MKV 不会被原地修改。")
                 }
             }
         }
