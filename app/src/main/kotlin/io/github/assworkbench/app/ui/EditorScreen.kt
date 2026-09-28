@@ -1129,6 +1129,7 @@ private fun TimelineInspector(
     modifier: Modifier = Modifier,
 ) {
     var windowSeconds by rememberSaveable { mutableStateOf(30) }
+    var snapEnabled by rememberSaveable { mutableStateOf(true) }
     val focused = state.document.events.firstOrNull { it.id == state.focusedEventId }
     val centerMs = when {
         state.project.videoUri != null -> state.playbackPositionMs
@@ -1170,6 +1171,12 @@ private fun TimelineInspector(
                     )
                 }
             }
+            TextButton(
+                onClick = { snapEnabled = !snapEnabled },
+                modifier = Modifier.height(28.dp),
+            ) {
+                Text(if (snapEnabled) "吸附●" else "吸附○", style = MaterialTheme.typography.labelSmall)
+            }
         }
         if (visible.isEmpty()) {
             Text(
@@ -1187,6 +1194,7 @@ private fun TimelineInspector(
                         playheadMs = state.playbackPositionMs,
                         focused = event.id == state.focusedEventId,
                         snapTargetsMs = snapTargets,
+                        snapEnabled = snapEnabled,
                         onClick = { viewModel.focusEvent(event.id, seek = true) },
                         onTimingCommit = { startMs, endMs ->
                             viewModel.setEventTiming(event.id, startMs, endMs)
@@ -1212,6 +1220,7 @@ private fun TimelineEventRow(
     playheadMs: Long,
     focused: Boolean,
     snapTargetsMs: List<Long>,
+    snapEnabled: Boolean,
     onClick: () -> Unit,
     onTimingCommit: (Long, Long) -> Unit,
 ) {
@@ -1241,6 +1250,7 @@ private fun TimelineEventRow(
                     fun xFor(ms: Long): Float =
                         ((ms - windowStartMs).toFloat() / span.toFloat()).coerceIn(0f, 1f) * size.width
                     fun snap(candidate: Long): Long {
+                        if (!snapEnabled) return candidate
                         val grid = ((candidate + 5L) / 10L) * 10L
                         val threshold = minOf(120L, maxOf(30L, span / 200L))
                         val nearest = snapTargetsMs
@@ -1272,8 +1282,9 @@ private fun TimelineEventRow(
                                 val deltaMs = (dragAccumPx / size.width.coerceAtLeast(1) * span).toLong()
                                 when (mode) {
                                     TimelineDragMode.START -> {
+                                        val latestStart = (previewEnd - 10L).coerceAtLeast(0L)
                                         previewStart = snap(dragBaseStart + deltaMs)
-                                            .coerceIn(0L, previewEnd - 10L)
+                                            .coerceIn(0L, latestStart)
                                     }
                                     TimelineDragMode.END -> {
                                         previewEnd = snap(dragBaseEnd + deltaMs)
