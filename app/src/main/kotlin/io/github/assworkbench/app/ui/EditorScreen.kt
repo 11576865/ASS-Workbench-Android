@@ -1236,7 +1236,10 @@ private fun TimelineEventRow(
                     fun snap(candidate: Long): Long {
                         val grid = ((candidate + 5L) / 10L) * 10L
                         val threshold = minOf(120L, maxOf(30L, span / 200L))
-                        val nearest = snapTargetsMs.minByOrNull { kotlin.math.abs(it - candidate) }
+                        val nearest = snapTargetsMs
+                            .asSequence()
+                            .filterNot { it == dragBaseStart || it == dragBaseEnd }
+                            .minByOrNull { kotlin.math.abs(it - candidate) }
                         return if (nearest != null && kotlin.math.abs(nearest - candidate) <= threshold) nearest else grid
                     }
                     detectDragGestures(
