@@ -54,6 +54,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import io.github.assworkbench.app.AppThemeMode
 import io.github.assworkbench.app.BuildConfig
 import io.github.assworkbench.app.EditorState
 import io.github.assworkbench.app.EditorViewModel
@@ -80,6 +81,8 @@ fun EditorScreen(
     onSave: () -> Unit,
     onSaveAs: () -> Unit,
     onSaveMkv: () -> Unit,
+    themeMode: AppThemeMode,
+    onThemeModeChange: (AppThemeMode) -> Unit,
 ) {
     var sectionName by rememberSaveable { mutableStateOf(WorkspaceSection.SUBTITLES.name) }
     val section = WorkspaceSection.entries.firstOrNull { it.name == sectionName } ?: WorkspaceSection.SUBTITLES
@@ -145,6 +148,25 @@ fun EditorScreen(
                                     viewModel.rebuildRendererFontCache()
                                 },
                             )
+                            androidx.compose.material3.HorizontalDivider()
+                            AppThemeMode.entries.forEach { mode ->
+                                val label = when (mode) {
+                                    AppThemeMode.SYSTEM -> "跟随系统"
+                                    AppThemeMode.LIGHT -> "浅色"
+                                    AppThemeMode.DARK -> "深色"
+                                }
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            (if (themeMode == mode) "✓ " else "") + "主题 · " + label
+                                        )
+                                    },
+                                    onClick = {
+                                        overflowOpen = false
+                                        onThemeModeChange(mode)
+                                    },
+                                )
+                            }
                         }
                     }
                 },
