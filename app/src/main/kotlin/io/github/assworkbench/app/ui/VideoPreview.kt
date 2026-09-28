@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.matchParentSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Pause
@@ -127,8 +126,6 @@ private fun AuthoritativeMpvPreview(
     }
 
     LaunchedEffect(mpv, videoUri, document, protocolReady) {
-        // Parsing/editing is independent from video. Rendering waits for reference media
-        // only because there is no video surface to composite onto otherwise.
         if (!protocolReady || videoUri.isNullOrBlank()) return@LaunchedEffect
         delay(120)
         val tmp = File(previewFile.parentFile, "current.ass.tmp")
@@ -160,7 +157,7 @@ private fun AuthoritativeMpvPreview(
             } else {
                 MpvSurface(mpv, Modifier.fillMaxSize())
                 if (showLayoutGuides) {
-                    LayoutGuideOverlay(document, Modifier.matchParentSize())
+                    LayoutGuideOverlay(document, Modifier.fillMaxSize())
                 }
             }
         }
@@ -212,7 +209,6 @@ private fun formatClock(seconds: Double): String {
     val s = totalSeconds % 60
     return if (h > 0) "%d:%02d:%02d".format(h, m, s) else "%02d:%02d".format(m, s)
 }
-
 
 @Composable
 private fun LayoutGuideOverlay(document: AssDocument, modifier: Modifier = Modifier) {
