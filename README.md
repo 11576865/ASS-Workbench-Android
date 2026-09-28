@@ -2,7 +2,7 @@
 
 A focused Android ASS subtitle workbench for phones and tablets.
 
-**Current version: 0.19.0**
+**Current version: 0.20.0**
 
 ASS Workbench treats ASS as the primary editable document. A local video may be attached as reference media, or an MKV can be opened as a subtitle project.
 
@@ -50,7 +50,7 @@ Current CI uses:
 - Kotlin 2.4.10
 - Android Gradle Plugin 9.4.0
 - Gradle 9.7.1
-- compileSdk 36
+- compileSdk 37
 - targetSdk 35
 - minSdk 26
 - Go toolchain for the pinned arm64 MKV bridge
@@ -86,6 +86,21 @@ An MKV can be opened as a subtitle project. The reader scans Matroska tracks and
 The original MKV is never modified in place. The write-back path copies the source into app-private storage and writes one new result container; it no longer creates a second full-size intermediate container.
 
 ## Current hardening work
+
+0.20.0 is a broader professional-editor/infrastructure pass:
+
+- introduces a shared, lossless ASS inline syntax analyzer used by UI highlighting and validation instead of duplicating ad-hoc regexes;
+- keeps override blocks first-class and directly editable, while visually separating block syntax, tag names, values, escapes and malformed ranges;
+- makes raw Event Text permanently available in the Effects inspector and Review workspace rather than hiding it behind an expert-only toggle;
+- adds validation for malformed override blocks without rewriting unknown/unsupported tags;
+- exposes additional native ASS Style fields in a compact advanced section: SecondaryColour, ScaleX/Y, Angle, BorderStyle and Encoding;
+- adds a visual Style geometry preview for alignment and margins;
+- compacts workspace tabs and subtitle rows while keeping Style/Event metadata visible;
+- adds persisted System / Light / Dark appearance modes;
+- caches imported font metadata/font bytes and debounces glyph diagnostics to reduce typing and typesetting stalls;
+- updates the stable AndroidX baseline to Compose BOM 2026.09.00, Core 1.19.1 and Lifecycle 2.11.0, with compileSdk 37;
+- flattens redundant nested cards in Effects, Review and MKV Project inspectors to recover tablet workspace area.
+
 
 0.19.0 batches a larger tablet-usability and diagnostics pass instead of another single-issue hotfix:
 
