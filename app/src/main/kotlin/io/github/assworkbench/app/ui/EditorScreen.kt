@@ -721,7 +721,7 @@ private fun QualityCheckSummary(
                 modifier = Modifier.weight(1f),
                 style = MaterialTheme.typography.labelMedium,
                 color = when {
-                    errors > 0 -> MaterialTheme.colorScheme.error
+                    errors > 0 || missingFonts > 0 || missingGlyphStyles > 0 -> MaterialTheme.colorScheme.error
                     warnings > 0 -> MaterialTheme.colorScheme.tertiary
                     else -> MaterialTheme.colorScheme.onSurfaceVariant
                 },
@@ -732,7 +732,14 @@ private fun QualityCheckSummary(
         }
         if (open) {
             if (issues.isEmpty()) {
-                Text("未发现当前规则能确定的问题。", style = MaterialTheme.typography.labelSmall)
+                Text("未发现时间 / ASS 结构问题。", style = MaterialTheme.typography.labelSmall)
+                if (missingFonts > 0 || missingGlyphStyles > 0) {
+                    Text(
+                        "字体：missing $missingFonts · 存在缺字的 Style $missingGlyphStyles",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
             } else {
                 issues.take(40).forEach { issue ->
                     Row(
