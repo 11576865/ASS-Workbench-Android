@@ -471,29 +471,40 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    fun makeSelectedStyleIndependent(styleName: String) {
+    fun makeSelectedStylesIndependent() {
         val selectedIds = _state.value.selectedEventIds
         if (selectedIds.isEmpty()) return
-        editDocument("已为选中字幕创建独立 Style。") { doc ->
-            val source = doc.styles.firstOrNull { it.name == styleName } ?: return@editDocument doc
-            val targetIds = doc.events.asSequence()
-                .filter { it.id in selectedIds && it.style == styleName }
-                .map { it.id }
-                .toSet()
-            if (targetIds.isEmpty()) return@editDocument doc
+        editDocument("已为选中字幕创建独立 Style 副本。") { doc ->
+            val selectedEvents = doc.events.filter { it.id in selectedIds }
+            if (selectedEvents.isEmpty()) return@editDocument doc
 
-            val usedNames = doc.styles.mapTo(hashSetOf()) { it.name }
-            val base = styleName + "_selection"
-            var candidate = base
-            var suffix = 2
-            while (candidate in usedNames) {
-                candidate = base + "_" + suffix++
+            val styleByName = doc.styles.associateBy { it.name }
+            val usedNames = doc.styles.mapTo(linkedSetOf()) { it.name }
+            val cloneBySource = linkedMapOf<String, String>()
+            val clones = mutableListOf<io.github.assworkbench.domain.AssStyle>()
+
+            selectedEvents.map { it.style }.distinct().forEach { sourceName ->
+                val source = styleByName[sourceName] ?: return@forEach
+                val base = sourceName + "_selection"
+                var candidate = base
+                var suffix = 2
+                while (candidate in usedNames) {
+                    candidate = base + "_" + suffix++
+                }
+                usedNames += candidate
+                cloneBySource[sourceName] = candidate
+                clones += source.copy(name = candidate)
             }
 
+            if (clones.isEmpty()) return@editDocument doc
             doc.copy(
-                styles = doc.styles + source.copy(name = candidate),
+                styles = doc.styles + clones,
                 events = doc.events.map { event ->
-                    if (event.id in targetIds) event.copy(style = candidate) else event
+                    if (event.id !in selectedIds) {
+                        event
+                    } else {
+                        cloneBySource[event.style]?.let { event.copy(style = it) } ?: event
+                    }
                 },
             )
         }
