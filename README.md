@@ -178,3 +178,18 @@ The original MKV is never modified in place. The write-back path copies the sour
 4. **scope convergence** — product and roadmap documents describe the implemented MKV Container Bridge and no longer promise an unimplemented SRT importer.
 
 Still unresolved before 1.0: real-device confirmation of the CJK renderer path, exact placement of opaque lines, pathological custom Format layouts, broader MKV preservation, and larger real-world corpora.
+
+
+## 0.21 compact workbench batch
+
+- Compact 42dp editor toolbar; long project/subtitle name no longer consumes a two-line app bar.
+- Preview surface uses a fixed 16:9 workspace frame. Non-16:9 material letterboxes inside that frame instead of changing editor geometry.
+- Playback controls reduced to a 34dp strip.
+- Subtitle search moved from a permanent full-width field to an overlay opened from the search icon.
+- Select-all reduced to a compact toolbar action.
+- Long-press + drag range selection added for subtitle rows.
+- Focused subtitle timing, event margins and raw ASS text now expand directly inside the subtitle row.
+- The former right-side duplicate subtitle inspector is replaced by a 30-second timeline view.
+- Style inspector widened and explanatory copy reduced; geometry preview is smaller.
+- Embedded MKV fonts and standalone imported fonts now feed the same provider=none fallback path.
+- Default fallback selection prefers readable CJK-capable Android system fonts before Latin-only fonts.
