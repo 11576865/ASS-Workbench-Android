@@ -1,6 +1,7 @@
 package io.github.assworkbench.app.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
@@ -25,7 +26,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Redo
 import androidx.compose.material.icons.automirrored.filled.Undo
@@ -75,6 +78,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -89,7 +93,6 @@ import io.github.assworkbench.domain.AssInlineSyntax
 import io.github.assworkbench.domain.SubTime
 import io.github.assworkbench.domain.EventFormatPasteMode
 import io.github.assworkbench.fonts.FontMatchStatus
-import androidx.window.core.layout.WindowSizeClass.Companion.WIDTH_DP_EXPANDED_LOWER_BOUND
 import androidx.window.core.layout.WindowSizeClass.Companion.WIDTH_DP_MEDIUM_LOWER_BOUND
 
 private enum class WorkspaceSection(val label: String) {
@@ -158,7 +161,7 @@ fun EditorScreen(
             onSaveMkv = onSaveMkv,
             onOpenVideo = onOpenVideo,
             onOpenSubtitle = onOpenSubtitle,
-            modifier = Modifier.fillMaxSize().padding(padding).navigationBarsPadding(),
+            modifier = Modifier.fillMaxSize().padding(padding),
         )
     }
 }
@@ -176,7 +179,7 @@ private fun CompactEditorToolbar(
 ) {
     var overflowOpen by remember { mutableStateOf(false) }
     CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 32.dp) {
-        Surface(Modifier.statusBarsPadding(), tonalElevation = 1.dp) {
+        Surface(tonalElevation = 1.dp) {
             Row(
                 Modifier.fillMaxWidth().height(42.dp).padding(horizontal = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -1741,7 +1744,7 @@ private fun FocusedEventEditor(
             visualTransformation = rememberAssSyntaxTransformation(),
             isError = syntax.hasErrors,
             textStyle = MaterialTheme.typography.bodySmall,
-            modifier = Modifier.fillMaxWidth().heightIn(min = 68.dp, max = 132.dp),
+            modifier = Modifier.fillMaxWidth().heightIn(min = 84.dp, max = 180.dp),
         )
     }
 }
@@ -1803,13 +1806,34 @@ private fun CompactEventField(
     onValue: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    OutlinedTextField(
-        value = value,
-        onValueChange = onValue,
-        label = { Text(label, style = MaterialTheme.typography.labelSmall) },
-        singleLine = true,
-        textStyle = MaterialTheme.typography.bodySmall,
-        modifier = modifier.height(44.dp),
-    )
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(1.dp),
+    ) {
+        Text(
+            label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+        )
+        BasicTextField(
+            value = value,
+            onValueChange = onValue,
+            singleLine = true,
+            textStyle = MaterialTheme.typography.bodySmall.merge(
+                TextStyle(color = MaterialTheme.colorScheme.onSurface)
+            ),
+            cursorBrush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.primary),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(30.dp)
+                .border(
+                    width = 1.dp,
+                    color = MaterialTheme.colorScheme.outline,
+                    shape = RoundedCornerShape(5.dp),
+                )
+                .padding(horizontal = 7.dp, vertical = 6.dp),
+        )
+    }
 }
 
