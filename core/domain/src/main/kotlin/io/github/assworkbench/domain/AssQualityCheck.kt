@@ -11,6 +11,7 @@ enum class AssQcKind {
     TINY_GAP,
     UNKNOWN_STYLE,
     INLINE_SYNTAX,
+    INVALID_POSITION,
 }
 
 data class AssQcIssue(
@@ -21,6 +22,11 @@ data class AssQcIssue(
 )
 
 object AssQualityCheck {
+    private val validPos = Regex("""\\pos\(\s*-?\d+(?:\.\d+)?\s*,\s*-?\d+(?:\.\d+)?\s*\)""", RegexOption.IGNORE_CASE)
+    private val validMove = Regex(
+        """\\move\(\s*-?\d+(?:\.\d+)?\s*,\s*-?\d+(?:\.\d+)?\s*,\s*-?\d+(?:\.\d+)?\s*,\s*-?\d+(?:\.\d+)?(?:\s*,\s*\d+\s*,\s*\d+)?\s*\)""",
+        RegexOption.IGNORE_CASE,
+    )
     fun inspect(
         document: AssDocument,
         veryShortMs: Long = 250L,
@@ -49,6 +55,13 @@ object AssQualityCheck {
             val analysis = AssInlineSyntax.analyze(event.text)
             analysis.issues.forEach { issue ->
                 out += AssQcIssue(event.id, AssQcKind.INLINE_SYNTAX, AssQcSeverity.ERROR, issue.message)
+            }
+            val lower = event.text.lowercase()
+            if ("\\pos(" in lower && !validPos.containsMatchIn(event.text)) {
+                out += AssQcIssue(event.id, AssQcKind.INVALID_POSITION, AssQcSeverity.ERROR, "无效 \\pos 参数")
+            }
+            if ("\\move(" in lower && !validMove.containsMatchIn(event.text)) {
+                out += AssQcIssue(event.id, AssQcKind.INVALID_POSITION, AssQcSeverity.ERROR, "无效 \\move 参数")
             }
         }
 
