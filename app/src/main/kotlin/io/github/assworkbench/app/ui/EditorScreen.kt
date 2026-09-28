@@ -109,6 +109,7 @@ fun EditorScreen(
                         seekRequestMs = state.seekRequestMs,
                         seekRequestNonce = state.seekRequestNonce,
                         onPosition = viewModel::setPlaybackPosition,
+                        onRendererDiagnostics = viewModel::updateRendererDiagnostics,
                         configDir = viewModel.rendererConfigDir(),
                         fontsDir = viewModel.rendererFontsDir(),
                         fontRevision = state.fontRevision,
@@ -320,6 +321,22 @@ private fun FontStatusRow(state: EditorState, viewModel: EditorViewModel, onImpo
                     color = if (glyph.matchedFamily != null && glyph.missingCodePoints.isEmpty())
                         MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
                 )
+            }
+            if (state.rendererDiagnostics.isEmpty()) {
+                Text(
+                    "Renderer：等待 mpv/libass font selection 日志",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                Text("Renderer（mpv/libass）", style = MaterialTheme.typography.labelSmall)
+                state.rendererDiagnostics.takeLast(4).forEach { line ->
+                    Text(
+                        line,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
         }
     }

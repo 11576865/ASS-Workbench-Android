@@ -10,6 +10,7 @@ import io.github.assworkbench.container.MatroskaScanResult
 import io.github.assworkbench.domain.AssCodec
 import io.github.assworkbench.domain.AssDocument
 import io.github.assworkbench.domain.EventOverrideEditor
+import io.github.assworkbench.domain.ReviewEventKey
 import io.github.assworkbench.domain.ReviewSidecar
 import io.github.assworkbench.domain.SubTime
 import io.github.assworkbench.domain.TypesettingMath
@@ -35,6 +36,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     private val recoveryStore = RecoveryStore(application)
     private val reviewStateStore = ReviewStateStore(application)
     private var recoveryJob: Job? = null
+    private var reviewPersistJob: Job? = null
     private var containerScan: MatroskaScanResult? = null
     private val _state = MutableStateFlow(
         EditorState(
@@ -46,6 +48,13 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         )
     )
     val state: StateFlow<EditorState> = _state.asStateFlow()
+
+    private data class RestoredReviewState(
+        val sourceStyle: String,
+        val targetStyle: String,
+        val confirmedIds: Set<Long>,
+        val originalTextById: Map<Long, String>,
+    )
 
     init {
         refreshFonts(initial = true)
@@ -516,13 +525,8 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun updateEventText(id: Long, text: String) {
-        val before = _state.value.document.events.firstOrNull { it.id == id }?.text
         editDocument("已修改字幕 #" + id + "。") { doc ->
             doc.copy(events = doc.events.map { if (it.id == id) it.copy(text = text) else it })
-        }
-        if (before != text) {
-            _state.update { it.copy(confirmedReviewIds = it.confirmedReviewIds - id) }
-            persistReviewSidecar()
         }
     }
 
@@ -679,47 +683,66 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     fun rendererConfigDir() = fontStore.mpvConfigDir
     fun rendererFontsDir() = fontStore.importedDir
 
+    fun updateRendererDiagnostics(lines: List<String>) {
+        val normalized = lines.filter(String::isNotBlank).takeLast(12)
+        if (_state.value.rendererDiagnostics == normalized) return
+        _state.update { it.copy(rendererDiagnostics = normalized) }
+    }
+
     private fun restoreReviewSidecar(
         identity: String,
         document: AssDocument,
         styleNames: List<String>,
-    ): ReviewSidecar {
+    ): RestoredReviewState {
         val loaded = reviewStateStore.load(identity)
         val validIds = document.events.mapTo(hashSetOf()) { it.id }
         val defaults = document.events.associate { event -> event.id to event.text }
         if (loaded == null) {
-            return ReviewSidecar(
+            return RestoredReviewState(
                 sourceStyle = styleNames.firstOrNull().orEmpty(),
                 targetStyle = styleNames.drop(1).firstOrNull().orEmpty(),
                 confirmedIds = emptySet(),
                 originalTextById = defaults,
             )
         }
+
         val source = loaded.sourceStyle.takeIf { it in styleNames } ?: styleNames.firstOrNull().orEmpty()
         val target = loaded.targetStyle.takeIf { it in styleNames && it != source }
             ?: styleNames.firstOrNull { it != source }.orEmpty()
-        val originals = defaults.toMutableMap().apply {
-            loaded.originalTextById.forEach { (id, text) -> if (id in validIds) put(id, text) }
+
+        val keyById = ReviewEventKey.keys(document.events)
+        val idByKey = keyById.entries.associate { (id, key) -> key to id }
+        val originals = defaults.toMutableMap()
+        loaded.legacyOriginalTextById.forEach { (id, text) ->
+            if (id in validIds) originals[id] = text
         }
-        return ReviewSidecar(
-            sourceStyle = source,
-            targetStyle = target,
-            confirmedIds = loaded.confirmedIds.filterTo(linkedSetOf()) { it in validIds },
-            originalTextById = originals,
-        )
+        loaded.originalTextByKey.forEach { (key, text) ->
+            idByKey[key]?.let { id -> originals[id] = text }
+        }
+
+        val confirmed = linkedSetOf<Long>()
+        loaded.legacyConfirmedIds.filterTo(confirmed) { it in validIds }
+        loaded.confirmedKeys.mapNotNullTo(confirmed) { idByKey[it] }
+
+        return RestoredReviewState(source, target, confirmed, originals)
     }
 
     private fun persistReviewSidecar() {
         val snapshot = _state.value
         val identity = reviewIdentity(snapshot) ?: return
+        val keyById = ReviewEventKey.keys(snapshot.document.events)
         val value = ReviewSidecar(
             sourceStyle = snapshot.reviewSourceStyle,
             targetStyle = snapshot.reviewTargetStyle,
-            confirmedIds = snapshot.confirmedReviewIds,
-            originalTextById = snapshot.originalTextById,
+            confirmedKeys = snapshot.confirmedReviewIds.mapNotNull { keyById[it] }.toSet(),
+            originalTextByKey = snapshot.originalTextById.entries.mapNotNull { (id, text) ->
+                keyById[id]?.let { key -> key to text }
+            }.toMap(),
         )
-        viewModelScope.launch(Dispatchers.IO) {
-            runCatching { reviewStateStore.write(identity, value) }
+        reviewPersistJob?.cancel()
+        reviewPersistJob = viewModelScope.launch {
+            delay(250)
+            withContext(Dispatchers.IO) { reviewStateStore.write(identity, value) }
         }
     }
 
@@ -738,12 +761,22 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     private inline fun editDocument(status: String, transform: (AssDocument) -> AssDocument) {
-        val next = transform(_state.value.document)
-        if (next == _state.value.document) return
+        val beforeState = _state.value
+        val before = beforeState.document
+        val next = transform(before)
+        if (next == before) return
+
+        val changedConfirmedIds = beforeState.confirmedReviewIds.filterTo(hashSetOf()) { id ->
+            before.events.firstOrNull { it.id == id } != next.events.firstOrNull { it.id == id }
+        }
+
         history.commit(next)
         publishDocument(next, status, dirty = true)
+        if (changedConfirmedIds.isNotEmpty()) {
+            _state.update { it.copy(confirmedReviewIds = it.confirmedReviewIds - changedConfirmedIds) }
+        }
         scheduleRecovery(next)
-        refreshFontDiagnostics()
+        persistReviewSidecar()
     }
 
     private fun publishDocument(document: AssDocument, status: String, dirty: Boolean = true) {

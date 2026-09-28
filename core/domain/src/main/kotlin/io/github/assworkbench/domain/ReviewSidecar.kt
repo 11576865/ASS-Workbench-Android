@@ -5,31 +5,69 @@ import java.util.Base64
 data class ReviewSidecar(
     val sourceStyle: String = "",
     val targetStyle: String = "",
-    val confirmedIds: Set<Long> = emptySet(),
-    val originalTextById: Map<Long, String> = emptyMap(),
+    val confirmedKeys: Set<String> = emptySet(),
+    val originalTextByKey: Map<String, String> = emptyMap(),
+    val legacyConfirmedIds: Set<Long> = emptySet(),
+    val legacyOriginalTextById: Map<Long, String> = emptyMap(),
 )
 
 object ReviewSidecarCodec {
-    private const val HEADER = "ASSWB_REVIEW_V1"
+    private const val HEADER_V2 = "ASSWB_REVIEW_V2"
+    private const val HEADER_V1 = "ASSWB_REVIEW_V1"
 
     fun encode(value: ReviewSidecar): String = buildString {
-        append(HEADER).append('\n')
+        append(HEADER_V2).append('\n')
         append("S\t").append(enc(value.sourceStyle)).append('\n')
         append("T\t").append(enc(value.targetStyle)).append('\n')
-        append("C\t").append(value.confirmedIds.sorted().joinToString(",")).append('\n')
-        value.originalTextById.toSortedMap().forEach { (id, text) ->
-            append("O\t").append(id).append('\t').append(enc(text)).append('\n')
+        value.confirmedKeys.sorted().forEach { key ->
+            append("C\t").append(enc(key)).append('\n')
+        }
+        value.originalTextByKey.toSortedMap().forEach { (key, text) ->
+            append("O\t").append(enc(key)).append('\t').append(enc(text)).append('\n')
         }
     }
 
     fun decode(text: String): ReviewSidecar? {
         val lines = text.replace("\r\n", "\n").replace('\r', '\n').lines()
-        if (lines.firstOrNull()?.trim() != HEADER) return null
+        return when (lines.firstOrNull()?.trim()) {
+            HEADER_V2 -> decodeV2(lines.drop(1))
+            HEADER_V1 -> decodeV1(lines.drop(1))
+            else -> null
+        }
+    }
+
+    private fun decodeV2(lines: List<String>): ReviewSidecar {
+        var source = ""
+        var target = ""
+        val confirmed = linkedSetOf<String>()
+        val originals = linkedMapOf<String, String>()
+        lines.forEach { line ->
+            val parts = line.split('\t')
+            when (parts.firstOrNull()) {
+                "S" -> source = parts.getOrNull(1)?.let(::dec).orEmpty()
+                "T" -> target = parts.getOrNull(1)?.let(::dec).orEmpty()
+                "C" -> parts.getOrNull(1)?.let(::dec)?.takeIf(String::isNotBlank)?.let(confirmed::add)
+                "O" -> {
+                    val key = parts.getOrNull(1)?.let(::dec)
+                    val value = parts.getOrNull(2)?.let(::dec)
+                    if (!key.isNullOrBlank() && value != null) originals[key] = value
+                }
+            }
+        }
+        return ReviewSidecar(
+            sourceStyle = source,
+            targetStyle = target,
+            confirmedKeys = confirmed,
+            originalTextByKey = originals,
+        )
+    }
+
+    private fun decodeV1(lines: List<String>): ReviewSidecar {
         var source = ""
         var target = ""
         val confirmed = linkedSetOf<Long>()
         val originals = linkedMapOf<Long, String>()
-        lines.drop(1).forEach { line ->
+        lines.forEach { line ->
             val parts = line.split('\t')
             when (parts.firstOrNull()) {
                 "S" -> source = parts.getOrNull(1)?.let(::dec).orEmpty()
@@ -44,7 +82,12 @@ object ReviewSidecarCodec {
                 }
             }
         }
-        return ReviewSidecar(source, target, confirmed, originals)
+        return ReviewSidecar(
+            sourceStyle = source,
+            targetStyle = target,
+            legacyConfirmedIds = confirmed,
+            legacyOriginalTextById = originals,
+        )
     }
 
     private fun enc(value: String): String =

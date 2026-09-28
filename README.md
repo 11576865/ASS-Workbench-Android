@@ -2,7 +2,7 @@
 
 A focused Android ASS subtitle workbench for phones and tablets.
 
-**Current version: 0.12.0**
+**Current version: 0.14.0**
 
 ASS Workbench treats ASS as the primary editable document. A local video may be attached as reference media, or an MKV can be opened as a subtitle project.
 
@@ -19,17 +19,19 @@ ASS Workbench treats ASS as the primary editable document. A local video may be 
 - imported TTF/OTF Font Registry with OpenType family-name parsing;
 - explicit Style font assignment;
 - family match diagnostics plus actual OpenType `cmap` glyph-coverage checks;
+- mpv/libass renderer-log capture for font-selection evidence;
 - focused Style typesetting workspace;
 - safe-area guide and 60/40 bilingual layout preset generalized from the HSR workbench;
 - event-level position, blur, fade and restrained soft-entry overrides;
-- bilingual Review workspace with persisted review sidecar;
+- bilingual Review workspace with persisted Review Sidecar V2 using stable event fingerprints and V1 compatibility;
 - tri-state select-all and batch time/Layer/Style operations;
 - MKV Container Bridge:
   - enumerate embedded ASS tracks;
   - register attached TTF/OTF fonts;
   - edit a selected ASS track;
   - save a new MKV with video/audio stream-copied instead of transcoded;
-- preservation of unknown ASS sections plus opaque/comment lines inside known sections.
+- preservation of unknown ASS sections plus opaque/comment lines inside known sections;
+- preservation of custom Style/Event Format columns and an initial round-trip regression corpus.
 
 ## Product boundary
 
@@ -84,9 +86,11 @@ The original MKV is never modified in place. The current implementation uses app
 
 ## Current hardening work
 
-0.11/0.12 focus on two areas that previously caused uncertainty:
+0.14 is a stabilization release:
 
-1. **font diagnosis** — family-name matching is now separate from actual glyph coverage, using OpenType `cmap` format 4/12 parsing;
-2. **ASS round-trip safety** — comments and opaque unknown lines inside Script Info, V4+ Styles and Events are retained across parse/write cycles, in addition to previously preserved unknown sections.
+1. **renderer observability** — mpv writes an app-private verbose log and recent libass/font-selection lines are surfaced beside family/glyph diagnostics;
+2. **Review identity** — new sidecars persist stable event fingerprints instead of parse-order IDs, while legacy V1 sidecars remain readable;
+3. **round-trip regression corpus** — representative Aegisub-like, custom-column and opaque-section fixtures exercise open → one-field edit → save → parse;
+4. **scope convergence** — product and roadmap documents describe the implemented MKV Container Bridge and no longer promise an unimplemented SRT importer.
 
-Exact original placement of those opaque lines and nonstandard custom Format columns still need further hardening before 1.0.
+Still unresolved before 1.0: real-device confirmation of the CJK renderer path, exact placement of opaque lines, pathological custom Format layouts, broader MKV preservation, and larger real-world corpora.
