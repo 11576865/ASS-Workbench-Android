@@ -162,17 +162,28 @@ private fun ReviewPairCard(
                 "SOURCE  " + (row.source?.start?.toAss() ?: "—") + " → " + (row.source?.end?.toAss() ?: "—"),
                 style = MaterialTheme.typography.labelSmall,
             )
-            Text(row.source?.text ?: "（缺失 Source）")
+            if (row.source != null) {
+                Text(rememberAssAnnotatedText(row.source.text))
+            } else {
+                Text("（缺失 Source）")
+            }
 
             Text("REFERENCE", style = MaterialTheme.typography.labelSmall)
-            Text(if (target == null) "（缺失 Target）" else reference.ifBlank { "（载入时为空）" })
+            if (target == null) {
+                Text("（缺失 Target）")
+            } else if (reference.isBlank()) {
+                Text("（载入时为空）")
+            } else {
+                Text(rememberAssAnnotatedText(reference))
+            }
 
             if (target != null) {
                 OutlinedTextField(
                     value = finalText,
                     onValueChange = { finalText = it },
-                    label = { Text("FINAL") },
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 70.dp),
+                    label = { Text("FINAL / ASS Event Text") },
+                    visualTransformation = rememberAssSyntaxTransformation(),
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 82.dp),
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Button(
