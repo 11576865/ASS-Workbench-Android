@@ -79,6 +79,11 @@ fun TypesettingPanel(
     val hasEventMarginOverrides = focusedEvent?.let {
         it.marginL > 0 || it.marginR > 0 || it.marginV > 0
     } == true
+    val focusedSources = focusedEvent?.let(::styleOverrideSources).orEmpty()
+    val selectedOverrideCount = state.document.events.count { event ->
+        event.id in state.selectedEventIds &&
+            (styleOverrideSources(event).isNotEmpty() || event.marginL > 0 || event.marginR > 0 || event.marginV > 0)
+    }
 
     LaunchedEffect(
         style.name,
@@ -119,9 +124,9 @@ fun TypesettingPanel(
         )
     }
 
-    Card(modifier.fillMaxWidth()) {
+    Card(modifier.fillMaxSize()) {
         LazyColumn(
-            Modifier.fillMaxWidth().heightIn(max = 430.dp).padding(10.dp),
+            Modifier.fillMaxSize().padding(10.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             item {
@@ -143,6 +148,14 @@ fun TypesettingPanel(
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         Text("仅让已选字幕使用独立 Style（" + state.selectedEventIds.size + " 条已选）")
+                    }
+                    if (selectedOverrideCount > 0) {
+                        OutlinedButton(
+                            onClick = viewModel::clearSelectedStyleOverrides,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text("让已选字幕全部继承 Style（$selectedOverrideCount 条存在覆盖）")
+                        }
                     }
                 }
             }
@@ -212,6 +225,28 @@ fun TypesettingPanel(
                 }
             }
             item {
+                Text("有效值来源", style = androidx.compose.material3.MaterialTheme.typography.titleSmall)
+                if (focusedEvent != null) {
+                    Text(
+                        if (focusedSources.isEmpty() && !hasEventMarginOverrides)
+                            "当前字幕没有检测到样式覆盖：以下参数由 Style 决定。"
+                        else
+                            buildString {
+                                if (focusedSources.isNotEmpty()) append("内联覆盖：").append(focusedSources.joinToString("、"))
+                                if (hasEventMarginOverrides) {
+                                    if (isNotEmpty()) append(" · ")
+                                    append("事件 Margin=")
+                                        .append(focusedEvent.marginL).append("/")
+                                        .append(focusedEvent.marginR).append("/")
+                                        .append(focusedEvent.marginV)
+                                }
+                            },
+                        color = if (focusedSources.isEmpty() && !hasEventMarginOverrides)
+                            androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
+                        else
+                            androidx.compose.material3.MaterialTheme.colorScheme.tertiary,
+                    )
+                }
                 Text("排版参数会自动应用到 Style；数值输入停止约 220 ms 后刷新预览。")
                 if (hasInlineStyleOverrides || hasEventMarginOverrides) {
                     val reasons = buildList {
@@ -420,6 +455,26 @@ private fun formatAssColor(value: AssRgba): String =
         value.green.coerceIn(0, 255),
         value.red.coerceIn(0, 255),
     )
+
+private fun styleOverrideSources(event: io.github.assworkbench.domain.AssEvent): List<String> {
+    val text = event.text
+    val checks = listOf(
+        "字体" to Regex("""\\fn""", RegexOption.IGNORE_CASE),
+        "字号" to Regex("""\\fs(?!c)""", RegexOption.IGNORE_CASE),
+        "粗体" to Regex("""\\b-?\d""", RegexOption.IGNORE_CASE),
+        "斜体" to Regex("""\\i-?\d""", RegexOption.IGNORE_CASE),
+        "下划线" to Regex("""\\u-?\d""", RegexOption.IGNORE_CASE),
+        "删除线" to Regex("""\\s-?\d""", RegexOption.IGNORE_CASE),
+        "字距" to Regex("""\\fsp""", RegexOption.IGNORE_CASE),
+        "描边" to Regex("""\\bord""", RegexOption.IGNORE_CASE),
+        "阴影" to Regex("""\\shad""", RegexOption.IGNORE_CASE),
+        "对齐" to Regex("""\\(?:an[1-9]|a\d+)""", RegexOption.IGNORE_CASE),
+        "位置" to Regex("""\\(?:pos|move|org)\(""", RegexOption.IGNORE_CASE),
+        "颜色" to Regex("""\\(?:c|1c|3c|4c)&H""", RegexOption.IGNORE_CASE),
+        "Style 重置" to Regex("""\\r(?:[^\\}]*)""", RegexOption.IGNORE_CASE),
+    )
+    return checks.mapNotNull { (label, regex) -> label.takeIf { regex.containsMatchIn(text) } }
+}
 
 @Composable
 private fun StylePicker(
