@@ -676,28 +676,38 @@ private fun FontStatusRow(state: EditorState, viewModel: EditorViewModel, onImpo
     val missing = state.fontDiagnostics.count { it.status == FontMatchStatus.MISSING }
     val fallback = state.fontDiagnostics.count { it.status == FontMatchStatus.FALLBACK_ONLY }
     var menuOpen by remember { mutableStateOf(false) }
-    val focusedStyleName = state.focusedEventId?.let { id -> state.document.events.firstOrNull { it.id == id }?.style }
-    val focusedStyle = focusedStyleName?.let { name -> state.document.styles.firstOrNull { it.name == name } }
+    val focusedStyleName = state.focusedEventId?.let { id ->
+        state.document.events.firstOrNull { it.id == id }?.style
+    }
+    val focusedStyle = focusedStyleName?.let { name ->
+        state.document.styles.firstOrNull { it.name == name }
+    }
 
-    Column(Modifier.fillMaxWidth().padding(top = 6.dp)) {
+    Column(
+        Modifier.fillMaxWidth().padding(vertical = 2.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
         Row(
             Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
+            val summaryColor = when {
+                missing > 0 -> MaterialTheme.colorScheme.error
+                aliasOnly > 0 || fallback > 0 -> MaterialTheme.colorScheme.tertiary
+                else -> MaterialTheme.colorScheme.onSurfaceVariant
+            }
             Text(
-                "字体：" + state.importedFonts.size + " imported · " + exact + " renderer exact · " + aliasOnly + " alias-only · " + fallback + " fallback · " + missing + " missing",
+                "字体 ${state.importedFonts.size} · exact $exact · alias $aliasOnly · fallback $fallback · missing $missing",
                 style = MaterialTheme.typography.labelSmall,
-                color = when {
-                    missing > 0 -> MaterialTheme.colorScheme.error
-                    aliasOnly > 0 || fallback > 0 -> MaterialTheme.colorScheme.tertiary
-                    else -> MaterialTheme.colorScheme.onSurfaceVariant
-                },
+                color = summaryColor,
                 modifier = Modifier.weight(1f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
-            androidx.compose.material3.TextButton(onClick = viewModel::rebuildRendererFontCache) { Text("重建缓存") }
-            androidx.compose.material3.TextButton(onClick = onImportFont) { Text("导入字体") }
+            TextButton(onClick = onImportFont) { Text("导入") }
         }
+
         if (focusedStyle != null) {
             Row(
                 Modifier.fillMaxWidth(),
@@ -705,14 +715,16 @@ private fun FontStatusRow(state: EditorState, viewModel: EditorViewModel, onImpo
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 Text(
-                    "Style " + focusedStyle.name + "：" + focusedStyle.fontName,
+                    focusedStyle.name + " · " + focusedStyle.fontName,
                     style = MaterialTheme.typography.labelMedium,
                     modifier = Modifier.weight(1f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
-                androidx.compose.material3.TextButton(
+                TextButton(
                     onClick = { menuOpen = true },
                     enabled = state.importedFonts.isNotEmpty(),
-                ) { Text("选择字体") }
+                ) { Text("字体") }
                 DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                     state.importedFonts.forEach { asset ->
                         DropdownMenuItem(
@@ -725,7 +737,6 @@ private fun FontStatusRow(state: EditorState, viewModel: EditorViewModel, onImpo
                                             style = MaterialTheme.typography.labelSmall,
                                         )
                                     }
-                                    Text(asset.fileName, style = MaterialTheme.typography.labelSmall)
                                 }
                             },
                             onClick = {
@@ -737,66 +748,40 @@ private fun FontStatusRow(state: EditorState, viewModel: EditorViewModel, onImpo
                                 }
                             },
                         )
-                        DropdownMenuItem(
-                            text = {
-                                Column {
-                                    Text("强制全局绑定 → " + asset.metadata.rendererFamily)
-                                    Text("统一 Style Fontname 与显式 \\fn", style = MaterialTheme.typography.labelSmall)
-                                }
-                            },
-                            onClick = {
-                                menuOpen = false
-                                viewModel.forceFontFamily(asset.metadata.rendererFamily)
-                            },
-                        )
                     }
                 }
             }
+
             val diagnostic = state.fontDiagnostics.firstOrNull {
                 it.requestedFamily.equals(focusedStyle.fontName, ignoreCase = true)
             }
-            if (diagnostic != null) {
-                val diagnosticText = when (diagnostic.status) {
-                    FontMatchStatus.EXACT_IMPORTED -> "字体名称：RENDERER EXACT → " + diagnostic.matchedFamily
-                    FontMatchStatus.METADATA_ALIAS -> "字体名称：仅元数据别名 → 建议改为 " + diagnostic.matchedFamily
-                    FontMatchStatus.FALLBACK_ONLY -> "字体名称：FALLBACK → " + diagnostic.matchedFamily
-                    FontMatchStatus.MISSING -> "字体名称：MISSING"
+            val glyph = state.fontGlyphDiagnostics[focusedStyle.name]
+            if (diagnostic != null || glyph != null) {
+                val rendererMatch = when (diagnostic?.status) {
+                    FontMatchStatus.EXACT_IMPORTED -> "renderer exact"
+                    FontMatchStatus.METADATA_ALIAS -> "alias → " + diagnostic.matchedFamily
+                    FontMatchStatus.FALLBACK_ONLY -> "fallback → " + diagnostic.matchedFamily
+                    FontMatchStatus.MISSING -> "missing"
+                    null -> null
                 }
-                Text(
-                    diagnosticText,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = if (diagnostic.status == FontMatchStatus.EXACT_IMPORTED) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
-                )
-            }
-            state.fontGlyphDiagnostics[focusedStyle.name]?.let { glyph ->
                 val glyphText = when {
-                    glyph.matchedFamily == null -> "字形覆盖：未找到已导入的同名字体"
-                    glyph.checkedCodePoints == 0 -> "字形覆盖：当前 Style 没有可检查字符"
-                    glyph.missingCodePoints.isEmpty() -> "字形覆盖：已检查 " + glyph.checkedCodePoints + " 个字符，全部存在"
-                    else -> "字形覆盖：缺少 " + glyph.missingCodePoints.size + " 个样例字形 → " + glyph.missingSampleText
+                    glyph == null -> null
+                    glyph.matchedFamily == null -> "无匹配字体"
+                    glyph.checkedCodePoints == 0 -> "无可检查字形"
+                    glyph.missingCodePoints.isEmpty() -> "字形 ${glyph.checkedCodePoints}/${glyph.checkedCodePoints}"
+                    else -> "缺字 ${glyph.missingCodePoints.size}/${glyph.checkedCodePoints}"
                 }
                 Text(
-                    glyphText,
+                    listOfNotNull(rendererMatch, glyphText).joinToString(" · "),
                     style = MaterialTheme.typography.labelSmall,
-                    color = if (glyph.matchedFamily != null && glyph.missingCodePoints.isEmpty())
-                        MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                    color = when {
+                        diagnostic?.status == FontMatchStatus.MISSING -> MaterialTheme.colorScheme.error
+                        glyph != null && glyph.missingCodePoints.isNotEmpty() -> MaterialTheme.colorScheme.error
+                        else -> MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
-            }
-            if (state.rendererDiagnostics.isEmpty()) {
-                Text(
-                    "Renderer：等待 mpv/libass font selection 日志",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            } else {
-                Text("Renderer（mpv/libass）", style = MaterialTheme.typography.labelSmall)
-                state.rendererDiagnostics.takeLast(4).forEach { line ->
-                    Text(
-                        line,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
             }
         }
     }
