@@ -536,6 +536,8 @@ private fun PlaybackBar(
 ) {
     val duration = (playback.durationSeconds ?: 0.0).coerceAtLeast(0.0)
     val position = (playback.positionSeconds ?: 0.0).coerceIn(0.0, if (duration > 0.0) duration else Double.MAX_VALUE)
+    var scrubPosition by remember { mutableStateOf<Float?>(null) }
+    val displayPosition = scrubPosition?.toDouble() ?: position
     Row(
         Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(horizontal = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -545,10 +547,14 @@ private fun PlaybackBar(
             val playing = playback.status == MpvPlaybackState.Status.Playing || playback.status == MpvPlaybackState.Status.Buffering
             Icon(if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow, if (playing) "暂停" else "播放")
         }
-        Text(formatClock(position), style = MaterialTheme.typography.labelSmall)
+        Text(formatClock(displayPosition), style = MaterialTheme.typography.labelSmall)
         Slider(
-            value = if (duration > 0.0) position.toFloat() else 0f,
-            onValueChange = { if (duration > 0.0) onSeek(it.toDouble()) },
+            value = if (duration > 0.0) (scrubPosition ?: position.toFloat()) else 0f,
+            onValueChange = { if (duration > 0.0) scrubPosition = it },
+            onValueChangeFinished = {
+                scrubPosition?.let { onSeek(it.toDouble()) }
+                scrubPosition = null
+            },
             valueRange = 0f..duration.coerceAtLeast(1.0).toFloat(),
             enabled = duration > 0.0,
             modifier = Modifier.weight(1f),
@@ -588,6 +594,13 @@ private fun LayoutGuideOverlay(
         val contentBottom = size.height - marginBottom * scaleY
         val contentWidth = (contentRight - contentLeft).coerceAtLeast(0f)
         val contentHeight = (contentBottom - contentTop).coerceAtLeast(0f)
+
+        drawRect(
+            color = Color.Yellow.copy(alpha = 0.75f),
+            topLeft = androidx.compose.ui.geometry.Offset(contentLeft, contentTop),
+            size = androidx.compose.ui.geometry.Size(contentWidth, contentHeight),
+            style = Stroke(width = 1.dp.toPx()),
+        )
 
         val sx = contentWidth / layout.playResX.toFloat().coerceAtLeast(1f)
         val sy = contentHeight / layout.playResY.toFloat().coerceAtLeast(1f)
