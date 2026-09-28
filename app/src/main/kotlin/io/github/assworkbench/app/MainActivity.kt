@@ -3,6 +3,7 @@ package io.github.assworkbench.app
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.provider.OpenableColumns
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
@@ -38,7 +39,11 @@ class MainActivity : ComponentActivity() {
     private val openVideo = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri ?: return@registerForActivityResult
         persist(uri, read = true, write = false)
-        viewModel.openPickedVideo(uri)
+        if (isMatroskaDocument(uri)) {
+            viewModel.openMkvProject(uri)
+        } else {
+            viewModel.openPickedVideo(uri)
+        }
     }
 
     private val openMkvProject = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -142,7 +147,9 @@ class MainActivity : ComponentActivity() {
                     EditorScreen(
                         state = state,
                         viewModel = viewModel,
-                        onOpenVideo = { openVideo.launch(arrayOf("video/*")) },
+                        onOpenVideo = {
+                            openVideo.launch(arrayOf("video/*", "video/x-matroska", "application/octet-stream"))
+                        },
                         onOpenMkvProject = { openMkvProject.launch(arrayOf("video/x-matroska", "video/*", "application/octet-stream")) },
                         onOpenSubtitle = {
                             openSubtitle.launch(arrayOf("application/x-ass", "text/x-ass", "text/x-ssa", "text/plain"))
@@ -174,10 +181,22 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun isAssDocument(uri: Uri): Boolean {
-        val projection = arrayOf(android.provider.OpenableColumns.DISPLAY_NAME)
+    private fun isMatroskaDocument(uri: Uri): Boolean {
+        val projection = arrayOf(OpenableColumns.DISPLAY_NAME)
         val name = contentResolver.query(uri, projection, null, null, null)?.use { cursor ->
-            val column = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+            val column = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+            if (column >= 0 && cursor.moveToFirst()) cursor.getString(column) else null
+        } ?: uri.lastPathSegment
+        val mime = contentResolver.getType(uri).orEmpty()
+        return name?.endsWith(".mkv", ignoreCase = true) == true ||
+            mime.equals("video/x-matroska", ignoreCase = true) ||
+            mime.equals("video/webm", ignoreCase = true)
+    }
+
+    private fun isAssDocument(uri: Uri): Boolean {
+        val projection = arrayOf(OpenableColumns.DISPLAY_NAME)
+        val name = contentResolver.query(uri, projection, null, null, null)?.use { cursor ->
+            val column = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
             if (column >= 0 && cursor.moveToFirst()) cursor.getString(column) else null
         } ?: uri.lastPathSegment
         return name?.endsWith(".ass", ignoreCase = true) == true
