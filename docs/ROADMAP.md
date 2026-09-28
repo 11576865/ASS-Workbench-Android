@@ -54,7 +54,19 @@
 - [ ] Verify unusual EBML layouts and large files on device.
 - [ ] Decide how to handle ASS packets using unsupported lacing in the Android reader.
 
-## 0.16.0 — Preview-path stabilization (current)
+## 0.17.0 — Adaptive workspace UI (current)
+
+- [x] Replace the single oversized workbench column with Preview + Subtitle Dock + Inspector.
+- [x] Keep the video preview as the dominant primary pane.
+- [x] Keep subtitle search/list selection persistently accessible on tablet layouts.
+- [x] Move Style, Effects, Review, Project/MKV and renderer diagnostics into contextual inspector sections.
+- [x] Use different expanded, tablet and compact compositions instead of stretching one layout.
+- [x] Reduce top-bar action density with an overflow menu for secondary actions.
+- [ ] Device-check landscape and portrait tablet ergonomics.
+- [ ] Tune pane proportions and minimum widths from real tablet screenshots.
+- [ ] Decide whether the medium-width inspector should become a draggable supporting pane.
+
+## 0.16.0 — Preview-path stabilization (done)
 
 - [x] Preserve playback position across font-renderer recreation.
 - [x] Throttle editor-wide playback position publication to reduce unnecessary recomposition.
