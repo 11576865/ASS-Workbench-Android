@@ -2,6 +2,7 @@ package io.github.assworkbench.app.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -1059,6 +1060,15 @@ private fun TimelineInspector(
     val visible = state.document.events.filter { event ->
         event.end.millis >= windowStart && event.start.millis <= windowEnd
     }.take(28)
+    val snapTargets = remember(visible, state.playbackPositionMs) {
+        buildList {
+            add(state.playbackPositionMs)
+            visible.forEach { event ->
+                add(event.start.millis)
+                add(event.end.millis)
+            }
+        }.distinct()
+    }
 
     Column(modifier.padding(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -1095,7 +1105,11 @@ private fun TimelineInspector(
                         windowEndMs = windowEnd,
                         playheadMs = state.playbackPositionMs,
                         focused = event.id == state.focusedEventId,
+                        snapTargetsMs = snapTargets,
                         onClick = { viewModel.focusEvent(event.id, seek = true) },
+                        onTimingCommit = { startMs, endMs ->
+                            viewModel.setEventTiming(event.id, startMs, endMs)
+                        },
                     )
                 }
             }
@@ -1107,6 +1121,8 @@ private fun TimelineInspector(
     }
 }
 
+private enum class TimelineDragMode { START, MOVE, END }
+
 @Composable
 private fun TimelineEventRow(
     event: AssEvent,
@@ -1114,10 +1130,19 @@ private fun TimelineEventRow(
     windowEndMs: Long,
     playheadMs: Long,
     focused: Boolean,
+    snapTargetsMs: List<Long>,
     onClick: () -> Unit,
+    onTimingCommit: (Long, Long) -> Unit,
 ) {
+    var previewStart by remember(event.id, event.start) { mutableStateOf(event.start.millis) }
+    var previewEnd by remember(event.id, event.end) { mutableStateOf(event.end.millis) }
+    var dragMode by remember { mutableStateOf<TimelineDragMode?>(null) }
+    var dragBaseStart by remember { mutableStateOf(previewStart) }
+    var dragBaseEnd by remember { mutableStateOf(previewEnd) }
+    var dragAccumPx by remember { mutableStateOf(0f) }
+
     Row(
-        Modifier.fillMaxWidth().height(28.dp).clickable(onClick = onClick),
+        Modifier.fillMaxWidth().height(30.dp).clickable(onClick = onClick),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
@@ -1128,25 +1153,91 @@ private fun TimelineEventRow(
             color = if (focused) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
         )
         BoxWithConstraints(
-            Modifier.weight(1f).height(16.dp)
+            Modifier.weight(1f).height(18.dp)
                 .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f))
+                .pointerInput(event.id, windowStartMs, windowEndMs, snapTargetsMs) {
+                    val span = (windowEndMs - windowStartMs).coerceAtLeast(1L)
+                    fun xFor(ms: Long): Float =
+                        ((ms - windowStartMs).toFloat() / span.toFloat()).coerceIn(0f, 1f) * size.width
+                    fun snap(candidate: Long): Long {
+                        val grid = ((candidate + 5L) / 10L) * 10L
+                        val threshold = minOf(120L, maxOf(30L, span / 200L))
+                        val nearest = snapTargetsMs.minByOrNull { kotlin.math.abs(it - candidate) }
+                        return if (nearest != null && kotlin.math.abs(nearest - candidate) <= threshold) nearest else grid
+                    }
+                    detectDragGestures(
+                        onDragStart = { offset ->
+                            val startX = xFor(previewStart)
+                            val endX = xFor(previewEnd)
+                            val edge = 14.dp.toPx()
+                            dragMode = when {
+                                kotlin.math.abs(offset.x - startX) <= edge -> TimelineDragMode.START
+                                kotlin.math.abs(offset.x - endX) <= edge -> TimelineDragMode.END
+                                offset.x in startX..endX -> TimelineDragMode.MOVE
+                                else -> null
+                            }
+                            dragBaseStart = previewStart
+                            dragBaseEnd = previewEnd
+                            dragAccumPx = 0f
+                        },
+                        onDrag = { change, amount ->
+                            val mode = dragMode ?: return@detectDragGestures
+                            change.consume()
+                            dragAccumPx += amount.x
+                            val deltaMs = (dragAccumPx / size.width.coerceAtLeast(1) * span).toLong()
+                            when (mode) {
+                                TimelineDragMode.START -> {
+                                    previewStart = snap(dragBaseStart + deltaMs)
+                                        .coerceIn(0L, previewEnd - 10L)
+                                }
+                                TimelineDragMode.END -> {
+                                    previewEnd = snap(dragBaseEnd + deltaMs)
+                                        .coerceAtLeast(previewStart + 10L)
+                                }
+                                TimelineDragMode.MOVE -> {
+                                    val duration = dragBaseEnd - dragBaseStart
+                                    val candidate = snap(dragBaseStart + deltaMs).coerceAtLeast(0L)
+                                    previewStart = candidate
+                                    previewEnd = candidate + duration
+                                }
+                            }
+                        },
+                        onDragEnd = {
+                            if (dragMode != null) onTimingCommit(previewStart, previewEnd)
+                            dragMode = null
+                        },
+                        onDragCancel = {
+                            previewStart = event.start.millis
+                            previewEnd = event.end.millis
+                            dragMode = null
+                        },
+                    )
+                }
         ) {
             val span = (windowEndMs - windowStartMs).coerceAtLeast(1L).toFloat()
-            val startFraction = ((event.start.millis - windowStartMs) / span).coerceIn(0f, 1f)
-            val endFraction = ((event.end.millis - windowStartMs) / span).coerceIn(0f, 1f)
+            val startFraction = ((previewStart - windowStartMs) / span).coerceIn(0f, 1f)
+            val endFraction = ((previewEnd - windowStartMs) / span).coerceIn(0f, 1f)
             val playFraction = ((playheadMs - windowStartMs) / span).coerceIn(0f, 1f)
             val eventWidth = maxWidth * (endFraction - startFraction).coerceAtLeast(0.012f)
             Box(
                 Modifier.offset(x = maxWidth * startFraction)
-                    .width(eventWidth).height(16.dp)
+                    .width(eventWidth).height(18.dp)
                     .background(
                         if (focused) MaterialTheme.colorScheme.primary
                         else MaterialTheme.colorScheme.secondary.copy(alpha = 0.72f)
                     )
             )
             Box(
+                Modifier.offset(x = maxWidth * startFraction).width(2.dp).height(18.dp)
+                    .background(MaterialTheme.colorScheme.onPrimary)
+            )
+            Box(
+                Modifier.offset(x = maxWidth * endFraction - 2.dp).width(2.dp).height(18.dp)
+                    .background(MaterialTheme.colorScheme.onPrimary)
+            )
+            Box(
                 Modifier.offset(x = maxWidth * playFraction)
-                    .width(1.dp).height(16.dp)
+                    .width(1.dp).height(18.dp)
                     .background(MaterialTheme.colorScheme.error)
             )
         }
