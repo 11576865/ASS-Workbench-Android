@@ -86,7 +86,8 @@ fun EventOverridePanel(
                     value = event.text,
                     onValueChange = { viewModel.updateEventText(event.id, it) },
                     label = { Text("Event Text / Override Tags") },
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 92.dp, max = 180.dp),
+                    visualTransformation = rememberAssSyntaxTransformation(),
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 92.dp, max = 220.dp),
                 )
             }
         }
