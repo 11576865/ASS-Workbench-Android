@@ -2,7 +2,7 @@
 
 A focused Android ASS subtitle workbench for phones and tablets.
 
-**Current version: 0.14.0**
+**Current version: 0.15.0**
 
 ASS Workbench treats ASS as the primary editable document. A local video may be attached as reference media, or an MKV can be opened as a subtitle project.
 
@@ -29,6 +29,7 @@ ASS Workbench treats ASS as the primary editable document. A local video may be 
   - enumerate embedded ASS tracks;
   - register attached TTF/OTF fonts;
   - edit a selected ASS track;
+  - replace the selected ASS track in the same track slot while preserving TrackNumber, TrackUID, ordering and track metadata;
   - save a new MKV with video/audio stream-copied instead of transcoded;
 - preservation of unknown ASS sections plus opaque/comment lines inside known sections;
 - preservation of custom Style/Event Format columns and an initial round-trip regression corpus.
@@ -80,13 +81,22 @@ Managed event-level overrides for position, blur, fade and restrained soft entry
 
 ### Container Bridge
 
-An MKV can be opened as a subtitle project. The reader scans Matroska tracks and supported font attachments. On supported arm64 builds, the bundled pinned Go helper replaces the selected ASS track into a new MKV while carrying video/audio streams without transcoding.
+An MKV can be opened as a subtitle project. The reader scans Matroska tracks and supported font attachments. On supported arm64 builds, a small ASS Workbench bridge built against the pinned mkvgo revision replaces the selected ASS payload in the original track slot while carrying video/audio streams without transcoding. The source TrackNumber, TrackUID, ordering, language/name and disposition metadata are inherited instead of deleting and appending a new subtitle track.
 
-The original MKV is never modified in place. The current implementation uses app-private temporary files, so large containers require corresponding free storage.
+The original MKV is never modified in place. The write-back path copies the source into app-private storage and writes one new result container; it no longer creates a second full-size intermediate container.
 
 ## Current hardening work
 
-0.14 is a stabilization release:
+0.15 hardens MKV write-back:
+
+1. **same-slot ASS replacement** — the selected subtitle keeps its TrackNumber, TrackUID, track ordering, language/name and disposition metadata;
+2. **container preservation test** — the pinned mkvgo source receives an ASS Workbench replacement operation at CI time and is tested for track identity, font attachment, chapter and ordinary tag preservation;
+3. **derived metadata safety** — content hashes/statistics are recomputed when the source carried them instead of copying stale values;
+4. **smaller bridge surface** — the APK now bundles a dedicated `replace-ass` helper rather than the full mkvgo CLI.
+
+0.14 established renderer observability, Review Sidecar V2 stable event identity, the initial ASS round-trip corpus and specification convergence.
+
+
 
 1. **renderer observability** — mpv writes an app-private verbose log and recent libass/font-selection lines are surfaced beside family/glyph diagnostics;
 2. **Review identity** — new sidecars persist stable event fingerprints instead of parse-order IDs, while legacy V1 sidecars remain readable;
