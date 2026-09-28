@@ -278,28 +278,34 @@ private fun FontStatusRow(state: EditorState, viewModel: EditorViewModel, onImpo
                             text = {
                                 Column {
                                     Text(asset.metadata.family)
+                                    if (!asset.metadata.rendererFamily.equals(asset.metadata.family, ignoreCase = true)) {
+                                        Text(
+                                            "libass → " + asset.metadata.rendererFamily,
+                                            style = MaterialTheme.typography.labelSmall,
+                                        )
+                                    }
                                     Text(asset.fileName, style = MaterialTheme.typography.labelSmall)
                                 }
                             },
                             onClick = {
                                 menuOpen = false
                                 if (state.selectedEventIds.isEmpty()) {
-                                    viewModel.setStyleFont(focusedStyle.name, asset.metadata.family)
+                                    viewModel.setStyleFont(focusedStyle.name, asset.metadata.rendererFamily)
                                 } else {
-                                    viewModel.applyFontToSelectedStyles(asset.metadata.family)
+                                    viewModel.applyFontToSelectedStyles(asset.metadata.rendererFamily)
                                 }
                             },
                         )
                         DropdownMenuItem(
                             text = {
                                 Column {
-                                    Text("强制全局绑定 → " + asset.metadata.family)
+                                    Text("强制全局绑定 → " + asset.metadata.rendererFamily)
                                     Text("统一 Style Fontname 与显式 \\fn", style = MaterialTheme.typography.labelSmall)
                                 }
                             },
                             onClick = {
                                 menuOpen = false
-                                viewModel.forceFontFamily(asset.metadata.family)
+                                viewModel.forceFontFamily(asset.metadata.rendererFamily)
                             },
                         )
                     }
@@ -310,7 +316,8 @@ private fun FontStatusRow(state: EditorState, viewModel: EditorViewModel, onImpo
             }
             if (diagnostic != null) {
                 val diagnosticText = when (diagnostic.status) {
-                    FontMatchStatus.EXACT_IMPORTED -> "字体名称：EXACT → " + diagnostic.matchedFamily
+                    FontMatchStatus.EXACT_IMPORTED -> "字体名称：RENDERER EXACT → " + diagnostic.matchedFamily
+                    FontMatchStatus.METADATA_ALIAS -> "字体名称：仅元数据别名 → 建议改为 " + diagnostic.matchedFamily
                     FontMatchStatus.FALLBACK_ONLY -> "字体名称：FALLBACK → " + diagnostic.matchedFamily
                     FontMatchStatus.MISSING -> "字体名称：MISSING"
                 }
