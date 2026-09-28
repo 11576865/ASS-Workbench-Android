@@ -2,7 +2,7 @@
 
 A focused Android ASS subtitle workbench for phones and tablets.
 
-**Current version: 0.15.0**
+**Current version: 0.15.1**
 
 ASS Workbench treats ASS as the primary editable document. A local video may be attached as reference media, or an MKV can be opened as a subtitle project.
 
@@ -86,6 +86,12 @@ An MKV can be opened as a subtitle project. The reader scans Matroska tracks and
 The original MKV is never modified in place. The write-back path copies the source into app-private storage and writes one new result container; it no longer creates a second full-size intermediate container.
 
 ## Current hardening work
+
+0.15.1 is a focused hotfix:
+
+1. **lower-memory MKV attachment scanning** — embedded attachments are delivered one at a time to the importer instead of retaining the full attachment set in the scan result;
+2. **forced font binding compatibility mode** — an imported font can explicitly rewrite every Style `Fontname` and every non-empty inline `\\fn` request to one family, matching the established MKV-Fast-Muxer-v3 force-mode semantics;
+3. **inline font diagnostics** — explicit `\\fn` requests are included in the font-name diagnostic set instead of checking Style names only.
 
 0.15 hardens MKV write-back:
 
