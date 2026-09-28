@@ -1131,6 +1131,8 @@ private fun TimelineInspector(
 ) {
     var windowSeconds by rememberSaveable { mutableStateOf(30) }
     var snapEnabled by rememberSaveable { mutableStateOf(true) }
+    var snapGridMs by rememberSaveable { mutableStateOf(10L) }
+    var timelineSettingsOpen by remember { mutableStateOf(false) }
     val focused = state.document.events.firstOrNull { it.id == state.focusedEventId }
     val centerMs = when {
         state.project.videoUri != null -> state.playbackPositionMs
@@ -1161,22 +1163,42 @@ private fun TimelineInspector(
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            listOf(10, 30, 60).forEach { seconds ->
-                TextButton(
-                    onClick = { windowSeconds = seconds },
-                    modifier = Modifier.height(28.dp),
-                ) {
+            Box {
+                TextButton(onClick = { timelineSettingsOpen = true }, modifier = Modifier.height(28.dp)) {
                     Text(
-                        if (windowSeconds == seconds) "● ${seconds}s" else "${seconds}s",
+                        windowSeconds.toString() + "s · " +
+                            (if (snapEnabled) "Snap " + snapGridMs + "ms" else "Snap off"),
                         style = MaterialTheme.typography.labelSmall,
                     )
                 }
-            }
-            TextButton(
-                onClick = { snapEnabled = !snapEnabled },
-                modifier = Modifier.height(28.dp),
-            ) {
-                Text(if (snapEnabled) "吸附●" else "吸附○", style = MaterialTheme.typography.labelSmall)
+                DropdownMenu(
+                    expanded = timelineSettingsOpen,
+                    onDismissRequest = { timelineSettingsOpen = false },
+                ) {
+                    listOf(10, 30, 60).forEach { seconds ->
+                        DropdownMenuItem(
+                            text = { Text((if (windowSeconds == seconds) "✓ " else "") + "窗口 " + seconds + "s") },
+                            onClick = {
+                                windowSeconds = seconds
+                                timelineSettingsOpen = false
+                            },
+                        )
+                    }
+                    DropdownMenuItem(
+                        text = { Text((if (snapEnabled) "✓ " else "") + "时间吸附") },
+                        onClick = { snapEnabled = !snapEnabled },
+                    )
+                    listOf(10L, 100L).forEach { grid ->
+                        DropdownMenuItem(
+                            text = { Text((if (snapGridMs == grid) "✓ " else "") + "网格 " + grid + " ms") },
+                            enabled = snapEnabled,
+                            onClick = {
+                                snapGridMs = grid
+                                timelineSettingsOpen = false
+                            },
+                        )
+                    }
+                }
             }
         }
         if (visible.isEmpty()) {
@@ -1196,6 +1218,7 @@ private fun TimelineInspector(
                         focused = event.id == state.focusedEventId,
                         snapTargetsMs = snapTargets,
                         snapEnabled = snapEnabled,
+                        snapGridMs = snapGridMs,
                         onClick = { viewModel.focusEvent(event.id, seek = true) },
                         onTimingCommit = { startMs, endMs ->
                             viewModel.setEventTiming(event.id, startMs, endMs)
@@ -1222,6 +1245,7 @@ private fun TimelineEventRow(
     focused: Boolean,
     snapTargetsMs: List<Long>,
     snapEnabled: Boolean,
+    snapGridMs: Long,
     onClick: () -> Unit,
     onTimingCommit: (Long, Long) -> Unit,
 ) {
@@ -1252,7 +1276,8 @@ private fun TimelineEventRow(
                         ((ms - windowStartMs).toFloat() / span.toFloat()).coerceIn(0f, 1f) * size.width
                     fun snap(candidate: Long): Long {
                         if (!snapEnabled) return candidate
-                        val grid = ((candidate + 5L) / 10L) * 10L
+                        val gridStep = snapGridMs.coerceAtLeast(1L)
+                        val grid = ((candidate + gridStep / 2L) / gridStep) * gridStep
                         val threshold = minOf(120L, maxOf(30L, span / 200L))
                         val nearest = snapTargetsMs
                             .asSequence()
