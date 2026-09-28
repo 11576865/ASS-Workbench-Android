@@ -164,9 +164,11 @@ jobs:
 
       - name: Collect experimental APK and renderer manifest
         run: |
+          VERSION="$(sed -nE 's/^val baseVersionName = "([^"]+)"/\1/p' app/build.gradle.kts | head -1)"
+          test -n "$VERSION"
           mkdir -p fontconfig-experimental-apk
           cp app/build/outputs/apk/debug/app-debug.apk \
-            fontconfig-experimental-apk/ASS-Workbench-Android-0.15.1-fontconfig-arm64-debug.apk
+            "fontconfig-experimental-apk/ASS-Workbench-Android-$VERSION-fontconfig-arm64-debug.apk"
           cp fontconfig-native-probe/depinfo.sh fontconfig-experimental-apk/
           cp fontconfig-native-probe/fontconfig.pc fontconfig-experimental-apk/
           cp fontconfig-native-probe/libass.pc fontconfig-experimental-apk/
