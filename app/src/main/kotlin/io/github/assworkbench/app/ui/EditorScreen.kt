@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SelectAll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Divider
 import androidx.compose.material3.DropdownMenu
@@ -49,6 +50,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.adaptive.currentWindowAdaptiveInfo
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -57,6 +59,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.github.assworkbench.app.AppThemeMode
@@ -615,6 +618,8 @@ private fun SubtitleDock(
     val visibleSelected = visibleIds.count { it in state.selectedEventIds }
     val allVisibleSelected = visibleIds.isNotEmpty() && visibleSelected == visibleIds.size
     var searchOpen by remember { mutableStateOf(false) }
+    var actionsOpen by remember { mutableStateOf(false) }
+    var replaceOpen by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
 
     Surface(modifier, tonalElevation = 1.dp) {
@@ -678,6 +683,51 @@ private fun SubtitleDock(
                             Text("清筛", style = MaterialTheme.typography.labelSmall)
                         }
                     }
+                    Box {
+                        TextButton(
+                            onClick = { actionsOpen = true },
+                            modifier = Modifier.height(28.dp),
+                        ) { Text("操作", style = MaterialTheme.typography.labelSmall) }
+                        DropdownMenu(expanded = actionsOpen, onDismissRequest = { actionsOpen = false }) {
+                            DropdownMenuItem(
+                                text = { Text("＋ 当前播放位置添加字幕") },
+                                onClick = { actionsOpen = false; viewModel.insertEventAtPlayback() },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("删除选中 / 当前字幕") },
+                                onClick = { actionsOpen = false; viewModel.deleteSelectedOrFocused() },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("合并选中字幕（换行）") },
+                                enabled = state.selectedEventIds.size >= 2,
+                                onClick = { actionsOpen = false; viewModel.mergeSelected(useLineBreak = true) },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("合并选中字幕（空格）") },
+                                enabled = state.selectedEventIds.size >= 2,
+                                onClick = { actionsOpen = false; viewModel.mergeSelected(useLineBreak = false) },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("复制当前字幕格式到选中字幕") },
+                                enabled = state.focusedEventId != null && state.selectedEventIds.any { it != state.focusedEventId },
+                                onClick = { actionsOpen = false; viewModel.copyFocusedFormattingToSelected() },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("批量查找 / 替换…") },
+                                onClick = { actionsOpen = false; replaceOpen = true },
+                            )
+                        }
+                    }
+                }
+
+                if (replaceOpen) {
+                    ReplaceEventsDialog(
+                        onDismiss = { replaceOpen = false },
+                        onReplace = { find, replacement, actor ->
+                            viewModel.replaceAll(find, replacement, actor)
+                            replaceOpen = false
+                        },
+                    )
                 }
 
                 var dragLastId by remember { mutableStateOf<Long?>(null) }
@@ -1030,16 +1080,51 @@ private fun FocusedEventEditor(
     var marginL by remember(event.id, event.marginL) { mutableStateOf(event.marginL.toString()) }
     var marginR by remember(event.id, event.marginR) { mutableStateOf(event.marginR.toString()) }
     var marginV by remember(event.id, event.marginV) { mutableStateOf(event.marginV.toString()) }
+    var eventText by remember(event.id) { mutableStateOf(TextFieldValue(event.text)) }
     val syntax = remember(event.text) { AssInlineSyntax.analyze(event.text) }
 
+    LaunchedEffect(event.text) {
+        if (eventText.text != event.text) {
+            val cursor = eventText.selection.start.coerceIn(0, event.text.length)
+            eventText = TextFieldValue(event.text, selection = androidx.compose.ui.text.TextRange(cursor))
+        }
+    }
+
     Column(modifier, verticalArrangement = Arrangement.spacedBy(3.dp)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(horizontalArrangement = Arrangement.spacedBy(3.dp), verticalAlignment = Alignment.CenterVertically) {
             CompactEventField("Start", startText, { startText = it }, Modifier.weight(1f))
             CompactEventField("End", endText, { endText = it }, Modifier.weight(1f))
-            TextButton(
-                onClick = { viewModel.updateFocusedTimes(startText, endText) },
-                modifier = Modifier.height(38.dp),
-            ) { Text("应用") }
+            TextButton(onClick = { viewModel.updateFocusedTimes(startText, endText) }, modifier = Modifier.height(36.dp)) {
+                Text("应用", style = MaterialTheme.typography.labelSmall)
+            }
+            TextButton(onClick = viewModel::setFocusedStartToPlayback, modifier = Modifier.height(36.dp)) {
+                Text("当前→S", style = MaterialTheme.typography.labelSmall)
+            }
+            TextButton(onClick = viewModel::setFocusedEndToPlayback, modifier = Modifier.height(36.dp)) {
+                Text("当前→E", style = MaterialTheme.typography.labelSmall)
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("整体", style = MaterialTheme.typography.labelSmall)
+            listOf(-500L, -100L, -10L, 10L, 100L, 500L).forEach { delta ->
+                TextButton(onClick = { viewModel.nudgeFocusedTime(delta) }, modifier = Modifier.height(28.dp)) {
+                    Text((if (delta > 0) "+" else "") + delta, style = MaterialTheme.typography.labelSmall)
+                }
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("起点", style = MaterialTheme.typography.labelSmall)
+            listOf(-100L, -10L, 10L, 100L).forEach { delta ->
+                TextButton(onClick = { viewModel.nudgeFocusedStart(delta) }, modifier = Modifier.height(28.dp)) {
+                    Text((if (delta > 0) "+" else "") + delta, style = MaterialTheme.typography.labelSmall)
+                }
+            }
+            Text("终点", style = MaterialTheme.typography.labelSmall)
+            listOf(-100L, -10L, 10L, 100L).forEach { delta ->
+                TextButton(onClick = { viewModel.nudgeFocusedEnd(delta) }, modifier = Modifier.height(28.dp)) {
+                    Text((if (delta > 0) "+" else "") + delta, style = MaterialTheme.typography.labelSmall)
+                }
+            }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
             CompactEventField("L", marginL, { marginL = it }, Modifier.weight(1f))
@@ -1053,32 +1138,93 @@ private fun FocusedEventEditor(
                         marginV.toIntOrNull() ?: event.marginV,
                     )
                 },
-                modifier = Modifier.height(38.dp),
-            ) { Text("Margin") }
+                modifier = Modifier.height(36.dp),
+            ) { Text("Margin", style = MaterialTheme.typography.labelSmall) }
             TextButton(
                 onClick = {
                     marginL = "0"; marginR = "0"; marginV = "0"
                     viewModel.clearFocusedMargins()
                 },
-                modifier = Modifier.height(38.dp),
-            ) { Text("继承") }
+                modifier = Modifier.height(36.dp),
+            ) { Text("继承", style = MaterialTheme.typography.labelSmall) }
         }
-        Text(
-            "Event Text · " + syntax.tags.size + " tags" +
-                if (syntax.hasErrors) " · " + syntax.issues.size + " issue" else "",
-            style = MaterialTheme.typography.labelSmall,
-            color = if (syntax.hasErrors) MaterialTheme.colorScheme.error
-                else MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "Event Text · " + syntax.tags.size + " tags" +
+                    if (syntax.hasErrors) " · " + syntax.issues.size + " issue" else "",
+                style = MaterialTheme.typography.labelSmall,
+                color = if (syntax.hasErrors) MaterialTheme.colorScheme.error
+                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f),
+            )
+            TextButton(
+                onClick = { viewModel.splitFocusedEvent(eventText.selection.start) },
+                enabled = eventText.selection.start in 1 until eventText.text.length,
+                modifier = Modifier.height(28.dp),
+            ) { Text("光标处分割", style = MaterialTheme.typography.labelSmall) }
+        }
         OutlinedTextField(
-            value = event.text,
-            onValueChange = viewModel::updateFocusedText,
+            value = eventText,
+            onValueChange = { value ->
+                eventText = value
+                viewModel.updateFocusedText(value.text)
+            },
             visualTransformation = rememberAssSyntaxTransformation(),
             isError = syntax.hasErrors,
             textStyle = MaterialTheme.typography.bodySmall,
             modifier = Modifier.fillMaxWidth().heightIn(min = 68.dp, max = 132.dp),
         )
     }
+}
+
+@Composable
+private fun ReplaceEventsDialog(
+    onDismiss: () -> Unit,
+    onReplace: (String, String, Boolean) -> Unit,
+) {
+    var find by remember { mutableStateOf("") }
+    var replacement by remember { mutableStateOf("") }
+    var actorMode by remember { mutableStateOf(false) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("批量查找 / 替换") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    TextButton(onClick = { actorMode = false }) {
+                        Text(if (!actorMode) "✓ 正文" else "正文")
+                    }
+                    TextButton(onClick = { actorMode = true }) {
+                        Text(if (actorMode) "✓ Actor / 角色名" else "Actor / 角色名")
+                    }
+                }
+                OutlinedTextField(
+                    value = find,
+                    onValueChange = { find = it },
+                    label = { Text("查找") },
+                    singleLine = true,
+                )
+                OutlinedTextField(
+                    value = replacement,
+                    onValueChange = { replacement = it },
+                    label = { Text("替换为") },
+                    singleLine = true,
+                )
+                Text(
+                    if (actorMode) "只修改 ASS Event 的 Name/Actor 字段，不碰正文。"
+                    else "只修改 Event Text 正文；ASS 标签中的同名文本也会被替换，使用前请确认。",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onReplace(find, replacement, actorMode) }, enabled = find.isNotEmpty()) {
+                Text("全部替换")
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
+    )
 }
 
 @Composable
