@@ -762,6 +762,21 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         }.onFailure { reportError("重命名 Style 失败", it) }
     }
 
+    fun deleteUnusedStyles() {
+        val snapshot = _state.value
+        val used = snapshot.document.events.mapTo(hashSetOf()) { it.style }
+        val removable = snapshot.document.styles.filterNot { it.name in used }
+        if (removable.isEmpty()) {
+            _state.update { it.copy(status = "没有未使用的 Style。") }
+            return
+        }
+        editDocument("已清理未使用 Style。") { doc ->
+            val keepAtLeast = if (doc.styles.all { it.name !in used }) doc.styles.firstOrNull()?.name else null
+            doc.copy(styles = doc.styles.filter { it.name in used || it.name == keepAtLeast })
+        }
+        _state.update { it.copy(status = "已删除 " + removable.size + " 个未使用 Style。") }
+    }
+
     fun deleteStyle(name: String, replacement: String) {
         runCatching {
             AssDocumentEditing.deleteStyle(_state.value.document, name, replacement)
