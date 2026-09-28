@@ -311,6 +311,7 @@ private fun FontStatusRow(state: EditorState, viewModel: EditorViewModel, onImpo
     }
 }
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 private fun SubtitleRow(
     event: AssEvent,
