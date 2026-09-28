@@ -23,6 +23,11 @@ data class EditorState(
     val fallbackFontFamily: String? = null,
     val fontRevision: Long = 0L,
     val showLayoutGuides: Boolean = false,
+    val reviewSourceStyle: String = "",
+    val reviewTargetStyle: String = "",
+    val originalTextById: Map<Long, String> = emptyMap(),
+    val confirmedReviewIds: Set<Long> = emptySet(),
+    val reviewFilter: String = "all",
     val status: String = "可先打开 ASS，也可先选择参考视频；两者互不依赖。",
 ) {
     val filteredEvents get() = document.events.filter {

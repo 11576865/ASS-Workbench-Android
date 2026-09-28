@@ -39,6 +39,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             ?: error("无法读取字幕")
         val document = AssCodec.parse(text)
         history.reset(document)
+        val styleNames = document.styles.map { it.name }
         _state.update {
             it.copy(
                 project = it.project.copy(subtitleUri = uri.toString(), title = displayName(uri) ?: "ASS project"),
@@ -49,6 +50,11 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 dirty = false,
                 canUndo = false,
                 canRedo = false,
+                reviewSourceStyle = styleNames.firstOrNull().orEmpty(),
+                reviewTargetStyle = styleNames.drop(1).firstOrNull().orEmpty(),
+                originalTextById = document.events.associate { event -> event.id to event.text },
+                confirmedReviewIds = emptySet(),
+                reviewFilter = "all",
                 status = "已载入 ${document.events.size} 条 ASS 事件。",
             )
         }
@@ -218,6 +224,29 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                     else -> style
                 }
             })
+        }
+    }
+
+    fun setReviewSourceStyle(value: String) = _state.update { it.copy(reviewSourceStyle = value) }
+
+    fun setReviewTargetStyle(value: String) = _state.update { it.copy(reviewTargetStyle = value) }
+
+    fun setReviewFilter(value: String) = _state.update { it.copy(reviewFilter = value) }
+
+    fun confirmReviewTarget(id: Long, confirmed: Boolean) {
+        _state.update {
+            val next = it.confirmedReviewIds.toMutableSet()
+            if (confirmed) next.add(id) else next.remove(id)
+            it.copy(
+                confirmedReviewIds = next,
+                status = if (confirmed) "已确认字幕 #" + id else "已取消确认字幕 #" + id,
+            )
+        }
+    }
+
+    fun updateEventText(id: Long, text: String) {
+        editDocument("已修改字幕 #" + id + "。") { doc ->
+            doc.copy(events = doc.events.map { if (it.id == id) it.copy(text = text) else it })
         }
     }
 

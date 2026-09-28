@@ -130,6 +130,7 @@ private fun SubtitleWorkbench(
     val focused = state.document.events.firstOrNull { it.id == state.focusedEventId }
     val focusedStyle = focused?.let { event -> state.document.styles.firstOrNull { it.name == event.style } }
     var typesettingOpen by remember { mutableStateOf(false) }
+    var reviewOpen by remember { mutableStateOf(false) }
     Column(modifier.padding(8.dp)) {
         OutlinedTextField(
             value = state.query,
@@ -142,12 +143,26 @@ private fun SubtitleWorkbench(
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text("工作区", style = MaterialTheme.typography.labelMedium, modifier = Modifier.weight(1f))
             androidx.compose.material3.TextButton(
-                onClick = { typesettingOpen = !typesettingOpen },
+                onClick = {
+                    reviewOpen = false
+                    typesettingOpen = !typesettingOpen
+                },
                 enabled = focusedStyle != null,
             ) { Text(if (typesettingOpen) "收起排版" else "排版") }
+            androidx.compose.material3.TextButton(
+                onClick = {
+                    typesettingOpen = false
+                    reviewOpen = !reviewOpen
+                },
+                enabled = state.document.styles.size >= 2,
+            ) { Text(if (reviewOpen) "收起校对" else "双语/校对") }
         }
         if (typesettingOpen && focusedStyle != null) {
             TypesettingPanel(state, viewModel, focusedStyle)
+        }
+        if (reviewOpen) {
+            ReviewWorkspace(state, viewModel, Modifier.weight(1f))
+            return@Column
         }
         val visibleIds = state.filteredEvents.map { it.id }
         val visibleSelected = visibleIds.count { it in state.selectedEventIds }
