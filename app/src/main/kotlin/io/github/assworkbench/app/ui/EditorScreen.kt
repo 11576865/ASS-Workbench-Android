@@ -270,6 +270,7 @@ private fun FontStatusRow(state: EditorState, viewModel: EditorViewModel, onImpo
                 },
                 modifier = Modifier.weight(1f),
             )
+            androidx.compose.material3.TextButton(onClick = viewModel::rebuildRendererFontCache) { Text("重建缓存") }
             androidx.compose.material3.TextButton(onClick = onImportFont) { Text("导入字体") }
         }
         if (focusedStyle != null) {
