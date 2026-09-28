@@ -1,7 +1,7 @@
 package io.github.assworkbench.domain
 
 object FontBindingRewriter {
-    private val overrideBlock = Regex("""\{[^}]*}""")
+    private val overrideBlock = Regex("""\{[^}]*\}""")
     private val explicitFont = Regex("""\\fn([^\\}]*)""", RegexOption.IGNORE_CASE)
 
     /**
