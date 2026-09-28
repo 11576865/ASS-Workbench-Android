@@ -862,14 +862,16 @@ private fun TimelineInspector(
     viewModel: EditorViewModel,
     modifier: Modifier = Modifier,
 ) {
+    var windowSeconds by rememberSaveable { mutableStateOf(30) }
     val focused = state.document.events.firstOrNull { it.id == state.focusedEventId }
     val centerMs = when {
         state.project.videoUri != null -> state.playbackPositionMs
         state.playbackPositionMs > 0L -> state.playbackPositionMs
         else -> focused?.start?.millis ?: 0L
     }
-    val windowStart = (centerMs - 15_000L).coerceAtLeast(0L)
-    val windowEnd = windowStart + 30_000L
+    val halfWindowMs = windowSeconds * 500L
+    val windowStart = (centerMs - halfWindowMs).coerceAtLeast(0L)
+    val windowEnd = windowStart + windowSeconds * 1000L
     val visible = state.document.events.filter { event ->
         event.end.millis >= windowStart && event.start.millis <= windowEnd
     }.take(28)
@@ -878,10 +880,21 @@ private fun TimelineInspector(
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text("时间轴", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
             Text(
-                formatTimelineClock(centerMs) + " · ±15s",
+                formatTimelineClock(centerMs),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            listOf(10, 30, 60).forEach { seconds ->
+                TextButton(
+                    onClick = { windowSeconds = seconds },
+                    modifier = Modifier.height(28.dp),
+                ) {
+                    Text(
+                        if (windowSeconds == seconds) "● ${seconds}s" else "${seconds}s",
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                }
+            }
         }
         if (visible.isEmpty()) {
             Text(
