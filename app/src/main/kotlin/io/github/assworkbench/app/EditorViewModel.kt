@@ -9,6 +9,7 @@ import io.github.assworkbench.container.MatroskaReader
 import io.github.assworkbench.container.MatroskaScanResult
 import io.github.assworkbench.domain.AssCodec
 import io.github.assworkbench.domain.AssDocument
+import io.github.assworkbench.domain.AssDocumentEditing
 import io.github.assworkbench.domain.AssTextDecoder
 import io.github.assworkbench.domain.AssTextEncoding
 import io.github.assworkbench.domain.EventOverrideEditor
@@ -413,6 +414,204 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
 
     fun clearSelection() = _state.update {
         it.copy(selectedEventIds = emptySet(), selectionAnchorId = null, status = "已清除选择。")
+    }
+
+    fun insertEventAtPlayback() {
+        val snapshot = _state.value
+        val result = AssDocumentEditing.insertAtPlayback(
+            document = snapshot.document,
+            afterEventId = snapshot.focusedEventId,
+            positionMs = snapshot.playbackPositionMs,
+        )
+        editDocument("已在当前播放位置添加字幕。") { result.document }
+        _state.update {
+            it.copy(
+                focusedEventId = result.focusedEventId,
+                selectedEventIds = result.selectedEventIds,
+                originalTextById = result.focusedEventId?.let { id -> it.originalTextById + (id to "") } ?: it.originalTextById,
+            )
+        }
+    }
+
+    fun deleteSelectedOrFocused() {
+        val snapshot = _state.value
+        val ids = snapshot.selectedEventIds.ifEmpty {
+            snapshot.focusedEventId?.let(::setOf).orEmpty()
+        }
+        if (ids.isEmpty()) return
+        val result = AssDocumentEditing.deleteEvents(snapshot.document, ids)
+        editDocument("已删除 " + ids.size + " 条字幕。") { result.document }
+        _state.update {
+            it.copy(
+                focusedEventId = result.focusedEventId,
+                selectedEventIds = emptySet(),
+                selectionAnchorId = null,
+                originalTextById = it.originalTextById.filterKeys { id -> id !in ids },
+                confirmedReviewIds = it.confirmedReviewIds - ids,
+            )
+        }
+    }
+
+    fun splitFocusedEvent(textIndex: Int) {
+        val snapshot = _state.value
+        val id = snapshot.focusedEventId ?: return
+        runCatching {
+            AssDocumentEditing.splitEvent(
+                document = snapshot.document,
+                eventId = id,
+                splitTimeMs = snapshot.playbackPositionMs,
+                textIndex = textIndex,
+            )
+        }.onSuccess { result ->
+            editDocument("已在当前播放时间和文本光标处分割字幕。") { result.document }
+            val newIds = result.document.events.map { it.id }.toSet() - snapshot.document.events.map { it.id }.toSet()
+            _state.update { state ->
+                state.copy(
+                    focusedEventId = result.focusedEventId,
+                    selectedEventIds = result.selectedEventIds,
+                    originalTextById = state.originalTextById + newIds.associateWith { newId ->
+                        result.document.events.firstOrNull { it.id == newId }?.text.orEmpty()
+                    },
+                )
+            }
+        }.onFailure { reportError("拆分失败", it) }
+    }
+
+    fun mergeSelected(useLineBreak: Boolean = true) {
+        val snapshot = _state.value
+        val ids = snapshot.selectedEventIds
+        if (ids.size < 2) return
+        runCatching {
+            AssDocumentEditing.mergeEvents(
+                document = snapshot.document,
+                eventIds = ids,
+                separator = if (useLineBreak) "\\N" else " ",
+            )
+        }.onSuccess { result ->
+            editDocument("已合并 " + ids.size + " 条字幕。") { result.document }
+            _state.update {
+                it.copy(
+                    focusedEventId = result.focusedEventId,
+                    selectedEventIds = result.selectedEventIds,
+                    selectionAnchorId = null,
+                    originalTextById = it.originalTextById.filterKeys { id -> id !in ids || id == result.focusedEventId },
+                    confirmedReviewIds = it.confirmedReviewIds - ids,
+                )
+            }
+        }.onFailure { reportError("合并失败", it) }
+    }
+
+    fun nudgeFocusedTime(deltaMs: Long) {
+        val id = _state.value.focusedEventId ?: return
+        if (deltaMs == 0L) return
+        editDocument("当前字幕整体平移 " + deltaMs + " ms。") { doc ->
+            doc.copy(events = doc.events.map { event ->
+                if (event.id != id) event else {
+                    val duration = event.end.millis - event.start.millis
+                    val start = (event.start.millis + deltaMs).coerceAtLeast(0L)
+                    event.copy(start = SubTime(start), end = SubTime(start + duration))
+                }
+            })
+        }
+    }
+
+    fun nudgeFocusedStart(deltaMs: Long) {
+        val id = _state.value.focusedEventId ?: return
+        editDocument("开始时间微调 " + deltaMs + " ms。") { doc ->
+            doc.copy(events = doc.events.map { event ->
+                if (event.id != id) event else {
+                    val next = (event.start.millis + deltaMs).coerceIn(0L, event.end.millis)
+                    event.copy(start = SubTime(next))
+                }
+            })
+        }
+    }
+
+    fun nudgeFocusedEnd(deltaMs: Long) {
+        val id = _state.value.focusedEventId ?: return
+        editDocument("结束时间微调 " + deltaMs + " ms。") { doc ->
+            doc.copy(events = doc.events.map { event ->
+                if (event.id != id) event else {
+                    val next = (event.end.millis + deltaMs).coerceAtLeast(event.start.millis)
+                    event.copy(end = SubTime(next))
+                }
+            })
+        }
+    }
+
+    fun setFocusedStartToPlayback() {
+        val id = _state.value.focusedEventId ?: return
+        val now = _state.value.playbackPositionMs
+        editDocument("开始时间已设为当前播放位置。") { doc ->
+            doc.copy(events = doc.events.map { event ->
+                if (event.id != id) event else event.copy(start = SubTime(now.coerceAtMost(event.end.millis)))
+            })
+        }
+    }
+
+    fun setFocusedEndToPlayback() {
+        val id = _state.value.focusedEventId ?: return
+        val now = _state.value.playbackPositionMs
+        editDocument("结束时间已设为当前播放位置。") { doc ->
+            doc.copy(events = doc.events.map { event ->
+                if (event.id != id) event else event.copy(end = SubTime(now.coerceAtLeast(event.start.millis)))
+            })
+        }
+    }
+
+    fun copyFocusedFormattingToSelected() {
+        val snapshot = _state.value
+        val sourceId = snapshot.focusedEventId ?: return
+        val targets = snapshot.selectedEventIds - sourceId
+        if (targets.isEmpty()) return
+        editDocument("已把当前字幕格式应用到 " + targets.size + " 条字幕。") { doc ->
+            AssDocumentEditing.copyEventFormatting(doc, sourceId, targets)
+        }
+    }
+
+    fun replaceAll(find: String, replacement: String, inActor: Boolean) {
+        if (find.isEmpty()) return
+        var count = 0
+        editDocument("批量替换完成。") { doc ->
+            doc.copy(events = doc.events.map { event ->
+                if (inActor) {
+                    if (!event.name.contains(find, ignoreCase = false)) event else {
+                        count++
+                        event.copy(name = event.name.replace(find, replacement))
+                    }
+                } else {
+                    if (!event.text.contains(find, ignoreCase = false)) event else {
+                        count++
+                        event.copy(text = event.text.replace(find, replacement))
+                    }
+                }
+            })
+        }
+        _state.update { it.copy(status = "已替换 " + count + " 条字幕中的" + if (inActor) " Actor。" else "正文。") }
+    }
+
+    fun createStyle(name: String, copyFrom: String? = null) {
+        runCatching {
+            AssDocumentEditing.createStyle(_state.value.document, name, copyFrom)
+        }.onSuccess { next ->
+            editDocument("已创建 Style " + name.trim() + "。") { next }
+        }.onFailure { reportError("创建 Style 失败", it) }
+    }
+
+    fun renameStyle(oldName: String, newName: String) {
+        runCatching {
+            AssDocumentEditing.renameStyle(_state.value.document, oldName, newName)
+        }.onSuccess { next ->
+            editDocument("Style 已重命名为 " + newName.trim() + "。") { next }
+        }.onFailure { reportError("重命名 Style 失败", it) }
+    }
+
+    fun deleteStyle(name: String, replacement: String) {
+        runCatching {
+            AssDocumentEditing.deleteStyle(_state.value.document, name, replacement)
+        }.onSuccess { next ->
+            editDocument("已删除 Style " + name + "，引用已转到 " + replacement + "。") { next }
+        }.onFailure { reportError("删除 Style 失败", it) }
     }
 
     fun shiftSelected(deltaMs: Long) {
