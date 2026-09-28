@@ -4,6 +4,7 @@ import io.github.assworkbench.domain.AssDocument
 import io.github.assworkbench.domain.SubtitleProject
 import io.github.assworkbench.fonts.FontAsset
 import io.github.assworkbench.fonts.FontDiagnostic
+import io.github.assworkbench.fonts.FontGlyphDiagnostic
 
 data class EditorState(
     val project: SubtitleProject = SubtitleProject(),
@@ -21,6 +22,7 @@ data class EditorState(
     val dirty: Boolean = false,
     val importedFonts: List<FontAsset> = emptyList(),
     val fontDiagnostics: List<FontDiagnostic> = emptyList(),
+    val fontGlyphDiagnostics: Map<String, FontGlyphDiagnostic> = emptyMap(),
     val fallbackFontFamily: String? = null,
     val fontRevision: Long = 0L,
     val showLayoutGuides: Boolean = false,

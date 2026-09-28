@@ -297,14 +297,28 @@ private fun FontStatusRow(state: EditorState, viewModel: EditorViewModel, onImpo
             }
             if (diagnostic != null) {
                 val diagnosticText = when (diagnostic.status) {
-                    FontMatchStatus.EXACT_IMPORTED -> "libass 字体状态：EXACT → " + diagnostic.matchedFamily
-                    FontMatchStatus.FALLBACK_ONLY -> "libass 字体状态：FALLBACK → " + diagnostic.matchedFamily
-                    FontMatchStatus.MISSING -> "libass 字体状态：MISSING"
+                    FontMatchStatus.EXACT_IMPORTED -> "字体名称：EXACT → " + diagnostic.matchedFamily
+                    FontMatchStatus.FALLBACK_ONLY -> "字体名称：FALLBACK → " + diagnostic.matchedFamily
+                    FontMatchStatus.MISSING -> "字体名称：MISSING"
                 }
                 Text(
                     diagnosticText,
                     style = MaterialTheme.typography.labelSmall,
                     color = if (diagnostic.status == FontMatchStatus.EXACT_IMPORTED) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                )
+            }
+            state.fontGlyphDiagnostics[focusedStyle.name]?.let { glyph ->
+                val glyphText = when {
+                    glyph.matchedFamily == null -> "字形覆盖：未找到已导入的同名字体"
+                    glyph.checkedCodePoints == 0 -> "字形覆盖：当前 Style 没有可检查字符"
+                    glyph.missingCodePoints.isEmpty() -> "字形覆盖：已检查 " + glyph.checkedCodePoints + " 个字符，全部存在"
+                    else -> "字形覆盖：缺少 " + glyph.missingCodePoints.size + " 个样例字形 → " + glyph.missingSampleText
+                }
+                Text(
+                    glyphText,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (glyph.matchedFamily != null && glyph.missingCodePoints.isEmpty())
+                        MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
                 )
             }
         }

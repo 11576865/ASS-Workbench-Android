@@ -25,3 +25,13 @@
 - [ ] Real-world large-file / overlapping-event / lifecycle corpus.
 
 ## 1.0 — Product acceptance
+
+
+## 0.11 — Font glyph diagnostics + round-trip audit (current)
+- [x] Parse OpenType cmap format 4 and 12.
+- [x] Check actual subtitle code points against the imported font assigned to each Style.
+- [x] Distinguish family-name match from glyph coverage.
+- [x] Show missing glyph samples in the editor.
+- [ ] Capture libass/mpv selected-font logs on device to distinguish renderer-load failure from font-file coverage failure.
+- [ ] Preserve comments and unsupported lines inside known ASS sections.
+- [ ] Expand round-trip corpus.

@@ -4,7 +4,9 @@ import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
 import io.github.assworkbench.fonts.FontAsset
+import io.github.assworkbench.fonts.FontGlyphDiagnostic
 import io.github.assworkbench.fonts.FontMetadata
+import io.github.assworkbench.fonts.OpenTypeCmap
 import io.github.assworkbench.fonts.OpenTypeNameReader
 import java.io.File
 
@@ -54,6 +56,34 @@ class FontStore(private val context: Context) {
         val target = File(importedDir, "${safeStem}-${sha.take(10)}.$ext")
         if (!target.exists()) target.writeBytes(bytes)
         return FontAsset(target.name, sha, metadata)
+    }
+
+    fun glyphDiagnostic(family: String, text: String): FontGlyphDiagnostic? {
+        val normalized = family.trim().lowercase()
+        val asset = listImported().firstOrNull { candidate ->
+            val names = candidate.metadata.aliases + candidate.metadata.family +
+                listOfNotNull(candidate.metadata.fullName, candidate.metadata.postScriptName)
+            names.any { it.trim().lowercase() == normalized }
+        } ?: return FontGlyphDiagnostic(family, null, 0, emptyList())
+
+        val file = File(importedDir, asset.fileName)
+        if (!file.isFile) return FontGlyphDiagnostic(family, asset.metadata.family, 0, emptyList())
+        val bytes = runCatching { file.readBytes() }.getOrNull()
+            ?: return FontGlyphDiagnostic(family, asset.metadata.family, 0, emptyList())
+
+        val cps = text.codePoints()
+            .filter { cp -> !Character.isWhitespace(cp) && !Character.isISOControl(cp) }
+            .distinct()
+            .limit(512)
+            .toArray()
+            .toList()
+
+        return FontGlyphDiagnostic(
+            requestedFamily = family,
+            matchedFamily = asset.metadata.family,
+            checkedCodePoints = cps.size,
+            missingCodePoints = OpenTypeCmap.missingCodePoints(bytes, cps, limit = 24),
+        )
     }
 
     fun ensureFallbackFont(): FontMetadata? {

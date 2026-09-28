@@ -789,12 +789,22 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
 
     private fun refreshFontDiagnostics() {
         _state.update { state ->
+            val byStyle = state.document.events.groupBy { it.style }
+            val glyphs = linkedMapOf<String, io.github.assworkbench.fonts.FontGlyphDiagnostic>()
+            state.document.styles.forEach { style ->
+                val sampleText = byStyle[style.name].orEmpty()
+                    .asSequence()
+                    .map { it.text.replace(Regex("\\{[^}]*}"), "").replace("\\N", " ") }
+                    .joinToString(" ")
+                fontStore.glyphDiagnostic(style.fontName, sampleText)?.let { glyphs[style.name] = it }
+            }
             state.copy(
                 fontDiagnostics = FontDiagnostics.diagnose(
                     requestedFamilies = state.document.styles.map { it.fontName },
                     imported = state.importedFonts,
                     fallbackFamily = state.fallbackFontFamily,
                 ),
+                fontGlyphDiagnostics = glyphs,
             )
         }
     }
