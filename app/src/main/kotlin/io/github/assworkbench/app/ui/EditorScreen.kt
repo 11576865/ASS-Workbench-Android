@@ -1,7 +1,9 @@
 package io.github.assworkbench.app.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -24,11 +26,15 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Redo
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ChevronLeft
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Movie
@@ -72,6 +78,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -79,10 +86,13 @@ import io.github.assworkbench.app.BuildConfig
 import io.github.assworkbench.app.EditorState
 import io.github.assworkbench.app.EditorViewModel
 import io.github.assworkbench.domain.AssEvent
+import io.github.assworkbench.domain.AssEffectiveInspector
+import io.github.assworkbench.domain.AssQualityCheck
+import io.github.assworkbench.domain.AssQcSeverity
 import io.github.assworkbench.domain.AssInlineSyntax
 import io.github.assworkbench.domain.SubTime
+import io.github.assworkbench.domain.EventFormatPasteMode
 import io.github.assworkbench.fonts.FontMatchStatus
-import androidx.window.core.layout.WindowSizeClass.Companion.WIDTH_DP_EXPANDED_LOWER_BOUND
 import androidx.window.core.layout.WindowSizeClass.Companion.WIDTH_DP_MEDIUM_LOWER_BOUND
 
 private enum class WorkspaceSection(val label: String) {
@@ -150,7 +160,8 @@ fun EditorScreen(
             onImportFont = onImportFont,
             onSaveMkv = onSaveMkv,
             onOpenVideo = onOpenVideo,
-            modifier = Modifier.fillMaxSize().padding(padding).navigationBarsPadding(),
+            onOpenSubtitle = onOpenSubtitle,
+            modifier = Modifier.fillMaxSize().padding(padding),
         )
     }
 }
@@ -168,7 +179,7 @@ private fun CompactEditorToolbar(
 ) {
     var overflowOpen by remember { mutableStateOf(false) }
     CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 32.dp) {
-        Surface(Modifier.statusBarsPadding(), tonalElevation = 1.dp) {
+        Surface(tonalElevation = 1.dp) {
             Row(
                 Modifier.fillMaxWidth().height(42.dp).padding(horizontal = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -253,39 +264,32 @@ private fun EditorWorkspace(
     onImportFont: () -> Unit,
     onSaveMkv: () -> Unit,
     onOpenVideo: () -> Unit,
+    onOpenSubtitle: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val windowSizeClass = currentWindowAdaptiveInfo(supportLargeAndXLargeWidth = true).windowSizeClass
     Box(modifier) {
-        when {
-            windowSizeClass.isWidthAtLeastBreakpoint(WIDTH_DP_EXPANDED_LOWER_BOUND) ->
-                ExpandedEditorWorkspace(
-                    state,
-                    viewModel,
-                    section,
-                    onSectionChange,
-                    onImportFont,
-                    onSaveMkv,
-                    onOpenVideo,
-                )
-            windowSizeClass.isWidthAtLeastBreakpoint(WIDTH_DP_MEDIUM_LOWER_BOUND) ->
-                TabletEditorWorkspace(
-                    state,
-                    viewModel,
-                    section,
-                    onSectionChange,
-                    onImportFont,
-                    onSaveMkv,
-                    onOpenVideo,
-                )
-            else -> CompactEditorWorkspace(
-                state,
-                viewModel,
-                section,
-                onSectionChange,
-                onImportFont,
-                onSaveMkv,
-                onOpenVideo,
+        if (windowSizeClass.isWidthAtLeastBreakpoint(WIDTH_DP_MEDIUM_LOWER_BOUND)) {
+            TabletEditorWorkspace(
+                state = state,
+                viewModel = viewModel,
+                section = section,
+                onSectionChange = onSectionChange,
+                onImportFont = onImportFont,
+                onSaveMkv = onSaveMkv,
+                onOpenVideo = onOpenVideo,
+                onOpenSubtitle = onOpenSubtitle,
+            )
+        } else {
+            CompactEditorWorkspace(
+                state = state,
+                viewModel = viewModel,
+                section = section,
+                onSectionChange = onSectionChange,
+                onImportFont = onImportFont,
+                onSaveMkv = onSaveMkv,
+                onOpenVideo = onOpenVideo,
+                onOpenSubtitle = onOpenSubtitle,
             )
         }
     }
@@ -300,6 +304,7 @@ private fun ExpandedEditorWorkspace(
     onImportFont: () -> Unit,
     onSaveMkv: () -> Unit,
     onOpenVideo: () -> Unit,
+    onOpenSubtitle: () -> Unit,
 ) {
     var inspectorVisible by rememberSaveable { mutableStateOf(true) }
     val inspectorWidth = when (section) {
@@ -311,9 +316,14 @@ private fun ExpandedEditorWorkspace(
     }
     Row(Modifier.fillMaxSize()) {
         Column(Modifier.weight(1f).fillMaxHeight()) {
-            PreviewPane(state, viewModel, onOpenVideo, Modifier.fillMaxWidth())
+            PreviewPane(state, viewModel, onOpenVideo, section == WorkspaceSection.EFFECTS, Modifier.fillMaxWidth())
             Divider()
-            SubtitleDock(state, viewModel, Modifier.weight(1f).fillMaxWidth())
+            SubtitleDock(
+                state = state,
+                viewModel = viewModel,
+                onOpenSubtitle = onOpenSubtitle,
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+            )
         }
         Box(
             Modifier.width(1.dp).fillMaxHeight()
@@ -352,20 +362,20 @@ private fun TabletEditorWorkspace(
     onImportFont: () -> Unit,
     onSaveMkv: () -> Unit,
     onOpenVideo: () -> Unit,
+    onOpenSubtitle: () -> Unit,
 ) {
     var inspectorVisible by rememberSaveable { mutableStateOf(true) }
-    val inspectorWeight = when (section) {
-        WorkspaceSection.SUBTITLES -> 0.36f
-        WorkspaceSection.STYLE -> 0.50f
-        WorkspaceSection.EFFECTS -> 0.44f
-        WorkspaceSection.REVIEW -> 0.50f
-        WorkspaceSection.PROJECT -> 0.44f
-    }
+    val inspectorWeight = 0.50f
     Column(Modifier.fillMaxSize()) {
-        PreviewPane(state, viewModel, onOpenVideo, Modifier.fillMaxWidth())
+        PreviewPane(state, viewModel, onOpenVideo, section == WorkspaceSection.EFFECTS, Modifier.fillMaxWidth())
         Divider()
         Row(Modifier.weight(1f).fillMaxWidth()) {
-            SubtitleDock(state, viewModel, Modifier.weight(1f - inspectorWeight).fillMaxHeight())
+            SubtitleDock(
+                state = state,
+                viewModel = viewModel,
+                onOpenSubtitle = onOpenSubtitle,
+                modifier = Modifier.weight(1f - inspectorWeight).fillMaxHeight(),
+            )
             Box(
                 Modifier.width(1.dp).fillMaxHeight()
                     .background(MaterialTheme.colorScheme.outlineVariant),
@@ -404,14 +414,15 @@ private fun CompactEditorWorkspace(
     onImportFont: () -> Unit,
     onSaveMkv: () -> Unit,
     onOpenVideo: () -> Unit,
+    onOpenSubtitle: () -> Unit,
 ) {
     Column(Modifier.fillMaxSize()) {
-        PreviewPane(state, viewModel, onOpenVideo, Modifier.fillMaxWidth())
+        PreviewPane(state, viewModel, onOpenVideo, section == WorkspaceSection.EFFECTS, Modifier.fillMaxWidth())
         Divider()
         WorkspaceTabs(section, onSectionChange)
         Divider()
         if (section == WorkspaceSection.SUBTITLES) {
-            SubtitleDock(state, viewModel, Modifier.weight(1f).fillMaxWidth())
+            SubtitleDock(state, viewModel, onOpenSubtitle, Modifier.weight(1f).fillMaxWidth())
         } else {
             InspectorBody(
                 state = state,
@@ -430,6 +441,7 @@ private fun PreviewPane(
     state: EditorState,
     viewModel: EditorViewModel,
     onOpenVideo: () -> Unit,
+    directManipulationEnabled: Boolean,
     modifier: Modifier = Modifier,
 ) {
     VideoPreview(
@@ -444,6 +456,8 @@ private fun PreviewPane(
         fontRevision = state.fontRevision,
         initialPositionMs = state.playbackPositionMs,
         showLayoutGuides = state.showLayoutGuides,
+        focusedEventId = if (directManipulationEnabled) state.focusedEventId else null,
+        onSetEventPosition = viewModel::setFocusedPosition,
         onOpenVideo = onOpenVideo,
         modifier = modifier,
     )
@@ -543,24 +557,61 @@ private fun InspectorBody(
             }
 
             WorkspaceSection.STYLE -> {
+                val styleNames = state.document.styles.map { it.name }
+                var inspectedStyleName by remember(focusedStyle?.name, styleNames) {
+                    mutableStateOf(focusedStyle?.name ?: styleNames.firstOrNull().orEmpty())
+                }
+                var stylePickerOpen by remember { mutableStateOf(false) }
+                val inspectedStyle = state.document.styles.firstOrNull { it.name == inspectedStyleName }
+                    ?: state.document.styles.firstOrNull()
                 Column(
                     Modifier.fillMaxSize().padding(8.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
                     FontStatusRow(state, viewModel, onImportFont)
+                    if (focused != null) {
+                        EffectiveValueStrip(state, focused, viewModel)
+                    }
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Text("编辑 Style", style = MaterialTheme.typography.labelSmall)
+                        Box {
+                            TextButton(onClick = { stylePickerOpen = true }) {
+                                Text(inspectedStyle?.name ?: "无 Style")
+                            }
+                            DropdownMenu(expanded = stylePickerOpen, onDismissRequest = { stylePickerOpen = false }) {
+                                state.document.styles.forEach { candidate ->
+                                    val uses = state.document.events.count { it.style == candidate.name }
+                                    DropdownMenuItem(
+                                        text = { Text(candidate.name + " · " + uses + " Events") },
+                                        onClick = {
+                                            inspectedStyleName = candidate.name
+                                            stylePickerOpen = false
+                                        },
+                                    )
+                                }
+                            }
+                        }
+                        if (focused != null && inspectedStyle != null && focused.style != inspectedStyle.name) {
+                            TextButton(
+                                onClick = { viewModel.assignFocusedStyle(inspectedStyle.name) },
+                                modifier = Modifier.height(28.dp),
+                            ) { Text("应用到当前字幕", style = MaterialTheme.typography.labelSmall) }
+                        }
+                    }
                     Divider()
-                    if (focusedStyle != null) {
+                    if (inspectedStyle != null) {
                         TypesettingPanel(
                             state = state,
                             viewModel = viewModel,
-                            style = focusedStyle,
+                            style = inspectedStyle,
                             modifier = Modifier.weight(1f).fillMaxWidth(),
                         )
                     } else {
-                        Text(
-                            "选择一条字幕后编辑它所使用的 Style。",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                        Text("当前文档没有 Style。", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
@@ -602,6 +653,131 @@ private fun InspectorBody(
                     onSaveMkv = onSaveMkv,
                     modifier = Modifier.fillMaxSize(),
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun EffectiveValueStrip(
+    state: EditorState,
+    event: AssEvent,
+    viewModel: EditorViewModel,
+) {
+    val values = remember(state.document, event) { AssEffectiveInspector.inspect(state.document, event) }
+    var open by remember { mutableStateOf(false) }
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "Effective · " + values.joinToString(" · ") { it.name + "=" + it.effectiveValue },
+                modifier = Modifier.weight(1f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            TextButton(onClick = { open = !open }, modifier = Modifier.height(28.dp)) {
+                Text(if (open) "收起" else "来源", style = MaterialTheme.typography.labelSmall)
+            }
+        }
+        if (open) {
+            values.forEach { value ->
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(value.name, modifier = Modifier.width(70.dp), style = MaterialTheme.typography.labelSmall)
+                    Text(
+                        "Style " + value.styleValue,
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    value.eventValue?.let {
+                        Text("Event " + it, style = MaterialTheme.typography.labelSmall)
+                    }
+                    value.overrideValue?.let {
+                        Text("Override " + it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.tertiary)
+                    }
+                    Text("→ " + value.effectiveValue, style = MaterialTheme.typography.labelSmall)
+                }
+            }
+            TextButton(
+                onClick = viewModel::clearFocusedStyleOverrides,
+                modifier = Modifier.height(28.dp),
+            ) { Text("清除当前字幕覆盖，回到 Style", style = MaterialTheme.typography.labelSmall) }
+        }
+    }
+}
+
+@Composable
+private fun QualityCheckSummary(
+    state: EditorState,
+    viewModel: EditorViewModel,
+) {
+    val issues = remember(state.document) { AssQualityCheck.inspect(state.document) }
+    var open by remember { mutableStateOf(false) }
+    val errors = issues.count { it.severity == AssQcSeverity.ERROR }
+    val warnings = issues.count { it.severity == AssQcSeverity.WARNING }
+    val missingFonts = state.fontDiagnostics.count { it.status == FontMatchStatus.MISSING }
+    val missingGlyphStyles = state.fontGlyphDiagnostics.values.count { it.missingCodePoints.isNotEmpty() }
+    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "QC · ${issues.size} 项 · error $errors · warning $warnings" +
+                    " · missing font $missingFonts · glyph $missingGlyphStyles",
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.labelMedium,
+                color = when {
+                    errors > 0 || missingFonts > 0 || missingGlyphStyles > 0 -> MaterialTheme.colorScheme.error
+                    warnings > 0 -> MaterialTheme.colorScheme.tertiary
+                    else -> MaterialTheme.colorScheme.onSurfaceVariant
+                },
+            )
+            TextButton(onClick = { open = !open }, modifier = Modifier.height(28.dp)) {
+                Text(if (open) "收起" else "查看", style = MaterialTheme.typography.labelSmall)
+            }
+        }
+        if (open) {
+            if (issues.isEmpty()) {
+                Text("未发现时间 / ASS 结构问题。", style = MaterialTheme.typography.labelSmall)
+                if (missingFonts > 0 || missingGlyphStyles > 0) {
+                    Text(
+                        "字体：missing $missingFonts · 存在缺字的 Style $missingGlyphStyles",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            } else {
+                issues.take(40).forEach { issue ->
+                    Row(
+                        Modifier.fillMaxWidth().clickable { viewModel.focusEvent(issue.eventId, seek = true) },
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            "#${issue.eventId}",
+                            modifier = Modifier.width(46.dp),
+                            style = MaterialTheme.typography.labelSmall,
+                        )
+                        Text(
+                            issue.message,
+                            modifier = Modifier.weight(1f),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = when (issue.severity) {
+                                AssQcSeverity.ERROR -> MaterialTheme.colorScheme.error
+                                AssQcSeverity.WARNING -> MaterialTheme.colorScheme.tertiary
+                                else -> MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                        )
+                    }
+                }
+                if (issues.size > 40) {
+                    Text("另有 ${issues.size - 40} 项未展开。", style = MaterialTheme.typography.labelSmall)
+                }
+                if (missingFonts > 0 || missingGlyphStyles > 0) {
+                    Text(
+                        "字体：missing $missingFonts · 存在缺字的 Style $missingGlyphStyles",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
             }
         }
     }
@@ -670,6 +846,8 @@ private fun ProjectInspector(
             color = if (overrideEvents > 0) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Divider()
+        QualityCheckSummary(state, viewModel)
+        Divider()
         Text("Renderer 诊断", style = MaterialTheme.typography.labelMedium)
         if (state.rendererDiagnostics.isEmpty()) {
             Text(
@@ -693,11 +871,15 @@ private fun ProjectInspector(
 private fun SubtitleDock(
     state: EditorState,
     viewModel: EditorViewModel,
+    onOpenSubtitle: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val visibleIds = state.filteredEvents.map { it.id }
     val visibleSelected = visibleIds.count { it in state.selectedEventIds }
     val allVisibleSelected = visibleIds.isNotEmpty() && visibleSelected == visibleIds.size
+    val qcByEvent = remember(state.document) {
+        AssQualityCheck.inspect(state.document).groupBy { it.eventId }
+    }
     var searchOpen by remember { mutableStateOf(false) }
     var actionsOpen by remember { mutableStateOf(false) }
     var replaceOpen by remember { mutableStateOf(false) }
@@ -780,6 +962,20 @@ private fun SubtitleDock(
                             else MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     HintIconButton(
+                        Icons.Filled.ChevronLeft,
+                        "上一条字幕",
+                        viewModel::focusPreviousEvent,
+                        enabled = state.document.events.isNotEmpty(),
+                        compact = true,
+                    )
+                    HintIconButton(
+                        Icons.Filled.ChevronRight,
+                        "下一条字幕",
+                        viewModel::focusNextEvent,
+                        enabled = state.document.events.isNotEmpty(),
+                        compact = true,
+                    )
+                    HintIconButton(
                         Icons.Filled.Add,
                         "在当前播放位置添加字幕",
                         viewModel::insertEventAtPlayback,
@@ -808,9 +1004,38 @@ private fun SubtitleDock(
                                 onClick = { actionsOpen = false; viewModel.mergeSelected(useLineBreak = false) },
                             )
                             DropdownMenuItem(
-                                text = { Text("复制当前字幕格式到选中字幕") },
+                                text = { Text("直接复制当前格式到选中字幕") },
                                 enabled = state.focusedEventId != null && state.selectedEventIds.any { it != state.focusedEventId },
                                 onClick = { actionsOpen = false; viewModel.copyFocusedFormattingToSelected() },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("复制当前格式到格式剪贴板") },
+                                enabled = state.focusedEventId != null,
+                                onClick = { actionsOpen = false; viewModel.copyFocusedFormatToClipboard() },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("粘贴格式剪贴板 · 全部") },
+                                onClick = { actionsOpen = false; viewModel.pasteFormatClipboardToSelected(EventFormatPasteMode.ALL) },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("粘贴 · Style") },
+                                onClick = { actionsOpen = false; viewModel.pasteFormatClipboardToSelected(EventFormatPasteMode.STYLE) },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("粘贴 · Margin") },
+                                onClick = { actionsOpen = false; viewModel.pasteFormatClipboardToSelected(EventFormatPasteMode.MARGINS) },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("粘贴 · 位置") },
+                                onClick = { actionsOpen = false; viewModel.pasteFormatClipboardToSelected(EventFormatPasteMode.POSITION) },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("粘贴 · Override") },
+                                onClick = { actionsOpen = false; viewModel.pasteFormatClipboardToSelected(EventFormatPasteMode.OVERRIDES) },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("粘贴 · 效果") },
+                                onClick = { actionsOpen = false; viewModel.pasteFormatClipboardToSelected(EventFormatPasteMode.EFFECTS) },
                             )
                             DropdownMenuItem(
                                 text = { Text("批量查找 / 替换…") },
@@ -832,13 +1057,14 @@ private fun SubtitleDock(
 
                 if (!state.subtitleLoaded) {
                     Column(
-                        Modifier.weight(1f).fillMaxWidth(),
+                        Modifier.weight(1f).fillMaxWidth()
+                            .clickable(onClick = onOpenSubtitle),
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center,
                     ) {
                         Text("未选择 ASS 字幕", style = MaterialTheme.typography.titleSmall)
                         Text(
-                            "可从顶部文件夹图标打开现有 ASS，或在 ⋮ → 新建空白 ASS 后直接开始。",
+                            "点击此处选择 .ass · 或从 ⋮ 新建空白 ASS",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -889,6 +1115,7 @@ private fun SubtitleDock(
                             checked = event.id in state.selectedEventIds,
                             focused = event.id == state.focusedEventId,
                             active = event.id in activeIds,
+                            issueCount = qcByEvent[event.id].orEmpty().size,
                             viewModel = viewModel,
                             onCheck = { viewModel.toggleSelected(event.id) },
                             onFocus = { viewModel.focusEvent(event.id, seek = false) },
@@ -909,6 +1136,9 @@ private fun TimelineInspector(
     modifier: Modifier = Modifier,
 ) {
     var windowSeconds by rememberSaveable { mutableStateOf(30) }
+    var snapEnabled by rememberSaveable { mutableStateOf(true) }
+    var snapGridMs by rememberSaveable { mutableStateOf(10L) }
+    var timelineSettingsOpen by remember { mutableStateOf(false) }
     val focused = state.document.events.firstOrNull { it.id == state.focusedEventId }
     val centerMs = when {
         state.project.videoUri != null -> state.playbackPositionMs
@@ -921,6 +1151,15 @@ private fun TimelineInspector(
     val visible = state.document.events.filter { event ->
         event.end.millis >= windowStart && event.start.millis <= windowEnd
     }.take(28)
+    val snapTargets = remember(visible, state.playbackPositionMs) {
+        buildList {
+            add(state.playbackPositionMs)
+            visible.forEach { event ->
+                add(event.start.millis)
+                add(event.end.millis)
+            }
+        }.distinct()
+    }
 
     Column(modifier.padding(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -930,15 +1169,41 @@ private fun TimelineInspector(
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            listOf(10, 30, 60).forEach { seconds ->
-                TextButton(
-                    onClick = { windowSeconds = seconds },
-                    modifier = Modifier.height(28.dp),
-                ) {
+            Box {
+                TextButton(onClick = { timelineSettingsOpen = true }, modifier = Modifier.height(28.dp)) {
                     Text(
-                        if (windowSeconds == seconds) "● ${seconds}s" else "${seconds}s",
+                        windowSeconds.toString() + "s · " +
+                            (if (snapEnabled) "Snap " + snapGridMs + "ms" else "Snap off"),
                         style = MaterialTheme.typography.labelSmall,
                     )
+                }
+                DropdownMenu(
+                    expanded = timelineSettingsOpen,
+                    onDismissRequest = { timelineSettingsOpen = false },
+                ) {
+                    listOf(10, 30, 60).forEach { seconds ->
+                        DropdownMenuItem(
+                            text = { Text((if (windowSeconds == seconds) "✓ " else "") + "窗口 " + seconds + "s") },
+                            onClick = {
+                                windowSeconds = seconds
+                                timelineSettingsOpen = false
+                            },
+                        )
+                    }
+                    DropdownMenuItem(
+                        text = { Text((if (snapEnabled) "✓ " else "") + "时间吸附") },
+                        onClick = { snapEnabled = !snapEnabled },
+                    )
+                    listOf(10L, 100L).forEach { grid ->
+                        DropdownMenuItem(
+                            text = { Text((if (snapGridMs == grid) "✓ " else "") + "网格 " + grid + " ms") },
+                            enabled = snapEnabled,
+                            onClick = {
+                                snapGridMs = grid
+                                timelineSettingsOpen = false
+                            },
+                        )
+                    }
                 }
             }
         }
@@ -957,7 +1222,13 @@ private fun TimelineInspector(
                         windowEndMs = windowEnd,
                         playheadMs = state.playbackPositionMs,
                         focused = event.id == state.focusedEventId,
+                        snapTargetsMs = snapTargets,
+                        snapEnabled = snapEnabled,
+                        snapGridMs = snapGridMs,
                         onClick = { viewModel.focusEvent(event.id, seek = true) },
+                        onTimingCommit = { startMs, endMs ->
+                            viewModel.setEventTiming(event.id, startMs, endMs)
+                        },
                     )
                 }
             }
@@ -969,6 +1240,8 @@ private fun TimelineInspector(
     }
 }
 
+private enum class TimelineDragMode { START, MOVE, END }
+
 @Composable
 private fun TimelineEventRow(
     event: AssEvent,
@@ -976,10 +1249,21 @@ private fun TimelineEventRow(
     windowEndMs: Long,
     playheadMs: Long,
     focused: Boolean,
+    snapTargetsMs: List<Long>,
+    snapEnabled: Boolean,
+    snapGridMs: Long,
     onClick: () -> Unit,
+    onTimingCommit: (Long, Long) -> Unit,
 ) {
+    var previewStart by remember(event.id, event.start) { mutableStateOf(event.start.millis) }
+    var previewEnd by remember(event.id, event.end) { mutableStateOf(event.end.millis) }
+    var dragMode by remember { mutableStateOf<TimelineDragMode?>(null) }
+    var dragBaseStart by remember { mutableStateOf(previewStart) }
+    var dragBaseEnd by remember { mutableStateOf(previewEnd) }
+    var dragAccumPx by remember { mutableStateOf(0f) }
+
     Row(
-        Modifier.fillMaxWidth().height(28.dp).clickable(onClick = onClick),
+        Modifier.fillMaxWidth().height(30.dp).clickable(onClick = onClick),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
@@ -990,25 +1274,99 @@ private fun TimelineEventRow(
             color = if (focused) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
         )
         BoxWithConstraints(
-            Modifier.weight(1f).height(16.dp)
+            Modifier.weight(1f).height(18.dp)
                 .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f))
+                .pointerInput(event.id, windowStartMs, windowEndMs, snapTargetsMs) {
+                    val span = (windowEndMs - windowStartMs).coerceAtLeast(1L)
+                    fun xFor(ms: Long): Float =
+                        ((ms - windowStartMs).toFloat() / span.toFloat()).coerceIn(0f, 1f) * size.width
+                    fun snap(candidate: Long): Long {
+                        if (!snapEnabled) return candidate
+                        val gridStep = snapGridMs.coerceAtLeast(1L)
+                        val grid = ((candidate + gridStep / 2L) / gridStep) * gridStep
+                        val threshold = minOf(120L, maxOf(30L, span / 200L))
+                        val nearest = snapTargetsMs
+                            .asSequence()
+                            .filterNot { it == dragBaseStart || it == dragBaseEnd }
+                            .minByOrNull { kotlin.math.abs(it - candidate) }
+                        return if (nearest != null && kotlin.math.abs(nearest - candidate) <= threshold) nearest else grid
+                    }
+                    detectDragGestures(
+                        onDragStart = { offset ->
+                            val startX = xFor(previewStart)
+                            val endX = xFor(previewEnd)
+                            val edge = 14.dp.toPx()
+                            dragMode = when {
+                                kotlin.math.abs(offset.x - startX) <= edge -> TimelineDragMode.START
+                                kotlin.math.abs(offset.x - endX) <= edge -> TimelineDragMode.END
+                                offset.x in startX..endX -> TimelineDragMode.MOVE
+                                else -> null
+                            }
+                            dragBaseStart = previewStart
+                            dragBaseEnd = previewEnd
+                            dragAccumPx = 0f
+                        },
+                        onDrag = { change, amount ->
+                            val mode = dragMode
+                            if (mode != null) {
+                                change.consume()
+                                dragAccumPx += amount.x
+                                val deltaMs = (dragAccumPx / size.width.coerceAtLeast(1) * span).toLong()
+                                when (mode) {
+                                    TimelineDragMode.START -> {
+                                        val latestStart = (previewEnd - 10L).coerceAtLeast(0L)
+                                        previewStart = snap(dragBaseStart + deltaMs)
+                                            .coerceIn(0L, latestStart)
+                                    }
+                                    TimelineDragMode.END -> {
+                                        previewEnd = snap(dragBaseEnd + deltaMs)
+                                            .coerceAtLeast(previewStart + 10L)
+                                    }
+                                    TimelineDragMode.MOVE -> {
+                                        val duration = dragBaseEnd - dragBaseStart
+                                        val candidate = snap(dragBaseStart + deltaMs).coerceAtLeast(0L)
+                                        previewStart = candidate
+                                        previewEnd = candidate + duration
+                                    }
+                                }
+                            }
+                        },
+                        onDragEnd = {
+                            if (dragMode != null) onTimingCommit(previewStart, previewEnd)
+                            dragMode = null
+                        },
+                        onDragCancel = {
+                            previewStart = event.start.millis
+                            previewEnd = event.end.millis
+                            dragMode = null
+                        },
+                    )
+                }
         ) {
             val span = (windowEndMs - windowStartMs).coerceAtLeast(1L).toFloat()
-            val startFraction = ((event.start.millis - windowStartMs) / span).coerceIn(0f, 1f)
-            val endFraction = ((event.end.millis - windowStartMs) / span).coerceIn(0f, 1f)
+            val startFraction = ((previewStart - windowStartMs) / span).coerceIn(0f, 1f)
+            val endFraction = ((previewEnd - windowStartMs) / span).coerceIn(0f, 1f)
             val playFraction = ((playheadMs - windowStartMs) / span).coerceIn(0f, 1f)
             val eventWidth = maxWidth * (endFraction - startFraction).coerceAtLeast(0.012f)
             Box(
                 Modifier.offset(x = maxWidth * startFraction)
-                    .width(eventWidth).height(16.dp)
+                    .width(eventWidth).height(18.dp)
                     .background(
                         if (focused) MaterialTheme.colorScheme.primary
                         else MaterialTheme.colorScheme.secondary.copy(alpha = 0.72f)
                     )
             )
             Box(
+                Modifier.offset(x = maxWidth * startFraction).width(2.dp).height(18.dp)
+                    .background(MaterialTheme.colorScheme.onPrimary)
+            )
+            Box(
+                Modifier.offset(x = maxWidth * endFraction - 2.dp).width(2.dp).height(18.dp)
+                    .background(MaterialTheme.colorScheme.onPrimary)
+            )
+            Box(
                 Modifier.offset(x = maxWidth * playFraction)
-                    .width(1.dp).height(16.dp)
+                    .width(1.dp).height(18.dp)
                     .background(MaterialTheme.colorScheme.error)
             )
         }
@@ -1147,6 +1505,7 @@ private fun SubtitleRow(
     checked: Boolean,
     focused: Boolean,
     active: Boolean,
+    issueCount: Int,
     viewModel: EditorViewModel,
     onCheck: () -> Unit,
     onFocus: () -> Unit,
@@ -1172,18 +1531,21 @@ private fun SubtitleRow(
                 onCheckedChange = { onCheck() },
                 modifier = Modifier.width(26.dp).height(26.dp),
             )
-            Column(Modifier.width(132.dp)) {
+            Column(Modifier.width(158.dp)) {
                 Text(
-                    "#${event.id}  ${event.start.toAss()}–${event.end.toAss()}",
+                    "#${event.id} · L${event.layer} · ${event.style}" +
+                        if (event.comment) " · Comment" else "" +
+                        if (issueCount > 0) " · ⚠$issueCount" else "",
                     style = MaterialTheme.typography.labelSmall,
                     maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    "L${event.layer} · ${event.style}",
+                    event.start.toAss().removePrefix("0:") + "–" +
+                        event.end.toAss().removePrefix("0:"),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
                 )
             }
             Column(Modifier.weight(1f)) {
@@ -1226,8 +1588,12 @@ private fun FocusedEventEditor(
     var marginL by remember(event.id, event.marginL) { mutableStateOf(event.marginL.toString()) }
     var marginR by remember(event.id, event.marginR) { mutableStateOf(event.marginR.toString()) }
     var marginV by remember(event.id, event.marginV) { mutableStateOf(event.marginV.toString()) }
+    var layerText by remember(event.id, event.layer) { mutableStateOf(event.layer.toString()) }
+    var actorText by remember(event.id, event.name) { mutableStateOf(event.name) }
+    var comment by remember(event.id, event.comment) { mutableStateOf(event.comment) }
     var eventText by remember(event.id) { mutableStateOf(TextFieldValue(event.text)) }
     var timingOpen by remember { mutableStateOf(false) }
+    var alignmentOpen by remember { mutableStateOf(false) }
     val syntax = remember(event.text) { AssInlineSyntax.analyze(event.text) }
 
     LaunchedEffect(event.text) {
@@ -1300,6 +1666,40 @@ private fun FocusedEventEditor(
             }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+            CompactEventField("Layer", layerText, { layerText = it }, Modifier.width(70.dp))
+            CompactEventField("Actor", actorText, { actorText = it }, Modifier.weight(1f))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Checkbox(checked = comment, onCheckedChange = { comment = it })
+                Text("Comment", style = MaterialTheme.typography.labelSmall)
+            }
+            Box {
+                TextButton(onClick = { alignmentOpen = true }, modifier = Modifier.height(36.dp)) {
+                    Text("对齐", style = MaterialTheme.typography.labelSmall)
+                }
+                DropdownMenu(expanded = alignmentOpen, onDismissRequest = { alignmentOpen = false }) {
+                    listOf(7, 8, 9, 4, 5, 6, 1, 2, 3).forEach { value ->
+                        DropdownMenuItem(
+                            text = { Text("\\an" + value) },
+                            onClick = {
+                                alignmentOpen = false
+                                viewModel.setFocusedAlignment(value)
+                            },
+                        )
+                    }
+                }
+            }
+            TextButton(
+                onClick = {
+                    viewModel.updateFocusedMetadata(
+                        layer = layerText.toIntOrNull() ?: event.layer,
+                        actor = actorText,
+                        comment = comment,
+                    )
+                },
+                modifier = Modifier.height(36.dp),
+            ) { Text("应用", style = MaterialTheme.typography.labelSmall) }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
             CompactEventField("L", marginL, { marginL = it }, Modifier.weight(1f))
             CompactEventField("R", marginR, { marginR = it }, Modifier.weight(1f))
             CompactEventField("V", marginV, { marginV = it }, Modifier.weight(1f))
@@ -1345,7 +1745,7 @@ private fun FocusedEventEditor(
             visualTransformation = rememberAssSyntaxTransformation(),
             isError = syntax.hasErrors,
             textStyle = MaterialTheme.typography.bodySmall,
-            modifier = Modifier.fillMaxWidth().heightIn(min = 68.dp, max = 132.dp),
+            modifier = Modifier.fillMaxWidth().heightIn(min = 84.dp, max = 180.dp),
         )
     }
 }
@@ -1407,13 +1807,34 @@ private fun CompactEventField(
     onValue: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    OutlinedTextField(
-        value = value,
-        onValueChange = onValue,
-        label = { Text(label, style = MaterialTheme.typography.labelSmall) },
-        singleLine = true,
-        textStyle = MaterialTheme.typography.bodySmall,
-        modifier = modifier.height(44.dp),
-    )
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(1.dp),
+    ) {
+        Text(
+            label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+        )
+        BasicTextField(
+            value = value,
+            onValueChange = onValue,
+            singleLine = true,
+            textStyle = MaterialTheme.typography.bodySmall.merge(
+                TextStyle(color = MaterialTheme.colorScheme.onSurface)
+            ),
+            cursorBrush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.primary),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(30.dp)
+                .border(
+                    width = 1.dp,
+                    color = MaterialTheme.colorScheme.outline,
+                    shape = RoundedCornerShape(5.dp),
+                )
+                .padding(horizontal = 7.dp, vertical = 6.dp),
+        )
+    }
 }
 

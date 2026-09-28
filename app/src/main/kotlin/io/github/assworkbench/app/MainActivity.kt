@@ -27,6 +27,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import io.github.assworkbench.app.ui.EditorScreen
 
 class MainActivity : ComponentActivity() {
@@ -35,7 +38,7 @@ class MainActivity : ComponentActivity() {
     private val openVideo = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri ?: return@registerForActivityResult
         persist(uri, read = true, write = false)
-        viewModel.attachVideo(uri)
+        viewModel.openPickedVideo(uri)
     }
 
     private val openMkvProject = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -46,6 +49,10 @@ class MainActivity : ComponentActivity() {
 
     private val openSubtitle = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri ?: return@registerForActivityResult
+        if (!isAssDocument(uri)) {
+            viewModel.reportError("字幕导入失败", IllegalArgumentException("只接受 .ass 字幕文件"))
+            return@registerForActivityResult
+        }
         persist(uri, read = true, write = true)
         runCatching { viewModel.openSubtitle(uri) }
             .onFailure { viewModel.reportError("字幕导入失败", it) }
@@ -77,6 +84,8 @@ class MainActivity : ComponentActivity() {
             statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
             navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
         )
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        hideSystemBars()
         StartupProbe.mark(this, "activity_setContent", "starting")
         setContent {
             MaterialTheme(colorScheme = darkColorScheme()) {
@@ -135,7 +144,9 @@ class MainActivity : ComponentActivity() {
                         viewModel = viewModel,
                         onOpenVideo = { openVideo.launch(arrayOf("video/*")) },
                         onOpenMkvProject = { openMkvProject.launch(arrayOf("video/x-matroska", "video/*", "application/octet-stream")) },
-                        onOpenSubtitle = { openSubtitle.launch(arrayOf("text/*", "application/x-ass", "application/x-ssa")) },
+                        onOpenSubtitle = {
+                            openSubtitle.launch(arrayOf("application/x-ass", "text/x-ass", "text/x-ssa", "text/plain"))
+                        },
                         onImportFont = { importFont.launch(arrayOf("font/ttf", "font/otf", "application/x-font-ttf", "application/x-font-opentype", "application/octet-stream")) },
                         onSave = {
                             if (!viewModel.saveCurrent()) saveSubtitleAs.launch(defaultFileName(state.project.title))
@@ -149,6 +160,27 @@ class MainActivity : ComponentActivity() {
             }
         }
         StartupProbe.mark(this, "activity_setContent", "success")
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) hideSystemBars()
+    }
+
+    private fun hideSystemBars() {
+        WindowInsetsControllerCompat(window, window.decorView).apply {
+            hide(WindowInsetsCompat.Type.systemBars())
+            systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        }
+    }
+
+    private fun isAssDocument(uri: Uri): Boolean {
+        val projection = arrayOf(android.provider.OpenableColumns.DISPLAY_NAME)
+        val name = contentResolver.query(uri, projection, null, null, null)?.use { cursor ->
+            val column = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+            if (column >= 0 && cursor.moveToFirst()) cursor.getString(column) else null
+        } ?: uri.lastPathSegment
+        return name?.endsWith(".ass", ignoreCase = true) == true
     }
 
     private fun persist(uri: Uri, read: Boolean, write: Boolean) {

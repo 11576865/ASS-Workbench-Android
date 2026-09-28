@@ -13,6 +13,9 @@ import io.github.assworkbench.domain.AssDocumentEditing
 import io.github.assworkbench.domain.AssTextDecoder
 import io.github.assworkbench.domain.AssTextEncoding
 import io.github.assworkbench.domain.EventOverrideEditor
+import io.github.assworkbench.domain.EventFormatClipboard
+import io.github.assworkbench.domain.EventFormatClipboardOps
+import io.github.assworkbench.domain.EventFormatPasteMode
 import io.github.assworkbench.domain.FontBindingRewriter
 import io.github.assworkbench.domain.ReviewEventKey
 import io.github.assworkbench.domain.ReviewSidecar
@@ -55,6 +58,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     private var reviewPersistJob: Job? = null
     private var fontDiagnosticJob: Job? = null
     private var containerScan: MatroskaScanResult? = null
+    private var eventFormatClipboard: EventFormatClipboard? = null
     private val _state = MutableStateFlow(
         EditorState(
             project = io.github.assworkbench.domain.SubtitleProject(
@@ -81,6 +85,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun newSubtitleProject() {
+        fontStore.clearProjectFonts(refresh = true)
         val document = AssDocument()
         history.reset(document)
         _state.update {
@@ -111,6 +116,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun openMkvProject(uri: Uri) {
+        fontStore.clearProjectFonts(refresh = false)
         _state.update {
             it.copy(
                 container = ContainerBridgeState(
@@ -280,16 +286,35 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    fun openPickedVideo(uri: Uri) {
+        val current = _state.value
+        if (current.container.uri == uri.toString()) {
+            _state.update {
+                it.copy(
+                    project = it.project.copy(videoUri = uri.toString()),
+                    status = "当前 MKV 工程已经是参考视频，无需重复载入。",
+                )
+            }
+            return
+        }
+        attachVideo(uri)
+    }
+
     fun attachVideo(uri: Uri) {
         _state.update {
             it.copy(
                 project = it.project.copy(videoUri = uri.toString()),
-                status = "已更换参考视频；字幕未修改。",
+                status = if ((displayName(uri) ?: "").endsWith(".mkv", ignoreCase = true)) {
+                    "已把 MKV 作为参考视频载入；如需编辑它的内嵌 ASS，请使用顶部 MKV 入口。"
+                } else {
+                    "已更换参考视频；字幕未修改。"
+                },
             )
         }
     }
 
     fun openSubtitle(uri: Uri) {
+        fontStore.clearProjectFonts(refresh = true)
         val bytes = app.contentResolver.openInputStream(uri)?.use { it.readBytes() }
             ?: error("无法读取字幕")
         val decoded = AssTextDecoder.decode(bytes)
@@ -446,6 +471,101 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         it.copy(selectedEventIds = emptySet(), selectionAnchorId = null, status = "已清除选择。")
     }
 
+    fun focusPreviousEvent() {
+        val events = _state.value.document.events
+        if (events.isEmpty()) return
+        val current = _state.value.focusedEventId
+        val index = events.indexOfFirst { it.id == current }
+        val target = events[(if (index <= 0) 0 else index - 1)]
+        focusEvent(target.id, seek = true)
+    }
+
+    fun focusNextEvent() {
+        val events = _state.value.document.events
+        if (events.isEmpty()) return
+        val current = _state.value.focusedEventId
+        val index = events.indexOfFirst { it.id == current }
+        val target = events[(if (index < 0) 0 else (index + 1).coerceAtMost(events.lastIndex))]
+        focusEvent(target.id, seek = true)
+    }
+
+    fun alignSelectedStartToPlayback() {
+        val snapshot = _state.value
+        val ids = snapshot.selectedEventIds
+        if (ids.isEmpty()) return
+        val selected = snapshot.document.events.filter { it.id in ids }
+        val earliest = selected.minOfOrNull { it.start.millis } ?: return
+        val delta = snapshot.playbackPositionMs - earliest
+        shiftSelected(delta)
+    }
+
+    fun updateFocusedMetadata(layer: Int, actor: String, comment: Boolean) {
+        val id = _state.value.focusedEventId ?: return
+        editDocument("已更新当前字幕的 Layer / Actor / 类型。") { doc ->
+            doc.copy(events = doc.events.map { event ->
+                if (event.id == id) {
+                    event.copy(
+                        layer = layer.coerceIn(-999, 999),
+                        name = actor,
+                        comment = comment,
+                    )
+                } else event
+            })
+        }
+    }
+
+    fun setSelectedComment(comment: Boolean) {
+        val ids = _state.value.selectedEventIds
+        if (ids.isEmpty()) return
+        editDocument(if (comment) "已把选中字幕设为 Comment。" else "已把选中字幕设为 Dialogue。") { doc ->
+            doc.copy(events = doc.events.map { event ->
+                if (event.id in ids) event.copy(comment = comment) else event
+            })
+        }
+    }
+
+    fun setEventTiming(id: Long, startMs: Long, endMs: Long) {
+        if (endMs < startMs) return
+        editDocument("已在时间轴修改字幕 #" + id + "。") { doc ->
+            doc.copy(events = doc.events.map { event ->
+                if (event.id == id) event.copy(
+                    start = SubTime(startMs.coerceAtLeast(0L)),
+                    end = SubTime(endMs.coerceAtLeast(startMs.coerceAtLeast(0L))),
+                ) else event
+            })
+        }
+    }
+
+    fun setFocusedPosition(x: Double, y: Double) {
+        val state = _state.value
+        val id = state.focusedEventId ?: return
+        val event = state.document.events.firstOrNull { it.id == id } ?: return
+        val current = EventOverrideEditor.inspect(event.text)
+        applyEventOverrides(
+            id = id,
+            x = x.coerceIn(0.0, state.document.playResX.toDouble()),
+            y = y.coerceIn(0.0, state.document.playResY.toDouble()),
+            blur = current.blur,
+            fadeInMs = current.fadeInMs,
+            fadeOutMs = current.fadeOutMs,
+            softEntry = current.softEntry,
+        )
+    }
+
+    fun setFocusedAlignment(alignment: Int) {
+        val id = _state.value.focusedEventId ?: return
+        editDocument("已设置当前字幕对齐点。") { doc ->
+            doc.copy(events = doc.events.map { event ->
+                if (event.id != id) event else {
+                    val leading = Regex("""^(?:\{[^}]*\})*""").find(event.text)?.value.orEmpty()
+                    val body = event.text.removePrefix(leading)
+                    val cleaned = leading.replace(Regex("""\\an[1-9]"""), "").replace(Regex("""\{\s*\}"""), "")
+                    event.copy(text = cleaned + "{\\an" + alignment.coerceIn(1, 9) + "}" + body)
+                }
+            })
+        }
+    }
+
     fun insertEventAtPlayback() {
         val snapshot = _state.value
         val result = AssDocumentEditing.insertAtPlayback(
@@ -589,6 +709,32 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    fun copyFocusedFormatToClipboard() {
+        val snapshot = _state.value
+        val event = snapshot.focusedEventId?.let { id ->
+            snapshot.document.events.firstOrNull { it.id == id }
+        } ?: return
+        eventFormatClipboard = EventFormatClipboardOps.capture(event)
+        _state.update { it.copy(status = "已复制字幕 #" + event.id + " 的格式到内部剪贴板。") }
+    }
+
+    fun pasteFormatClipboardToSelected(mode: EventFormatPasteMode) {
+        val clipboard = eventFormatClipboard ?: run {
+            _state.update { it.copy(status = "格式剪贴板为空。") }
+            return
+        }
+        val snapshot = _state.value
+        val ids = snapshot.selectedEventIds.ifEmpty {
+            snapshot.focusedEventId?.let(::setOf).orEmpty()
+        }
+        if (ids.isEmpty()) return
+        editDocument("已粘贴格式到 " + ids.size + " 条字幕。") { doc ->
+            doc.copy(events = doc.events.map { event ->
+                if (event.id in ids) EventFormatClipboardOps.apply(event, clipboard, mode) else event
+            })
+        }
+    }
+
     fun copyFocusedFormattingToSelected() {
         val snapshot = _state.value
         val sourceId = snapshot.focusedEventId ?: return
@@ -637,6 +783,21 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         }.onFailure { reportError("重命名 Style 失败", it) }
     }
 
+    fun deleteUnusedStyles() {
+        val snapshot = _state.value
+        val used = snapshot.document.events.mapTo(hashSetOf()) { it.style }
+        val removable = snapshot.document.styles.filterNot { it.name in used }
+        if (removable.isEmpty()) {
+            _state.update { it.copy(status = "没有未使用的 Style。") }
+            return
+        }
+        editDocument("已清理未使用 Style。") { doc ->
+            val keepAtLeast = if (doc.styles.all { it.name !in used }) doc.styles.firstOrNull()?.name else null
+            doc.copy(styles = doc.styles.filter { it.name in used || it.name == keepAtLeast })
+        }
+        _state.update { it.copy(status = "已删除 " + removable.size + " 个未使用 Style。") }
+    }
+
     fun deleteStyle(name: String, replacement: String) {
         runCatching {
             AssDocumentEditing.deleteStyle(_state.value.document, name, replacement)
@@ -667,6 +828,17 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         editDocument("已修改 " + ids.size + " 条字幕的 Layer。") { doc ->
             doc.copy(events = doc.events.map { event ->
                 if (event.id in ids) event.copy(layer = layer.coerceIn(-999, 999)) else event
+            })
+        }
+    }
+
+    fun assignFocusedStyle(styleName: String) {
+        val state = _state.value
+        val id = state.focusedEventId ?: return
+        if (state.document.styles.none { it.name == styleName }) return
+        editDocument("当前字幕已指定为 Style " + styleName + "。") { doc ->
+            doc.copy(events = doc.events.map { event ->
+                if (event.id == id) event.copy(style = styleName) else event
             })
         }
     }
@@ -1083,7 +1255,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun rendererConfigDir() = fontStore.mpvConfigDir
-    fun rendererFontsDir() = fontStore.importedDir
+    fun rendererFontsDir() = fontStore.activeRendererFontsDir()
 
     fun rebuildRendererFontCache() {
         runCatching { fontStore.rebuildFontconfigCache() }

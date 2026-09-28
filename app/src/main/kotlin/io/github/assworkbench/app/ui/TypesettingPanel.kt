@@ -271,14 +271,25 @@ fun TypesettingPanel(
                                     styleManageMode = StyleManageMode.DELETE
                                 },
                             )
+                            DropdownMenuItem(
+                                text = { Text("清理未使用 Style") },
+                                onClick = {
+                                    styleMenuOpen = false
+                                    viewModel.deleteUnusedStyles()
+                                },
+                            )
                         }
                     }
                     Text("安全区")
                     Switch(checked = state.showLayoutGuides, onCheckedChange = { viewModel.toggleLayoutGuides() })
                 }
                 val styleUseCount = state.document.events.count { it.style == style.name }
+                val unusedStyleCount = state.document.styles.count { candidate ->
+                    state.document.events.none { it.style == candidate.name }
+                }
                 Text(
-                    "共享 " + styleUseCount + " 条 · Style 值可被 Event override 覆盖",
+                    "共享 " + styleUseCount + " 条 · 未使用 Style " + unusedStyleCount +
+                        " · Style 值可被 Event override 覆盖",
                     style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
                     color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
                 )
