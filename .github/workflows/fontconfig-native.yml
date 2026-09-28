@@ -1,0 +1,87 @@
+name: Fontconfig renderer native probe
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'tools/libmpvkt-fontconfig/**'
+      - '.github/workflows/fontconfig-native.yml'
+      - 'core/fonts/**'
+      - 'app/src/main/kotlin/io/github/assworkbench/app/FontStore.kt'
+      - 'app/src/main/kotlin/io/github/assworkbench/app/ui/EditorScreen.kt'
+
+permissions:
+  contents: read
+
+jobs:
+  arm64-fontconfig-native:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout ASS Workbench
+        uses: actions/checkout@v4
+
+      - name: Checkout pinned libmpvKt
+        uses: actions/checkout@v4
+        with:
+          repository: yuroyami/libmpvKt
+          ref: v0.3.0
+          path: .libmpvkt-src
+
+      - name: Patch libmpvKt for Fontconfig
+        run: tools/libmpvkt-fontconfig/patch_upstream.sh .libmpvkt-src
+
+      - name: Install native build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y autoconf automake libtool pkg-config ninja-build meson nasm python3-jinja2
+
+      - name: Install pinned Android NDK
+        shell: bash
+        run: |
+          set -euxo pipefail
+          NDK_VERSION=29.0.14206865
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/$NDK_VERSION" >> "$GITHUB_ENV"
+          if [ ! -f "$ANDROID_HOME/ndk/$NDK_VERSION/source.properties" ]; then
+            echo y | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;$NDK_VERSION" >/dev/null
+          fi
+
+      - name: Fetch pinned native sources
+        working-directory: .libmpvkt-src
+        run: buildscripts/download-deps.sh
+
+      - name: Build arm64 Fontconfig-enabled libmpvKt natives
+        working-directory: .libmpvkt-src
+        run: buildscripts/buildall.sh --arch arm64
+
+      - name: Verify Fontconfig reached the build prefix
+        working-directory: .libmpvkt-src
+        shell: bash
+        run: |
+          set -euxo pipefail
+          test -f buildscripts/prefix/arm64/lib/pkgconfig/fontconfig.pc
+          test -f buildscripts/prefix/arm64/lib/pkgconfig/libxml-2.0.pc
+          grep -E '^Version:' buildscripts/prefix/arm64/lib/pkgconfig/fontconfig.pc
+          test -f libmpvkt-native/native-libs/arm64-v8a/libmpv.so
+          test -f libmpvkt-native/native-libs/arm64-v8a/libmpvkt_jni.so
+
+      - name: Record renderer build manifest
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p fontconfig-native-probe
+          cp .libmpvkt-src/buildscripts/include/depinfo.sh fontconfig-native-probe/depinfo.sh
+          cp .libmpvkt-src/buildscripts/prefix/arm64/lib/pkgconfig/fontconfig.pc fontconfig-native-probe/fontconfig.pc
+          cp .libmpvkt-src/buildscripts/prefix/arm64/lib/pkgconfig/libass.pc fontconfig-native-probe/libass.pc
+          cp .libmpvkt-src/libmpvkt-native/native-libs/arm64-v8a/libmpv.so fontconfig-native-probe/
+          cp .libmpvkt-src/libmpvkt-native/native-libs/arm64-v8a/libmpvkt_jni.so fontconfig-native-probe/
+
+      - name: Upload arm64 probe
+        uses: actions/upload-artifact@v4
+        with:
+          name: asswb-fontconfig-native-arm64
+          path: fontconfig-native-probe/
+          if-no-files-found: error
+          retention-days: 7
