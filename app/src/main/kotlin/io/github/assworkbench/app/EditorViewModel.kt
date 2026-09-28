@@ -455,16 +455,17 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         val id = _state.value.focusedEventId ?: return
         editDocument("已清除当前字幕的样式/位置覆盖；该字幕现在继承 Style。") { doc ->
             doc.copy(events = doc.events.map { event ->
-                if (event.id != id) {
-                    event
-                } else {
-                    event.copy(
-                        text = stripInlineStyleOverrides(event.text),
-                        marginL = 0,
-                        marginR = 0,
-                        marginV = 0,
-                    )
-                }
+                if (event.id == id) event.inheritStyle() else event
+            })
+        }
+    }
+
+    fun clearSelectedStyleOverrides() {
+        val ids = _state.value.selectedEventIds
+        if (ids.isEmpty()) return
+        editDocument("已让 " + ids.size + " 条选中字幕完全继承各自 Style。") { doc ->
+            doc.copy(events = doc.events.map { event ->
+                if (event.id in ids) event.inheritStyle() else event
             })
         }
     }
@@ -703,6 +704,23 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    fun updateFocusedMargins(marginL: Int, marginR: Int, marginV: Int) {
+        val id = _state.value.focusedEventId ?: return
+        editDocument("已更新当前字幕的事件级 Margin。") { doc ->
+            doc.copy(events = doc.events.map { event ->
+                if (event.id == id) {
+                    event.copy(
+                        marginL = marginL.coerceIn(0, 9999),
+                        marginR = marginR.coerceIn(0, 9999),
+                        marginV = marginV.coerceIn(0, 9999),
+                    )
+                } else event
+            })
+        }
+    }
+
+    fun clearFocusedMargins() = updateFocusedMargins(0, 0, 0)
+
     fun undo() {
         if (!history.canUndo) return
         publishDocument(history.undo(), "已撤销。")
@@ -932,6 +950,14 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             )
         }
     }
+
+    private fun io.github.assworkbench.domain.AssEvent.inheritStyle(): io.github.assworkbench.domain.AssEvent =
+        copy(
+            text = stripInlineStyleOverrides(text),
+            marginL = 0,
+            marginR = 0,
+            marginV = 0,
+        )
 
     private fun stripInlineStyleOverrides(text: String): String {
         val overrideBlock = Regex("""\{[^}]*\}""")
