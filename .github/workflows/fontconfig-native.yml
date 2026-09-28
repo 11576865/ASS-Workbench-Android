@@ -73,6 +73,18 @@ jobs:
           test -f libmpvkt-native/native-libs/arm64-v8a/libmpv.so
           test -f libmpvkt-native/native-libs/arm64-v8a/libmpvkt_jni.so
 
+      - name: Verify runtime DT_NEEDED dependencies
+        working-directory: .libmpvkt-src
+        shell: bash
+        run: |
+          set -euxo pipefail
+          "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf" -d \
+            libmpvkt-native/native-libs/arm64-v8a/libmpv.so | tee "$GITHUB_WORKSPACE/libmpv-needed.txt"
+          if grep -E 'lib(fontconfig|xml2)\.so' "$GITHUB_WORKSPACE/libmpv-needed.txt"; then
+            echo "Fontconfig/libxml2 unexpectedly remained dynamic and would be missing from the AAR" >&2
+            exit 1
+          fi
+
       - name: Record renderer build manifest
         shell: bash
         run: |
