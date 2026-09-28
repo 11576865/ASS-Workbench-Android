@@ -41,15 +41,18 @@ object AssCodec {
         val scriptInfo = linkedMapOf<String, String>()
         val styles = mutableListOf<AssStyle>()
         val events = mutableListOf<AssEvent>()
+        val scriptInfoExtras = mutableListOf<String>()
+        val styleExtras = mutableListOf<String>()
+        val eventExtras = mutableListOf<String>()
         val unknown = mutableListOf<RawSection>()
         var nextEventId = 1L
 
         for (section in sections) {
             when (section.name.lowercase(Locale.ROOT)) {
-                "script info" -> parseScriptInfo(section.lines, scriptInfo)
-                "v4+ styles" -> styles += parseStyles(section.lines)
+                "script info" -> parseScriptInfo(section.lines, scriptInfo, scriptInfoExtras)
+                "v4+ styles" -> styles += parseStyles(section.lines, styleExtras)
                 "events" -> {
-                    val parsed = parseEvents(section.lines, nextEventId)
+                    val parsed = parseEvents(section.lines, nextEventId, eventExtras)
                     events += parsed
                     nextEventId += parsed.size
                 }
@@ -69,6 +72,9 @@ object AssCodec {
             scriptInfo = LinkedHashMap(scriptInfo),
             styles = styles.ifEmpty { listOf(AssStyle()) },
             events = events,
+            scriptInfoExtras = scriptInfoExtras,
+            styleSectionExtras = styleExtras,
+            eventSectionExtras = eventExtras,
             unknownSections = unknown,
         )
     }
@@ -80,29 +86,42 @@ object AssCodec {
         }
         append("[Script Info]\n")
         document.scriptInfo.forEach { (key, value) -> append(key).append(": ").append(value).append('\n') }
+        appendExtras(document.scriptInfoExtras)
         append("\n[V4+ Styles]\n")
         append("Format: ").append(defaultStyleFormat.joinToString(", ")).append('\n')
         document.styles.forEach { style -> append(styleToLine(style)).append('\n') }
+        appendExtras(document.styleSectionExtras)
         append("\n[Events]\n")
         append("Format: ").append(defaultEventFormat.joinToString(", ")).append('\n')
         document.events.forEach { event -> append(eventToLine(event)).append('\n') }
+        appendExtras(document.eventSectionExtras)
         document.unknownSections.forEach { section ->
             append('\n').append('[').append(section.name).append("]\n")
             if (section.lines.isNotEmpty()) append(section.lines.joinToString("\n")).append('\n')
         }
     }
 
-    private fun parseScriptInfo(lines: List<String>, target: LinkedHashMap<String, String>) {
+    private fun parseScriptInfo(
+        lines: List<String>,
+        target: LinkedHashMap<String, String>,
+        extras: MutableList<String>,
+    ) {
         for (line in lines) {
             val trimmed = line.trim()
-            if (trimmed.isBlank() || trimmed.startsWith(';')) continue
+            if (trimmed.isBlank() || trimmed.startsWith(';')) {
+                extras += line
+                continue
+            }
             val colon = line.indexOf(':')
-            if (colon <= 0) continue
+            if (colon <= 0) {
+                extras += line
+                continue
+            }
             target[line.substring(0, colon).trim()] = line.substring(colon + 1).trim()
         }
     }
 
-    private fun parseStyles(lines: List<String>): List<AssStyle> {
+    private fun parseStyles(lines: List<String>, extras: MutableList<String>): List<AssStyle> {
         var format = defaultStyleFormat
         val result = mutableListOf<AssStyle>()
         for (line in lines) {
@@ -138,12 +157,13 @@ object AssCodec {
                         encoding = map["encoding"]?.toIntOrNull() ?: 1,
                     )
                 }
+                else -> extras += line
             }
         }
         return result
     }
 
-    private fun parseEvents(lines: List<String>, firstId: Long): List<AssEvent> {
+    private fun parseEvents(lines: List<String>, firstId: Long, extras: MutableList<String>): List<AssEvent> {
         var format = defaultEventFormat
         val result = mutableListOf<AssEvent>()
         var id = firstId
@@ -172,9 +192,15 @@ object AssCodec {
                         comment = comment,
                     )
                 }
+                else -> extras += line
             }
         }
         return result
+    }
+
+    private fun StringBuilder.appendExtras(lines: List<String>) {
+        if (lines.isEmpty()) return
+        lines.forEach { append(it).append('\n') }
     }
 
     private fun styleToLine(s: AssStyle): String = "Style: " + listOf(

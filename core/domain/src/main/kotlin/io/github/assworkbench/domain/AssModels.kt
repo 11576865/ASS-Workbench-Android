@@ -60,6 +60,9 @@ data class AssDocument(
     ),
     val styles: List<AssStyle> = listOf(AssStyle()),
     val events: List<AssEvent> = emptyList(),
+    val scriptInfoExtras: List<String> = emptyList(),
+    val styleSectionExtras: List<String> = emptyList(),
+    val eventSectionExtras: List<String> = emptyList(),
     val unknownSections: List<RawSection> = emptyList(),
 ) {
     val playResX: Int get() = scriptInfo["PlayResX"]?.toIntOrNull() ?: 1920

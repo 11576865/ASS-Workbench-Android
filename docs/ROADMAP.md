@@ -35,3 +35,11 @@
 - [ ] Capture libass/mpv selected-font logs on device to distinguish renderer-load failure from font-file coverage failure.
 - [ ] Preserve comments and unsupported lines inside known ASS sections.
 - [ ] Expand round-trip corpus.
+
+
+## 0.12 — ASS known-section preservation
+- [x] Preserve comments, blank lines and unknown opaque lines inside Script Info, V4+ Styles and Events.
+- [x] Preserve those extras across repeated parse/write cycles.
+- [x] Keep unknown standalone sections as before.
+- [ ] Preserve exact original placement/order of extras relative to structured records.
+- [ ] Preserve nonstandard custom columns in Style/Event Format records.

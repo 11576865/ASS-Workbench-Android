@@ -11,8 +11,8 @@ android {
         applicationId = "io.github.assworkbench.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 11
-        versionName = "0.11.0"
+        versionCode = 12
+        versionName = "0.12.0"
     }
 
     buildFeatures { compose = true }

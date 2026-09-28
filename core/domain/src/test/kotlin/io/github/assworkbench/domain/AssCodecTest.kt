@@ -45,6 +45,42 @@ class AssCodecTest {
     }
 
     @Test
+    fun preservesCommentsAndUnknownLinesInsideKnownSections() {
+        val source = """
+            [Script Info]
+            ; script comment
+            ScriptType: v4.00+
+            CustomNoColonLine
+
+            [V4+ Styles]
+            ; style comment
+            Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+            Style: Default,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&H64000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+            Tool-Metadata: keep-me
+
+            [Events]
+            ; event comment
+            Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+            Dialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,Hello
+            Command: opaque payload
+        """.trimIndent()
+
+        val once = AssCodec.write(AssCodec.parse(source))
+        val twice = AssCodec.write(AssCodec.parse(once))
+        listOf(
+            "; script comment",
+            "CustomNoColonLine",
+            "; style comment",
+            "Tool-Metadata: keep-me",
+            "; event comment",
+            "Command: opaque payload",
+        ).forEach { marker ->
+            assertTrue(once.contains(marker), marker)
+            assertTrue(twice.contains(marker), marker)
+        }
+    }
+
+    @Test
     fun undoHistoryIsBoundedAndRedoable() {
         val history = UndoHistory(1, limit = 3)
         history.commit(2)
