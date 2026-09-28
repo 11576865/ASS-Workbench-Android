@@ -5,14 +5,32 @@ import kotlin.test.assertEquals
 
 class FontDiagnosticsTest {
     @Test
-    fun exactAliasWinsOverFallback() {
+    fun rendererAliasIsExactButTypographicOnlyAliasIsMetadataAlias() {
         val asset = FontAsset(
             fileName = "demo.ttf",
             sha256 = "x",
-            metadata = FontMetadata(family = "Demo Sans", aliases = setOf("Demo Sans", "演示黑体")),
+            metadata = FontMetadata(
+                family = "Demo Sans Display",
+                rendererFamily = "Demo Sans",
+                legacyFamily = "Demo Sans",
+                typographicFamily = "Demo Sans Display",
+                fullName = "Demo Sans Regular",
+                postScriptName = "DemoSans-Regular",
+                aliases = setOf("Demo Sans", "Demo Sans Display", "Demo Sans Regular", "DemoSans-Regular"),
+                rendererAliases = setOf("Demo Sans", "Demo Sans Regular", "DemoSans-Regular"),
+            ),
         )
-        val result = FontDiagnostics.diagnose(listOf("演示黑体", "Missing"), listOf(asset), "Roboto")
+
+        val result = FontDiagnostics.diagnose(
+            listOf("Demo Sans", "Demo Sans Display", "Missing"),
+            listOf(asset),
+            "Roboto",
+        )
+
         assertEquals(FontMatchStatus.EXACT_IMPORTED, result[0].status)
-        assertEquals(FontMatchStatus.FALLBACK_ONLY, result[1].status)
+        assertEquals("Demo Sans", result[0].matchedFamily)
+        assertEquals(FontMatchStatus.METADATA_ALIAS, result[1].status)
+        assertEquals("Demo Sans", result[1].matchedFamily)
+        assertEquals(FontMatchStatus.FALLBACK_ONLY, result[2].status)
     }
 }
