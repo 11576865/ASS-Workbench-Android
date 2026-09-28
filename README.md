@@ -65,7 +65,7 @@ See `docs/PRODUCT_SPEC_1_0.md`, `docs/ROADMAP.md`, and `THIRD_PARTY_NOTICES.md`.
 
 ### Edit
 
-Event text/timing, search, Layer, Style assignment, selection and batch operations.
+Event text/timing, search, Layer, Style assignment, selection and batch operations. ASS Event Text remains first-class: override blocks stay directly editable and receive syntax-aware rendering instead of being hidden behind a simplified text view.
 
 ### Typeset
 
@@ -89,7 +89,7 @@ The original MKV is never modified in place. The write-back path copies the sour
 
 0.19.0 batches a larger tablet-usability and diagnostics pass instead of another single-issue hotfix:
 
-- subtitle rows show readable dialogue text without leading ASS override tags while keeping raw text editable in the inspector;
+- subtitle rows and Event editors keep ASS override tags visible, but syntax-highlight blocks/tags/values/escapes so control syntax is visually distinct from dialogue text;
 - the focused subtitle inspector exposes event-level Margin L/R/V directly, including a one-tap reset to Style inheritance;
 - selected subtitles can bulk-clear style/position overrides instead of repeating the action one event at a time;
 - the Style inspector reports which effective properties are coming from inline ASS overrides versus the shared Style;
