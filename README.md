@@ -2,7 +2,7 @@
 
 A focused Android ASS subtitle workbench for phones and tablets.
 
-**Current version: 0.8.0**
+**Current version: 0.9.0**
 
 The app edits **ASS subtitles** while a local video is used only as reference media. It does **not** encode hard-subbed video and does **not** mux subtitles into containers.
 
@@ -56,3 +56,8 @@ MKV can now be opened as a subtitle project. The Android reader scans Matroska s
 On arm64 builds, a pinned pure-Go `mkvgo` helper provides lossless write-back. “Save as new MKV” removes the selected embedded ASS track and merges the edited ASS back into a new container while carrying the source video/audio blocks and attachments without transcoding. The original MKV is never modified in place.
 
 The first write-back implementation uses app-private temporary files, so it needs enough free storage for large containers.
+
+
+## 0.9 Batch and recovery
+
+Touch range selection uses a long-press anchor followed by an endpoint tap. Selected events can be shifted in time, assigned a Layer, or assigned a Style as one undoable operation. The split-pane ratio persists across launches. Dirty edits are journaled to internal storage after a short debounce; after an interruption, the app offers Restore or Discard without overwriting the source ASS automatically.

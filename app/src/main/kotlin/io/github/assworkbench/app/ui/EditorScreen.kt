@@ -1,6 +1,6 @@
 package io.github.assworkbench.app.ui
 
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -206,6 +206,9 @@ private fun SubtitleWorkbench(
             }
             Text(state.filteredEvents.size.toString() + "/" + state.document.events.size, style = MaterialTheme.typography.labelMedium)
         }
+        if (state.selectedEventIds.isNotEmpty()) {
+            BatchSelectionPanel(state, viewModel)
+        }
         LazyColumn(Modifier.weight(1f).fillMaxWidth()) {
             items(state.filteredEvents, key = { it.id }) { event ->
                 SubtitleRow(
@@ -213,7 +216,11 @@ private fun SubtitleWorkbench(
                     checked = event.id in state.selectedEventIds,
                     focused = event.id == state.focusedEventId,
                     onCheck = { viewModel.toggleSelected(event.id) },
-                    onFocus = { viewModel.focusEvent(event.id, seek = false) },
+                    onFocus = {
+                        if (state.selectionAnchorId != null) viewModel.selectRangeTo(event.id)
+                        else viewModel.focusEvent(event.id, seek = false)
+                    },
+                    onLongPress = { viewModel.beginRangeSelection(event.id) },
                     onJump = { viewModel.focusEvent(event.id, seek = true) },
                 )
                 Divider()
@@ -311,10 +318,11 @@ private fun SubtitleRow(
     focused: Boolean,
     onCheck: () -> Unit,
     onFocus: () -> Unit,
+    onLongPress: () -> Unit,
     onJump: () -> Unit,
 ) {
     Row(
-        Modifier.fillMaxWidth().clickable(onClick = onFocus).padding(vertical = 6.dp),
+        Modifier.fillMaxWidth().combinedClickable(onClick = onFocus, onLongClick = onLongPress).padding(vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {

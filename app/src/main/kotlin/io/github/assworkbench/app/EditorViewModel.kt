@@ -2,6 +2,7 @@ package io.github.assworkbench.app
 
 import android.app.Application
 import android.net.Uri
+import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.assworkbench.container.MatroskaReader
@@ -17,6 +18,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -251,10 +254,13 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         val text = AssCodec.write(_state.value.document)
         app.contentResolver.openOutputStream(uri, "wt")?.bufferedWriter(Charsets.UTF_8)?.use { it.write(text) }
             ?: error("无法写入字幕")
+        recoveryStore.clear()
         _state.update {
             it.copy(
                 project = it.project.copy(subtitleUri = uri.toString()),
                 dirty = false,
+                recoveryAvailable = false,
+                recoveryLabel = "",
                 status = "ASS 已保存。",
             )
         }
@@ -271,7 +277,75 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     fun toggleSelected(id: Long) {
         _state.update {
             val next = it.selectedEventIds.toMutableSet().apply { if (!add(id)) remove(id) }
-            it.copy(selectedEventIds = next)
+            it.copy(selectedEventIds = next, selectionAnchorId = null)
+        }
+    }
+
+    fun beginRangeSelection(id: Long) {
+        _state.update {
+            it.copy(
+                selectedEventIds = it.selectedEventIds + id,
+                selectionAnchorId = id,
+                status = "区间选择起点 #" + id + "；点另一条字幕完成整段选择。",
+            )
+        }
+    }
+
+    fun selectRangeTo(id: Long) {
+        _state.update { state ->
+            val anchor = state.selectionAnchorId ?: return@update state
+            val ordered = state.filteredEvents.map { it.id }
+            val a = ordered.indexOf(anchor)
+            val b = ordered.indexOf(id)
+            if (a < 0 || b < 0) return@update state.copy(selectionAnchorId = null)
+            val from = minOf(a, b)
+            val to = maxOf(a, b)
+            val range = ordered.subList(from, to + 1)
+            state.copy(
+                selectedEventIds = state.selectedEventIds + range,
+                selectionAnchorId = null,
+                status = "已选择区间 " + range.size + " 条字幕。",
+            )
+        }
+    }
+
+    fun clearSelection() = _state.update {
+        it.copy(selectedEventIds = emptySet(), selectionAnchorId = null, status = "已清除选择。")
+    }
+
+    fun shiftSelected(deltaMs: Long) {
+        val ids = _state.value.selectedEventIds
+        if (ids.isEmpty() || deltaMs == 0L) return
+        editDocument("已将 " + ids.size + " 条字幕平移 " + deltaMs + " ms。") { doc ->
+            doc.copy(events = doc.events.map { event ->
+                if (event.id !in ids) {
+                    event
+                } else {
+                    val duration = event.end.millis - event.start.millis
+                    val newStart = (event.start.millis + deltaMs).coerceAtLeast(0L)
+                    event.copy(start = SubTime(newStart), end = SubTime(newStart + duration))
+                }
+            })
+        }
+    }
+
+    fun setSelectedLayer(layer: Int) {
+        val ids = _state.value.selectedEventIds
+        if (ids.isEmpty()) return
+        editDocument("已修改 " + ids.size + " 条字幕的 Layer。") { doc ->
+            doc.copy(events = doc.events.map { event ->
+                if (event.id in ids) event.copy(layer = layer.coerceIn(-999, 999)) else event
+            })
+        }
+    }
+
+    fun assignSelectedStyle(styleName: String) {
+        val state = _state.value
+        if (state.selectedEventIds.isEmpty() || state.document.styles.none { it.name == styleName }) return
+        editDocument("已将 " + state.selectedEventIds.size + " 条字幕指定为 Style " + styleName + "。") { doc ->
+            doc.copy(events = doc.events.map { event ->
+                if (event.id in state.selectedEventIds) event.copy(style = styleName) else event
+            })
         }
     }
 
@@ -532,8 +606,44 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
 
     fun setPlaybackPosition(positionMs: Long) = _state.update { it.copy(playbackPositionMs = positionMs.coerceAtLeast(0)) }
 
-    fun setSplitRatio(value: Float) = _state.update {
-        it.copy(project = it.project.copy(splitRatio = value.coerceIn(0.28f, 0.78f)))
+    fun setSplitRatio(value: Float) {
+        val next = value.coerceIn(0.28f, 0.78f)
+        prefs.edit().putFloat("split_ratio", next).apply()
+        _state.update { it.copy(project = it.project.copy(splitRatio = next)) }
+    }
+
+    fun restoreRecovery() {
+        val snapshot = recoveryStore.read() ?: run {
+            _state.update { it.copy(recoveryAvailable = false, recoveryLabel = "") }
+            return
+        }
+        history.reset(snapshot.document)
+        val styleNames = snapshot.document.styles.map { it.name }
+        _state.update {
+            it.copy(
+                project = snapshot.project,
+                document = snapshot.document,
+                subtitleLoaded = true,
+                selectedEventIds = emptySet(),
+                selectionAnchorId = null,
+                focusedEventId = snapshot.document.events.firstOrNull()?.id,
+                dirty = true,
+                canUndo = false,
+                canRedo = false,
+                reviewSourceStyle = styleNames.firstOrNull().orEmpty(),
+                reviewTargetStyle = styleNames.drop(1).firstOrNull().orEmpty(),
+                originalTextById = snapshot.document.events.associate { event -> event.id to event.text },
+                recoveryAvailable = false,
+                recoveryLabel = "",
+                status = "已恢复上次未保存编辑。",
+            )
+        }
+        refreshFontDiagnostics()
+    }
+
+    fun discardRecovery() {
+        recoveryStore.clear()
+        _state.update { it.copy(recoveryAvailable = false, recoveryLabel = "", status = "已丢弃恢复日志。") }
     }
 
     fun rendererConfigDir() = fontStore.mpvConfigDir
@@ -544,6 +654,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         if (next == _state.value.document) return
         history.commit(next)
         publishDocument(next, status, dirty = true)
+        scheduleRecovery(next)
         refreshFontDiagnostics()
     }
 
@@ -558,6 +669,20 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             )
         }
         refreshFontDiagnostics()
+    }
+
+    private fun scheduleRecovery(document: AssDocument) {
+        recoveryJob?.cancel()
+        recoveryJob = viewModelScope.launch {
+            delay(450)
+            val project = _state.value.project
+            withContext(Dispatchers.IO) {
+                recoveryStore.write(project, document)
+            }
+            _state.update {
+                it.copy(recoveryAvailable = true, recoveryLabel = project.title)
+            }
+        }
     }
 
     private fun refreshFonts(initial: Boolean, status: String? = null) {
