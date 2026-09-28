@@ -20,32 +20,18 @@ class MkvGoTool(private val context: Context) {
         trackNumber: Long,
         editedAss: File,
         output: File,
-        language: String,
-        name: String,
     ) {
         require(isAvailable()) { "MKV 写回工具在此 ABI 上不可用" }
-        val parent = output.parentFile ?: error("输出目录不可用")
-        parent.mkdirs()
-        val withoutTrack = File(parent, "without-track.mkv")
-        withoutTrack.delete()
+        output.parentFile?.mkdirs() ?: error("输出目录不可用")
         output.delete()
 
         run(
-            "remove-track",
+            "replace-ass",
             source.absolutePath,
-            "-o", withoutTrack.absolutePath,
-            "-t", trackNumber.toString(),
-        )
-        run(
-            "merge-subtitle",
-            withoutTrack.absolutePath,
             "-o", output.absolutePath,
+            "-t", trackNumber.toString(),
             editedAss.absolutePath,
-            "-format", "ass",
-            "-lang", language.ifBlank { "und" },
-            "-name", name.ifBlank { "Edited ASS" },
         )
-        withoutTrack.delete()
         require(output.isFile && output.length() > 0L) { "MKV 写回未生成输出文件" }
     }
 
