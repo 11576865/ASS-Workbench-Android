@@ -693,6 +693,21 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     fun rendererConfigDir() = fontStore.mpvConfigDir
     fun rendererFontsDir() = fontStore.importedDir
 
+    fun rebuildRendererFontCache() {
+        runCatching { fontStore.rebuildFontconfigCache() }
+            .onSuccess { prepared ->
+                refreshFonts(
+                    initial = false,
+                    status = "已重建 Fontconfig 缓存 · " + prepared.fingerprint.take(12),
+                )
+            }
+            .onFailure { error ->
+                _state.update {
+                    it.copy(status = "Fontconfig 缓存重建失败：" + (error.message ?: error::class.java.simpleName))
+                }
+            }
+    }
+
     fun updateRendererDiagnostics(lines: List<String>) {
         val normalized = lines.filter(String::isNotBlank).takeLast(12)
         if (_state.value.rendererDiagnostics == normalized) return
