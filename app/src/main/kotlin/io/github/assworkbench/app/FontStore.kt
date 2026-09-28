@@ -107,12 +107,12 @@ class FontStore(private val context: Context) {
     private fun writeFontconfig() {
         val cacheDir = File(context.cacheDir, "fontconfig").apply { mkdirs() }
         val config = buildString {
-            appendLine("<?xml version=\"1.0\"?>")
-            appendLine("<!DOCTYPE fontconfig SYSTEM \"fonts.dtd\">")
+            // Keep this intentionally close to mpv-android's proven Android fontconfig.
+            // In particular, do not add a relative fonts.dtd DOCTYPE: that file is not
+            // packaged with the app and is unnecessary for Fontconfig parsing.
             appendLine("<fontconfig>")
-            appendLine("  <dir>/system/fonts</dir>")
-            appendLine("  <dir>/product/fonts</dir>")
-            appendLine("  <dir>/system_ext/fonts</dir>")
+            appendLine("  <dir>/system/fonts/</dir>")
+            appendLine("  <dir>/product/fonts/</dir>")
             appendLine("  <dir>" + xmlEscape(importedDir.absolutePath) + "</dir>")
             appendLine("  <cachedir>" + xmlEscape(cacheDir.absolutePath) + "</cachedir>")
             appendLine("  <alias>")
