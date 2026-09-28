@@ -38,7 +38,7 @@ object AssQualityCheck {
             }
             if (duration == 0L) {
                 out += AssQcIssue(event.id, AssQcKind.ZERO_DURATION, AssQcSeverity.ERROR, "持续时间为 0 ms")
-            } else if (duration in 1 until veryShortMs) {
+            } else if (duration in 1L until veryShortMs) {
                 out += AssQcIssue(event.id, AssQcKind.VERY_SHORT_DURATION, AssQcSeverity.WARNING, "持续时间仅 ${duration} ms")
             } else if (duration > veryLongMs) {
                 out += AssQcIssue(event.id, AssQcKind.VERY_LONG_DURATION, AssQcSeverity.INFO, "持续时间 ${duration} ms")
@@ -64,7 +64,7 @@ object AssQualityCheck {
                     AssQcSeverity.WARNING,
                     "与下一条 #${next.id} 重叠 ${-gap} ms",
                 )
-            } else if (gap in 0 until tinyGapMs) {
+            } else if (gap in 0L until tinyGapMs) {
                 out += AssQcIssue(
                     current.id,
                     AssQcKind.TINY_GAP,
