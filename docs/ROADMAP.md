@@ -54,7 +54,20 @@
 - [ ] Verify unusual EBML layouts and large files on device.
 - [ ] Decide how to handle ASS packets using unsupported lacing in the Android reader.
 
-## 0.17.0 — Adaptive workspace UI (current)
+## 0.18.0 — ASS style fidelity and placement diagnostics (current)
+
+- [x] Explain that Style edits apply to every subtitle that references that Style.
+- [x] Allow selected subtitles to receive an automatically cloned independent Style.
+- [x] Make "inherit Style" clear managed inline font/size/emphasis/color/border/alignment/position overrides and event-level margins.
+- [x] Replace raw ASS color entry fields with a popup RGBA picker.
+- [x] Map safe-area guides using mpv `osd-dimensions` margins instead of reconstructed aspect-ratio geometry.
+- [x] Explicitly request `sub-ass-use-video-data=all` to match standard VSFilter/libass semantics.
+- [x] Surface ASS PlayRes plus OSD dimensions/margins in renderer diagnostics.
+- [ ] Verify the safe-area overlay on the target tablet.
+- [ ] Re-test external ASS vs MKV-derived ASS vertical placement with the exact same font and script.
+- [ ] If placement still differs, capture and compare the final serialized `current.ass` against the MKV CodecPrivate/events reconstruction.
+
+## 0.17.0 — Adaptive workspace UI (done)
 
 - [x] Replace the single oversized workbench column with Preview + Subtitle Dock + Inspector.
 - [x] Keep the video preview as the dominant primary pane.
