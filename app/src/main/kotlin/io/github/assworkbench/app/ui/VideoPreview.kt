@@ -631,32 +631,33 @@ private fun PositionDragOverlay(
                     armed = kotlin.math.sqrt(dx * dx + dy * dy) <= 36.dp.toPx()
                 },
                 onDrag = { change, _ ->
-                    if (!armed) return@detectDragGestures
-                    change.consume()
-                    val px = change.position.x.coerceIn(0f, size.width.toFloat())
-                    val py = change.position.y.coerceIn(0f, size.height.toFloat())
-                    var nx = px / size.width.coerceAtLeast(1) * document.playResX
-                    var ny = py / size.height.coerceAtLeast(1) * document.playResY
-                    val xTargets = listOf(
-                        marginL.toDouble(),
-                        document.playResX / 2.0,
-                        (document.playResX - marginR).toDouble(),
-                    )
-                    val yTargets = listOf(
-                        marginV.toDouble(),
-                        document.playResY / 2.0,
-                        (document.playResY - marginV).toDouble(),
-                    )
-                    val xThreshold = document.playResX * 0.015
-                    val yThreshold = document.playResY * 0.015
-                    xTargets.minByOrNull { kotlin.math.abs(nx - it) }?.let { target ->
-                        if (kotlin.math.abs(nx - target) < xThreshold) nx = target.toFloat()
+                    if (armed) {
+                        change.consume()
+                        val px = change.position.x.coerceIn(0f, size.width.toFloat())
+                        val py = change.position.y.coerceIn(0f, size.height.toFloat())
+                        var nx = px / size.width.coerceAtLeast(1) * document.playResX
+                        var ny = py / size.height.coerceAtLeast(1) * document.playResY
+                        val xTargets = listOf(
+                            marginL.toDouble(),
+                            document.playResX / 2.0,
+                            (document.playResX - marginR).toDouble(),
+                        )
+                        val yTargets = listOf(
+                            marginV.toDouble(),
+                            document.playResY / 2.0,
+                            (document.playResY - marginV).toDouble(),
+                        )
+                        val xThreshold = document.playResX * 0.015
+                        val yThreshold = document.playResY * 0.015
+                        xTargets.minByOrNull { kotlin.math.abs(nx - it) }?.let { target ->
+                            if (kotlin.math.abs(nx - target) < xThreshold) nx = target.toFloat()
+                        }
+                        yTargets.minByOrNull { kotlin.math.abs(ny - it) }?.let { target ->
+                            if (kotlin.math.abs(ny - target) < yThreshold) ny = target.toFloat()
+                        }
+                        x = nx.toDouble()
+                        y = ny.toDouble()
                     }
-                    yTargets.minByOrNull { kotlin.math.abs(ny - it) }?.let { target ->
-                        if (kotlin.math.abs(ny - target) < yThreshold) ny = target.toFloat()
-                    }
-                    x = nx.toDouble()
-                    y = ny.toDouble()
                 },
                 onDragEnd = {
                     if (armed) onCommit(x, y)
