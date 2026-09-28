@@ -99,6 +99,9 @@ The original MKV is never modified in place. The write-back path copies the sour
 - adds persisted System / Light / Dark appearance modes;
 - caches imported font metadata/font bytes and debounces glyph diagnostics to reduce typing and typesetting stalls;
 - updates the stable AndroidX baseline to Compose BOM 2026.09.00, Core 1.19.1 and Lifecycle 2.11.0, with compileSdk 37;
+- uses Material3 Adaptive window size classes instead of custom tablet width thresholds;
+- preserves UTF-8 BOM / UTF-16 LE / UTF-16 BE when reopening and saving standalone ASS files;
+- supports selecting multiple TTF/OTF files in one import batch and rebuilds Fontconfig only once;
 - flattens redundant nested cards in Effects, Review and MKV Project inspectors to recover tablet workspace area.
 
 
