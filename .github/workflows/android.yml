@@ -27,6 +27,23 @@ jobs:
           go-version: '1.27.0'
           cache: false
 
+      - name: Inject ASS Workbench MKV bridge
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cp tools/mkvgo/ass_replace.go .mkvgo-src/mkv/ops/asswb_replace_ass.go
+          cp tools/mkvgo/ass_replace_test.go .mkvgo-src/mkv/ops/asswb_replace_ass_test.go
+          python3 tools/mkvgo/patch_upstream_writer.py
+          mkdir -p .mkvgo-src/cmd/asswb-mkvgo
+          cp tools/mkvgo/bridge_main.go .mkvgo-src/cmd/asswb-mkvgo/main.go
+
+      - name: Test ASS Workbench MKV bridge
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cd .mkvgo-src
+          go test ./mkv/ops
+
       - name: Build arm64 MKV bridge
         shell: bash
         run: |
@@ -35,7 +52,7 @@ jobs:
           cd .mkvgo-src
           CGO_ENABLED=0 GOOS=android GOARCH=arm64 \
             go build -buildmode=pie -trimpath -ldflags="-s -w" \
-            -o "$GITHUB_WORKSPACE/app/src/main/jniLibs/arm64-v8a/libmkvgo.so" ./cmd/mkvgo
+            -o "$GITHUB_WORKSPACE/app/src/main/jniLibs/arm64-v8a/libmkvgo.so" ./cmd/asswb-mkvgo
           file "$GITHUB_WORKSPACE/app/src/main/jniLibs/arm64-v8a/libmkvgo.so"
 
       - uses: actions/setup-java@v5

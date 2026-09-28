@@ -163,7 +163,6 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             reportError("MKV 写回失败", IllegalStateException("尚未选择 ASS 轨"))
             return
         }
-        val scanTrack = containerScan?.subtitleTracks?.firstOrNull { it.number == trackNumber }
         if (!mkvGoTool.isAvailable()) {
             reportError("MKV 写回失败", IllegalStateException("当前设备 ABI 没有 MKV 写回工具"))
             return
@@ -197,8 +196,6 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                         trackNumber = trackNumber,
                         editedAss = editedAss,
                         output = result,
-                        language = scanTrack?.language.orEmpty(),
-                        name = scanTrack?.name.orEmpty(),
                     )
 
                     app.contentResolver.openOutputStream(outputUri, "w")?.use { output ->
@@ -211,7 +208,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                     it.copy(
                         dirty = false,
                         container = it.container.copy(writeBackBusy = false),
-                        status = "新 MKV 已保存；视频/音频未重新编码，输出 " + (bytes / (1024 * 1024)) + " MiB。",
+                        status = "新 MKV 已保存；视频/音频未重新编码，原 ASS 轨身份与顺序保持，输出 " + (bytes / (1024 * 1024)) + " MiB。",
                     )
                 }
             }.onFailure { error ->

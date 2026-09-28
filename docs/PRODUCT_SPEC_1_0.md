@@ -55,8 +55,10 @@ On an Android phone or tablet, a user can open local video and ASS independently
 - Open an MKV as a subtitle project and select an embedded `S_TEXT/ASS` track.
 - Register supported TTF/OTF attachments.
 - Save a new MKV by replacing the selected ASS track without transcoding video/audio.
+- Replacement preserves the source subtitle track slot and identity metadata: TrackNumber, TrackUID, ordering, language/name and disposition flags.
 - Never modify the source MKV in place.
-- Audit preservation of attachments, chapters, tags and track metadata before 1.0.
+- Preserve attached fonts, chapters and ordinary tags; protect this with an end-to-end bridge regression test.
+- Audit the same preservation contract across a broader real-world corpus before 1.0.
 
 ### ASS safety
 - Preserve unknown sections and unsupported tags where possible.
