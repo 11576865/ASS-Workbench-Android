@@ -284,11 +284,29 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    fun openPickedVideo(uri: Uri) {
+        val current = _state.value
+        if (current.container.uri == uri.toString()) {
+            _state.update {
+                it.copy(
+                    project = it.project.copy(videoUri = uri.toString()),
+                    status = "当前 MKV 工程已经是参考视频，无需重复载入。",
+                )
+            }
+            return
+        }
+        attachVideo(uri)
+    }
+
     fun attachVideo(uri: Uri) {
         _state.update {
             it.copy(
                 project = it.project.copy(videoUri = uri.toString()),
-                status = "已更换参考视频；字幕未修改。",
+                status = if ((displayName(uri) ?: "").endsWith(".mkv", ignoreCase = true)) {
+                    "已把 MKV 作为参考视频载入；如需编辑它的内嵌 ASS，请使用顶部 MKV 入口。"
+                } else {
+                    "已更换参考视频；字幕未修改。"
+                },
             )
         }
     }
