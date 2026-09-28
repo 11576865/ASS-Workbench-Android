@@ -318,7 +318,7 @@ private fun ExpandedEditorWorkspace(
     }
     Row(Modifier.fillMaxSize()) {
         Column(Modifier.weight(1f).fillMaxHeight()) {
-            PreviewPane(state, viewModel, onOpenVideo, Modifier.fillMaxWidth())
+            PreviewPane(state, viewModel, onOpenVideo, section == WorkspaceSection.EFFECTS, Modifier.fillMaxWidth())
             Divider()
             SubtitleDock(state, viewModel, Modifier.weight(1f).fillMaxWidth())
         }
@@ -369,7 +369,7 @@ private fun TabletEditorWorkspace(
         WorkspaceSection.PROJECT -> 0.44f
     }
     Column(Modifier.fillMaxSize()) {
-        PreviewPane(state, viewModel, onOpenVideo, Modifier.fillMaxWidth())
+        PreviewPane(state, viewModel, onOpenVideo, section == WorkspaceSection.EFFECTS, Modifier.fillMaxWidth())
         Divider()
         Row(Modifier.weight(1f).fillMaxWidth()) {
             SubtitleDock(state, viewModel, Modifier.weight(1f - inspectorWeight).fillMaxHeight())
@@ -413,7 +413,7 @@ private fun CompactEditorWorkspace(
     onOpenVideo: () -> Unit,
 ) {
     Column(Modifier.fillMaxSize()) {
-        PreviewPane(state, viewModel, onOpenVideo, Modifier.fillMaxWidth())
+        PreviewPane(state, viewModel, onOpenVideo, section == WorkspaceSection.EFFECTS, Modifier.fillMaxWidth())
         Divider()
         WorkspaceTabs(section, onSectionChange)
         Divider()
@@ -437,6 +437,7 @@ private fun PreviewPane(
     state: EditorState,
     viewModel: EditorViewModel,
     onOpenVideo: () -> Unit,
+    directManipulationEnabled: Boolean,
     modifier: Modifier = Modifier,
 ) {
     VideoPreview(
@@ -451,7 +452,7 @@ private fun PreviewPane(
         fontRevision = state.fontRevision,
         initialPositionMs = state.playbackPositionMs,
         showLayoutGuides = state.showLayoutGuides,
-        focusedEventId = state.focusedEventId,
+        focusedEventId = if (directManipulationEnabled) state.focusedEventId else null,
         onSetEventPosition = viewModel::setFocusedPosition,
         onOpenVideo = onOpenVideo,
         modifier = modifier,
