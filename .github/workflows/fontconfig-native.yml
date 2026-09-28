@@ -31,7 +31,7 @@ jobs:
           path: .libmpvkt-src
 
       - name: Patch libmpvKt for Fontconfig
-        run: tools/libmpvkt-fontconfig/patch_upstream.sh .libmpvkt-src
+        run: bash tools/libmpvkt-fontconfig/patch_upstream.sh .libmpvkt-src
 
       - name: Install native build tools
         run: |
