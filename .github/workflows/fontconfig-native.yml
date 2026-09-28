@@ -125,9 +125,9 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      - name: Install Android SDK 37 for current Compose packaging
+      - name: Install Android 17 preview SDK platform
         run: |
-          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-37" >/dev/null
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-37" --channel=3 >/dev/null
 
       - name: Give patched renderer an isolated Maven version
         working-directory: .libmpvkt-src
