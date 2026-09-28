@@ -85,6 +85,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun newSubtitleProject() {
+        fontStore.clearProjectFonts(refresh = true)
         val document = AssDocument()
         history.reset(document)
         _state.update {
@@ -115,6 +116,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun openMkvProject(uri: Uri) {
+        fontStore.clearProjectFonts(refresh = false)
         _state.update {
             it.copy(
                 container = ContainerBridgeState(
@@ -312,6 +314,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun openSubtitle(uri: Uri) {
+        fontStore.clearProjectFonts(refresh = true)
         val bytes = app.contentResolver.openInputStream(uri)?.use { it.readBytes() }
             ?: error("无法读取字幕")
         val decoded = AssTextDecoder.decode(bytes)
@@ -1252,7 +1255,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun rendererConfigDir() = fontStore.mpvConfigDir
-    fun rendererFontsDir() = fontStore.importedDir
+    fun rendererFontsDir() = fontStore.activeRendererFontsDir()
 
     fun rebuildRendererFontCache() {
         runCatching { fontStore.rebuildFontconfigCache() }
