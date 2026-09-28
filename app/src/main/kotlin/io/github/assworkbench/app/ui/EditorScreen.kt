@@ -79,6 +79,9 @@ import io.github.assworkbench.app.BuildConfig
 import io.github.assworkbench.app.EditorState
 import io.github.assworkbench.app.EditorViewModel
 import io.github.assworkbench.domain.AssEvent
+import io.github.assworkbench.domain.AssEffectiveInspector
+import io.github.assworkbench.domain.AssQualityCheck
+import io.github.assworkbench.domain.AssQcSeverity
 import io.github.assworkbench.domain.AssInlineSyntax
 import io.github.assworkbench.domain.SubTime
 import io.github.assworkbench.fonts.FontMatchStatus
@@ -548,6 +551,9 @@ private fun InspectorBody(
                     verticalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
                     FontStatusRow(state, viewModel, onImportFont)
+                    if (focused != null) {
+                        EffectiveValueStrip(state, focused, viewModel)
+                    }
                     Divider()
                     if (focusedStyle != null) {
                         TypesettingPanel(
@@ -602,6 +608,114 @@ private fun InspectorBody(
                     onSaveMkv = onSaveMkv,
                     modifier = Modifier.fillMaxSize(),
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun EffectiveValueStrip(
+    state: EditorState,
+    event: AssEvent,
+    viewModel: EditorViewModel,
+) {
+    val values = remember(state.document, event) { AssEffectiveInspector.inspect(state.document, event) }
+    var open by remember { mutableStateOf(false) }
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "Effective · " + values.joinToString(" · ") { it.name + "=" + it.effectiveValue },
+                modifier = Modifier.weight(1f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            TextButton(onClick = { open = !open }, modifier = Modifier.height(28.dp)) {
+                Text(if (open) "收起" else "来源", style = MaterialTheme.typography.labelSmall)
+            }
+        }
+        if (open) {
+            values.forEach { value ->
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(value.name, modifier = Modifier.width(70.dp), style = MaterialTheme.typography.labelSmall)
+                    Text(
+                        "Style " + value.styleValue,
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    value.eventValue?.let {
+                        Text("Event " + it, style = MaterialTheme.typography.labelSmall)
+                    }
+                    value.overrideValue?.let {
+                        Text("Override " + it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.tertiary)
+                    }
+                    Text("→ " + value.effectiveValue, style = MaterialTheme.typography.labelSmall)
+                }
+            }
+            TextButton(
+                onClick = viewModel::clearFocusedStyleOverrides,
+                modifier = Modifier.height(28.dp),
+            ) { Text("清除当前字幕覆盖，回到 Style", style = MaterialTheme.typography.labelSmall) }
+        }
+    }
+}
+
+@Composable
+private fun QualityCheckSummary(
+    state: EditorState,
+    viewModel: EditorViewModel,
+) {
+    val issues = remember(state.document) { AssQualityCheck.inspect(state.document) }
+    var open by remember { mutableStateOf(false) }
+    val errors = issues.count { it.severity == AssQcSeverity.ERROR }
+    val warnings = issues.count { it.severity == AssQcSeverity.WARNING }
+    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "QC · ${issues.size} 项 · error $errors · warning $warnings",
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.labelMedium,
+                color = when {
+                    errors > 0 -> MaterialTheme.colorScheme.error
+                    warnings > 0 -> MaterialTheme.colorScheme.tertiary
+                    else -> MaterialTheme.colorScheme.onSurfaceVariant
+                },
+            )
+            TextButton(onClick = { open = !open }, modifier = Modifier.height(28.dp)) {
+                Text(if (open) "收起" else "查看", style = MaterialTheme.typography.labelSmall)
+            }
+        }
+        if (open) {
+            if (issues.isEmpty()) {
+                Text("未发现当前规则能确定的问题。", style = MaterialTheme.typography.labelSmall)
+            } else {
+                issues.take(40).forEach { issue ->
+                    Row(
+                        Modifier.fillMaxWidth().clickable { viewModel.focusEvent(issue.eventId, seek = true) },
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            "#${issue.eventId}",
+                            modifier = Modifier.width(46.dp),
+                            style = MaterialTheme.typography.labelSmall,
+                        )
+                        Text(
+                            issue.message,
+                            modifier = Modifier.weight(1f),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = when (issue.severity) {
+                                AssQcSeverity.ERROR -> MaterialTheme.colorScheme.error
+                                AssQcSeverity.WARNING -> MaterialTheme.colorScheme.tertiary
+                                else -> MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                        )
+                    }
+                }
+                if (issues.size > 40) {
+                    Text("另有 ${issues.size - 40} 项未展开。", style = MaterialTheme.typography.labelSmall)
+                }
             }
         }
     }
@@ -669,6 +783,8 @@ private fun ProjectInspector(
             style = MaterialTheme.typography.labelSmall,
             color = if (overrideEvents > 0) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        Divider()
+        QualityCheckSummary(state, viewModel)
         Divider()
         Text("Renderer 诊断", style = MaterialTheme.typography.labelMedium)
         if (state.rendererDiagnostics.isEmpty()) {
