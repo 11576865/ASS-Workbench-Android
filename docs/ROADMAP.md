@@ -1,53 +1,77 @@
 # Roadmap
 
-## 0.9 — Batch + recovery (current)
-- [x] Long-press range-selection anchor + tap endpoint for touch devices.
-- [x] Existing tri-state select-all continues to operate on the current filtered result set.
-- [x] Batch time shift in milliseconds.
-- [x] Batch Layer assignment.
-- [x] Batch Style assignment.
-- [x] Every batch mutation is one Undo step.
-- [x] Persist split-pane ratio across launches.
-- [x] Debounced internal crash-recovery ASS journal.
-- [x] Restore/discard recovery controls on startup.
-- [ ] Freehand sweep selection is deferred until range-selection ergonomics are tested.
-- [ ] Review pair metadata/confirmation persistence still needs a project sidecar.
-- [x] MKV subtitle write-back is available through the bundled mkvgo bridge with video/audio stream copy.
+## Done through 0.13
 
-## 0.10 — Round-trip + review persistence (current)
-- [x] Replace the edited ASS track without re-encoding video/audio.
-- [x] Persist Review Source/Target Style, confirmation state and immutable reference text in an app-private sidecar keyed to the ASS URI or MKV track.
-- [x] Restore Review metadata when reopening the same ASS or MKV track.
-- [x] Editing a previously confirmed Review target invalidates that confirmation.
-- [ ] Audit attachment preservation and track metadata across a broader MKV corpus.
-- [ ] Preserve unsupported ASS content under repeated edit/save cycles.
-- [ ] CJK/font-family device diagnostics.
-- [ ] Real-world large-file / overlapping-event / lifecycle corpus.
+- [x] ASS-first editable domain with mpv + libass authoritative preview.
+- [x] Independent reference video and subtitle selection.
+- [x] Edit / Typeset / Review / Event Effects workspaces.
+- [x] Imported TTF/OTF Font Registry with OpenType family parsing and cmap glyph checks.
+- [x] Bilingual Source/Target pairing and persisted Review sidecar.
+- [x] Batch time/Layer/Style edits, touch range selection, Undo/Redo and crash recovery.
+- [x] MKV Container Bridge for embedded ASS/font extraction and arm64 no-transcode write-back.
+- [x] Unknown ASS sections and opaque/comment/blank lines inside known sections preserved.
+- [x] Original Style/Event Format column order and unknown custom column values preserved.
 
-## 1.0 — Product acceptance
+## 0.14 — Stabilization (current)
 
+### Renderer diagnostics
+- [x] Configure an app-private mpv log for the authoritative preview.
+- [x] Surface recent libass/font-selection log lines beside family and glyph diagnostics.
+- [x] Keep family match, cmap coverage and renderer selection as separate diagnostic layers.
+- [ ] Confirm on a real Android device which font face libass selects for the known CJK square-glyph failure.
+- [ ] Remove any workaround shown to be unnecessary once the root cause is known.
 
-## 0.11 — Font glyph diagnostics + round-trip audit (current)
-- [x] Parse OpenType cmap format 4 and 12.
-- [x] Check actual subtitle code points against the imported font assigned to each Style.
-- [x] Distinguish family-name match from glyph coverage.
-- [x] Show missing glyph samples in the editor.
-- [ ] Capture libass/mpv selected-font logs on device to distinguish renderer-load failure from font-file coverage failure.
-- [ ] Preserve comments and unsupported lines inside known ASS sections.
-- [ ] Expand round-trip corpus.
+### Review identity
+- [x] Replace parse-order IDs in newly persisted Review Sidecar V2 data with stable event fingerprints.
+- [x] Decode legacy V1 sidecars and resolve their IDs against the current document.
+- [x] Debounce sidecar writes.
+- [x] Invalidate confirmation when a confirmed event is structurally edited.
+- [ ] Exercise insert/delete/reorder when those editor operations exist.
 
-
-## 0.12 — ASS known-section preservation
-- [x] Preserve comments, blank lines and unknown opaque lines inside Script Info, V4+ Styles and Events.
-- [x] Preserve those extras across repeated parse/write cycles.
-- [x] Keep unknown standalone sections as before.
+### Round-trip harness
+- [x] Add initial Aegisub-like, custom-column and opaque-section ASS fixtures.
+- [x] Exercise open → edit one event field → save → parse for every fixture.
 - [ ] Preserve exact original placement/order of extras relative to structured records.
-- [ ] Preserve nonstandard custom columns in Style/Event Format records.
+- [ ] Support multiple Format declarations in one section without collapsing schema history.
+- [ ] Define or reject pathological custom Format layouts where Text is followed by comma-bearing fields.
+- [ ] Expand the corpus with real files from multiple ASS-producing tools.
 
+### Documentation
+- [x] Synchronize README version and 0.14 scope.
+- [x] Align PRODUCT_SPEC_1_0 with the implemented MKV Container Bridge.
+- [x] Remove the unimplemented SRT importer from 1.0 acceptance.
+- [x] Remove stale version-specific wording from THIRD_PARTY_NOTICES.
 
-## 0.13 — Preserve custom ASS Format columns
-- [x] Retain original Style/Event Format column order.
-- [x] Store unknown custom column values per Style/Event record.
-- [x] Write those custom values back after structured edits.
-- [x] Keep Text comma handling correct when Text remains the final field.
-- [ ] Arbitrary nonstandard formats with Text before later comma-bearing fields remain outside the guaranteed subset.
+## Next hardening
+
+### MKV preservation audit
+- [ ] Verify attached fonts survive write-back.
+- [ ] Verify chapters and tags.
+- [ ] Verify default/forced flags, track UID, order, language and name.
+- [ ] Verify large files and unusual EBML.
+- [ ] Decide how to handle ASS packets using unsupported lacing.
+
+### Android/device reliability
+- [ ] Fixed smoke-test checklist on at least one primary tablet and one phone.
+- [ ] Divider gesture and orientation/lifecycle regression checks.
+- [ ] App icon confirmation on a current build.
+- [ ] Large event-list performance.
+- [ ] Compose/instrumentation coverage for critical flows.
+
+## 1.0 blockers
+
+- [ ] Known CJK font-rendering failure is diagnosed and fixed on real hardware.
+- [ ] ASS round-trip behavior is documented and protected by a representative corpus.
+- [ ] MKV write-back preservation is audited on representative containers.
+- [ ] Review sidecar identity remains correct across supported structural edits.
+- [ ] Core open/edit/save/reopen flows pass the device smoke-test checklist.
+- [ ] Product specification, README, roadmap and release behavior agree.
+
+## Deferred unless evidence justifies promotion
+
+- Freehand sweep selection beyond the existing anchor + endpoint interaction.
+- Generalized multilingual SubtitleGroup beyond current 1:1 Source/Target pairing.
+- Word-alignment sidecars and Karaoke authoring.
+- General ASR, OCR or translation.
+- Video encoding, filters or hard-sub rendering.
+- Full Aegisub parity, Lua Automation, vector drawing and professional waveform/spectrogram timing.
