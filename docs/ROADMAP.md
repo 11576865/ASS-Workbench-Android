@@ -54,7 +54,20 @@
 - [ ] Verify unusual EBML layouts and large files on device.
 - [ ] Decide how to handle ASS packets using unsupported lacing in the Android reader.
 
-## 0.15.2 — Android startup regex hotfix (current)
+## 0.16.0 — Preview-path stabilization (current)
+
+- [x] Preserve playback position across font-renderer recreation.
+- [x] Throttle editor-wide playback position publication to reduce unnecessary recomposition.
+- [x] Disable embedded MKV subtitle selection before attaching the workbench-generated preview ASS.
+- [x] Surface active preview subtitle source/SID in renderer diagnostics.
+- [x] Map safe-area guides to the actual displayed video rectangle instead of the whole preview container.
+- [x] Clip the preview surface while the layout changes orientation/size.
+- [x] Auto-apply Style typesetting edits after a short debounce.
+- [x] Detect inline ASS tags that shadow Style edits and let the focused event return to Style control.
+- [ ] Device-compare external ASS and MKV-derived preview positions using the same ASS/font pair.
+- [ ] Confirm whether orientation transitions are fully stable on the target tablet.
+
+## 0.15.2 — Android startup regex hotfix (done)
 
 - [x] Escape the closing brace in ASS override-block regexes for Android/ICU compatibility.
 - [x] Prevent `EditorViewModel` construction from failing in initial font diagnostics with `PatternSyntaxException`.
