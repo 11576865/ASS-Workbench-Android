@@ -64,10 +64,10 @@ jobs:
         with:
           packages: 'platform-tools'
 
-      - name: Install Android 17 preview SDK platform
+      - name: Install stable Android SDK 36
         shell: bash
         run: |
-          yes | sdkmanager "platforms;android-37" --channel=3 >/dev/null
+          yes | sdkmanager "platforms;android-36" >/dev/null
 
       - uses: gradle/actions/setup-gradle@v4
         with:
