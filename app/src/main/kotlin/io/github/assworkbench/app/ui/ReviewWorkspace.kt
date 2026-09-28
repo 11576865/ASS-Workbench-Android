@@ -158,12 +158,13 @@ private fun ReviewPairCard(
                 }
             }
 
+            val source = row.source
             Text(
-                "SOURCE  " + (row.source?.start?.toAss() ?: "—") + " → " + (row.source?.end?.toAss() ?: "—"),
+                "SOURCE  " + (source?.start?.toAss() ?: "—") + " → " + (source?.end?.toAss() ?: "—"),
                 style = MaterialTheme.typography.labelSmall,
             )
-            if (row.source != null) {
-                Text(rememberAssAnnotatedText(row.source.text))
+            if (source != null) {
+                Text(rememberAssAnnotatedText(source.text))
             } else {
                 Text("（缺失 Source）")
             }
