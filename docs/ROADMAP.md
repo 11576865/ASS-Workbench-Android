@@ -54,7 +54,20 @@
 - [ ] Verify unusual EBML layouts and large files on device.
 - [ ] Decide how to handle ASS packets using unsupported lacing in the Android reader.
 
-## 0.18.0 — ASS style fidelity and placement diagnostics (current)
+## 0.19.0 — Batched tablet usability + diagnostics (current)
+
+- [x] Strip ASS override tags from subtitle-list display while preserving raw event text for editing.
+- [x] Expose event-level Margin L/R/V in the subtitle inspector with reset-to-Style semantics.
+- [x] Allow selected subtitles to bulk-clear managed Style/position overrides.
+- [x] Report effective inline override sources in the Style inspector.
+- [x] Let the Style editor consume the full inspector height.
+- [x] Surface PlayRes, ScaledBorderAndShadow, LayoutRes/YCbCr metadata when present, and override counts in Project diagnostics.
+- [x] Commit playback seeks at the end of slider scrubbing instead of on every drag sample.
+- [x] Draw the mpv video rectangle separately from the ASS safe area.
+- [ ] Device-check the full batch in one session: playback, guide rectangle, margin inheritance, selection-local Style, color picker, and external-vs-MKV placement.
+- [ ] If external-vs-MKV placement still differs, capture both final ASS representations and compare Script Info/Style/Event fields automatically.
+
+## 0.18.0 — ASS style fidelity and placement diagnostics (done)
 
 - [x] Explain that Style edits apply to every subtitle that references that Style.
 - [x] Allow selected subtitles to receive an automatically cloned independent Style.
