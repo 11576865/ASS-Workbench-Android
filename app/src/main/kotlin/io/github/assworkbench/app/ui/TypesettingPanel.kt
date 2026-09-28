@@ -159,7 +159,9 @@ fun TypesettingPanel(
                 }
                 val styleUseCount = state.document.events.count { it.style == style.name }
                 Text(
-                    "作用域：这个 Style 被 " + styleUseCount + " 条字幕共用；修改 Style 会同时影响它们。",
+                    "共享 " + styleUseCount + " 条 · Style 值可被 Event override 覆盖",
+                    style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
+                    color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 if (state.selectedEventIds.isNotEmpty()) {
                     OutlinedButton(
@@ -186,7 +188,7 @@ fun TypesettingPanel(
                     marginL = marginL.toIntOrNull() ?: style.marginL,
                     marginR = marginR.toIntOrNull() ?: style.marginR,
                     marginV = marginV.toIntOrNull() ?: style.marginV,
-                    modifier = Modifier.fillMaxWidth().height(116.dp),
+                    modifier = Modifier.fillMaxWidth().height(76.dp),
                 )
             }
             item {
@@ -279,7 +281,7 @@ fun TypesettingPanel(
                             SmallField("Encoding", encoding, { encoding = it }, Modifier.weight(1f))
                         }
                         Text(
-                            "这些是 ASS Style 原生字段：Scale X/Y、Angle、BorderStyle、Encoding。默认折叠以减少空间，但不隐藏能力。",
+                            "ASS 原生 Style 字段",
                             style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
                             color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -309,7 +311,11 @@ fun TypesettingPanel(
                             androidx.compose.material3.MaterialTheme.colorScheme.tertiary,
                     )
                 }
-                Text("排版参数会自动应用到 Style；数值输入停止约 220 ms 后刷新预览。")
+                Text(
+                    "Style → Override → Effective",
+                    style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
+                    color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                )
                 if (hasInlineStyleOverrides || hasEventMarginOverrides) {
                     val reasons = buildList {
                         if (hasInlineStyleOverrides) add("内联 ASS 标签")
