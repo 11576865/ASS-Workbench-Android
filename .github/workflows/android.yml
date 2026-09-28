@@ -74,6 +74,19 @@ jobs:
       - name: Build debug APK
         run: gradle :app:assembleDebug --stacktrace
 
+      - name: Validate launcher icon packaging
+        shell: bash
+        run: |
+          set -euxo pipefail
+          APK="app/build/outputs/apk/debug/app-debug.apk"
+          unzip -l "$APK" | grep -q 'res/mipmap-anydpi-v26/ic_launcher.xml'
+          unzip -l "$APK" | grep -q 'res/mipmap-anydpi-v26/ic_launcher_round.xml'
+          unzip -l "$APK" | grep -q 'res/drawable/ic_launcher_foreground.xml'
+          if unzip -l "$APK" | grep -q 'drawable-nodpi-v4/ic_launcher.png'; then
+            echo "Legacy launcher PNG unexpectedly packaged" >&2
+            exit 1
+          fi
+
       - name: Read app version
         id: version
         shell: bash
