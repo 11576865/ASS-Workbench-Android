@@ -1,0 +1,23 @@
+; fixture: opaque content in known and unknown sections
+[Script Info]
+; preserve-script-comment
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+Tool-Opaque-No-Colon
+
+[V4+ Styles]
+; preserve-style-comment
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&H64000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+Tool-Metadata: keep-me
+
+[Events]
+; preserve-event-comment
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,Hello
+Command: opaque payload
+
+[Custom Tool Section]
+Opaque-Key: Opaque-Value
+raw line without delimiter
