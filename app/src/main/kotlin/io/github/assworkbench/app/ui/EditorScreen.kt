@@ -552,6 +552,13 @@ private fun InspectorBody(
             }
 
             WorkspaceSection.STYLE -> {
+                val styleNames = state.document.styles.map { it.name }
+                var inspectedStyleName by remember(focusedStyle?.name, styleNames) {
+                    mutableStateOf(focusedStyle?.name ?: styleNames.firstOrNull().orEmpty())
+                }
+                var stylePickerOpen by remember { mutableStateOf(false) }
+                val inspectedStyle = state.document.styles.firstOrNull { it.name == inspectedStyleName }
+                    ?: state.document.styles.firstOrNull()
                 Column(
                     Modifier.fillMaxSize().padding(8.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -560,19 +567,46 @@ private fun InspectorBody(
                     if (focused != null) {
                         EffectiveValueStrip(state, focused, viewModel)
                     }
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Text("编辑 Style", style = MaterialTheme.typography.labelSmall)
+                        Box {
+                            TextButton(onClick = { stylePickerOpen = true }) {
+                                Text(inspectedStyle?.name ?: "无 Style")
+                            }
+                            DropdownMenu(expanded = stylePickerOpen, onDismissRequest = { stylePickerOpen = false }) {
+                                state.document.styles.forEach { candidate ->
+                                    val uses = state.document.events.count { it.style == candidate.name }
+                                    DropdownMenuItem(
+                                        text = { Text(candidate.name + " · " + uses + " Events") },
+                                        onClick = {
+                                            inspectedStyleName = candidate.name
+                                            stylePickerOpen = false
+                                        },
+                                    )
+                                }
+                            }
+                        }
+                        if (focused != null && inspectedStyle != null && focused.style != inspectedStyle.name) {
+                            TextButton(
+                                onClick = { viewModel.assignFocusedStyle(inspectedStyle.name) },
+                                modifier = Modifier.height(28.dp),
+                            ) { Text("应用到当前字幕", style = MaterialTheme.typography.labelSmall) }
+                        }
+                    }
                     Divider()
-                    if (focusedStyle != null) {
+                    if (inspectedStyle != null) {
                         TypesettingPanel(
                             state = state,
                             viewModel = viewModel,
-                            style = focusedStyle,
+                            style = inspectedStyle,
                             modifier = Modifier.weight(1f).fillMaxWidth(),
                         )
                     } else {
-                        Text(
-                            "选择一条字幕后编辑它所使用的 Style。",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                        Text("当前文档没有 Style。", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
