@@ -3,9 +3,11 @@ package io.github.assworkbench.app
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
+import io.github.assworkbench.fonts.AndroidFontconfigPolicy
 import io.github.assworkbench.fonts.FontAsset
 import io.github.assworkbench.fonts.FontGlyphDiagnostic
 import io.github.assworkbench.fonts.FontMetadata
+import io.github.assworkbench.fonts.FontconfigPrepared
 import io.github.assworkbench.fonts.OpenTypeCmap
 import io.github.assworkbench.fonts.OpenTypeNameReader
 import java.io.File
@@ -17,9 +19,10 @@ class FontStore(private val context: Context) {
     // Keep imported project fonts here so the UI registry and renderer consume the same files.
     val importedDir: File = File(mpvConfigDir, "fonts").apply { mkdirs() }
 
-    init {
-        writeFontconfig()
-    }
+    private val fontconfigCacheRoot: File = File(context.cacheDir, "fontconfig").apply { mkdirs() }
+
+    var fontconfigPrepared: FontconfigPrepared = refreshFontconfig(pruneOldCaches = false)
+        private set
 
     fun listImported(): List<FontAsset> = importedDir.listFiles()
         .orEmpty()
@@ -43,11 +46,11 @@ class FontStore(private val context: Context) {
         if (!target.exists()) target.writeBytes(bytes)
 
         // libmpvKt documents subfont.ttf as the reliable fallback when sub-font-provider=none.
-        // Point fallback at the most recently imported font so CJK glyphs do not fall back
-        // to the bundled Latin-only Roboto copy.
-        val fallback = File(mpvConfigDir, "subfont.ttf")
-        fallback.writeBytes(bytes)
+        // Point fallback at the most recently imported font so provider=none remains a useful
+        // compatibility/debug mode even after Fontconfig becomes available.
+        File(mpvConfigDir, "subfont.ttf").writeBytes(bytes)
 
+        refreshFontconfig(pruneOldCaches = true)
         return FontAsset(target.name, sha, metadata)
     }
 
@@ -59,7 +62,19 @@ class FontStore(private val context: Context) {
         val safeStem = metadata.family.replace(Regex("[^A-Za-z0-9._-]+"), "_").trim('_').ifBlank { "font" }
         val target = File(importedDir, "${safeStem}-${sha.take(10)}.$ext")
         if (!target.exists()) target.writeBytes(bytes)
+        refreshFontconfig(pruneOldCaches = true)
         return FontAsset(target.name, sha, metadata)
+    }
+
+    fun refreshFontconfig(pruneOldCaches: Boolean): FontconfigPrepared {
+        val prepared = AndroidFontconfigPolicy.prepare(
+            configDir = mpvConfigDir,
+            importedDir = importedDir,
+            cacheRoot = fontconfigCacheRoot,
+            pruneOldCaches = pruneOldCaches,
+        )
+        fontconfigPrepared = prepared
+        return prepared
     }
 
     fun glyphDiagnostic(family: String, text: String): FontGlyphDiagnostic? {
@@ -103,41 +118,6 @@ class FontStore(private val context: Context) {
         }
         return if (target.isFile) runCatching { OpenTypeNameReader.read(target.readBytes()) }.getOrNull() else null
     }
-
-    private fun writeFontconfig() {
-        val cacheDir = File(context.cacheDir, "fontconfig").apply { mkdirs() }
-        val config = buildString {
-            // Keep this intentionally close to mpv-android's proven Android fontconfig.
-            // In particular, do not add a relative fonts.dtd DOCTYPE: that file is not
-            // packaged with the app and is unnecessary for Fontconfig parsing.
-            appendLine("<fontconfig>")
-            appendLine("  <dir>/system/fonts/</dir>")
-            appendLine("  <dir>/product/fonts/</dir>")
-            appendLine("  <dir>" + xmlEscape(importedDir.absolutePath) + "</dir>")
-            appendLine("  <cachedir>" + xmlEscape(cacheDir.absolutePath) + "</cachedir>")
-            appendLine("  <alias>")
-            appendLine("    <family>sans-serif</family>")
-            appendLine("    <prefer><family>Roboto</family><family>Noto Sans</family></prefer>")
-            appendLine("  </alias>")
-            appendLine("  <alias>")
-            appendLine("    <family>serif</family>")
-            appendLine("    <prefer><family>Noto Serif</family></prefer>")
-            appendLine("  </alias>")
-            appendLine("  <alias>")
-            appendLine("    <family>monospace</family>")
-            appendLine("    <prefer><family>Droid Sans Mono</family><family>Noto Sans Mono</family></prefer>")
-            appendLine("  </alias>")
-            appendLine("</fontconfig>")
-        }
-        File(mpvConfigDir, "fonts.conf").writeText(config, Charsets.UTF_8)
-    }
-
-    private fun xmlEscape(value: String): String = value
-        .replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-        .replace("\"", "&quot;")
-        .replace("'", "&apos;")
 
     private fun queryName(uri: Uri): String? {
         val projection = arrayOf(OpenableColumns.DISPLAY_NAME)
