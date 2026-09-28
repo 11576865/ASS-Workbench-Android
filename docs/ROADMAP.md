@@ -12,7 +12,7 @@
 - [x] Unknown ASS sections and opaque/comment/blank lines inside known sections preserved.
 - [x] Original Style/Event Format column order and unknown custom column values preserved.
 
-## 0.14 — Stabilization (current)
+## 0.14 — Stabilization
 
 ### Renderer diagnostics
 - [x] Configure an app-private mpv log for the authoritative preview.
@@ -42,12 +42,24 @@
 - [x] Remove the unimplemented SRT importer from 1.0 acceptance.
 - [x] Remove stale version-specific wording from THIRD_PARTY_NOTICES.
 
+## 0.15 — MKV preservation (current)
+
+- [x] Replace edited ASS in the original track slot instead of remove + append.
+- [x] Preserve TrackNumber, TrackUID, track order, language/name, BCP-47 language and disposition flags.
+- [x] Preserve attached fonts, chapters and ordinary tags in an end-to-end bridge test.
+- [x] Recompute content-derived hash/statistics tags when the source carried them.
+- [x] Eliminate the full-size `without-track.mkv` intermediate.
+- [x] Build a minimal ASS Workbench bridge executable instead of shipping the full mkvgo CLI.
+- [ ] Expand write-back testing to a real-world MKV corpus from multiple muxers.
+- [ ] Verify unusual EBML layouts and large files on device.
+- [ ] Decide how to handle ASS packets using unsupported lacing in the Android reader.
+
 ## Next hardening
 
 ### MKV preservation audit
-- [ ] Verify attached fonts survive write-back.
-- [ ] Verify chapters and tags.
-- [ ] Verify default/forced flags, track UID, order, language and name.
+- [x] Verify attached fonts survive write-back in the synthetic preservation fixture.
+- [x] Verify chapters and ordinary tags in the synthetic preservation fixture.
+- [x] Verify default/forced/extended flags, TrackUID, order, legacy/BCP-47 language and name in the synthetic preservation fixture.
 - [ ] Verify large files and unusual EBML.
 - [ ] Decide how to handle ASS packets using unsupported lacing.
 
