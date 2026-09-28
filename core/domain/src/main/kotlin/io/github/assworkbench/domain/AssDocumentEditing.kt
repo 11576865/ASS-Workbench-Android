@@ -111,6 +111,24 @@ object AssDocumentEditing {
         return AssStructuralEditResult(document.copy(events = remaining), focus)
     }
 
+    fun replacePlainDialogueText(text: String, find: String, replacement: String): Pair<String, Boolean> {
+        if (find.isEmpty()) return text to false
+        val analysis = AssInlineSyntax.analyze(text)
+        val plain = analysis.tokens
+            .filter { it.kind == AssInlineTokenKind.TEXT }
+            .sortedByDescending { it.start }
+        var changed = false
+        var result = text
+        plain.forEach { token ->
+            val replaced = token.text.replace(find, replacement)
+            if (replaced != token.text) {
+                result = result.substring(0, token.start) + replaced + result.substring(token.endExclusive)
+                changed = true
+            }
+        }
+        return result to changed
+    }
+
     fun copyEventFormatting(
         document: AssDocument,
         sourceEventId: Long,
