@@ -56,8 +56,15 @@ fun TypesettingPanel(
     var marginR by remember(style) { mutableStateOf(style.marginR.toString()) }
     var marginV by remember(style) { mutableStateOf(style.marginV.toString()) }
     var primaryColor by remember(style) { mutableStateOf(style.primaryColor) }
+    var secondaryColor by remember(style) { mutableStateOf(style.secondaryColor) }
     var outlineColor by remember(style) { mutableStateOf(style.outlineColor) }
     var backColor by remember(style) { mutableStateOf(style.backColor) }
+    var scaleX by remember(style) { mutableStateOf(style.scaleX.toString()) }
+    var scaleY by remember(style) { mutableStateOf(style.scaleY.toString()) }
+    var angle by remember(style) { mutableStateOf(style.angle.toString()) }
+    var borderStyle by remember(style) { mutableStateOf(style.borderStyle.toString()) }
+    var encoding by remember(style) { mutableStateOf(style.encoding.toString()) }
+    var advancedOpen by remember { mutableStateOf(false) }
     var bold by remember(style) { mutableStateOf(style.bold) }
     var italic by remember(style) { mutableStateOf(style.italic) }
     var underline by remember(style) { mutableStateOf(style.underline) }
@@ -96,8 +103,14 @@ fun TypesettingPanel(
         marginR,
         marginV,
         primaryColor,
+        secondaryColor,
         outlineColor,
         backColor,
+        scaleX,
+        scaleY,
+        angle,
+        borderStyle,
+        encoding,
         bold,
         italic,
         underline,
@@ -120,8 +133,14 @@ fun TypesettingPanel(
             marginR = marginR.toIntOrNull() ?: return@LaunchedEffect,
             marginV = marginV.toIntOrNull() ?: return@LaunchedEffect,
             primaryColor = primaryColor,
+            secondaryColor = secondaryColor,
             outlineColor = outlineColor,
             backColor = backColor,
+            scaleX = scaleX.toDoubleOrNull() ?: return@LaunchedEffect,
+            scaleY = scaleY.toDoubleOrNull() ?: return@LaunchedEffect,
+            angle = angle.toDoubleOrNull() ?: return@LaunchedEffect,
+            borderStyle = borderStyle.toIntOrNull() ?: return@LaunchedEffect,
+            encoding = encoding.toIntOrNull() ?: return@LaunchedEffect,
         )
     }
 
@@ -212,6 +231,12 @@ fun TypesettingPanel(
                         modifier = Modifier.weight(1f),
                     )
                     AssColorControl(
+                        label = "次要",
+                        value = secondaryColor,
+                        onValue = { secondaryColor = it },
+                        modifier = Modifier.weight(1f),
+                    )
+                    AssColorControl(
                         label = "描边",
                         value = outlineColor,
                         onValue = { outlineColor = it },
@@ -223,6 +248,32 @@ fun TypesettingPanel(
                         onValue = { backColor = it },
                         modifier = Modifier.weight(1f),
                     )
+                }
+            }
+            item {
+                TextButton(
+                    onClick = { advancedOpen = !advancedOpen },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(if (advancedOpen) "收起高级 Style 参数" else "高级 Style 参数")
+                }
+                if (advancedOpen) {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            SmallField("Scale X %", scaleX, { scaleX = it }, Modifier.weight(1f))
+                            SmallField("Scale Y %", scaleY, { scaleY = it }, Modifier.weight(1f))
+                            SmallField("旋转 Z°", angle, { angle = it }, Modifier.weight(1f))
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            SmallField("BorderStyle", borderStyle, { borderStyle = it }, Modifier.weight(1f))
+                            SmallField("Encoding", encoding, { encoding = it }, Modifier.weight(1f))
+                        }
+                        Text(
+                            "这些是 ASS Style 原生字段：Scale X/Y、Angle、BorderStyle、Encoding。默认折叠以减少空间，但不隐藏能力。",
+                            style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
+                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
             }
             item {
