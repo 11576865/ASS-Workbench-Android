@@ -164,7 +164,7 @@ jobs:
 
       - name: Collect experimental APK and renderer manifest
         run: |
-          VERSION="$(sed -nE 's/^val baseVersionName = "([^"]+)"/\\1/p' app/build.gradle.kts | head -1)"
+          VERSION="$(sed -nE 's/^val baseVersionName = "([^"]+)"/\1/p' app/build.gradle.kts | head -1)"
           test -n "$VERSION"
           mkdir -p fontconfig-experimental-apk
           cp app/build/outputs/apk/debug/app-debug.apk \
