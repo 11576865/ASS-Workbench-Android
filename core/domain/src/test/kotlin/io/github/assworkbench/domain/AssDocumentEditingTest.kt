@@ -1,0 +1,91 @@
+package io.github.assworkbench.domain
+
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertTrue
+
+class AssDocumentEditingTest {
+    private fun doc(): AssDocument = AssDocument(
+        styles = listOf(
+            AssStyle(name = "Default", fontName = "Arial", fontSize = 48.0),
+            AssStyle(name = "Alt", fontName = "Noto Sans", fontSize = 56.0),
+        ),
+        events = listOf(
+            AssEvent(
+                id = 1,
+                start = SubTime(1_000),
+                end = SubTime(4_000),
+                style = "Default",
+                marginV = 62,
+                text = "{\\fs56}{\\bord6}你好世界",
+            ),
+            AssEvent(
+                id = 2,
+                start = SubTime(5_000),
+                end = SubTime(7_000),
+                style = "Alt",
+                text = "第二句",
+            ),
+        ),
+    )
+
+    @Test
+    fun insertAtPlaybackCopiesContextButNotText() {
+        val result = AssDocumentEditing.insertAtPlayback(doc(), 1, 3_000)
+        val inserted = result.document.events.first { it.id == result.focusedEventId }
+        assertEquals(3_000, inserted.start.millis)
+        assertEquals(5_000, inserted.end.millis)
+        assertEquals("Default", inserted.style)
+        assertEquals("", inserted.text)
+    }
+
+    @Test
+    fun splitUsesCursorAndPlaybackTimeAndCarriesLeadingOverrides() {
+        val source = doc()
+        val splitIndex = source.events.first().text.indexOf("世界")
+        val result = AssDocumentEditing.splitEvent(source, 1, 2_500, splitIndex)
+        val first = result.document.events[0]
+        val second = result.document.events[1]
+        assertEquals(2_500, first.end.millis)
+        assertEquals(2_500, second.start.millis)
+        assertEquals("{\\fs56}{\\bord6}你好", first.text)
+        assertTrue(second.text.startsWith("{\\fs56}{\\bord6}"))
+        assertTrue(second.text.endsWith("世界"))
+    }
+
+    @Test
+    fun mergeKeepsFirstEventFormattingAndJoinsTexts() {
+        val result = AssDocumentEditing.mergeEvents(doc(), setOf(1, 2), "\\N")
+        val merged = result.document.events.single()
+        assertEquals(1_000, merged.start.millis)
+        assertEquals(7_000, merged.end.millis)
+        assertEquals("Default", merged.style)
+        assertEquals(62, merged.marginV)
+        assertEquals("{\\fs56}{\\bord6}你好世界\\N第二句", merged.text)
+    }
+
+    @Test
+    fun copyFormattingPreservesTargetTimingAndDialogue() {
+        val result = AssDocumentEditing.copyEventFormatting(doc(), 1, setOf(2))
+        val target = result.events.first { it.id == 2L }
+        assertEquals(5_000, target.start.millis)
+        assertEquals(7_000, target.end.millis)
+        assertEquals("Default", target.style)
+        assertEquals(62, target.marginV)
+        assertEquals("{\\fs56}{\\bord6}第二句", target.text)
+    }
+
+    @Test
+    fun renameStyleUpdatesAllEventReferences() {
+        val result = AssDocumentEditing.renameStyle(doc(), "Default", "Dialogue")
+        assertTrue(result.styles.any { it.name == "Dialogue" })
+        assertEquals("Dialogue", result.events.first { it.id == 1L }.style)
+    }
+
+    @Test
+    fun deleteStyleRedirectsReferences() {
+        val result = AssDocumentEditing.deleteStyle(doc(), "Alt", "Default")
+        assertEquals(listOf("Default"), result.styles.map { it.name })
+        assertEquals("Default", result.events.first { it.id == 2L }.style)
+    }
+}
