@@ -422,7 +422,7 @@ private fun CompactEditorWorkspace(
         WorkspaceTabs(section, onSectionChange)
         Divider()
         if (section == WorkspaceSection.SUBTITLES) {
-            SubtitleDock(state, viewModel, Modifier.weight(1f).fillMaxWidth())
+            SubtitleDock(state, viewModel, onOpenSubtitle, Modifier.weight(1f).fillMaxWidth())
         } else {
             InspectorBody(
                 state = state,
