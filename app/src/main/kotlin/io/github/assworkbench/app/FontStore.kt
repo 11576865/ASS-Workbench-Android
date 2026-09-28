@@ -21,8 +21,12 @@ class FontStore(private val context: Context) {
 
     private val fontconfigCacheRoot: File = File(context.cacheDir, "fontconfig").apply { mkdirs() }
 
-    var fontconfigPrepared: FontconfigPrepared = refreshFontconfig(pruneOldCaches = false)
+    lateinit var fontconfigPrepared: FontconfigPrepared
         private set
+
+    init {
+        refreshFontconfig(pruneOldCaches = false)
+    }
 
     fun listImported(): List<FontAsset> = importedDir.listFiles()
         .orEmpty()
