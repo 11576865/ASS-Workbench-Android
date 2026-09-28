@@ -66,6 +66,27 @@ object AssInlineSyntax {
         "b", "i", "u", "s", "a", "r", "c", "k", "K", "t",
     ).distinct().sortedByDescending { it.length }
 
+    fun visibleText(text: String): String {
+        if (text.isEmpty()) return ""
+        val analysis = analyze(text)
+        return buildString {
+            analysis.tokens
+                .filter { it.kind == AssInlineTokenKind.TEXT || it.kind == AssInlineTokenKind.ESCAPE }
+                .sortedBy { it.start }
+                .forEach { token ->
+                    when (token.kind) {
+                        AssInlineTokenKind.TEXT -> append(token.text)
+                        AssInlineTokenKind.ESCAPE -> when (token.text) {
+                            "\\N", "\\n" -> append('\n')
+                            "\\h" -> append(' ')
+                            else -> append(token.text)
+                        }
+                        else -> Unit
+                    }
+                }
+        }
+    }
+
     fun analyze(text: String): AssInlineAnalysis {
         if (text.isEmpty()) return AssInlineAnalysis(emptyList(), emptyList(), emptyList())
 
