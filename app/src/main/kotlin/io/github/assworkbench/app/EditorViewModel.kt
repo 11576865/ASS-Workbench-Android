@@ -10,6 +10,7 @@ import io.github.assworkbench.container.MatroskaScanResult
 import io.github.assworkbench.domain.AssCodec
 import io.github.assworkbench.domain.AssDocument
 import io.github.assworkbench.domain.EventOverrideEditor
+import io.github.assworkbench.domain.FontBindingRewriter
 import io.github.assworkbench.domain.ReviewEventKey
 import io.github.assworkbench.domain.ReviewSidecar
 import io.github.assworkbench.domain.SubTime
@@ -419,6 +420,15 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             })
         }
     }
+
+    fun forceFontFamily(family: String) {
+        val target = family.trim()
+        if (target.isEmpty()) return
+        editDocument("已强制绑定字体 $target：全部 Style Fontname 与非空显式 \\fn 已统一改写。") { doc ->
+            FontBindingRewriter.forceFamily(doc, target)
+        }
+    }
+
 
     fun toggleLayoutGuides() = _state.update { it.copy(showLayoutGuides = !it.showLayoutGuides) }
 
@@ -833,7 +843,8 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             }
             state.copy(
                 fontDiagnostics = FontDiagnostics.diagnose(
-                    requestedFamilies = state.document.styles.map { it.fontName },
+                    requestedFamilies = state.document.styles.map { it.fontName } +
+                        FontBindingRewriter.explicitFamilies(state.document),
                     imported = state.importedFonts,
                     fallbackFamily = state.fallbackFontFamily,
                 ),
