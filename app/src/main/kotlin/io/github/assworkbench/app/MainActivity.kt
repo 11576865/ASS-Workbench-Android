@@ -101,7 +101,7 @@ class MainActivity : ComponentActivity() {
                                         editorReady = true
                                     }
                                     .onFailure { error ->
-                                        startupError = "${error::class.java.simpleName}: ${error.message ?: "无消息"}"
+                                        startupError = StartupProbe.describe(error)
                                         StartupProbe.mark(
                                             this@MainActivity,
                                             "activity_request_viewmodel",
