@@ -56,7 +56,7 @@
 
 ## 0.19.0 — Batched tablet usability + diagnostics (current)
 
-- [x] Strip ASS override tags from subtitle-list display while preserving raw event text for editing.
+- [x] Keep ASS override tags visible and directly editable, with syntax-aware rendering that visually separates override blocks, tag names, values and text escapes from dialogue.
 - [x] Expose event-level Margin L/R/V in the subtitle inspector with reset-to-Style semantics.
 - [x] Allow selected subtitles to bulk-clear managed Style/position overrides.
 - [x] Report effective inline override sources in the Style inspector.
