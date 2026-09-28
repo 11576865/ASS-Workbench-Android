@@ -125,9 +125,9 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      - name: Install Android 17 preview SDK platform
+      - name: Install stable Android SDK 36
         run: |
-          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-37" --channel=3 >/dev/null
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" >/dev/null
 
       - name: Give patched renderer an isolated Maven version
         working-directory: .libmpvkt-src
