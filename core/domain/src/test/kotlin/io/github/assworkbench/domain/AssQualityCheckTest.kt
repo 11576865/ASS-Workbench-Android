@@ -31,4 +31,20 @@ class AssQualityCheckTest {
         assertTrue(issues.any { it.eventId == 1L && it.kind == AssQcKind.INLINE_SYNTAX })
         assertTrue(issues.any { it.eventId == 1L && it.kind == AssQcKind.OVERLAP })
     }
+    @Test
+    fun detects_invalid_position_syntax() {
+        val document = AssDocument(
+            events = listOf(
+                AssEvent(
+                    id = 9,
+                    start = SubTime(0),
+                    end = SubTime(1_000),
+                    text = "{\\pos(nope,200)}Text",
+                )
+            )
+        )
+        val issues = AssQualityCheck.inspect(document)
+        assertTrue(issues.any { it.eventId == 9L && it.kind == AssQcKind.INVALID_POSITION })
+    }
+
 }
