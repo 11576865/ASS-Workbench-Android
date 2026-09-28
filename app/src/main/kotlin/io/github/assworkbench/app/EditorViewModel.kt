@@ -30,8 +30,19 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     private val history = UndoHistory(AssDocument(), limit = 80)
     private val fontStore = FontStore(application)
     private val mkvGoTool = MkvGoTool(application)
+    private val prefs = application.getSharedPreferences("ass_workbench_editor", Context.MODE_PRIVATE)
+    private val recoveryStore = RecoveryStore(application)
+    private var recoveryJob: Job? = null
     private var containerScan: MatroskaScanResult? = null
-    private val _state = MutableStateFlow(EditorState())
+    private val _state = MutableStateFlow(
+        EditorState(
+            project = io.github.assworkbench.domain.SubtitleProject(
+                splitRatio = prefs.getFloat("split_ratio", 0.56f).coerceIn(0.28f, 0.78f)
+            ),
+            recoveryAvailable = recoveryStore.exists(),
+            recoveryLabel = recoveryStore.label(),
+        )
+    )
     val state: StateFlow<EditorState> = _state.asStateFlow()
 
     init {
