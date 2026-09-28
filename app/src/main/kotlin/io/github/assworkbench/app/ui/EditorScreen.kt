@@ -48,6 +48,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -102,7 +104,17 @@ fun EditorScreen(
 ) {
     var sectionName by rememberSaveable { mutableStateOf(WorkspaceSection.SUBTITLES.name) }
     val section = WorkspaceSection.entries.firstOrNull { it.name == sectionName } ?: WorkspaceSection.SUBTITLES
+    val snackbarHostState = remember { SnackbarHostState() }
+    LaunchedEffect(state.status) {
+        if (state.status.isNotBlank()) snackbarHostState.showSnackbar(state.status)
+    }
     Scaffold(
+        snackbarHost = {
+            SnackbarHost(
+                hostState = snackbarHostState,
+                modifier = Modifier.navigationBarsPadding(),
+            )
+        },
         topBar = {
             CompactEditorToolbar(
                 state = state,
@@ -115,16 +127,6 @@ fun EditorScreen(
                 onSaveAs = onSaveAs,
             )
         },
-        bottomBar = {
-            Text(
-                state.status,
-                modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 10.dp, vertical = 3.dp),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        },
     ) { padding ->
         EditorWorkspace(
             state = state,
@@ -134,7 +136,7 @@ fun EditorScreen(
             onImportFont = onImportFont,
             onSaveMkv = onSaveMkv,
             onOpenVideo = onOpenVideo,
-            modifier = Modifier.fillMaxSize().padding(padding),
+            modifier = Modifier.fillMaxSize().padding(padding).navigationBarsPadding(),
         )
     }
 }
