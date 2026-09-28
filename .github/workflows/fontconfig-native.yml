@@ -85,3 +85,55 @@ jobs:
           path: fontconfig-native-probe/
           if-no-files-found: error
           retention-days: 7
+
+      - name: Set up JDK 21 for patched AAR packaging
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Install Android SDK 37 for libmpvKt packaging
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-37" "build-tools;37.0.0" >/dev/null
+
+      - name: Give patched renderer an isolated Maven version
+        working-directory: .libmpvkt-src
+        run: |
+          sed -i 's/^VERSION=.*/VERSION=0.3.0-asswb-fontconfig/' gradle.properties
+
+      - name: Publish patched arm64 renderer AARs to a local Maven repository
+        working-directory: .libmpvkt-src
+        run: |
+          ./gradlew \
+            :libmpvkt-native:publishAllPublicationsToStaticRepository \
+            :libmpvkt:publishAllPublicationsToStaticRepository \
+            :libmpvkt-view:publishAllPublicationsToStaticRepository \
+            :libmpvkt-compose:publishAllPublicationsToStaticRepository \
+            -Plibmpvkt.abis=arm64-v8a \
+            -Plibmpvkt.mavenRepoDir="$GITHUB_WORKSPACE/fontconfig-maven" \
+            --no-configuration-cache
+
+      - name: Build ASS Workbench experimental Fontconfig APK
+        run: |
+          gradle :app:assembleDebug \
+            -Passwb.rendererRepo="$GITHUB_WORKSPACE/fontconfig-maven" \
+            -Passwb.rendererVersion=0.3.0-asswb-fontconfig \
+            -Passwb.rendererProvider=fontconfig \
+            --stacktrace
+
+      - name: Collect experimental APK and renderer manifest
+        run: |
+          mkdir -p fontconfig-experimental-apk
+          cp app/build/outputs/apk/debug/app-debug.apk \
+            fontconfig-experimental-apk/ASS-Workbench-Android-0.15.1-fontconfig-arm64-debug.apk
+          cp fontconfig-native-probe/depinfo.sh fontconfig-experimental-apk/
+          cp fontconfig-native-probe/fontconfig.pc fontconfig-experimental-apk/
+          cp fontconfig-native-probe/libass.pc fontconfig-experimental-apk/
+
+      - name: Upload experimental Fontconfig APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: asswb-fontconfig-experimental-apk
+          path: fontconfig-experimental-apk/
+          if-no-files-found: error
+          retention-days: 7
