@@ -73,27 +73,30 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             )
         }
         viewModelScope.launch {
+            var imported = 0
+            var skipped = 0
             runCatching {
                 withContext(Dispatchers.IO) {
                     val stream = app.contentResolver.openInputStream(uri) ?: error("无法读取 MKV")
-                    stream.use { MatroskaReader().scan(it) }
+                    stream.use {
+                        MatroskaReader().scan(
+                            input = it,
+                            retainAttachments = false,
+                            onAttachment = { attachment ->
+                                if (!attachment.isSupportedFont) {
+                                    skipped++
+                                } else {
+                                    val asset = runCatching {
+                                        fontStore.importEmbeddedFont(attachment.fileName, attachment.data)
+                                    }.getOrNull()
+                                    if (asset != null) imported++ else skipped++
+                                }
+                            },
+                        )
+                    }
                 }
             }.onSuccess { scan ->
                 containerScan = scan
-                var imported = 0
-                var skipped = 0
-                withContext(Dispatchers.IO) {
-                    scan.attachments.forEach { attachment ->
-                        if (!attachment.isSupportedFont) {
-                            skipped++
-                        } else {
-                            val asset = runCatching {
-                                fontStore.importEmbeddedFont(attachment.fileName, attachment.data)
-                            }.getOrNull()
-                            if (asset != null) imported++ else skipped++
-                        }
-                    }
-                }
                 val tracks = scan.subtitleTracks.map {
                     ContainerTrackUi(it.number, it.displayName, it.language, it.packets.size)
                 }
