@@ -41,7 +41,7 @@ class FontStore(private val context: Context) {
 
     fun listImported(): List<FontAsset> {
         importedCache?.let { return it }
-        val scanned = (projectFontDir.listFiles().orEmpty() + importedDir.listFiles().orEmpty())
+        val scanned = (projectFontDir.listFiles()?.toList().orEmpty() + importedDir.listFiles()?.toList().orEmpty())
             .filter { it.isFile && it.extension.lowercase() in setOf("ttf", "otf") }
             .distinctBy { it.absolutePath }
             .mapNotNull { file ->
