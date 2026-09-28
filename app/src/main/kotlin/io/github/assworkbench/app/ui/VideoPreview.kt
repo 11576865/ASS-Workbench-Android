@@ -621,8 +621,17 @@ private fun PositionDragOverlay(
 
     BoxWithConstraints(
         modifier.pointerInput(event.id, document.playResX, document.playResY) {
+            var armed = false
             detectDragGestures(
+                onDragStart = { start ->
+                    val currentPx = (x / document.playResX.coerceAtLeast(1)) * size.width
+                    val currentPy = (y / document.playResY.coerceAtLeast(1)) * size.height
+                    val dx = start.x - currentPx.toFloat()
+                    val dy = start.y - currentPy.toFloat()
+                    armed = kotlin.math.sqrt(dx * dx + dy * dy) <= 36.dp.toPx()
+                },
                 onDrag = { change, _ ->
+                    if (!armed) return@detectDragGestures
                     change.consume()
                     val px = change.position.x.coerceIn(0f, size.width.toFloat())
                     val py = change.position.y.coerceIn(0f, size.height.toFloat())
@@ -649,7 +658,11 @@ private fun PositionDragOverlay(
                     x = nx.toDouble()
                     y = ny.toDouble()
                 },
-                onDragEnd = { onCommit(x, y) },
+                onDragEnd = {
+                    if (armed) onCommit(x, y)
+                    armed = false
+                },
+                onDragCancel = { armed = false },
             )
         }
     ) {
@@ -676,7 +689,7 @@ private fun PositionDragOverlay(
             )
         }
         Text(
-            "pos ${x.toInt()},${y.toInt()}",
+            "pos ${x.toInt()},${y.toInt()} · 拖十字定位",
             modifier = Modifier
                 .align(Alignment.TopStart)
                 .background(Color.Black.copy(alpha = 0.55f))
@@ -684,6 +697,22 @@ private fun PositionDragOverlay(
             color = Color.White,
             style = MaterialTheme.typography.labelSmall,
         )
+        val visible = remember(event.text) { io.github.assworkbench.domain.AssInlineSyntax.visibleText(event.text) }
+        if (visible.isNotBlank()) {
+            Text(
+                visible,
+                modifier = Modifier
+                    .offset(
+                        x = maxWidth * (x / document.playResX.coerceAtLeast(1)).toFloat(),
+                        y = maxHeight * (y / document.playResY.coerceAtLeast(1)).toFloat(),
+                    )
+                    .background(Color.Black.copy(alpha = 0.45f))
+                    .padding(horizontal = 3.dp, vertical = 1.dp),
+                color = Color.White.copy(alpha = 0.75f),
+                maxLines = 1,
+                style = MaterialTheme.typography.labelSmall,
+            )
+        }
     }
 }
 
