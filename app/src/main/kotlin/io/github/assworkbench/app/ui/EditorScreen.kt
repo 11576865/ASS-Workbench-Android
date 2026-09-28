@@ -677,10 +677,13 @@ private fun QualityCheckSummary(
     var open by remember { mutableStateOf(false) }
     val errors = issues.count { it.severity == AssQcSeverity.ERROR }
     val warnings = issues.count { it.severity == AssQcSeverity.WARNING }
+    val missingFonts = state.fontDiagnostics.count { it.status == FontMatchStatus.MISSING }
+    val missingGlyphStyles = state.fontGlyphDiagnostics.values.count { it.missingCodePoints.isNotEmpty() }
     Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(
-                "QC · ${issues.size} 项 · error $errors · warning $warnings",
+                "QC · ${issues.size} 项 · error $errors · warning $warnings" +
+                    " · missing font $missingFonts · glyph $missingGlyphStyles",
                 modifier = Modifier.weight(1f),
                 style = MaterialTheme.typography.labelMedium,
                 color = when {
@@ -721,6 +724,13 @@ private fun QualityCheckSummary(
                 }
                 if (issues.size > 40) {
                     Text("另有 ${issues.size - 40} 项未展开。", style = MaterialTheme.typography.labelSmall)
+                }
+                if (missingFonts > 0 || missingGlyphStyles > 0) {
+                    Text(
+                        "字体：missing $missingFonts · 存在缺字的 Style $missingGlyphStyles",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
                 }
             }
         }
@@ -1211,24 +1221,26 @@ private fun TimelineEventRow(
                             dragAccumPx = 0f
                         },
                         onDrag = { change, amount ->
-                            val mode = dragMode ?: return@detectDragGestures
-                            change.consume()
-                            dragAccumPx += amount.x
-                            val deltaMs = (dragAccumPx / size.width.coerceAtLeast(1) * span).toLong()
-                            when (mode) {
-                                TimelineDragMode.START -> {
-                                    previewStart = snap(dragBaseStart + deltaMs)
-                                        .coerceIn(0L, previewEnd - 10L)
-                                }
-                                TimelineDragMode.END -> {
-                                    previewEnd = snap(dragBaseEnd + deltaMs)
-                                        .coerceAtLeast(previewStart + 10L)
-                                }
-                                TimelineDragMode.MOVE -> {
-                                    val duration = dragBaseEnd - dragBaseStart
-                                    val candidate = snap(dragBaseStart + deltaMs).coerceAtLeast(0L)
-                                    previewStart = candidate
-                                    previewEnd = candidate + duration
+                            val mode = dragMode
+                            if (mode != null) {
+                                change.consume()
+                                dragAccumPx += amount.x
+                                val deltaMs = (dragAccumPx / size.width.coerceAtLeast(1) * span).toLong()
+                                when (mode) {
+                                    TimelineDragMode.START -> {
+                                        previewStart = snap(dragBaseStart + deltaMs)
+                                            .coerceIn(0L, previewEnd - 10L)
+                                    }
+                                    TimelineDragMode.END -> {
+                                        previewEnd = snap(dragBaseEnd + deltaMs)
+                                            .coerceAtLeast(previewStart + 10L)
+                                    }
+                                    TimelineDragMode.MOVE -> {
+                                        val duration = dragBaseEnd - dragBaseStart
+                                        val candidate = snap(dragBaseStart + deltaMs).coerceAtLeast(0L)
+                                        previewStart = candidate
+                                        previewEnd = candidate + duration
+                                    }
                                 }
                             }
                         },
