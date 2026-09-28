@@ -163,10 +163,10 @@ fun TypesettingPanel(
                 )
                 if (state.selectedEventIds.isNotEmpty()) {
                     OutlinedButton(
-                        onClick = { viewModel.makeSelectedStyleIndependent(style.name) },
+                        onClick = viewModel::makeSelectedStylesIndependent,
                         modifier = Modifier.fillMaxWidth(),
                     ) {
-                        Text("仅让已选字幕使用独立 Style（" + state.selectedEventIds.size + " 条已选）")
+                        Text("让已选字幕使用独立 Style 副本（" + state.selectedEventIds.size + " 条）")
                     }
                     if (selectedOverrideCount > 0) {
                         OutlinedButton(
