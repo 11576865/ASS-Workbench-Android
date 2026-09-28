@@ -2,14 +2,14 @@
 
 A focused Android ASS subtitle workbench for phones and tablets.
 
-**Current version: 0.16.0**
+**Current version: 0.17.0**
 
 ASS Workbench treats ASS as the primary editable document. A local video may be attached as reference media, or an MKV can be opened as a subtitle project.
 
 ## Current status
 
 - independent reference-video and ASS selection;
-- tablet preview-left / workbench-right split with draggable divider;
+- adaptive editor workspace: preview + subtitle dock + context inspector, with expanded/tablet/compact arrangements;
 - compact vertical layout on narrow screens;
 - searchable event list, Layer, overlap, multi-select and touch range selection;
 - bounded Undo/Redo and debounced crash-recovery journal;
@@ -86,6 +86,16 @@ An MKV can be opened as a subtitle project. The reader scans Matroska tracks and
 The original MKV is never modified in place. The write-back path copies the source into app-private storage and writes one new result container; it no longer creates a second full-size intermediate container.
 
 ## Current hardening work
+
+0.17.0 reorganizes the editor UI around three persistent concepts instead of stacking every tool into one scrolling workbench:
+
+- **Preview** remains visually dominant.
+- **Subtitle dock** is a dense searchable event list for selection and navigation.
+- **Inspector** is contextual and switches between Subtitle, Style, Effects, Review, and Project tools.
+- Expanded tablets use preview/list plus a fixed-width inspector; medium tablets use preview above list + inspector; compact screens switch inspector content below the preview.
+- renderer diagnostics and MKV bridge controls move out of the main subtitle list into the Project inspector.
+- secondary actions such as Save As, font import, and font-cache rebuild move into the top-bar overflow menu.
+
 
 0.16.0 is a preview-stabilization build:
 
