@@ -628,10 +628,24 @@ private fun PositionDragOverlay(
                     val py = change.position.y.coerceIn(0f, size.height.toFloat())
                     var nx = px / size.width.coerceAtLeast(1) * document.playResX
                     var ny = py / size.height.coerceAtLeast(1) * document.playResY
-                    val snapX = document.playResX / 2.0
-                    val snapY = document.playResY / 2.0
-                    if (kotlin.math.abs(nx - snapX) < document.playResX * 0.015) nx = snapX.toFloat()
-                    if (kotlin.math.abs(ny - snapY) < document.playResY * 0.015) ny = snapY.toFloat()
+                    val xTargets = listOf(
+                        marginL.toDouble(),
+                        document.playResX / 2.0,
+                        (document.playResX - marginR).toDouble(),
+                    )
+                    val yTargets = listOf(
+                        marginV.toDouble(),
+                        document.playResY / 2.0,
+                        (document.playResY - marginV).toDouble(),
+                    )
+                    val xThreshold = document.playResX * 0.015
+                    val yThreshold = document.playResY * 0.015
+                    xTargets.minByOrNull { kotlin.math.abs(nx - it) }?.let { target ->
+                        if (kotlin.math.abs(nx - target) < xThreshold) nx = target.toFloat()
+                    }
+                    yTargets.minByOrNull { kotlin.math.abs(ny - it) }?.let { target ->
+                        if (kotlin.math.abs(ny - target) < yThreshold) ny = target.toFloat()
+                    }
                     x = nx.toDouble()
                     y = ny.toDouble()
                 },
