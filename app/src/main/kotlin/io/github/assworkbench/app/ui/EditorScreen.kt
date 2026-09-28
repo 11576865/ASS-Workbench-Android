@@ -447,6 +447,8 @@ private fun PreviewPane(
         fontRevision = state.fontRevision,
         initialPositionMs = state.playbackPositionMs,
         showLayoutGuides = state.showLayoutGuides,
+        focusedEventId = state.focusedEventId,
+        onSetEventPosition = viewModel::setFocusedPosition,
         onOpenVideo = onOpenVideo,
         modifier = modifier,
     )
