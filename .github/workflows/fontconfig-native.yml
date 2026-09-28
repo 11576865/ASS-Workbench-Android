@@ -98,6 +98,23 @@ jobs:
           cp .libmpvkt-src/libmpvkt-native/native-libs/arm64-v8a/libmpv.so fontconfig-native-probe/
           cp .libmpvkt-src/libmpvkt-native/native-libs/arm64-v8a/libmpvkt_jni.so fontconfig-native-probe/
 
+          {
+            echo "schema=1"
+            echo "ass_workbench_commit=$GITHUB_SHA"
+            echo "abi=arm64-v8a"
+            echo "font_provider=fontconfig"
+            echo "libmpvkt_upstream=v0.3.0"
+            echo "libmpvkt_bundle_version=0.3.0-asswb-fontconfig"
+            echo "meson=1.11.0"
+            grep '^v_' .libmpvkt-src/buildscripts/include/depinfo.sh
+            echo "v_libxml2=2.15.4"
+            echo "v_fontconfig=2.18.3"
+            echo "fontconfig_pc_version=$(sed -nE 's/^Version:[[:space:]]*//p' .libmpvkt-src/buildscripts/prefix/arm64/lib/pkgconfig/fontconfig.pc | head -1)"
+            echo "libass_pc_version=$(sed -nE 's/^Version:[[:space:]]*//p' .libmpvkt-src/buildscripts/prefix/arm64/lib/pkgconfig/libass.pc | head -1)"
+            echo "libmpv_sha256=$(sha256sum .libmpvkt-src/libmpvkt-native/native-libs/arm64-v8a/libmpv.so | awk '{print $1}')"
+            echo "jni_sha256=$(sha256sum .libmpvkt-src/libmpvkt-native/native-libs/arm64-v8a/libmpvkt_jni.so | awk '{print $1}')"
+          } > fontconfig-native-probe/renderer-manifest.txt
+
       - name: Upload arm64 probe
         uses: actions/upload-artifact@v4
         with:
@@ -157,6 +174,8 @@ jobs:
           cp fontconfig-native-probe/depinfo.sh fontconfig-experimental-apk/
           cp fontconfig-native-probe/fontconfig.pc fontconfig-experimental-apk/
           cp fontconfig-native-probe/libass.pc fontconfig-experimental-apk/
+          cp fontconfig-native-probe/renderer-manifest.txt fontconfig-experimental-apk/
+          cp fontconfig-native-probe/libmpv-needed.txt fontconfig-experimental-apk/
 
       - name: Upload experimental Fontconfig APK
         uses: actions/upload-artifact@v4
