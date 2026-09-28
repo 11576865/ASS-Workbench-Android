@@ -23,6 +23,7 @@ data class EditorState(
     val importedFonts: List<FontAsset> = emptyList(),
     val fontDiagnostics: List<FontDiagnostic> = emptyList(),
     val fontGlyphDiagnostics: Map<String, FontGlyphDiagnostic> = emptyMap(),
+    val rendererDiagnostics: List<String> = emptyList(),
     val fallbackFontFamily: String? = null,
     val fontRevision: Long = 0L,
     val showLayoutGuides: Boolean = false,
