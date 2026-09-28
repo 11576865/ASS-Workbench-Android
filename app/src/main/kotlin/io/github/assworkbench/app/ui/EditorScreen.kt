@@ -1212,7 +1212,7 @@ private fun ReplaceEventsDialog(
                 )
                 Text(
                     if (actorMode) "只修改 ASS Event 的 Name/Actor 字段，不碰正文。"
-                    else "只修改 Event Text 正文；ASS 标签中的同名文本也会被替换，使用前请确认。",
+                    else "只修改可见正文；ASS override block 与标签值保持不变。",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
