@@ -16,9 +16,8 @@ class AssInlineSyntaxTest {
         assertEquals("HYRunYuan-55W", analysis.tags.first { it.name.equals("fn", true) }.value)
         assertEquals("56", analysis.tags.first { it.name.equals("fs", true) }.value)
         assertTrue(analysis.tokens.any { it.kind == AssInlineTokenKind.OVERRIDE_BLOCK })
-        assertTrue(analysis.tokens.any { it.kind == AssInlineTokenKind.ESCAPE && it.text == "\N" })
+        assertTrue(analysis.tokens.any { it.kind == AssInlineTokenKind.ESCAPE && it.text == "\\N" })
         assertTrue(analysis.tokens.any { it.kind == AssInlineTokenKind.TEXT && it.text.contains("正文") })
-        assertEquals(source, source)
     }
 
     @Test
@@ -27,7 +26,7 @@ class AssInlineSyntaxTest {
         val analysis = AssInlineSyntax.analyze(source)
 
         assertFalse(analysis.hasErrors)
-        assertTrue("x" in analysis.tagNames)
+        assertTrue("x-custom" in analysis.tagNames)
         assertTrue("t" in analysis.tagNames)
         assertTrue("fs" in analysis.tagNames)
     }
