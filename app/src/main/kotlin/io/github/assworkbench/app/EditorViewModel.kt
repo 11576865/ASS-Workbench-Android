@@ -10,6 +10,7 @@ import io.github.assworkbench.container.MatroskaScanResult
 import io.github.assworkbench.domain.AssCodec
 import io.github.assworkbench.domain.AssDocument
 import io.github.assworkbench.domain.EventOverrideEditor
+import io.github.assworkbench.domain.FontBindingRewriter
 import io.github.assworkbench.domain.ReviewEventKey
 import io.github.assworkbench.domain.ReviewSidecar
 import io.github.assworkbench.domain.SubTime
@@ -73,27 +74,30 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             )
         }
         viewModelScope.launch {
+            var imported = 0
+            var skipped = 0
             runCatching {
                 withContext(Dispatchers.IO) {
                     val stream = app.contentResolver.openInputStream(uri) ?: error("无法读取 MKV")
-                    stream.use { MatroskaReader().scan(it) }
+                    stream.use {
+                        MatroskaReader().scan(
+                            input = it,
+                            retainAttachments = false,
+                            onAttachment = { attachment ->
+                                if (!attachment.isSupportedFont) {
+                                    skipped++
+                                } else {
+                                    val asset = runCatching {
+                                        fontStore.importEmbeddedFont(attachment.fileName, attachment.data)
+                                    }.getOrNull()
+                                    if (asset != null) imported++ else skipped++
+                                }
+                            },
+                        )
+                    }
                 }
             }.onSuccess { scan ->
                 containerScan = scan
-                var imported = 0
-                var skipped = 0
-                withContext(Dispatchers.IO) {
-                    scan.attachments.forEach { attachment ->
-                        if (!attachment.isSupportedFont) {
-                            skipped++
-                        } else {
-                            val asset = runCatching {
-                                fontStore.importEmbeddedFont(attachment.fileName, attachment.data)
-                            }.getOrNull()
-                            if (asset != null) imported++ else skipped++
-                        }
-                    }
-                }
                 val tracks = scan.subtitleTracks.map {
                     ContainerTrackUi(it.number, it.displayName, it.language, it.packets.size)
                 }
@@ -416,6 +420,15 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             })
         }
     }
+
+    fun forceFontFamily(family: String) {
+        val target = family.trim()
+        if (target.isEmpty()) return
+        editDocument("已强制绑定字体 $target：全部 Style Fontname 与非空显式 \\fn 已统一改写。") { doc ->
+            FontBindingRewriter.forceFamily(doc, target)
+        }
+    }
+
 
     fun toggleLayoutGuides() = _state.update { it.copy(showLayoutGuides = !it.showLayoutGuides) }
 
@@ -830,7 +843,8 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             }
             state.copy(
                 fontDiagnostics = FontDiagnostics.diagnose(
-                    requestedFamilies = state.document.styles.map { it.fontName },
+                    requestedFamilies = state.document.styles.map { it.fontName } +
+                        FontBindingRewriter.explicitFamilies(state.document),
                     imported = state.importedFonts,
                     fallbackFamily = state.fallbackFontFamily,
                 ),

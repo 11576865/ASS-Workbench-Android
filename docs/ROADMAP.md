@@ -42,7 +42,7 @@
 - [x] Remove the unimplemented SRT importer from 1.0 acceptance.
 - [x] Remove stale version-specific wording from THIRD_PARTY_NOTICES.
 
-## 0.15 — MKV preservation (current)
+## 0.15 — MKV preservation
 
 - [x] Replace edited ASS in the original track slot instead of remove + append.
 - [x] Preserve TrackNumber, TrackUID, track order, language/name, BCP-47 language and disposition flags.
@@ -53,6 +53,15 @@
 - [ ] Expand write-back testing to a real-world MKV corpus from multiple muxers.
 - [ ] Verify unusual EBML layouts and large files on device.
 - [ ] Decide how to handle ASS packets using unsupported lacing in the Android reader.
+
+## 0.15.1 — MKV/font hotfix (current)
+
+- [x] Avoid retaining all embedded MKV font payloads after scanning.
+- [x] Deliver attachments to FontStore one at a time during the scan.
+- [x] Add an explicit compatibility action that rewrites all Style Fontname values and non-empty inline `\\fn` overrides to one imported family.
+- [x] Include inline `\\fn` requests in font-name diagnostics.
+- [ ] Confirm the formerly crashing MKV opens on the affected Android device.
+- [ ] Confirm the forced binding mode removes the known CJK square-glyph failure on the affected device.
 
 ## Next hardening
 

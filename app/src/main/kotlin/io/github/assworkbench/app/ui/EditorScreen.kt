@@ -290,6 +290,18 @@ private fun FontStatusRow(state: EditorState, viewModel: EditorViewModel, onImpo
                                 }
                             },
                         )
+                        DropdownMenuItem(
+                            text = {
+                                Column {
+                                    Text("强制全局绑定 → " + asset.metadata.family)
+                                    Text("统一 Style Fontname 与显式 \\fn", style = MaterialTheme.typography.labelSmall)
+                                }
+                            },
+                            onClick = {
+                                menuOpen = false
+                                viewModel.forceFontFamily(asset.metadata.family)
+                            },
+                        )
                     }
                 }
             }
