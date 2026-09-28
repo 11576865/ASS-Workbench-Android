@@ -226,6 +226,7 @@ private fun ExperimentalRendererStartupProbe(
                                         "force-window" to "no",
                                         "idle" to "yes",
                                         "sub-auto" to "no",
+                                        "sub-ass-use-video-data" to "all",
                                         "sid" to "no",
                                         "secondary-sid" to "no",
                                         "embeddedfonts" to "yes",
@@ -285,6 +286,7 @@ private fun ExperimentalRendererStartupProbe(
                                     extra = mapOf(
                                         "sub-auto" to "no",
                                         "sub-ass-override" to "no",
+                                        "sub-ass-use-video-data" to "all",
                                         "embeddedfonts" to "yes",
                                         "sub-fonts-dir" to fontsDir.absolutePath,
                                         "sub-font-provider" to BuildConfig.ASSWB_RENDERER_FONT_PROVIDER,
@@ -388,6 +390,7 @@ private fun AuthoritativeMpvPreview(
             extra = mapOf(
                 "sub-auto" to "no",
                 "sub-ass-override" to "no",
+                "sub-ass-use-video-data" to "all",
                 "sid" to "no",
                 "secondary-sid" to "no",
                 "embeddedfonts" to "yes",
@@ -471,7 +474,10 @@ private fun AuthoritativeMpvPreview(
         onRendererDiagnostics(
             readRendererFontDiagnostics(rendererLogFile) +
                 "Preview subtitle：sid=$activeSid · " +
-                (previewSource?.let { "external=$it" } ?: "external source 未报告")
+                (previewSource?.let { "external=$it" } ?: "external source 未报告") +
+                "ASS canvas：${document.playResX}×${document.playResY} · " +
+                "OSD=${osdWidth}×${osdHeight} margins=" +
+                "${osdMarginLeft},${osdMarginTop},${osdMarginRight},${osdMarginBottom}"
         )
     }
 
