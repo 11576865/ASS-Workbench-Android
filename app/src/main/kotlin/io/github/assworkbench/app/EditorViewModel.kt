@@ -822,7 +822,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         _state.update {
             it.copy(
                 importedFonts = imported,
-                fallbackFontFamily = fallback?.family,
+                fallbackFontFamily = fallback?.rendererFamily,
                 fontRevision = if (initial) it.fontRevision else it.fontRevision + 1,
                 status = status ?: it.status,
             )
