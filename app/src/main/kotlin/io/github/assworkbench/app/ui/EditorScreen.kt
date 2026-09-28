@@ -169,7 +169,7 @@ private fun CompactEditorToolbar(
                 )
                 Text(
                     state.document.events.size.toString() + " · " +
-                        if (BuildConfig.ASSWB_RENDERER_EXPERIMENTAL) "FC" else "libass",
+                        if (BuildConfig.ASSWB_RENDERER_FONT_PROVIDER.equals("fontconfig", ignoreCase = true)) "FC" else "libass",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
