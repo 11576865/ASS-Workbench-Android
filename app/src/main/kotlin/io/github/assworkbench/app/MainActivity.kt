@@ -53,10 +53,10 @@ class MainActivity : ComponentActivity() {
             .onFailure { viewModel.reportError("字幕导入失败", it) }
     }
 
-    private val importFont = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        uri ?: return@registerForActivityResult
-        persist(uri, read = true, write = false)
-        runCatching { viewModel.importFont(uri) }
+    private val importFont = registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+        if (uris.isEmpty()) return@registerForActivityResult
+        uris.forEach { persist(it, read = true, write = false) }
+        runCatching { viewModel.importFonts(uris) }
             .onFailure { viewModel.reportError("字体导入失败", it) }
     }
 
