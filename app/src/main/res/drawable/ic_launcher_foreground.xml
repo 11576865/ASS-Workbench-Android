@@ -1,6 +1,31 @@
 <?xml version="1.0" encoding="utf-8"?>
-<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <item>
-        <bitmap android:src="@drawable/ic_launcher" android:gravity="center" />
-    </item>
-</layer-list>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Subtitle/workbench mark. Keep this vector-only so launcher rendering
+         never depends on a bitmap decoder or density-specific PNG asset. -->
+    <path
+        android:pathData="M18,25 L90,25 L90,73 L60,73 L49,84 L49,73 L18,73 Z"
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="#F8FAFC"
+        android:strokeWidth="5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+
+    <path
+        android:pathData="M31,43 L77,43"
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="#5EEAD4"
+        android:strokeWidth="5"
+        android:strokeLineCap="round" />
+
+    <path
+        android:pathData="M31,56 L67,56"
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="#F8FAFC"
+        android:strokeWidth="5"
+        android:strokeLineCap="round" />
+</vector>
