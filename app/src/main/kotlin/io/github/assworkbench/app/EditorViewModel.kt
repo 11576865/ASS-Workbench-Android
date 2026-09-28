@@ -384,6 +384,33 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    fun previewRangeSelection(id: Long) {
+        _state.update { state ->
+            val anchor = state.selectionAnchorId ?: return@update state
+            val ordered = state.filteredEvents.map { it.id }
+            val a = ordered.indexOf(anchor)
+            val b = ordered.indexOf(id)
+            if (a < 0 || b < 0) return@update state
+            val from = minOf(a, b)
+            val to = maxOf(a, b)
+            val range = ordered.subList(from, to + 1).toSet()
+            state.copy(
+                selectedEventIds = range,
+                status = "滑动选择 " + range.size + " 条字幕。",
+            )
+        }
+    }
+
+    fun finishRangeSelection() {
+        _state.update { state ->
+            if (state.selectionAnchorId == null) state
+            else state.copy(
+                selectionAnchorId = null,
+                status = "已完成滑动选择 " + state.selectedEventIds.size + " 条字幕。",
+            )
+        }
+    }
+
     fun clearSelection() = _state.update {
         it.copy(selectedEventIds = emptySet(), selectionAnchorId = null, status = "已清除选择。")
     }
