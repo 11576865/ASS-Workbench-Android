@@ -1,11 +1,5 @@
 pluginManagement {
     repositories {
-        val rendererRepo = providers.gradleProperty("asswb.rendererRepo").orNull
-        if (!rendererRepo.isNullOrBlank()) {
-            maven(uri(rendererRepo)) {
-                content { includeModuleByRegex("io\\.github\\.yuroyami", "libmpvkt.*") }
-            }
-        }
         google()
         mavenCentral()
         gradlePluginPortal()
@@ -15,6 +9,12 @@ pluginManagement {
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
+        val rendererRepo = providers.gradleProperty("asswb.rendererRepo").orNull
+        if (!rendererRepo.isNullOrBlank()) {
+            maven(uri(rendererRepo)) {
+                content { includeModuleByRegex("io\\.github\\.yuroyami", "libmpvkt.*") }
+            }
+        }
         google()
         mavenCentral()
         maven("https://yuroyami.github.io/maven") {
@@ -27,5 +27,4 @@ rootProject.name = "ASS-Workbench-Android"
 include(":app")
 include(":core:domain")
 include(":core:fonts")
-
 include(":core:container")

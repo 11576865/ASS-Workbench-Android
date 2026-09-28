@@ -44,6 +44,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.unit.dp
+import io.github.assworkbench.app.BuildConfig
 import io.github.assworkbench.app.EditorState
 import io.github.assworkbench.app.EditorViewModel
 import io.github.assworkbench.domain.AssEvent
@@ -72,6 +73,15 @@ fun EditorScreen(
                             "ASS · ${state.document.events.size} events · libass preview",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Text(
+                            "renderer=" + BuildConfig.ASSWB_RENDERER_FONT_PROVIDER +
+                                " · libmpvKt=" + BuildConfig.ASSWB_RENDERER_VERSION,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (BuildConfig.ASSWB_RENDERER_EXPERIMENTAL)
+                                MaterialTheme.colorScheme.tertiary
+                            else
+                                MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                 },
