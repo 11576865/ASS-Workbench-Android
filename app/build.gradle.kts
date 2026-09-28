@@ -5,18 +5,26 @@ plugins {
 
 val rendererVersion = providers.gradleProperty("asswb.rendererVersion").getOrElse("0.3.0")
 val rendererProvider = providers.gradleProperty("asswb.rendererProvider").getOrElse("none")
+val rendererExperimental = !rendererProvider.equals("none", ignoreCase = true)
 
 android {
     namespace = "io.github.assworkbench.app"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "io.github.assworkbench.app"
+        applicationId = if (rendererExperimental) {
+            "io.github.assworkbench.app.fontconfig"
+        } else {
+            "io.github.assworkbench.app"
+        }
         minSdk = 26
         targetSdk = 35
         versionCode = 16
-        versionName = "0.15.1"
+        versionName = if (rendererExperimental) "0.15.1-fontconfig" else "0.15.1"
+        manifestPlaceholders["appLabel"] = if (rendererExperimental) "ASS Workbench FC" else "ASS Workbench"
         buildConfigField("String", "ASSWB_RENDERER_FONT_PROVIDER", "\"$rendererProvider\"")
+        buildConfigField("String", "ASSWB_RENDERER_VERSION", "\"$rendererVersion\"")
+        buildConfigField("boolean", "ASSWB_RENDERER_EXPERIMENTAL", rendererExperimental.toString())
     }
 
     buildFeatures {
