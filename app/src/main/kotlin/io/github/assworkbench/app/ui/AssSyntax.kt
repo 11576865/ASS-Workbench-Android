@@ -11,7 +11,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.OffsetMapping
 import androidx.compose.ui.text.input.TransformedText
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.em
+import io.github.assworkbench.domain.AssInlineSyntax
+import io.github.assworkbench.domain.AssInlineTokenKind
 
 private data class AssSyntaxPalette(
     val body: Color,
@@ -21,12 +24,6 @@ private data class AssSyntaxPalette(
     val escape: Color,
     val blockBackground: Color,
 )
-
-private val overrideBlockRegex = Regex("""\{[^}]*\}""")
-private val tagNameRegex = Regex("""\\[A-Za-z]+""")
-private val hexValueRegex = Regex("""&H[0-9A-Fa-f]+&?""")
-private val numericValueRegex = Regex("""(?<![A-Za-z])[-+]?\d+(?:\.\d+)?""")
-private val textEscapeRegex = Regex("""\\[Nnh]""")
 
 @Composable
 fun rememberAssSyntaxTransformation(): VisualTransformation {
@@ -75,71 +72,39 @@ private fun buildAssAnnotatedString(
         out.addStyle(SpanStyle(color = palette.body), 0, text.length)
     }
 
-    overrideBlockRegex.findAll(text).forEach { block ->
-        val start = block.range.first
-        val endExclusive = block.range.last + 1
-        out.addStyle(
-            SpanStyle(
+    val analysis = AssInlineSyntax.analyze(text)
+    analysis.tokens.forEach { token ->
+        val style = when (token.kind) {
+            AssInlineTokenKind.TEXT -> null
+            AssInlineTokenKind.OVERRIDE_BLOCK -> SpanStyle(
                 color = palette.block,
                 fontFamily = FontFamily.Monospace,
                 fontSize = 0.92.em,
                 background = palette.blockBackground,
-            ),
-            start,
-            endExclusive,
-        )
-
-        tagNameRegex.findAll(block.value).forEach { match ->
-            val s = start + match.range.first
-            val e = start + match.range.last + 1
-            out.addStyle(
-                SpanStyle(
-                    color = palette.tag,
-                    fontWeight = FontWeight.SemiBold,
-                    fontFamily = FontFamily.Monospace,
-                ),
-                s,
-                e,
             )
-        }
-
-        hexValueRegex.findAll(block.value).forEach { match ->
-            val s = start + match.range.first
-            val e = start + match.range.last + 1
-            out.addStyle(
-                SpanStyle(
-                    color = palette.value,
-                    fontFamily = FontFamily.Monospace,
-                ),
-                s,
-                e,
+            AssInlineTokenKind.TAG_NAME -> SpanStyle(
+                color = palette.tag,
+                fontWeight = FontWeight.SemiBold,
+                fontFamily = FontFamily.Monospace,
             )
-        }
-
-        numericValueRegex.findAll(block.value).forEach { match ->
-            val s = start + match.range.first
-            val e = start + match.range.last + 1
-            out.addStyle(
-                SpanStyle(
-                    color = palette.value,
-                    fontFamily = FontFamily.Monospace,
-                ),
-                s,
-                e,
+            AssInlineTokenKind.TAG_VALUE -> SpanStyle(
+                color = palette.value,
+                fontFamily = FontFamily.Monospace,
             )
-        }
-    }
-
-    textEscapeRegex.findAll(text).forEach { match ->
-        out.addStyle(
-            SpanStyle(
+            AssInlineTokenKind.ESCAPE -> SpanStyle(
                 color = palette.escape,
                 fontWeight = FontWeight.SemiBold,
                 fontFamily = FontFamily.Monospace,
-            ),
-            match.range.first,
-            match.range.last + 1,
-        )
+            )
+            AssInlineTokenKind.MALFORMED_BLOCK -> SpanStyle(
+                color = MaterialTheme.colorScheme.error,
+                fontFamily = FontFamily.Monospace,
+                textDecoration = TextDecoration.Underline,
+            )
+        }
+        if (style != null && token.endExclusive > token.start) {
+            out.addStyle(style, token.start, token.endExclusive)
+        }
     }
 
     return out.toAnnotatedString()
