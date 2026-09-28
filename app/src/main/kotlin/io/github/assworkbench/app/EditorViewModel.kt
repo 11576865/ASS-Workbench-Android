@@ -451,6 +451,15 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
 
     fun toggleLayoutGuides() = _state.update { it.copy(showLayoutGuides = !it.showLayoutGuides) }
 
+    fun clearFocusedStyleOverrides() {
+        val id = _state.value.focusedEventId ?: return
+        editDocument("已移除当前字幕中覆盖 Style 的内联排版标签。") { doc ->
+            doc.copy(events = doc.events.map { event ->
+                if (event.id != id) event else event.copy(text = stripInlineStyleOverrides(event.text))
+            })
+        }
+    }
+
     fun updateStyleTypography(
         styleName: String,
         fontSize: Double,
@@ -884,6 +893,19 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 ),
                 fontGlyphDiagnostics = glyphs,
             )
+        }
+    }
+
+    private fun stripInlineStyleOverrides(text: String): String {
+        val overrideBlock = Regex("""\{[^}]*\}""")
+        val managedTag = Regex(
+            """\\(?:fn[^\\}]*|fs(?!c)[+-]?(?:\d+(?:\.\d+)?)?|b-?\d+|i-?\d+|u-?\d+|s-?\d+|fsp[+-]?(?:\d+(?:\.\d+)?)?|bord[+-]?(?:\d+(?:\.\d+)?)?|shad[+-]?(?:\d+(?:\.\d+)?)?|an[1-9]|(?:c|1c|3c|4c)&H[0-9A-Fa-f]+&)""",
+            RegexOption.IGNORE_CASE,
+        )
+        return overrideBlock.replace(text) { block ->
+            val inner = block.value.substring(1, block.value.length - 1)
+            val stripped = managedTag.replace(inner, "")
+            if (stripped.isBlank()) "" else "{$stripped}"
         }
     }
 

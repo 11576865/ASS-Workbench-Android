@@ -19,6 +19,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -31,6 +32,7 @@ import io.github.assworkbench.app.EditorState
 import io.github.assworkbench.app.EditorViewModel
 import io.github.assworkbench.domain.AssStyle
 import io.github.assworkbench.domain.TypesettingMath
+import kotlinx.coroutines.delay
 
 @Composable
 fun TypesettingPanel(
@@ -62,6 +64,51 @@ fun TypesettingPanel(
     var targetMenu by remember { mutableStateOf(false) }
 
     val geometry = TypesettingMath.bilingual6040(state.document.playResX, state.document.playResY)
+
+    val focusedEvent = state.focusedEventId?.let { id -> state.document.events.firstOrNull { it.id == id } }
+    val hasInlineStyleOverrides = focusedEvent?.text?.let { text ->
+        Regex("""\\(?:fn|fs(?!c)|b-?\d|i-?\d|u-?\d|s-?\d|fsp|bord|shad|an[1-9]|c&H|1c&H|3c&H|4c&H)""", RegexOption.IGNORE_CASE)
+            .containsMatchIn(text)
+    } == true
+
+    LaunchedEffect(
+        style.name,
+        fontSize,
+        spacing,
+        outline,
+        shadow,
+        marginL,
+        marginR,
+        marginV,
+        primaryColor,
+        outlineColor,
+        backColor,
+        bold,
+        italic,
+        underline,
+        strikeOut,
+        alignment,
+    ) {
+        delay(220)
+        viewModel.updateStyleTypography(
+            styleName = style.name,
+            fontSize = fontSize.toDoubleOrNull() ?: return@LaunchedEffect,
+            bold = bold,
+            italic = italic,
+            underline = underline,
+            strikeOut = strikeOut,
+            spacing = spacing.toDoubleOrNull() ?: return@LaunchedEffect,
+            outline = outline.toDoubleOrNull() ?: return@LaunchedEffect,
+            shadow = shadow.toDoubleOrNull() ?: return@LaunchedEffect,
+            alignment = alignment,
+            marginL = marginL.toIntOrNull() ?: return@LaunchedEffect,
+            marginR = marginR.toIntOrNull() ?: return@LaunchedEffect,
+            marginV = marginV.toIntOrNull() ?: return@LaunchedEffect,
+            primaryColor = primaryColor,
+            outlineColor = outlineColor,
+            backColor = backColor,
+        )
+    }
 
     Card(modifier.fillMaxWidth()) {
         LazyColumn(
@@ -124,29 +171,14 @@ fun TypesettingPanel(
                 Text("ASS 颜色格式：&HAABBGGRR")
             }
             item {
-                Button(
-                    onClick = {
-                        viewModel.updateStyleTypography(
-                            styleName = style.name,
-                            fontSize = fontSize.toDoubleOrNull() ?: style.fontSize,
-                            bold = bold,
-                            italic = italic,
-                            underline = underline,
-                            strikeOut = strikeOut,
-                            spacing = spacing.toDoubleOrNull() ?: style.spacing,
-                            outline = outline.toDoubleOrNull() ?: style.outline,
-                            shadow = shadow.toDoubleOrNull() ?: style.shadow,
-                            alignment = alignment,
-                            marginL = marginL.toIntOrNull() ?: style.marginL,
-                            marginR = marginR.toIntOrNull() ?: style.marginR,
-                            marginV = marginV.toIntOrNull() ?: style.marginV,
-                            primaryColor = primaryColor,
-                            outlineColor = outlineColor,
-                            backColor = backColor,
-                        )
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                ) { Text("应用到 Style") }
+                Text("排版参数会自动应用到 Style；数值输入停止约 220 ms 后刷新预览。")
+                if (hasInlineStyleOverrides) {
+                    Text("当前字幕含有内联 ASS 排版覆盖（例如 \\fs / \\bord / \\an / \\fn），它会优先于 Style，因此部分改动可能看不出来。")
+                    OutlinedButton(
+                        onClick = viewModel::clearFocusedStyleOverrides,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text("让当前字幕改由 Style 控制") }
+                }
             }
             item {
                 Text("双语 60/40 预设")
