@@ -2,7 +2,7 @@
 
 A focused Android ASS subtitle workbench for phones and tablets.
 
-**Current version: 0.15.2**
+**Current version: 0.16.0**
 
 ASS Workbench treats ASS as the primary editable document. A local video may be attached as reference media, or an MKV can be opened as a subtitle project.
 
@@ -86,6 +86,17 @@ An MKV can be opened as a subtitle project. The reader scans Matroska tracks and
 The original MKV is never modified in place. The write-back path copies the source into app-private storage and writes one new result container; it no longer creates a second full-size intermediate container.
 
 ## Current hardening work
+
+0.16.0 is a preview-stabilization build:
+
+- preserves playback position across renderer recreation after font import and reduces global playback-position state churn;
+- disables the MKV's built-in subtitle selection before attaching the workbench preview ASS, so MKV and external-ASS paths render the same generated subtitle track;
+- reports the active preview subtitle source in renderer diagnostics;
+- maps layout/safe-area guides to the actual letterboxed/pillarboxed video rectangle using mpv display dimensions;
+- clips the mpv surface during layout/orientation changes to reduce stale-frame spill;
+- makes Style typesetting changes auto-apply after a short debounce;
+- warns when inline ASS overrides shadow Style changes and provides an explicit action to let the focused event inherit Style again.
+
 
 0.15.2 is a startup compatibility hotfix:
 
