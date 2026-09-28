@@ -59,6 +59,7 @@ import io.github.assworkbench.app.BuildConfig
 import io.github.assworkbench.app.EditorState
 import io.github.assworkbench.app.EditorViewModel
 import io.github.assworkbench.domain.AssEvent
+import io.github.assworkbench.domain.AssInlineSyntax
 import io.github.assworkbench.fonts.FontMatchStatus
 
 private enum class WorkspaceSection(val label: String) {
@@ -859,6 +860,7 @@ private fun FocusedEventEditor(event: AssEvent, viewModel: EditorViewModel) {
     var marginL by remember(event.id, event.marginL) { mutableStateOf(event.marginL.toString()) }
     var marginR by remember(event.id, event.marginR) { mutableStateOf(event.marginR.toString()) }
     var marginV by remember(event.id, event.marginV) { mutableStateOf(event.marginV.toString()) }
+    val syntax = remember(event.text) { AssInlineSyntax.analyze(event.text) }
 
     Column(Modifier.fillMaxWidth().padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text("当前字幕 · Style ${event.style} · Layer ${event.layer}", style = MaterialTheme.typography.titleSmall)
@@ -921,15 +923,21 @@ private fun FocusedEventEditor(event: AssEvent, viewModel: EditorViewModel) {
             ) { Text("全部继承 Style") }
         }
         Text(
-            "ASS Event Text · override tags 可直接编辑",
+            "ASS Event Text · " + syntax.tags.size + " tags" +
+                if (syntax.hasErrors) " · " + syntax.issues.size + " syntax issue(s)" else "",
             style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = if (syntax.hasErrors) MaterialTheme.colorScheme.error
+                else MaterialTheme.colorScheme.onSurfaceVariant,
         )
         OutlinedTextField(
             value = event.text,
             onValueChange = viewModel::updateFocusedText,
             label = { Text("Event Text / Override Tags") },
             visualTransformation = rememberAssSyntaxTransformation(),
+            isError = syntax.hasErrors,
+            supportingText = if (syntax.hasErrors) {
+                { Text(syntax.issues.first().message) }
+            } else null,
             modifier = Modifier.fillMaxWidth().heightIn(min = 96.dp, max = 220.dp),
         )
     }
