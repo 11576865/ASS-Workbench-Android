@@ -54,7 +54,25 @@
 - [ ] Verify unusual EBML layouts and large files on device.
 - [ ] Decide how to handle ASS packets using unsupported lacing in the Android reader.
 
-## 0.19.0 — Batched tablet usability + diagnostics (current)
+## 0.20.0 — Professional editor infrastructure (current)
+
+- [x] Add a lossless ASS inline syntax analyzer shared by UI highlighting/validation.
+- [x] Preserve unknown tags while identifying standard tag names and their values.
+- [x] Highlight override blocks, tag names, values and escapes; underline malformed blocks.
+- [x] Keep raw Event Text permanently visible in the Effects inspector and syntax-aware in Review.
+- [x] Expand Style editing to SecondaryColour, ScaleX/Y, Angle, BorderStyle and Encoding.
+- [x] Add a compact visual Style geometry preview.
+- [x] Compact workspace tabs and subtitle rows without hiding ASS structure.
+- [x] Add persisted System / Light / Dark appearance modes.
+- [x] Cache imported font metadata/font bytes.
+- [x] Debounce and bound expensive glyph diagnostics.
+- [x] Refresh stable Compose/Core/Lifecycle dependencies and compile against Android 37.
+- [x] Remove redundant nested cards from supporting inspectors.
+- [ ] Device-check 0.20 as one batch on the primary tablet.
+- [ ] Validate large-event-list performance with real ASS files.
+- [ ] Continue external-ASS vs MKV placement comparison if geometry still differs.
+
+## 0.19.0 — Batched tablet usability + diagnostics (done)
 
 - [x] Keep ASS override tags visible and directly editable, with syntax-aware rendering that visually separates override blocks, tag names, values and text escapes from dialogue.
 - [x] Expose event-level Margin L/R/V in the subtitle inspector with reset-to-Style semantics.
