@@ -785,10 +785,9 @@ private fun SubtitleRow(
         }
         Column(Modifier.weight(1f)) {
             Text(
-                visibleSubtitleText(event.text),
-                maxLines = if (focused) 3 else 2,
+                text = rememberAssAnnotatedText(event.text),
+                maxLines = if (focused) 4 else 3,
                 overflow = TextOverflow.Ellipsis,
-                color = if (focused) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
             )
             if (focused) {
                 Text(
@@ -873,20 +872,19 @@ private fun FocusedEventEditor(event: AssEvent, viewModel: EditorViewModel) {
                 },
             ) { Text("全部继承 Style") }
         }
+        Text(
+            "ASS Event Text · override tags 可直接编辑",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
         OutlinedTextField(
             value = event.text,
             onValueChange = viewModel::updateFocusedText,
-            label = { Text("文本（保留 ASS override tags）") },
-            modifier = Modifier.fillMaxWidth().heightIn(min = 84.dp, max = 180.dp),
+            label = { Text("Event Text / Override Tags") },
+            visualTransformation = rememberAssSyntaxTransformation(),
+            modifier = Modifier.fillMaxWidth().heightIn(min = 96.dp, max = 220.dp),
         )
     }
 }
 
-
-private fun visibleSubtitleText(text: String): String =
-    text
-        .replace(Regex("""\{[^}]*\}"""), "")
-        .replace("\\N", " ")
-        .replace("\\n", " ")
-        .trim()
 
