@@ -604,7 +604,12 @@ private fun PositionDragOverlay(
     val marginL = if (event.marginL > 0) event.marginL else style?.marginL ?: 10
     val marginR = if (event.marginR > 0) event.marginR else style?.marginR ?: 10
     val marginV = if (event.marginV > 0) event.marginV else style?.marginV ?: 10
-    val alignment = style?.alignment ?: 2
+    val overrideAlignment = remember(event.text) {
+        io.github.assworkbench.domain.AssInlineSyntax.analyze(event.text).tags
+            .lastOrNull { it.name.equals("an", ignoreCase = true) }
+            ?.value?.toIntOrNull()
+    }
+    val alignment = overrideAlignment ?: style?.alignment ?: 2
     val baseX = when (alignment) {
         1, 4, 7 -> marginL.toDouble()
         3, 6, 9 -> (document.playResX - marginR).toDouble()
