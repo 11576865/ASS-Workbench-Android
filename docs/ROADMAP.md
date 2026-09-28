@@ -54,7 +54,13 @@
 - [ ] Verify unusual EBML layouts and large files on device.
 - [ ] Decide how to handle ASS packets using unsupported lacing in the Android reader.
 
-## 0.15.1 — MKV/font hotfix (current)
+## 0.15.2 — Android startup regex hotfix (current)
+
+- [x] Escape the closing brace in ASS override-block regexes for Android/ICU compatibility.
+- [x] Prevent `EditorViewModel` construction from failing in initial font diagnostics with `PatternSyntaxException`.
+- [ ] Re-run the Fontconfig experimental APK on the device and continue renderer-selected-font diagnostics.
+
+## 0.15.1 — MKV/font hotfix (done)
 
 - [x] Avoid retaining all embedded MKV font payloads after scanning.
 - [x] Deliver attachments to FontStore one at a time during the scan.
