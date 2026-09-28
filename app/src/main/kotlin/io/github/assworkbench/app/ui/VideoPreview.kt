@@ -542,12 +542,12 @@ private fun AuthoritativeMpvPreview(
                             tint = Color.White.copy(alpha = 0.70f),
                         )
                         Text(
-                            "未选择参考视频",
+                            "未载入视频 / MKV",
                             color = Color.White,
                             style = MaterialTheme.typography.titleMedium,
                         )
                         Text(
-                            "点击此处选择视频 · 选择后这里恢复为纯预览区",
+                            "点击此处选择视频；若选择 MKV，将同时载入内嵌 ASS 与字体",
                             color = Color.White.copy(alpha = 0.60f),
                             style = MaterialTheme.typography.labelSmall,
                         )
