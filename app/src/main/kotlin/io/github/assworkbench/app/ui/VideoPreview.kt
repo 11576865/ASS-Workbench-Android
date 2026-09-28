@@ -86,16 +86,6 @@ fun VideoPreview(
         return
     }
 
-    if (videoUri.isNullOrBlank()) {
-        Box(
-            modifier.background(Color.Black),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text("未选择参考视频", color = Color.White)
-        }
-        return
-    }
-
     key(fontRevision) {
         AuthoritativeMpvPreview(
             videoUri = videoUri,
