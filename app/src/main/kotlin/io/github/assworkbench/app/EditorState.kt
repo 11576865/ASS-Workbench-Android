@@ -1,6 +1,7 @@
 package io.github.assworkbench.app
 
 import io.github.assworkbench.domain.AssDocument
+import io.github.assworkbench.domain.AssTextEncoding
 import io.github.assworkbench.domain.SubtitleProject
 import io.github.assworkbench.fonts.FontAsset
 import io.github.assworkbench.fonts.FontDiagnostic
@@ -10,6 +11,7 @@ data class EditorState(
     val project: SubtitleProject = SubtitleProject(),
     val document: AssDocument = AssDocument(),
     val subtitleLoaded: Boolean = false,
+    val subtitleTextEncoding: AssTextEncoding = AssTextEncoding.UTF8,
     val selectedEventIds: Set<Long> = emptySet(),
     val selectionAnchorId: Long? = null,
     val focusedEventId: Long? = null,

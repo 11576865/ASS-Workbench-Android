@@ -2,7 +2,7 @@
 
 A focused Android ASS subtitle workbench for phones and tablets.
 
-**Current version: 0.18.0**
+**Current version: 0.20.0**
 
 ASS Workbench treats ASS as the primary editable document. A local video may be attached as reference media, or an MKV can be opened as a subtitle project.
 
@@ -65,7 +65,7 @@ See `docs/PRODUCT_SPEC_1_0.md`, `docs/ROADMAP.md`, and `THIRD_PARTY_NOTICES.md`.
 
 ### Edit
 
-Event text/timing, search, Layer, Style assignment, selection and batch operations.
+Event text/timing, search, Layer, Style assignment, selection and batch operations. ASS Event Text remains first-class: override blocks stay directly editable and receive syntax-aware rendering instead of being hidden behind a simplified text view.
 
 ### Typeset
 
@@ -86,6 +86,36 @@ An MKV can be opened as a subtitle project. The reader scans Matroska tracks and
 The original MKV is never modified in place. The write-back path copies the source into app-private storage and writes one new result container; it no longer creates a second full-size intermediate container.
 
 ## Current hardening work
+
+0.20.0 is a broader professional-editor/infrastructure pass:
+
+- introduces a shared, lossless ASS inline syntax analyzer used by UI highlighting and validation instead of duplicating ad-hoc regexes;
+- keeps override blocks first-class and directly editable, while visually separating block syntax, tag names, values, escapes and malformed ranges;
+- makes raw Event Text permanently available in the Effects inspector and Review workspace rather than hiding it behind an expert-only toggle;
+- adds validation for malformed override blocks without rewriting unknown/unsupported tags;
+- exposes additional native ASS Style fields in a compact advanced section: SecondaryColour, ScaleX/Y, Angle, BorderStyle and Encoding;
+- adds a visual Style geometry preview for alignment and margins;
+- compacts workspace tabs and subtitle rows while keeping Style/Event metadata visible;
+- adds persisted System / Light / Dark appearance modes;
+- caches imported font metadata/font bytes and debounces glyph diagnostics to reduce typing and typesetting stalls;
+- updates the stable AndroidX baseline to Compose BOM 2026.04.01 (Compose 1.11), Core 1.17.0 and Lifecycle 2.10.0, with compileSdk 36;
+- uses Material3 Adaptive window size classes instead of custom tablet width thresholds;
+- preserves UTF-8 BOM / UTF-16 LE / UTF-16 BE when reopening and saving standalone ASS files;
+- supports selecting multiple TTF/OTF files in one import batch and rebuilds Fontconfig only once;
+- flattens redundant nested cards in Effects, Review and MKV Project inspectors to recover tablet workspace area.
+
+
+0.19.0 batches a larger tablet-usability and diagnostics pass instead of another single-issue hotfix:
+
+- subtitle rows and Event editors keep ASS override tags visible, but syntax-highlight blocks/tags/values/escapes so control syntax is visually distinct from dialogue text;
+- the focused subtitle inspector exposes event-level Margin L/R/V directly, including a one-tap reset to Style inheritance;
+- selected subtitles can bulk-clear style/position overrides instead of repeating the action one event at a time;
+- the Style inspector reports which effective properties are coming from inline ASS overrides versus the shared Style;
+- the Style panel uses the full inspector height instead of a fixed 430dp internal cap;
+- the Project inspector surfaces PlayRes, ScaledBorderAndShadow, optional LayoutRes/YCbCr fields, and the count of events carrying style/position overrides;
+- playback scrubbing no longer issues an exact seek for every slider movement; the seek is committed when the drag finishes;
+- guide mode now draws the mpv-reported video rectangle separately from the ASS safe area, making geometry mismatch visible immediately.
+
 
 0.18.0 focuses on ASS style fidelity and editor semantics:
 

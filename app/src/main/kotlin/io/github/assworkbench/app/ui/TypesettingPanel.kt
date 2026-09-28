@@ -1,11 +1,14 @@
 package io.github.assworkbench.app.ui
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -13,7 +16,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -33,9 +35,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.dp
 import io.github.assworkbench.app.EditorState
 import io.github.assworkbench.app.EditorViewModel
+import io.github.assworkbench.domain.AssInlineSyntax
 import io.github.assworkbench.domain.AssStyle
 import io.github.assworkbench.domain.TypesettingMath
 import kotlinx.coroutines.delay
@@ -55,8 +59,15 @@ fun TypesettingPanel(
     var marginR by remember(style) { mutableStateOf(style.marginR.toString()) }
     var marginV by remember(style) { mutableStateOf(style.marginV.toString()) }
     var primaryColor by remember(style) { mutableStateOf(style.primaryColor) }
+    var secondaryColor by remember(style) { mutableStateOf(style.secondaryColor) }
     var outlineColor by remember(style) { mutableStateOf(style.outlineColor) }
     var backColor by remember(style) { mutableStateOf(style.backColor) }
+    var scaleX by remember(style) { mutableStateOf(style.scaleX.toString()) }
+    var scaleY by remember(style) { mutableStateOf(style.scaleY.toString()) }
+    var angle by remember(style) { mutableStateOf(style.angle.toString()) }
+    var borderStyle by remember(style) { mutableStateOf(style.borderStyle.toString()) }
+    var encoding by remember(style) { mutableStateOf(style.encoding.toString()) }
+    var advancedOpen by remember { mutableStateOf(false) }
     var bold by remember(style) { mutableStateOf(style.bold) }
     var italic by remember(style) { mutableStateOf(style.italic) }
     var underline by remember(style) { mutableStateOf(style.underline) }
@@ -72,13 +83,15 @@ fun TypesettingPanel(
     val geometry = TypesettingMath.bilingual6040(state.document.playResX, state.document.playResY)
 
     val focusedEvent = state.focusedEventId?.let { id -> state.document.events.firstOrNull { it.id == id } }
-    val hasInlineStyleOverrides = focusedEvent?.text?.let { text ->
-        Regex("""\\(?:fn|fs(?!c)|b-?\d|i-?\d|u-?\d|s-?\d|fsp|bord|shad|an[1-9]|a\d+|pos\(|move\(|r|c&H|1c&H|3c&H|4c&H)""", RegexOption.IGNORE_CASE)
-            .containsMatchIn(text)
-    } == true
+    val focusedSources = focusedEvent?.let(::styleOverrideSources).orEmpty()
+    val hasInlineStyleOverrides = focusedSources.isNotEmpty()
     val hasEventMarginOverrides = focusedEvent?.let {
         it.marginL > 0 || it.marginR > 0 || it.marginV > 0
     } == true
+    val selectedOverrideCount = state.document.events.count { event ->
+        event.id in state.selectedEventIds &&
+            (styleOverrideSources(event).isNotEmpty() || event.marginL > 0 || event.marginR > 0 || event.marginV > 0)
+    }
 
     LaunchedEffect(
         style.name,
@@ -90,8 +103,14 @@ fun TypesettingPanel(
         marginR,
         marginV,
         primaryColor,
+        secondaryColor,
         outlineColor,
         backColor,
+        scaleX,
+        scaleY,
+        angle,
+        borderStyle,
+        encoding,
         bold,
         italic,
         underline,
@@ -114,16 +133,21 @@ fun TypesettingPanel(
             marginR = marginR.toIntOrNull() ?: return@LaunchedEffect,
             marginV = marginV.toIntOrNull() ?: return@LaunchedEffect,
             primaryColor = primaryColor,
+            secondaryColor = secondaryColor,
             outlineColor = outlineColor,
             backColor = backColor,
+            scaleX = scaleX.toDoubleOrNull() ?: return@LaunchedEffect,
+            scaleY = scaleY.toDoubleOrNull() ?: return@LaunchedEffect,
+            angle = angle.toDoubleOrNull() ?: return@LaunchedEffect,
+            borderStyle = borderStyle.toIntOrNull() ?: return@LaunchedEffect,
+            encoding = encoding.toIntOrNull() ?: return@LaunchedEffect,
         )
     }
 
-    Card(modifier.fillMaxWidth()) {
-        LazyColumn(
-            Modifier.fillMaxWidth().heightIn(max = 430.dp).padding(10.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
+    LazyColumn(
+        modifier.fillMaxSize().padding(horizontal = 6.dp, vertical = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
             item {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
@@ -139,12 +163,31 @@ fun TypesettingPanel(
                 )
                 if (state.selectedEventIds.isNotEmpty()) {
                     OutlinedButton(
-                        onClick = { viewModel.makeSelectedStyleIndependent(style.name) },
+                        onClick = viewModel::makeSelectedStylesIndependent,
                         modifier = Modifier.fillMaxWidth(),
                     ) {
-                        Text("仅让已选字幕使用独立 Style（" + state.selectedEventIds.size + " 条已选）")
+                        Text("让已选字幕使用独立 Style 副本（" + state.selectedEventIds.size + " 条）")
+                    }
+                    if (selectedOverrideCount > 0) {
+                        OutlinedButton(
+                            onClick = viewModel::clearSelectedStyleOverrides,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text("让已选字幕全部继承 Style（$selectedOverrideCount 条存在覆盖）")
+                        }
                     }
                 }
+            }
+            item {
+                StyleGeometryPreview(
+                    playResX = state.document.playResX,
+                    playResY = state.document.playResY,
+                    alignment = alignment,
+                    marginL = marginL.toIntOrNull() ?: style.marginL,
+                    marginR = marginR.toIntOrNull() ?: style.marginR,
+                    marginV = marginV.toIntOrNull() ?: style.marginV,
+                    modifier = Modifier.fillMaxWidth().height(116.dp),
+                )
             }
             item {
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -198,6 +241,12 @@ fun TypesettingPanel(
                         modifier = Modifier.weight(1f),
                     )
                     AssColorControl(
+                        label = "次要",
+                        value = secondaryColor,
+                        onValue = { secondaryColor = it },
+                        modifier = Modifier.weight(1f),
+                    )
+                    AssColorControl(
                         label = "描边",
                         value = outlineColor,
                         onValue = { outlineColor = it },
@@ -212,6 +261,54 @@ fun TypesettingPanel(
                 }
             }
             item {
+                TextButton(
+                    onClick = { advancedOpen = !advancedOpen },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(if (advancedOpen) "收起高级 Style 参数" else "高级 Style 参数")
+                }
+                if (advancedOpen) {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            SmallField("Scale X %", scaleX, { scaleX = it }, Modifier.weight(1f))
+                            SmallField("Scale Y %", scaleY, { scaleY = it }, Modifier.weight(1f))
+                            SmallField("旋转 Z°", angle, { angle = it }, Modifier.weight(1f))
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            SmallField("BorderStyle", borderStyle, { borderStyle = it }, Modifier.weight(1f))
+                            SmallField("Encoding", encoding, { encoding = it }, Modifier.weight(1f))
+                        }
+                        Text(
+                            "这些是 ASS Style 原生字段：Scale X/Y、Angle、BorderStyle、Encoding。默认折叠以减少空间，但不隐藏能力。",
+                            style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
+                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+            item {
+                Text("有效值来源", style = androidx.compose.material3.MaterialTheme.typography.titleSmall)
+                if (focusedEvent != null) {
+                    Text(
+                        if (focusedSources.isEmpty() && !hasEventMarginOverrides)
+                            "当前字幕没有检测到样式覆盖：以下参数由 Style 决定。"
+                        else
+                            buildString {
+                                if (focusedSources.isNotEmpty()) append("内联覆盖：").append(focusedSources.joinToString("、"))
+                                if (hasEventMarginOverrides) {
+                                    if (isNotEmpty()) append(" · ")
+                                    append("事件 Margin=")
+                                        .append(focusedEvent.marginL).append("/")
+                                        .append(focusedEvent.marginR).append("/")
+                                        .append(focusedEvent.marginV)
+                                }
+                            },
+                        color = if (focusedSources.isEmpty() && !hasEventMarginOverrides)
+                            androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
+                        else
+                            androidx.compose.material3.MaterialTheme.colorScheme.tertiary,
+                    )
+                }
                 Text("排版参数会自动应用到 Style；数值输入停止约 220 ms 后刷新预览。")
                 if (hasInlineStyleOverrides || hasEventMarginOverrides) {
                     val reasons = buildList {
@@ -261,6 +358,58 @@ fun TypesettingPanel(
                 ) { Text("应用 60/40 几何预设") }
             }
         }
+}
+
+@Composable
+private fun StyleGeometryPreview(
+    playResX: Int,
+    playResY: Int,
+    alignment: Int,
+    marginL: Int,
+    marginR: Int,
+    marginV: Int,
+    modifier: Modifier = Modifier,
+) {
+    val outline = androidx.compose.material3.MaterialTheme.colorScheme.outline
+    val safe = androidx.compose.material3.MaterialTheme.colorScheme.primary
+    val anchorColor = androidx.compose.material3.MaterialTheme.colorScheme.tertiary
+    val surface = androidx.compose.material3.MaterialTheme.colorScheme.surfaceVariant
+
+    Canvas(modifier.background(surface.copy(alpha = 0.28f))) {
+        val px = playResX.coerceAtLeast(1).toFloat()
+        val py = playResY.coerceAtLeast(1).toFloat()
+        val sx = size.width / px
+        val sy = size.height / py
+        val left = marginL.coerceAtLeast(0) * sx
+        val right = size.width - marginR.coerceAtLeast(0) * sx
+        val top = marginV.coerceAtLeast(0) * sy
+        val bottom = size.height - marginV.coerceAtLeast(0) * sy
+
+        drawRect(
+            color = outline,
+            style = Stroke(width = 1.dp.toPx()),
+        )
+        drawRect(
+            color = safe.copy(alpha = 0.75f),
+            topLeft = androidx.compose.ui.geometry.Offset(left, top),
+            size = androidx.compose.ui.geometry.Size(
+                (right - left).coerceAtLeast(0f),
+                (bottom - top).coerceAtLeast(0f),
+            ),
+            style = Stroke(width = 1.dp.toPx()),
+        )
+
+        val x = when (alignment) {
+            1, 4, 7 -> left
+            3, 6, 9 -> right
+            else -> size.width / 2f
+        }
+        val y = when (alignment) {
+            7, 8, 9 -> top
+            4, 5, 6 -> size.height / 2f
+            else -> bottom
+        }
+        drawCircle(anchorColor, radius = 5.dp.toPx(), center = androidx.compose.ui.geometry.Offset(x, y))
     }
 }
 
@@ -420,6 +569,28 @@ private fun formatAssColor(value: AssRgba): String =
         value.green.coerceIn(0, 255),
         value.red.coerceIn(0, 255),
     )
+
+private fun styleOverrideSources(event: io.github.assworkbench.domain.AssEvent): List<String> {
+    val names = AssInlineSyntax.analyze(event.text).tagNames
+    fun has(vararg tags: String) = tags.any { it.lowercase() in names }
+
+    return buildList {
+        if (has("fn")) add("字体")
+        if (has("fs")) add("字号")
+        if (has("b")) add("粗体")
+        if (has("i")) add("斜体")
+        if (has("u")) add("下划线")
+        if (has("s")) add("删除线")
+        if (has("fsp")) add("字距")
+        if (has("bord", "xbord", "ybord")) add("描边")
+        if (has("shad", "xshad", "yshad")) add("阴影")
+        if (has("an", "a")) add("对齐")
+        if (has("pos", "move", "org")) add("位置")
+        if (has("c", "1c", "2c", "3c", "4c", "alpha", "1a", "2a", "3a", "4a")) add("颜色/透明度")
+        if (has("r")) add("Style 重置")
+        if (has("fscx", "fscy", "fr", "frx", "fry", "frz", "fax", "fay")) add("变换")
+    }
+}
 
 @Composable
 private fun StylePicker(

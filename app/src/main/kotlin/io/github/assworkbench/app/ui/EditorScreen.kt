@@ -5,7 +5,6 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -43,21 +42,27 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TriStateCheckbox
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.adaptive.currentWindowAdaptiveInfo
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import io.github.assworkbench.app.AppThemeMode
 import io.github.assworkbench.app.BuildConfig
 import io.github.assworkbench.app.EditorState
 import io.github.assworkbench.app.EditorViewModel
 import io.github.assworkbench.domain.AssEvent
+import io.github.assworkbench.domain.AssInlineSyntax
 import io.github.assworkbench.fonts.FontMatchStatus
+import androidx.window.core.layout.WindowSizeClass.Companion.WIDTH_DP_EXPANDED_LOWER_BOUND
+import androidx.window.core.layout.WindowSizeClass.Companion.WIDTH_DP_MEDIUM_LOWER_BOUND
 
 private enum class WorkspaceSection(val label: String) {
     SUBTITLES("字幕"),
@@ -79,8 +84,11 @@ fun EditorScreen(
     onSave: () -> Unit,
     onSaveAs: () -> Unit,
     onSaveMkv: () -> Unit,
+    themeMode: AppThemeMode,
+    onThemeModeChange: (AppThemeMode) -> Unit,
 ) {
-    var section by remember { mutableStateOf(WorkspaceSection.SUBTITLES) }
+    var sectionName by rememberSaveable { mutableStateOf(WorkspaceSection.SUBTITLES.name) }
+    val section = WorkspaceSection.entries.firstOrNull { it.name == sectionName } ?: WorkspaceSection.SUBTITLES
     var overflowOpen by remember { mutableStateOf(false) }
 
     Scaffold(
@@ -143,6 +151,25 @@ fun EditorScreen(
                                     viewModel.rebuildRendererFontCache()
                                 },
                             )
+                            androidx.compose.material3.HorizontalDivider()
+                            AppThemeMode.entries.forEach { mode ->
+                                val label = when (mode) {
+                                    AppThemeMode.SYSTEM -> "跟随系统"
+                                    AppThemeMode.LIGHT -> "浅色"
+                                    AppThemeMode.DARK -> "深色"
+                                }
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            (if (themeMode == mode) "✓ " else "") + "主题 · " + label
+                                        )
+                                    },
+                                    onClick = {
+                                        overflowOpen = false
+                                        onThemeModeChange(mode)
+                                    },
+                                )
+                            }
                         }
                     }
                 },
@@ -163,7 +190,7 @@ fun EditorScreen(
             state = state,
             viewModel = viewModel,
             section = section,
-            onSectionChange = { section = it },
+            onSectionChange = { sectionName = it.name },
             onImportFont = onImportFont,
             onSaveMkv = onSaveMkv,
             modifier = Modifier.fillMaxSize().padding(padding),
@@ -181,24 +208,27 @@ private fun EditorWorkspace(
     onSaveMkv: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    BoxWithConstraints(modifier) {
+    val windowSizeClass = currentWindowAdaptiveInfo(supportLargeAndXLargeWidth = true).windowSizeClass
+    Box(modifier) {
         when {
-            maxWidth >= 1100.dp -> ExpandedEditorWorkspace(
-                state,
-                viewModel,
-                section,
-                onSectionChange,
-                onImportFont,
-                onSaveMkv,
-            )
-            maxWidth >= 720.dp -> TabletEditorWorkspace(
-                state,
-                viewModel,
-                section,
-                onSectionChange,
-                onImportFont,
-                onSaveMkv,
-            )
+            windowSizeClass.isWidthAtLeastBreakpoint(WIDTH_DP_EXPANDED_LOWER_BOUND) ->
+                ExpandedEditorWorkspace(
+                    state,
+                    viewModel,
+                    section,
+                    onSectionChange,
+                    onImportFont,
+                    onSaveMkv,
+                )
+            windowSizeClass.isWidthAtLeastBreakpoint(WIDTH_DP_MEDIUM_LOWER_BOUND) ->
+                TabletEditorWorkspace(
+                    state,
+                    viewModel,
+                    section,
+                    onSectionChange,
+                    onImportFont,
+                    onSaveMkv,
+                )
             else -> CompactEditorWorkspace(
                 state,
                 viewModel,
@@ -333,16 +363,28 @@ private fun WorkspaceTabs(
     Row(
         modifier.fillMaxWidth()
             .horizontalScroll(rememberScrollState())
-            .padding(horizontal = 8.dp, vertical = 6.dp),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+            .padding(horizontal = 6.dp, vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         WorkspaceSection.entries.forEach { item ->
-            FilterChip(
-                selected = section == item,
-                onClick = { onSectionChange(item) },
-                label = { Text(item.label) },
-            )
+            val selected = section == item
+            Surface(
+                color = if (selected) MaterialTheme.colorScheme.secondaryContainer
+                    else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                shape = MaterialTheme.shapes.small,
+            ) {
+                TextButton(
+                    onClick = { onSectionChange(item) },
+                    modifier = Modifier.height(40.dp),
+                ) {
+                    Text(
+                        item.label,
+                        color = if (selected) MaterialTheme.colorScheme.onSecondaryContainer
+                            else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
         }
     }
 }
@@ -512,6 +554,34 @@ private fun ProjectInspector(
             )
         }
         Divider()
+        Text("ASS 几何 / 覆盖概况", style = MaterialTheme.typography.labelMedium)
+        val overrideEvents = state.document.events.count { event ->
+            Regex("""\\(?:fn|fs(?!c)|b-?\d|i-?\d|u-?\d|s-?\d|fsp|bord|shad|an[1-9]|a\d+|pos\(|move\(|r)""", RegexOption.IGNORE_CASE)
+                .containsMatchIn(event.text) ||
+                event.marginL > 0 || event.marginR > 0 || event.marginV > 0
+        }
+        Text(
+            "PlayRes " + state.document.playResX + "×" + state.document.playResY +
+                " · ScaledBorderAndShadow=" +
+                (state.document.scriptInfo["ScaledBorderAndShadow"] ?: "未声明"),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        listOf("LayoutResX", "LayoutResY", "YCbCr Matrix").mapNotNull { key ->
+            state.document.scriptInfo[key]?.let { value -> "$key=$value" }
+        }.takeIf { it.isNotEmpty() }?.let { values ->
+            Text(
+                values.joinToString(" · "),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Text(
+            "含事件级样式/位置覆盖：" + overrideEvents + "/" + state.document.events.size,
+            style = MaterialTheme.typography.labelSmall,
+            color = if (overrideEvents > 0) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Divider()
         Text("Renderer 诊断", style = MaterialTheme.typography.labelMedium)
         if (state.rendererDiagnostics.isEmpty()) {
             Text(
@@ -556,7 +626,7 @@ private fun SubtitleDock(
                     value = state.query,
                     onValueChange = viewModel::setQuery,
                     singleLine = true,
-                    label = { Text("搜索字幕") },
+                    placeholder = { Text("搜索正文 / Actor / Style") },
                     modifier = Modifier.weight(1f),
                 )
                 TriStateCheckbox(
@@ -606,28 +676,38 @@ private fun FontStatusRow(state: EditorState, viewModel: EditorViewModel, onImpo
     val missing = state.fontDiagnostics.count { it.status == FontMatchStatus.MISSING }
     val fallback = state.fontDiagnostics.count { it.status == FontMatchStatus.FALLBACK_ONLY }
     var menuOpen by remember { mutableStateOf(false) }
-    val focusedStyleName = state.focusedEventId?.let { id -> state.document.events.firstOrNull { it.id == id }?.style }
-    val focusedStyle = focusedStyleName?.let { name -> state.document.styles.firstOrNull { it.name == name } }
+    val focusedStyleName = state.focusedEventId?.let { id ->
+        state.document.events.firstOrNull { it.id == id }?.style
+    }
+    val focusedStyle = focusedStyleName?.let { name ->
+        state.document.styles.firstOrNull { it.name == name }
+    }
 
-    Column(Modifier.fillMaxWidth().padding(top = 6.dp)) {
+    Column(
+        Modifier.fillMaxWidth().padding(vertical = 2.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
         Row(
             Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
+            val summaryColor = when {
+                missing > 0 -> MaterialTheme.colorScheme.error
+                aliasOnly > 0 || fallback > 0 -> MaterialTheme.colorScheme.tertiary
+                else -> MaterialTheme.colorScheme.onSurfaceVariant
+            }
             Text(
-                "字体：" + state.importedFonts.size + " imported · " + exact + " renderer exact · " + aliasOnly + " alias-only · " + fallback + " fallback · " + missing + " missing",
+                "字体 ${state.importedFonts.size} · exact $exact · alias $aliasOnly · fallback $fallback · missing $missing",
                 style = MaterialTheme.typography.labelSmall,
-                color = when {
-                    missing > 0 -> MaterialTheme.colorScheme.error
-                    aliasOnly > 0 || fallback > 0 -> MaterialTheme.colorScheme.tertiary
-                    else -> MaterialTheme.colorScheme.onSurfaceVariant
-                },
+                color = summaryColor,
                 modifier = Modifier.weight(1f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
-            androidx.compose.material3.TextButton(onClick = viewModel::rebuildRendererFontCache) { Text("重建缓存") }
-            androidx.compose.material3.TextButton(onClick = onImportFont) { Text("导入字体") }
+            TextButton(onClick = onImportFont) { Text("导入") }
         }
+
         if (focusedStyle != null) {
             Row(
                 Modifier.fillMaxWidth(),
@@ -635,14 +715,16 @@ private fun FontStatusRow(state: EditorState, viewModel: EditorViewModel, onImpo
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 Text(
-                    "Style " + focusedStyle.name + "：" + focusedStyle.fontName,
+                    focusedStyle.name + " · " + focusedStyle.fontName,
                     style = MaterialTheme.typography.labelMedium,
                     modifier = Modifier.weight(1f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
-                androidx.compose.material3.TextButton(
+                TextButton(
                     onClick = { menuOpen = true },
                     enabled = state.importedFonts.isNotEmpty(),
-                ) { Text("选择字体") }
+                ) { Text("字体") }
                 DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                     state.importedFonts.forEach { asset ->
                         DropdownMenuItem(
@@ -655,7 +737,6 @@ private fun FontStatusRow(state: EditorState, viewModel: EditorViewModel, onImpo
                                             style = MaterialTheme.typography.labelSmall,
                                         )
                                     }
-                                    Text(asset.fileName, style = MaterialTheme.typography.labelSmall)
                                 }
                             },
                             onClick = {
@@ -667,66 +748,40 @@ private fun FontStatusRow(state: EditorState, viewModel: EditorViewModel, onImpo
                                 }
                             },
                         )
-                        DropdownMenuItem(
-                            text = {
-                                Column {
-                                    Text("强制全局绑定 → " + asset.metadata.rendererFamily)
-                                    Text("统一 Style Fontname 与显式 \\fn", style = MaterialTheme.typography.labelSmall)
-                                }
-                            },
-                            onClick = {
-                                menuOpen = false
-                                viewModel.forceFontFamily(asset.metadata.rendererFamily)
-                            },
-                        )
                     }
                 }
             }
+
             val diagnostic = state.fontDiagnostics.firstOrNull {
                 it.requestedFamily.equals(focusedStyle.fontName, ignoreCase = true)
             }
-            if (diagnostic != null) {
-                val diagnosticText = when (diagnostic.status) {
-                    FontMatchStatus.EXACT_IMPORTED -> "字体名称：RENDERER EXACT → " + diagnostic.matchedFamily
-                    FontMatchStatus.METADATA_ALIAS -> "字体名称：仅元数据别名 → 建议改为 " + diagnostic.matchedFamily
-                    FontMatchStatus.FALLBACK_ONLY -> "字体名称：FALLBACK → " + diagnostic.matchedFamily
-                    FontMatchStatus.MISSING -> "字体名称：MISSING"
+            val glyph = state.fontGlyphDiagnostics[focusedStyle.name]
+            if (diagnostic != null || glyph != null) {
+                val rendererMatch = when (diagnostic?.status) {
+                    FontMatchStatus.EXACT_IMPORTED -> "renderer exact"
+                    FontMatchStatus.METADATA_ALIAS -> "alias → " + diagnostic.matchedFamily
+                    FontMatchStatus.FALLBACK_ONLY -> "fallback → " + diagnostic.matchedFamily
+                    FontMatchStatus.MISSING -> "missing"
+                    null -> null
                 }
-                Text(
-                    diagnosticText,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = if (diagnostic.status == FontMatchStatus.EXACT_IMPORTED) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
-                )
-            }
-            state.fontGlyphDiagnostics[focusedStyle.name]?.let { glyph ->
                 val glyphText = when {
-                    glyph.matchedFamily == null -> "字形覆盖：未找到已导入的同名字体"
-                    glyph.checkedCodePoints == 0 -> "字形覆盖：当前 Style 没有可检查字符"
-                    glyph.missingCodePoints.isEmpty() -> "字形覆盖：已检查 " + glyph.checkedCodePoints + " 个字符，全部存在"
-                    else -> "字形覆盖：缺少 " + glyph.missingCodePoints.size + " 个样例字形 → " + glyph.missingSampleText
+                    glyph == null -> null
+                    glyph.matchedFamily == null -> "无匹配字体"
+                    glyph.checkedCodePoints == 0 -> "无可检查字形"
+                    glyph.missingCodePoints.isEmpty() -> "字形 ${glyph.checkedCodePoints}/${glyph.checkedCodePoints}"
+                    else -> "缺字 ${glyph.missingCodePoints.size}/${glyph.checkedCodePoints}"
                 }
                 Text(
-                    glyphText,
+                    listOfNotNull(rendererMatch, glyphText).joinToString(" · "),
                     style = MaterialTheme.typography.labelSmall,
-                    color = if (glyph.matchedFamily != null && glyph.missingCodePoints.isEmpty())
-                        MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                    color = when {
+                        diagnostic?.status == FontMatchStatus.MISSING -> MaterialTheme.colorScheme.error
+                        glyph != null && glyph.missingCodePoints.isNotEmpty() -> MaterialTheme.colorScheme.error
+                        else -> MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
-            }
-            if (state.rendererDiagnostics.isEmpty()) {
-                Text(
-                    "Renderer：等待 mpv/libass font selection 日志",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            } else {
-                Text("Renderer（mpv/libass）", style = MaterialTheme.typography.labelSmall)
-                state.rendererDiagnostics.takeLast(4).forEach { line ->
-                    Text(
-                        line,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
             }
         }
     }
@@ -744,24 +799,46 @@ private fun SubtitleRow(
     onJump: () -> Unit,
 ) {
     Row(
-        Modifier.fillMaxWidth().combinedClickable(onClick = onFocus, onLongClick = onLongPress).padding(vertical = 6.dp),
+        Modifier.fillMaxWidth()
+            .background(
+                if (focused) MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.28f)
+                else MaterialTheme.colorScheme.surface,
+            )
+            .combinedClickable(onClick = onFocus, onLongClick = onLongPress)
+            .padding(vertical = 3.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Checkbox(checked = checked, onCheckedChange = { onCheck() })
-        Text("#${event.id}", modifier = Modifier.width(44.dp), style = MaterialTheme.typography.labelSmall)
-        Column(Modifier.width(104.dp)) {
-            Text(event.start.toAss(), style = MaterialTheme.typography.labelSmall)
-            Text(event.end.toAss(), style = MaterialTheme.typography.labelSmall)
-            Text("L${event.layer}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Column(Modifier.width(138.dp)) {
+            Text(
+                "#${event.id}  ${event.start.toAss()}–${event.end.toAss()}",
+                style = MaterialTheme.typography.labelSmall,
+                maxLines = 1,
+            )
+            Text(
+                "L${event.layer} · ${event.style}",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
-        Text(
-            event.text,
-            modifier = Modifier.weight(1f),
-            maxLines = if (focused) 3 else 2,
-            overflow = TextOverflow.Ellipsis,
-            color = if (focused) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
-        )
+        Column(Modifier.weight(1f)) {
+            Text(
+                text = rememberAssAnnotatedText(event.text),
+                maxLines = if (focused) 3 else 2,
+                overflow = TextOverflow.Ellipsis,
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            if (focused && (event.marginL > 0 || event.marginR > 0 || event.marginV > 0)) {
+                Text(
+                    "Event Margin ${event.marginL}/${event.marginR}/${event.marginV}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.tertiary,
+                )
+            }
+        }
         IconButton(onClick = onJump) { Icon(Icons.Filled.PlayArrow, "跳转") }
     }
 }
@@ -770,6 +847,10 @@ private fun SubtitleRow(
 private fun FocusedEventEditor(event: AssEvent, viewModel: EditorViewModel) {
     var startText by remember(event.id, event.start) { mutableStateOf(event.start.toAss()) }
     var endText by remember(event.id, event.end) { mutableStateOf(event.end.toAss()) }
+    var marginL by remember(event.id, event.marginL) { mutableStateOf(event.marginL.toString()) }
+    var marginR by remember(event.id, event.marginR) { mutableStateOf(event.marginR.toString()) }
+    var marginV by remember(event.id, event.marginV) { mutableStateOf(event.marginV.toString()) }
+    val syntax = remember(event.text) { AssInlineSyntax.analyze(event.text) }
 
     Column(Modifier.fillMaxWidth().padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text("当前字幕 · Style ${event.style} · Layer ${event.layer}", style = MaterialTheme.typography.titleSmall)
@@ -790,11 +871,66 @@ private fun FocusedEventEditor(event: AssEvent, viewModel: EditorViewModel) {
             )
         }
         androidx.compose.material3.TextButton(onClick = { viewModel.updateFocusedTimes(startText, endText) }) { Text("应用时间") }
+        Text("事件级 Margin（0 = 继承 Style）", style = MaterialTheme.typography.labelMedium)
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            OutlinedTextField(
+                value = marginL,
+                onValueChange = { marginL = it },
+                label = { Text("L") },
+                singleLine = true,
+                modifier = Modifier.weight(1f),
+            )
+            OutlinedTextField(
+                value = marginR,
+                onValueChange = { marginR = it },
+                label = { Text("R") },
+                singleLine = true,
+                modifier = Modifier.weight(1f),
+            )
+            OutlinedTextField(
+                value = marginV,
+                onValueChange = { marginV = it },
+                label = { Text("V") },
+                singleLine = true,
+                modifier = Modifier.weight(1f),
+            )
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            TextButton(
+                onClick = {
+                    viewModel.updateFocusedMargins(
+                        marginL.toIntOrNull() ?: event.marginL,
+                        marginR.toIntOrNull() ?: event.marginR,
+                        marginV.toIntOrNull() ?: event.marginV,
+                    )
+                },
+            ) { Text("应用 Margin") }
+            TextButton(
+                onClick = {
+                    marginL = "0"; marginR = "0"; marginV = "0"
+                    viewModel.clearFocusedMargins()
+                },
+            ) { Text("全部继承 Style") }
+        }
+        Text(
+            "ASS Event Text · " + syntax.tags.size + " tags" +
+                if (syntax.hasErrors) " · " + syntax.issues.size + " syntax issue(s)" else "",
+            style = MaterialTheme.typography.labelMedium,
+            color = if (syntax.hasErrors) MaterialTheme.colorScheme.error
+                else MaterialTheme.colorScheme.onSurfaceVariant,
+        )
         OutlinedTextField(
             value = event.text,
             onValueChange = viewModel::updateFocusedText,
-            label = { Text("文本（保留 ASS override tags）") },
-            modifier = Modifier.fillMaxWidth().heightIn(min = 84.dp, max = 180.dp),
+            label = { Text("Event Text / Override Tags") },
+            visualTransformation = rememberAssSyntaxTransformation(),
+            isError = syntax.hasErrors,
+            supportingText = if (syntax.hasErrors) {
+                { Text(syntax.issues.first().message) }
+            } else null,
+            modifier = Modifier.fillMaxWidth().heightIn(min = 96.dp, max = 220.dp),
         )
     }
 }
+
+

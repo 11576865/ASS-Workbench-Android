@@ -61,8 +61,10 @@ fun ReviewWorkspace(
     }
 
     Column(modifier) {
-        Card(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Column(
+            Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     ReviewPicker(
                         label = "Source Style",
@@ -111,7 +113,6 @@ fun ReviewWorkspace(
                     }
                 }
             }
-        }
 
         LazyColumn(
             Modifier.weight(1f).fillMaxWidth(),
@@ -157,21 +158,33 @@ private fun ReviewPairCard(
                 }
             }
 
+            val source = row.source
             Text(
-                "SOURCE  " + (row.source?.start?.toAss() ?: "—") + " → " + (row.source?.end?.toAss() ?: "—"),
+                "SOURCE  " + (source?.start?.toAss() ?: "—") + " → " + (source?.end?.toAss() ?: "—"),
                 style = MaterialTheme.typography.labelSmall,
             )
-            Text(row.source?.text ?: "（缺失 Source）")
+            if (source != null) {
+                Text(rememberAssAnnotatedText(source.text))
+            } else {
+                Text("（缺失 Source）")
+            }
 
             Text("REFERENCE", style = MaterialTheme.typography.labelSmall)
-            Text(if (target == null) "（缺失 Target）" else reference.ifBlank { "（载入时为空）" })
+            if (target == null) {
+                Text("（缺失 Target）")
+            } else if (reference.isBlank()) {
+                Text("（载入时为空）")
+            } else {
+                Text(rememberAssAnnotatedText(reference))
+            }
 
             if (target != null) {
                 OutlinedTextField(
                     value = finalText,
                     onValueChange = { finalText = it },
-                    label = { Text("FINAL") },
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 70.dp),
+                    label = { Text("FINAL / ASS Event Text") },
+                    visualTransformation = rememberAssSyntaxTransformation(),
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 82.dp),
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Button(

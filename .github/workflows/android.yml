@@ -60,9 +60,15 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      - uses: android-actions/setup-android@v3
+      - uses: android-actions/setup-android@v4
         with:
-          packages: 'platform-tools platforms;android-36 build-tools;35.0.0'
+          packages: 'platform-tools'
+
+      - name: Install stable Android SDK 36
+        shell: bash
+        run: |
+          sdkmanager "platforms;android-36" >/dev/null
+          test -d "$ANDROID_HOME/platforms/android-36"
 
       - uses: gradle/actions/setup-gradle@v4
         with:

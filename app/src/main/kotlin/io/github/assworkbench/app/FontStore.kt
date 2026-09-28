@@ -11,6 +11,12 @@ import io.github.assworkbench.fonts.FontconfigPrepared
 import io.github.assworkbench.fonts.OpenTypeCmap
 import io.github.assworkbench.fonts.OpenTypeNameReader
 import java.io.File
+import java.util.concurrent.ConcurrentHashMap
+
+data class FontImportBatchResult(
+    val assets: List<FontAsset>,
+    val failures: List<String>,
+)
 
 class FontStore(private val context: Context) {
     val rootDir: File = File(context.filesDir, "ass-fonts").apply { mkdirs() }
@@ -24,22 +30,57 @@ class FontStore(private val context: Context) {
     lateinit var fontconfigPrepared: FontconfigPrepared
         private set
 
+    @Volatile
+    private var importedCache: List<FontAsset>? = null
+    private val fontBytesCache = ConcurrentHashMap<String, ByteArray>()
+
     init {
         refreshFontconfig(pruneOldCaches = false)
     }
 
-    fun listImported(): List<FontAsset> = importedDir.listFiles()
-        .orEmpty()
-        .filter { it.isFile && it.extension.lowercase() in setOf("ttf", "otf") }
-        .mapNotNull { file ->
-            runCatching {
-                val bytes = file.readBytes()
-                FontAsset(file.name, OpenTypeNameReader.sha256(bytes), OpenTypeNameReader.read(bytes))
-            }.getOrNull()
-        }
-        .sortedBy { it.metadata.family.lowercase() }
+    fun listImported(): List<FontAsset> {
+        importedCache?.let { return it }
+        val scanned = importedDir.listFiles()
+            .orEmpty()
+            .filter { it.isFile && it.extension.lowercase() in setOf("ttf", "otf") }
+            .mapNotNull { file ->
+                runCatching {
+                    val bytes = fontBytesCache.computeIfAbsent(file.name) { file.readBytes() }
+                    FontAsset(file.name, OpenTypeNameReader.sha256(bytes), OpenTypeNameReader.read(bytes))
+                }.getOrNull()
+            }
+            .sortedBy { it.metadata.family.lowercase() }
+        importedCache = scanned
+        return scanned
+    }
+
+    private fun invalidateImportedCache() {
+        importedCache = null
+    }
 
     fun import(uri: Uri): FontAsset {
+        val asset = importOne(uri)
+        refreshFontconfig(pruneOldCaches = true)
+        return asset
+    }
+
+    fun importAll(uris: List<Uri>): FontImportBatchResult {
+        if (uris.isEmpty()) return FontImportBatchResult(emptyList(), emptyList())
+        val assets = mutableListOf<FontAsset>()
+        val failures = mutableListOf<String>()
+        uris.forEach { uri ->
+            runCatching { importOne(uri) }
+                .onSuccess(assets::add)
+                .onFailure { error ->
+                    failures += (queryName(uri) ?: uri.lastPathSegment ?: "font") +
+                        "：" + (error.message ?: error::class.java.simpleName)
+                }
+        }
+        if (assets.isNotEmpty()) refreshFontconfig(pruneOldCaches = true)
+        return FontImportBatchResult(assets, failures)
+    }
+
+    private fun importOne(uri: Uri): FontAsset {
         val originalName = queryName(uri) ?: "font.ttf"
         val ext = originalName.substringAfterLast('.', "ttf").lowercase().takeIf { it in setOf("ttf", "otf") } ?: "ttf"
         val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: error("无法读取字体")
@@ -48,13 +89,11 @@ class FontStore(private val context: Context) {
         val safeStem = metadata.family.replace(Regex("[^A-Za-z0-9._-]+"), "_").trim('_').ifBlank { "font" }
         val target = File(importedDir, "${safeStem}-${sha.take(10)}.$ext")
         if (!target.exists()) target.writeBytes(bytes)
+        fontBytesCache[target.name] = bytes
+        invalidateImportedCache()
 
-        // libmpvKt documents subfont.ttf as the reliable fallback when sub-font-provider=none.
-        // Point fallback at the most recently imported font so provider=none remains a useful
-        // compatibility/debug mode even after Fontconfig becomes available.
+        // Keep provider=none fallback deterministic: the last imported font becomes subfont.ttf.
         File(mpvConfigDir, "subfont.ttf").writeBytes(bytes)
-
-        refreshFontconfig(pruneOldCaches = true)
         return FontAsset(target.name, sha, metadata)
     }
 
@@ -66,6 +105,8 @@ class FontStore(private val context: Context) {
         val safeStem = metadata.family.replace(Regex("[^A-Za-z0-9._-]+"), "_").trim('_').ifBlank { "font" }
         val target = File(importedDir, "${safeStem}-${sha.take(10)}.$ext")
         if (!target.exists()) target.writeBytes(bytes)
+        fontBytesCache[target.name] = bytes
+        invalidateImportedCache()
         return FontAsset(target.name, sha, metadata)
     }
 
@@ -97,8 +138,9 @@ class FontStore(private val context: Context) {
 
         val file = File(importedDir, asset.fileName)
         if (!file.isFile) return FontGlyphDiagnostic(family, asset.metadata.family, 0, emptyList())
-        val bytes = runCatching { file.readBytes() }.getOrNull()
-            ?: return FontGlyphDiagnostic(family, asset.metadata.family, 0, emptyList())
+        val bytes = runCatching {
+            fontBytesCache.computeIfAbsent(asset.fileName) { file.readBytes() }
+        }.getOrNull() ?: return FontGlyphDiagnostic(family, asset.metadata.family, 0, emptyList())
 
         val cps = text.codePoints()
             .filter { cp -> !Character.isWhitespace(cp) && !Character.isISOControl(cp) }

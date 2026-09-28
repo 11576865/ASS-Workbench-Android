@@ -9,6 +9,8 @@ import io.github.assworkbench.container.MatroskaReader
 import io.github.assworkbench.container.MatroskaScanResult
 import io.github.assworkbench.domain.AssCodec
 import io.github.assworkbench.domain.AssDocument
+import io.github.assworkbench.domain.AssTextDecoder
+import io.github.assworkbench.domain.AssTextEncoding
 import io.github.assworkbench.domain.EventOverrideEditor
 import io.github.assworkbench.domain.FontBindingRewriter
 import io.github.assworkbench.domain.ReviewEventKey
@@ -50,6 +52,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     }
     private var recoveryJob: Job? = null
     private var reviewPersistJob: Job? = null
+    private var fontDiagnosticJob: Job? = null
     private var containerScan: MatroskaScanResult? = null
     private val _state = MutableStateFlow(
         EditorState(
@@ -159,6 +162,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 project = it.project.copy(subtitleUri = null, title = it.container.name + " · " + track.displayName),
                 document = document,
                 subtitleLoaded = true,
+                subtitleTextEncoding = AssTextEncoding.UTF8,
                 selectedEventIds = emptySet(),
                 focusedEventId = document.events.firstOrNull()?.id,
                 dirty = false,
@@ -255,9 +259,10 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun openSubtitle(uri: Uri) {
-        val text = app.contentResolver.openInputStream(uri)?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }
+        val bytes = app.contentResolver.openInputStream(uri)?.use { it.readBytes() }
             ?: error("无法读取字幕")
-        val document = AssCodec.parse(text)
+        val decoded = AssTextDecoder.decode(bytes)
+        val document = AssCodec.parse(decoded.text)
         history.reset(document)
         val styleNames = document.styles.map { it.name }
         val review = restoreReviewSidecar(uri.toString(), document, styleNames)
@@ -266,6 +271,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 project = it.project.copy(subtitleUri = uri.toString(), title = displayName(uri) ?: "ASS project"),
                 document = document,
                 subtitleLoaded = true,
+                subtitleTextEncoding = decoded.encoding,
                 selectedEventIds = emptySet(),
                 focusedEventId = document.events.firstOrNull()?.id,
                 dirty = false,
@@ -276,17 +282,37 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 originalTextById = review.originalTextById,
                 confirmedReviewIds = review.confirmedIds,
                 reviewFilter = "all",
-                status = "已载入 ${document.events.size} 条 ASS 事件。",
+                status = "已载入 ${document.events.size} 条 ASS 事件 · ${decoded.encoding.displayName}。",
             )
         }
         refreshFontDiagnostics()
     }
 
     fun importFont(uri: Uri) {
-        val asset = fontStore.import(uri)
+        importFonts(listOf(uri))
+    }
+
+    fun importFonts(uris: List<Uri>) {
+        if (uris.isEmpty()) return
+        val batch = fontStore.importAll(uris)
+        if (batch.assets.isEmpty()) {
+            error(
+                "没有字体导入成功" +
+                    batch.failures.firstOrNull()?.let { "：$it" }.orEmpty()
+            )
+        }
+        val families = batch.assets.map { it.metadata.rendererFamily }.distinct()
+        val failureSuffix = if (batch.failures.isEmpty()) {
+            ""
+        } else {
+            " · 失败 " + batch.failures.size + " 个"
+        }
         refreshFonts(
             initial = false,
-            status = "已导入字体 ${asset.metadata.family}；libass renderer family=${asset.metadata.rendererFamily}；已重新加载。",
+            status = "已导入 " + batch.assets.size + " 个字体文件" + failureSuffix +
+                " · renderer family：" +
+                families.take(4).joinToString(", ") +
+                if (families.size > 4) " …" else "",
         )
     }
 
@@ -297,8 +323,10 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun saveTo(uri: Uri) {
-        val text = AssCodec.write(_state.value.document)
-        app.contentResolver.openOutputStream(uri, "wt")?.bufferedWriter(Charsets.UTF_8)?.use { it.write(text) }
+        val snapshot = _state.value
+        val text = AssCodec.write(snapshot.document)
+        val bytes = snapshot.subtitleTextEncoding.encode(text)
+        app.contentResolver.openOutputStream(uri, "wt")?.use { it.write(bytes) }
             ?: error("无法写入字幕")
         recoveryStore.clear()
         _state.update {
@@ -455,43 +483,55 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         val id = _state.value.focusedEventId ?: return
         editDocument("已清除当前字幕的样式/位置覆盖；该字幕现在继承 Style。") { doc ->
             doc.copy(events = doc.events.map { event ->
-                if (event.id != id) {
-                    event
-                } else {
-                    event.copy(
-                        text = stripInlineStyleOverrides(event.text),
-                        marginL = 0,
-                        marginR = 0,
-                        marginV = 0,
-                    )
-                }
+                if (event.id == id) event.inheritStyle() else event
             })
         }
     }
 
-    fun makeSelectedStyleIndependent(styleName: String) {
+    fun clearSelectedStyleOverrides() {
+        val ids = _state.value.selectedEventIds
+        if (ids.isEmpty()) return
+        editDocument("已让 " + ids.size + " 条选中字幕完全继承各自 Style。") { doc ->
+            doc.copy(events = doc.events.map { event ->
+                if (event.id in ids) event.inheritStyle() else event
+            })
+        }
+    }
+
+    fun makeSelectedStylesIndependent() {
         val selectedIds = _state.value.selectedEventIds
         if (selectedIds.isEmpty()) return
-        editDocument("已为选中字幕创建独立 Style。") { doc ->
-            val source = doc.styles.firstOrNull { it.name == styleName } ?: return@editDocument doc
-            val targetIds = doc.events.asSequence()
-                .filter { it.id in selectedIds && it.style == styleName }
-                .map { it.id }
-                .toSet()
-            if (targetIds.isEmpty()) return@editDocument doc
+        editDocument("已为选中字幕创建独立 Style 副本。") { doc ->
+            val selectedEvents = doc.events.filter { it.id in selectedIds }
+            if (selectedEvents.isEmpty()) return@editDocument doc
 
-            val usedNames = doc.styles.mapTo(hashSetOf()) { it.name }
-            val base = styleName + "_selection"
-            var candidate = base
-            var suffix = 2
-            while (candidate in usedNames) {
-                candidate = base + "_" + suffix++
+            val styleByName = doc.styles.associateBy { it.name }
+            val usedNames = doc.styles.mapTo(linkedSetOf()) { it.name }
+            val cloneBySource = linkedMapOf<String, String>()
+            val clones = mutableListOf<io.github.assworkbench.domain.AssStyle>()
+
+            selectedEvents.map { it.style }.distinct().forEach { sourceName ->
+                val source = styleByName[sourceName] ?: return@forEach
+                val base = sourceName + "_selection"
+                var candidate = base
+                var suffix = 2
+                while (candidate in usedNames) {
+                    candidate = base + "_" + suffix++
+                }
+                usedNames += candidate
+                cloneBySource[sourceName] = candidate
+                clones += source.copy(name = candidate)
             }
 
+            if (clones.isEmpty()) return@editDocument doc
             doc.copy(
-                styles = doc.styles + source.copy(name = candidate),
+                styles = doc.styles + clones,
                 events = doc.events.map { event ->
-                    if (event.id in targetIds) event.copy(style = candidate) else event
+                    if (event.id !in selectedIds) {
+                        event
+                    } else {
+                        cloneBySource[event.style]?.let { event.copy(style = it) } ?: event
+                    }
                 },
             )
         }
@@ -512,8 +552,14 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         marginR: Int,
         marginV: Int,
         primaryColor: String,
+        secondaryColor: String,
         outlineColor: String,
         backColor: String,
+        scaleX: Double,
+        scaleY: Double,
+        angle: Double,
+        borderStyle: Int,
+        encoding: Int,
     ) {
         editDocument("已更新 Style " + styleName + " 的排版。") { doc ->
             if (doc.styles.none { it.name == styleName }) return@editDocument doc
@@ -535,8 +581,14 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                         marginR = marginR.coerceIn(0, 9999),
                         marginV = marginV.coerceIn(0, 9999),
                         primaryColor = primaryColor.trim().ifBlank { style.primaryColor },
+                        secondaryColor = secondaryColor.trim().ifBlank { style.secondaryColor },
                         outlineColor = outlineColor.trim().ifBlank { style.outlineColor },
                         backColor = backColor.trim().ifBlank { style.backColor },
+                        scaleX = scaleX.coerceIn(1.0, 1000.0),
+                        scaleY = scaleY.coerceIn(1.0, 1000.0),
+                        angle = angle.coerceIn(-3600.0, 3600.0),
+                        borderStyle = borderStyle.coerceIn(1, 4),
+                        encoding = encoding.coerceIn(0, 255),
                     )
                 }
             })
@@ -703,6 +755,23 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    fun updateFocusedMargins(marginL: Int, marginR: Int, marginV: Int) {
+        val id = _state.value.focusedEventId ?: return
+        editDocument("已更新当前字幕的事件级 Margin。") { doc ->
+            doc.copy(events = doc.events.map { event ->
+                if (event.id == id) {
+                    event.copy(
+                        marginL = marginL.coerceIn(0, 9999),
+                        marginR = marginR.coerceIn(0, 9999),
+                        marginV = marginV.coerceIn(0, 9999),
+                    )
+                } else event
+            })
+        }
+    }
+
+    fun clearFocusedMargins() = updateFocusedMargins(0, 0, 0)
+
     fun undo() {
         if (!history.canUndo) return
         publishDocument(history.undo(), "已撤销。")
@@ -733,6 +802,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 project = snapshot.project,
                 document = snapshot.document,
                 subtitleLoaded = true,
+                subtitleTextEncoding = snapshot.textEncoding,
                 selectedEventIds = emptySet(),
                 selectionAnchorId = null,
                 focusedEventId = snapshot.document.events.firstOrNull()?.id,
@@ -879,7 +949,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 status = status,
             )
         }
-        refreshFontDiagnostics()
+        scheduleFontDiagnostics()
     }
 
     private fun scheduleRecovery(document: AssDocument) {
@@ -887,8 +957,9 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         recoveryJob = viewModelScope.launch {
             delay(450)
             val project = _state.value.project
+            val textEncoding = _state.value.subtitleTextEncoding
             withContext(Dispatchers.IO) {
-                recoveryStore.write(project, document)
+                recoveryStore.write(project, document, textEncoding)
             }
             _state.update {
                 it.copy(recoveryAvailable = true, recoveryLabel = project.title)
@@ -910,15 +981,30 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         refreshFontDiagnostics()
     }
 
+    private fun scheduleFontDiagnostics(delayMs: Long = 280L) {
+        fontDiagnosticJob?.cancel()
+        fontDiagnosticJob = viewModelScope.launch {
+            delay(delayMs)
+            refreshFontDiagnostics()
+        }
+    }
+
     private fun refreshFontDiagnostics() {
         _state.update { state ->
             val byStyle = state.document.events.groupBy { it.style }
             val glyphs = linkedMapOf<String, io.github.assworkbench.fonts.FontGlyphDiagnostic>()
             state.document.styles.forEach { style ->
-                val sampleText = byStyle[style.name].orEmpty()
-                    .asSequence()
-                    .map { it.text.replace(Regex("\\{[^}]*\\}"), "").replace("\\N", " ") }
-                    .joinToString(" ")
+                val sampleText = buildString {
+                    for (event in byStyle[style.name].orEmpty()) {
+                        if (length >= 4096) break
+                        val clean = event.text
+                            .replace(Regex("\\{[^}]*\\}"), "")
+                            .replace("\\N", " ")
+                            .replace("\\n", " ")
+                        append(clean.take((4096 - length).coerceAtLeast(0)))
+                        append(' ')
+                    }
+                }
                 fontStore.glyphDiagnostic(style.fontName, sampleText)?.let { glyphs[style.name] = it }
             }
             state.copy(
@@ -932,6 +1018,14 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             )
         }
     }
+
+    private fun io.github.assworkbench.domain.AssEvent.inheritStyle(): io.github.assworkbench.domain.AssEvent =
+        copy(
+            text = stripInlineStyleOverrides(text),
+            marginL = 0,
+            marginR = 0,
+            marginV = 0,
+        )
 
     private fun stripInlineStyleOverrides(text: String): String {
         val overrideBlock = Regex("""\{[^}]*\}""")

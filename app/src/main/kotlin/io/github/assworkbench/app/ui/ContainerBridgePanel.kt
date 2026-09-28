@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Card
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Text
@@ -30,8 +29,10 @@ fun ContainerBridgePanel(
 ) {
     if (state.uri == null) return
     var menuOpen by remember { mutableStateOf(false) }
-    Card(modifier.fillMaxWidth()) {
-        Column(Modifier.fillMaxWidth().padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Column(
+        modifier.fillMaxWidth().padding(vertical = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
             Text("MKV Container Bridge")
             Text(state.name)
             when {
@@ -96,5 +97,5 @@ fun ContainerBridgePanel(
                 }
             }
         }
-    }
 }
+

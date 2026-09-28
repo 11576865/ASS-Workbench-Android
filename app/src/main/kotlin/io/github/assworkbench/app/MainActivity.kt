@@ -17,7 +17,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -51,10 +53,10 @@ class MainActivity : ComponentActivity() {
             .onFailure { viewModel.reportError("字幕导入失败", it) }
     }
 
-    private val importFont = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        uri ?: return@registerForActivityResult
-        persist(uri, read = true, write = false)
-        runCatching { viewModel.importFont(uri) }
+    private val importFont = registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+        if (uris.isEmpty()) return@registerForActivityResult
+        uris.forEach { persist(it, read = true, write = false) }
+        runCatching { viewModel.importFonts(uris) }
             .onFailure { viewModel.reportError("字体导入失败", it) }
     }
 
@@ -75,8 +77,17 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         StartupProbe.mark(this, "activity_setContent", "starting")
+        val uiPrefs = getSharedPreferences("ass_workbench_ui", MODE_PRIVATE)
         setContent {
-            MaterialTheme(colorScheme = darkColorScheme()) {
+            var themeMode by rememberSaveable {
+                mutableStateOf(AppThemeMode.fromStorage(uiPrefs.getString("theme_mode", null)))
+            }
+            val darkTheme = when (themeMode) {
+                AppThemeMode.SYSTEM -> isSystemInDarkTheme()
+                AppThemeMode.LIGHT -> false
+                AppThemeMode.DARK -> true
+            }
+            MaterialTheme(colorScheme = if (darkTheme) darkColorScheme() else lightColorScheme()) {
                 var editorReady by rememberSaveable {
                     mutableStateOf(!BuildConfig.ASSWB_RENDERER_EXPERIMENTAL)
                 }
@@ -140,6 +151,11 @@ class MainActivity : ComponentActivity() {
                         onSaveAs = { saveSubtitleAs.launch(defaultFileName(state.project.title)) },
                         onSaveMkv = {
                             saveMkvAs.launch(defaultMkvFileName(state.container.name.ifBlank { state.project.title }))
+                        },
+                        themeMode = themeMode,
+                        onThemeModeChange = { mode ->
+                            themeMode = mode
+                            uiPrefs.edit().putString("theme_mode", mode.storageValue).apply()
                         },
                     )
                 }
