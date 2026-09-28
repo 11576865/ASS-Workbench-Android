@@ -512,6 +512,34 @@ private fun ProjectInspector(
             )
         }
         Divider()
+        Text("ASS 几何 / 覆盖概况", style = MaterialTheme.typography.labelMedium)
+        val overrideEvents = state.document.events.count { event ->
+            Regex("""\\(?:fn|fs(?!c)|b-?\d|i-?\d|u-?\d|s-?\d|fsp|bord|shad|an[1-9]|a\d+|pos\(|move\(|r)""", RegexOption.IGNORE_CASE)
+                .containsMatchIn(event.text) ||
+                event.marginL > 0 || event.marginR > 0 || event.marginV > 0
+        }
+        Text(
+            "PlayRes " + state.document.playResX + "×" + state.document.playResY +
+                " · ScaledBorderAndShadow=" +
+                (state.document.scriptInfo["ScaledBorderAndShadow"] ?: "未声明"),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        listOf("LayoutResX", "LayoutResY", "YCbCr Matrix").mapNotNull { key ->
+            state.document.scriptInfo[key]?.let { value -> "$key=$value" }
+        }.takeIf { it.isNotEmpty() }?.let { values ->
+            Text(
+                values.joinToString(" · "),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Text(
+            "含事件级样式/位置覆盖：" + overrideEvents + "/" + state.document.events.size,
+            style = MaterialTheme.typography.labelSmall,
+            color = if (overrideEvents > 0) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Divider()
         Text("Renderer 诊断", style = MaterialTheme.typography.labelMedium)
         if (state.rendererDiagnostics.isEmpty()) {
             Text(
@@ -755,13 +783,24 @@ private fun SubtitleRow(
             Text(event.end.toAss(), style = MaterialTheme.typography.labelSmall)
             Text("L${event.layer}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        Text(
-            event.text,
-            modifier = Modifier.weight(1f),
-            maxLines = if (focused) 3 else 2,
-            overflow = TextOverflow.Ellipsis,
-            color = if (focused) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
-        )
+        Column(Modifier.weight(1f)) {
+            Text(
+                visibleSubtitleText(event.text),
+                maxLines = if (focused) 3 else 2,
+                overflow = TextOverflow.Ellipsis,
+                color = if (focused) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+            )
+            if (focused) {
+                Text(
+                    "Style ${event.style}" +
+                        if (event.marginL > 0 || event.marginR > 0 || event.marginV > 0)
+                            " · Event Margin ${event.marginL}/${event.marginR}/${event.marginV}"
+                        else "",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
         IconButton(onClick = onJump) { Icon(Icons.Filled.PlayArrow, "跳转") }
     }
 }
@@ -770,6 +809,9 @@ private fun SubtitleRow(
 private fun FocusedEventEditor(event: AssEvent, viewModel: EditorViewModel) {
     var startText by remember(event.id, event.start) { mutableStateOf(event.start.toAss()) }
     var endText by remember(event.id, event.end) { mutableStateOf(event.end.toAss()) }
+    var marginL by remember(event.id, event.marginL) { mutableStateOf(event.marginL.toString()) }
+    var marginR by remember(event.id, event.marginR) { mutableStateOf(event.marginR.toString()) }
+    var marginV by remember(event.id, event.marginV) { mutableStateOf(event.marginV.toString()) }
 
     Column(Modifier.fillMaxWidth().padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text("当前字幕 · Style ${event.style} · Layer ${event.layer}", style = MaterialTheme.typography.titleSmall)
@@ -790,6 +832,47 @@ private fun FocusedEventEditor(event: AssEvent, viewModel: EditorViewModel) {
             )
         }
         androidx.compose.material3.TextButton(onClick = { viewModel.updateFocusedTimes(startText, endText) }) { Text("应用时间") }
+        Text("事件级 Margin（0 = 继承 Style）", style = MaterialTheme.typography.labelMedium)
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            OutlinedTextField(
+                value = marginL,
+                onValueChange = { marginL = it },
+                label = { Text("L") },
+                singleLine = true,
+                modifier = Modifier.weight(1f),
+            )
+            OutlinedTextField(
+                value = marginR,
+                onValueChange = { marginR = it },
+                label = { Text("R") },
+                singleLine = true,
+                modifier = Modifier.weight(1f),
+            )
+            OutlinedTextField(
+                value = marginV,
+                onValueChange = { marginV = it },
+                label = { Text("V") },
+                singleLine = true,
+                modifier = Modifier.weight(1f),
+            )
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            TextButton(
+                onClick = {
+                    viewModel.updateFocusedMargins(
+                        marginL.toIntOrNull() ?: event.marginL,
+                        marginR.toIntOrNull() ?: event.marginR,
+                        marginV.toIntOrNull() ?: event.marginV,
+                    )
+                },
+            ) { Text("应用 Margin") }
+            TextButton(
+                onClick = {
+                    marginL = "0"; marginR = "0"; marginV = "0"
+                    viewModel.clearFocusedMargins()
+                },
+            ) { Text("全部继承 Style") }
+        }
         OutlinedTextField(
             value = event.text,
             onValueChange = viewModel::updateFocusedText,
@@ -798,3 +881,12 @@ private fun FocusedEventEditor(event: AssEvent, viewModel: EditorViewModel) {
         )
     }
 }
+
+
+private fun visibleSubtitleText(text: String): String =
+    text
+        .replace(Regex("""\{[^}]*\}"""), "")
+        .replace("\\N", " ")
+        .replace("\\n", " ")
+        .trim()
+
