@@ -46,6 +46,7 @@ fun BatchSelectionPanel(
                 modifier = Modifier.weight(1f),
             )
             TextButton(onClick = { viewModel.shiftSelected(shift.toLongOrNull() ?: 0L) }) { Text("平移") }
+            TextButton(onClick = viewModel::alignSelectedStartToPlayback) { Text("首条→当前") }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             OutlinedTextField(
@@ -68,6 +69,11 @@ fun BatchSelectionPanel(
                     )
                 }
             }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            TextButton(onClick = { viewModel.setSelectedComment(false) }) { Text("Dialogue") }
+            TextButton(onClick = { viewModel.setSelectedComment(true) }) { Text("Comment") }
+            TextButton(onClick = viewModel::clearSelectedStyleOverrides) { Text("清覆盖") }
         }
         if (state.selectionAnchorId != null) {
             Text("区间起点 #" + state.selectionAnchorId + "：点另一条字幕完成选择。")
