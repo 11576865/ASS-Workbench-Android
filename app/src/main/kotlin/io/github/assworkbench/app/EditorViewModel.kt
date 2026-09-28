@@ -513,8 +513,14 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         marginR: Int,
         marginV: Int,
         primaryColor: String,
+        secondaryColor: String,
         outlineColor: String,
         backColor: String,
+        scaleX: Double,
+        scaleY: Double,
+        angle: Double,
+        borderStyle: Int,
+        encoding: Int,
     ) {
         editDocument("已更新 Style " + styleName + " 的排版。") { doc ->
             if (doc.styles.none { it.name == styleName }) return@editDocument doc
@@ -536,8 +542,14 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                         marginR = marginR.coerceIn(0, 9999),
                         marginV = marginV.coerceIn(0, 9999),
                         primaryColor = primaryColor.trim().ifBlank { style.primaryColor },
+                        secondaryColor = secondaryColor.trim().ifBlank { style.secondaryColor },
                         outlineColor = outlineColor.trim().ifBlank { style.outlineColor },
                         backColor = backColor.trim().ifBlank { style.backColor },
+                        scaleX = scaleX.coerceIn(1.0, 1000.0),
+                        scaleY = scaleY.coerceIn(1.0, 1000.0),
+                        angle = angle.coerceIn(-3600.0, 3600.0),
+                        borderStyle = borderStyle.coerceIn(1, 4),
+                        encoding = encoding.coerceIn(0, 255),
                     )
                 }
             })
