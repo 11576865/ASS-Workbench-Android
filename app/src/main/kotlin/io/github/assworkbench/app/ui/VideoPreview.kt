@@ -3,6 +3,7 @@ package io.github.assworkbench.app.ui
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -40,12 +41,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import io.github.assworkbench.app.BuildConfig
 import io.github.assworkbench.domain.AssCodec
 import io.github.assworkbench.domain.AssDocument
+import io.github.assworkbench.domain.AssEvent
+import io.github.assworkbench.domain.EventOverrideEditor
 import io.github.assworkbench.domain.TypesettingMath
 import io.github.assworkbench.fonts.RendererLogParser
 import io.github.yuroyami.libmpvkt.Mpv
@@ -74,6 +78,8 @@ fun VideoPreview(
     fontRevision: Long,
     initialPositionMs: Long,
     showLayoutGuides: Boolean,
+    focusedEventId: Long?,
+    onSetEventPosition: (Double, Double) -> Unit,
     onOpenVideo: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -114,6 +120,8 @@ fun VideoPreview(
             fontsDir = fontsDir,
             initialPositionMs = resumePositionMs,
             showLayoutGuides = showLayoutGuides,
+            focusedEventId = focusedEventId,
+            onSetEventPosition = onSetEventPosition,
             onOpenVideo = onOpenVideo,
             modifier = modifier,
         )
@@ -386,6 +394,8 @@ private fun AuthoritativeMpvPreview(
     fontsDir: File,
     initialPositionMs: Long,
     showLayoutGuides: Boolean,
+    focusedEventId: Long?,
+    onSetEventPosition: (Double, Double) -> Unit,
     onOpenVideo: () -> Unit,
     modifier: Modifier,
 ) {
@@ -555,6 +565,17 @@ private fun AuthoritativeMpvPreview(
                         modifier = Modifier.fillMaxSize(),
                     )
                 }
+                val focusedEvent = focusedEventId?.let { id ->
+                    document.events.firstOrNull { it.id == id }
+                }
+                if (focusedEvent != null) {
+                    PositionDragOverlay(
+                        document = document,
+                        event = focusedEvent,
+                        onCommit = onSetEventPosition,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
             }
         }
         if (!videoUri.isNullOrBlank()) {
@@ -568,6 +589,87 @@ private fun AuthoritativeMpvPreview(
                 onSeek = { seconds -> mpv.command("seek", seconds.toString(), "absolute+exact") },
             )
         }
+    }
+}
+
+@Composable
+private fun PositionDragOverlay(
+    document: AssDocument,
+    event: AssEvent,
+    onCommit: (Double, Double) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val override = remember(event.text) { EventOverrideEditor.inspect(event.text) }
+    val style = document.styles.firstOrNull { it.name == event.style }
+    val marginL = if (event.marginL > 0) event.marginL else style?.marginL ?: 10
+    val marginR = if (event.marginR > 0) event.marginR else style?.marginR ?: 10
+    val marginV = if (event.marginV > 0) event.marginV else style?.marginV ?: 10
+    val alignment = style?.alignment ?: 2
+    val baseX = when (alignment) {
+        1, 4, 7 -> marginL.toDouble()
+        3, 6, 9 -> (document.playResX - marginR).toDouble()
+        else -> document.playResX / 2.0
+    }
+    val baseY = when (alignment) {
+        7, 8, 9 -> marginV.toDouble()
+        4, 5, 6 -> document.playResY / 2.0
+        else -> (document.playResY - marginV).toDouble()
+    }
+    var x by remember(event.id, event.text) { mutableStateOf(override.x ?: baseX) }
+    var y by remember(event.id, event.text) { mutableStateOf(override.y ?: baseY) }
+    val guideColor = MaterialTheme.colorScheme.tertiary
+
+    BoxWithConstraints(
+        modifier.pointerInput(event.id, document.playResX, document.playResY) {
+            detectDragGestures(
+                onDrag = { change, _ ->
+                    change.consume()
+                    val px = change.position.x.coerceIn(0f, size.width.toFloat())
+                    val py = change.position.y.coerceIn(0f, size.height.toFloat())
+                    var nx = px / size.width.coerceAtLeast(1) * document.playResX
+                    var ny = py / size.height.coerceAtLeast(1) * document.playResY
+                    val snapX = document.playResX / 2.0
+                    val snapY = document.playResY / 2.0
+                    if (kotlin.math.abs(nx - snapX) < document.playResX * 0.015) nx = snapX.toFloat()
+                    if (kotlin.math.abs(ny - snapY) < document.playResY * 0.015) ny = snapY.toFloat()
+                    x = nx.toDouble()
+                    y = ny.toDouble()
+                },
+                onDragEnd = { onCommit(x, y) },
+            )
+        }
+    ) {
+        Canvas(Modifier.fillMaxSize()) {
+            val px = (x / document.playResX.coerceAtLeast(1)) * size.width
+            val py = (y / document.playResY.coerceAtLeast(1)) * size.height
+            drawCircle(
+                color = guideColor,
+                radius = 8.dp.toPx(),
+                center = androidx.compose.ui.geometry.Offset(px.toFloat(), py.toFloat()),
+                style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2.dp.toPx()),
+            )
+            drawLine(
+                color = guideColor.copy(alpha = 0.5f),
+                start = androidx.compose.ui.geometry.Offset(px.toFloat() - 12.dp.toPx(), py.toFloat()),
+                end = androidx.compose.ui.geometry.Offset(px.toFloat() + 12.dp.toPx(), py.toFloat()),
+                strokeWidth = 1.dp.toPx(),
+            )
+            drawLine(
+                color = guideColor.copy(alpha = 0.5f),
+                start = androidx.compose.ui.geometry.Offset(px.toFloat(), py.toFloat() - 12.dp.toPx()),
+                end = androidx.compose.ui.geometry.Offset(px.toFloat(), py.toFloat() + 12.dp.toPx()),
+                strokeWidth = 1.dp.toPx(),
+            )
+        }
+        Text(
+            "pos ${x.toInt()},${y.toInt()}",
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .background(Color.Black.copy(alpha = 0.55f))
+                .padding(horizontal = 4.dp, vertical = 2.dp),
+            color = Color.White,
+            style = MaterialTheme.typography.labelSmall,
+        )
     }
 }
 
