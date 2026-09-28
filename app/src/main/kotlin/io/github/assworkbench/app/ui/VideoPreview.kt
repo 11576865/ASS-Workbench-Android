@@ -7,6 +7,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.ui.draw.clipToBounds
@@ -16,10 +18,12 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -498,7 +502,10 @@ private fun AuthoritativeMpvPreview(
     }
 
     Column(modifier.background(Color.Black)) {
-        Box(Modifier.weight(1f).fillMaxWidth().clipToBounds(), contentAlignment = Alignment.Center) {
+        Box(
+            Modifier.fillMaxWidth().aspectRatio(16f / 9f).clipToBounds(),
+            contentAlignment = Alignment.Center,
+        ) {
             if (videoUri.isNullOrBlank()) {
                 Text("未选择参考视频", color = Color.White)
             } else {
@@ -538,12 +545,13 @@ private fun PlaybackBar(
     val position = (playback.positionSeconds ?: 0.0).coerceIn(0.0, if (duration > 0.0) duration else Double.MAX_VALUE)
     var scrubPosition by remember { mutableStateOf<Float?>(null) }
     val displayPosition = scrubPosition?.toDouble() ?: position
-    Row(
-        Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(horizontal = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
-        IconButton(onClick = onPlayPause) {
+    CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 28.dp) {
+        Row(
+            Modifier.fillMaxWidth().height(34.dp).background(MaterialTheme.colorScheme.surface).padding(horizontal = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+        IconButton(onClick = onPlayPause, modifier = Modifier.width(30.dp).height(30.dp)) {
             val playing = playback.status == MpvPlaybackState.Status.Playing || playback.status == MpvPlaybackState.Status.Buffering
             Icon(if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow, if (playing) "暂停" else "播放")
         }
@@ -557,9 +565,10 @@ private fun PlaybackBar(
             },
             valueRange = 0f..duration.coerceAtLeast(1.0).toFloat(),
             enabled = duration > 0.0,
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.weight(1f).height(28.dp),
         )
         Text(formatClock(duration), style = MaterialTheme.typography.labelSmall)
+        }
     }
 }
 
