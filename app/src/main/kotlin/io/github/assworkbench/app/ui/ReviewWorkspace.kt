@@ -61,8 +61,10 @@ fun ReviewWorkspace(
     }
 
     Column(modifier) {
-        Card(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Column(
+            Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     ReviewPicker(
                         label = "Source Style",
@@ -111,7 +113,6 @@ fun ReviewWorkspace(
                     }
                 }
             }
-        }
 
         LazyColumn(
             Modifier.weight(1f).fillMaxWidth(),
