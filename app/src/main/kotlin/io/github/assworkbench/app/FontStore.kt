@@ -66,7 +66,6 @@ class FontStore(private val context: Context) {
         val safeStem = metadata.family.replace(Regex("[^A-Za-z0-9._-]+"), "_").trim('_').ifBlank { "font" }
         val target = File(importedDir, "${safeStem}-${sha.take(10)}.$ext")
         if (!target.exists()) target.writeBytes(bytes)
-        refreshFontconfig(pruneOldCaches = true)
         return FontAsset(target.name, sha, metadata)
     }
 
