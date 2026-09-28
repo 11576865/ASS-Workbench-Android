@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -80,17 +82,22 @@ class MainActivity : ComponentActivity() {
                 }
                 var startupError by remember { mutableStateOf<String?>(null) }
                 var breadcrumb by remember { mutableStateOf(StartupProbe.read(this@MainActivity)) }
+                var latestBreadcrumb by remember { mutableStateOf(StartupProbe.readLatest(this@MainActivity)) }
 
                 if (BuildConfig.ASSWB_RENDERER_EXPERIMENTAL && !editorReady) {
                     Column(
-                        modifier = Modifier.fillMaxSize().padding(24.dp),
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .verticalScroll(rememberScrollState())
+                            .padding(24.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
                         Text("ASS Workbench FC 安全启动")
                         Text("此页面尚未创建 EditorViewModel，也不会加载 mpv/libass/Fontconfig。")
-                        Text("上次启动记录：\n$breadcrumb")
-                        startupError?.let { Text("初始化错误：$it") }
+                        Text("最新记录（新→旧）：\n$latestBreadcrumb")
+                        startupError?.let { Text("初始化错误：\n$it") }
+                        Text("完整记录：\n$breadcrumb")
                         Button(
                             onClick = {
                                 StartupProbe.mark(this@MainActivity, "activity_request_viewmodel", "starting")
@@ -98,6 +105,7 @@ class MainActivity : ComponentActivity() {
                                     .onSuccess {
                                         StartupProbe.mark(this@MainActivity, "activity_request_viewmodel", "success")
                                         breadcrumb = StartupProbe.read(this@MainActivity)
+                                        latestBreadcrumb = StartupProbe.readLatest(this@MainActivity)
                                         editorReady = true
                                     }
                                     .onFailure { error ->
@@ -109,6 +117,7 @@ class MainActivity : ComponentActivity() {
                                             startupError.orEmpty(),
                                         )
                                         breadcrumb = StartupProbe.read(this@MainActivity)
+                                        latestBreadcrumb = StartupProbe.readLatest(this@MainActivity)
                                     }
                             },
                         ) {
