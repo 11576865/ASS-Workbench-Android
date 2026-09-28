@@ -5,19 +5,23 @@ import java.io.File
 
 object StartupProbe {
     private const val FILE_NAME = "startup-probe.txt"
+    private const val MAX_HISTORY_CHARS = 32 * 1024
 
     fun mark(context: Context, stage: String, status: String, detail: String = "") {
         runCatching {
             val target = File(context.filesDir, FILE_NAME)
-            val tmp = File(context.filesDir, "$FILE_NAME.tmp")
-            val body = buildString {
+            val entry = buildString {
+                appendLine("---")
                 appendLine("stage=$stage")
                 appendLine("status=$status")
                 appendLine("provider=${BuildConfig.ASSWB_RENDERER_FONT_PROVIDER}")
                 appendLine("renderer=${BuildConfig.ASSWB_RENDERER_VERSION}")
                 if (detail.isNotBlank()) appendLine("detail=$detail")
             }
-            tmp.writeText(body, Charsets.UTF_8)
+            val previous = if (target.isFile) target.readText(Charsets.UTF_8) else ""
+            val combined = (previous + entry).takeLast(MAX_HISTORY_CHARS)
+            val tmp = File(context.filesDir, "$FILE_NAME.tmp")
+            tmp.writeText(combined, Charsets.UTF_8)
             if (target.exists()) target.delete()
             if (!tmp.renameTo(target)) {
                 tmp.copyTo(target, overwrite = true)
@@ -26,17 +30,40 @@ object StartupProbe {
         }
     }
 
-    fun read(context: Context): String = runCatching {
+    fun read(context: Context, maxLines: Int = 80): String = runCatching {
         val file = File(context.filesDir, FILE_NAME)
-        if (file.isFile) file.readText(Charsets.UTF_8) else "无启动记录"
+        if (!file.isFile) {
+            "无启动记录"
+        } else {
+            file.readLines(Charsets.UTF_8).takeLast(maxLines).joinToString("\n")
+        }
     }.getOrDefault("无法读取启动记录")
+
+    fun describe(t: Throwable, maxDepth: Int = 8): String {
+        val seen = HashSet<Throwable>()
+        val parts = ArrayList<String>()
+        var current: Throwable? = t
+        var depth = 0
+        while (current != null && depth < maxDepth && seen.add(current)) {
+            parts += buildString {
+                append(current::class.java.name)
+                current.message?.takeIf { it.isNotBlank() }?.let {
+                    append(": ")
+                    append(it)
+                }
+            }
+            current = current.cause
+            depth++
+        }
+        return parts.joinToString("\ncaused by → ")
+    }
 
     inline fun <T> stage(context: Context, name: String, block: () -> T): T {
         mark(context, name, "starting")
         return try {
             block().also { mark(context, name, "success") }
         } catch (t: Throwable) {
-            mark(context, name, "failure", "${t::class.java.simpleName}: ${t.message ?: "无消息"}")
+            mark(context, name, "failure", describe(t))
             throw t
         }
     }
