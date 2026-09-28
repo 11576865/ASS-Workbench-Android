@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -60,6 +61,41 @@ fun VideoPreview(
     showLayoutGuides: Boolean,
     modifier: Modifier = Modifier,
 ) {
+    var rendererArmed by remember { mutableStateOf(!BuildConfig.ASSWB_RENDERER_EXPERIMENTAL) }
+
+    if (BuildConfig.ASSWB_RENDERER_EXPERIMENTAL && !rendererArmed) {
+        Box(
+            modifier.background(Color.Black),
+            contentAlignment = Alignment.Center,
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text("Fontconfig renderer 尚未启动", color = Color.White)
+                Text(
+                    "先确认应用本体可稳定打开；点击后才创建 mpv/libass/Fontconfig。",
+                    color = Color.White.copy(alpha = 0.75f),
+                    style = MaterialTheme.typography.labelSmall,
+                )
+                Button(onClick = { rendererArmed = true }) {
+                    Text("启动 Fontconfig renderer")
+                }
+            }
+        }
+        return
+    }
+
+    if (videoUri.isNullOrBlank()) {
+        Box(
+            modifier.background(Color.Black),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text("未选择参考视频", color = Color.White)
+        }
+        return
+    }
+
     key(fontRevision) {
         AuthoritativeMpvPreview(
             videoUri = videoUri,
