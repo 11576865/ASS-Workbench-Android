@@ -46,6 +46,26 @@ data class AssInlineAnalysis(
  * and structured editors share one source of truth instead of duplicating ad-hoc regular expressions.
  */
 object AssInlineSyntax {
+    private val knownTagNames = listOf(
+        "ScaledBorderAndShadow",
+        "alpha",
+        "iclip",
+        "xbord", "ybord", "xshad", "yshad",
+        "fscx", "fscy",
+        "frx", "fry", "frz",
+        "move", "fade", "clip",
+        "bord", "shad", "blur",
+        "fsp", "fax", "fay",
+        "pos", "org", "fad",
+        "1c", "2c", "3c", "4c",
+        "1a", "2a", "3a", "4a",
+        "fn", "fs", "fe",
+        "be", "an",
+        "kf", "ko", "kt",
+        "fr", "q",
+        "b", "i", "u", "s", "a", "r", "c", "k", "K", "t",
+    ).distinct().sortedByDescending { it.length }
+
     fun analyze(text: String): AssInlineAnalysis {
         if (text.isEmpty()) return AssInlineAnalysis(emptyList(), emptyList(), emptyList())
 
@@ -158,11 +178,17 @@ object AssInlineSyntax {
             cursor += 1
             val nameStart = cursor
 
-            if (cursor < contentEndExclusive && text[cursor].isDigit()) {
-                cursor += 1
-            }
-            while (cursor < contentEndExclusive && text[cursor].isLetter()) {
-                cursor += 1
+            val remaining = text.substring(nameStart, contentEndExclusive)
+            val known = knownTagNames.firstOrNull { remaining.startsWith(it, ignoreCase = true) }
+            if (known != null) {
+                cursor += known.length
+            } else {
+                while (
+                    cursor < contentEndExclusive &&
+                    (text[cursor].isLetterOrDigit() || text[cursor] == '-' || text[cursor] == '_')
+                ) {
+                    cursor += 1
+                }
             }
 
             if (cursor == nameStart) {
