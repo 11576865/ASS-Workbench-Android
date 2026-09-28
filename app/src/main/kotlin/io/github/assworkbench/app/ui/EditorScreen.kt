@@ -304,6 +304,7 @@ private fun ExpandedEditorWorkspace(
     onImportFont: () -> Unit,
     onSaveMkv: () -> Unit,
     onOpenVideo: () -> Unit,
+    onOpenSubtitle: () -> Unit,
 ) {
     var inspectorVisible by rememberSaveable { mutableStateOf(true) }
     val inspectorWidth = when (section) {
