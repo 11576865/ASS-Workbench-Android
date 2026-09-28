@@ -44,6 +44,8 @@ import io.github.assworkbench.domain.AssStyle
 import io.github.assworkbench.domain.TypesettingMath
 import kotlinx.coroutines.delay
 
+private enum class StyleManageMode { CREATE, RENAME, DELETE }
+
 @Composable
 fun TypesettingPanel(
     state: EditorState,
@@ -68,6 +70,9 @@ fun TypesettingPanel(
     var borderStyle by remember(style) { mutableStateOf(style.borderStyle.toString()) }
     var encoding by remember(style) { mutableStateOf(style.encoding.toString()) }
     var advancedOpen by remember { mutableStateOf(false) }
+    var styleMenuOpen by remember { mutableStateOf(false) }
+    var styleManageMode by remember { mutableStateOf<StyleManageMode?>(null) }
+    var styleNameDraft by remember(style.name) { mutableStateOf(style.name) }
     var bold by remember(style) { mutableStateOf(style.bold) }
     var italic by remember(style) { mutableStateOf(style.italic) }
     var underline by remember(style) { mutableStateOf(style.underline) }
@@ -144,6 +149,77 @@ fun TypesettingPanel(
         )
     }
 
+    when (styleManageMode) {
+        StyleManageMode.CREATE -> AlertDialog(
+            onDismissRequest = { styleManageMode = null },
+            title = { Text("新建 Style") },
+            text = {
+                OutlinedTextField(
+                    value = styleNameDraft,
+                    onValueChange = { styleNameDraft = it },
+                    label = { Text("Style 名称") },
+                    singleLine = true,
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.createStyle(styleNameDraft)
+                        styleManageMode = null
+                    },
+                    enabled = styleNameDraft.isNotBlank(),
+                ) { Text("创建") }
+            },
+            dismissButton = { TextButton(onClick = { styleManageMode = null }) { Text("取消") } },
+        )
+        StyleManageMode.RENAME -> AlertDialog(
+            onDismissRequest = { styleManageMode = null },
+            title = { Text("重命名 Style") },
+            text = {
+                OutlinedTextField(
+                    value = styleNameDraft,
+                    onValueChange = { styleNameDraft = it },
+                    label = { Text("新名称") },
+                    singleLine = true,
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.renameStyle(style.name, styleNameDraft)
+                        styleManageMode = null
+                    },
+                    enabled = styleNameDraft.isNotBlank() && styleNameDraft != style.name,
+                ) { Text("重命名") }
+            },
+            dismissButton = { TextButton(onClick = { styleManageMode = null }) { Text("取消") } },
+        )
+        StyleManageMode.DELETE -> {
+            val replacement = styleNames.firstOrNull { it != style.name }
+            AlertDialog(
+                onDismissRequest = { styleManageMode = null },
+                title = { Text("删除 Style " + style.name + "？") },
+                text = {
+                    Text(
+                        if (replacement == null) "至少必须保留一个 Style。"
+                        else "引用这个 Style 的字幕会改用 " + replacement + "。"
+                    )
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            if (replacement != null) viewModel.deleteStyle(style.name, replacement)
+                            styleManageMode = null
+                        },
+                        enabled = replacement != null,
+                    ) { Text("删除") }
+                },
+                dismissButton = { TextButton(onClick = { styleManageMode = null }) { Text("取消") } },
+            )
+        }
+        null -> Unit
+    }
+
     LazyColumn(
         modifier.fillMaxSize().padding(horizontal = 6.dp, vertical = 4.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -151,10 +227,53 @@ fun TypesettingPanel(
             item {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
-                        Text("排版 · Style " + style.name)
-                        Text("Font: " + style.fontName)
+                        Text("Style · " + style.name)
+                        Text(
+                            style.fontName,
+                            style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
+                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
-                    Text("安全区导引")
+                    Box {
+                        TextButton(onClick = { styleMenuOpen = true }) { Text("管理") }
+                        DropdownMenu(expanded = styleMenuOpen, onDismissRequest = { styleMenuOpen = false }) {
+                            DropdownMenuItem(
+                                text = { Text("新建 Style…") },
+                                onClick = {
+                                    styleMenuOpen = false
+                                    styleNameDraft = "New Style"
+                                    styleManageMode = StyleManageMode.CREATE
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("复制当前 Style") },
+                                onClick = {
+                                    styleMenuOpen = false
+                                    var candidate = style.name + "_copy"
+                                    var suffix = 2
+                                    while (candidate in styleNames) candidate = style.name + "_copy" + suffix++
+                                    viewModel.createStyle(candidate, style.name)
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("重命名…") },
+                                onClick = {
+                                    styleMenuOpen = false
+                                    styleNameDraft = style.name
+                                    styleManageMode = StyleManageMode.RENAME
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("删除…") },
+                                enabled = state.document.styles.size > 1,
+                                onClick = {
+                                    styleMenuOpen = false
+                                    styleManageMode = StyleManageMode.DELETE
+                                },
+                            )
+                        }
+                    }
+                    Text("安全区")
                     Switch(checked = state.showLayoutGuides, onCheckedChange = { viewModel.toggleLayoutGuides() })
                 }
                 val styleUseCount = state.document.events.count { it.style == style.name }
