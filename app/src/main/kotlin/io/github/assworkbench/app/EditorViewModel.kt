@@ -284,10 +284,18 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun importFont(uri: Uri) {
-        val asset = fontStore.import(uri)
+        importFonts(listOf(uri))
+    }
+
+    fun importFonts(uris: List<Uri>) {
+        if (uris.isEmpty()) return
+        val assets = fontStore.importAll(uris)
+        val families = assets.map { it.metadata.rendererFamily }.distinct()
         refreshFonts(
             initial = false,
-            status = "已导入字体 ${asset.metadata.family}；libass renderer family=${asset.metadata.rendererFamily}；已重新加载。",
+            status = "已导入 " + assets.size + " 个字体文件 · renderer family：" +
+                families.take(4).joinToString(", ") +
+                if (families.size > 4) " …" else "",
         )
     }
 
