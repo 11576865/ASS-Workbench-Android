@@ -25,6 +25,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Redo
 import androidx.compose.material.icons.automirrored.filled.Undo
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Movie
@@ -683,16 +684,20 @@ private fun SubtitleDock(
                             Text("清筛", style = MaterialTheme.typography.labelSmall)
                         }
                     }
+                    IconButton(
+                        onClick = viewModel::insertEventAtPlayback,
+                        modifier = Modifier.width(30.dp).height(30.dp),
+                    ) {
+                        Icon(Icons.Filled.Add, "在当前播放位置添加字幕")
+                    }
                     Box {
-                        TextButton(
+                        IconButton(
                             onClick = { actionsOpen = true },
-                            modifier = Modifier.height(28.dp),
-                        ) { Text("操作", style = MaterialTheme.typography.labelSmall) }
+                            modifier = Modifier.width(30.dp).height(30.dp),
+                        ) {
+                            Icon(Icons.Filled.MoreVert, "字幕操作")
+                        }
                         DropdownMenu(expanded = actionsOpen, onDismissRequest = { actionsOpen = false }) {
-                            DropdownMenuItem(
-                                text = { Text("＋ 当前播放位置添加字幕") },
-                                onClick = { actionsOpen = false; viewModel.insertEventAtPlayback() },
-                            )
                             DropdownMenuItem(
                                 text = { Text("删除选中 / 当前字幕") },
                                 onClick = { actionsOpen = false; viewModel.deleteSelectedOrFocused() },
@@ -1081,6 +1086,7 @@ private fun FocusedEventEditor(
     var marginR by remember(event.id, event.marginR) { mutableStateOf(event.marginR.toString()) }
     var marginV by remember(event.id, event.marginV) { mutableStateOf(event.marginV.toString()) }
     var eventText by remember(event.id) { mutableStateOf(TextFieldValue(event.text)) }
+    var timingOpen by remember { mutableStateOf(false) }
     val syntax = remember(event.text) { AssInlineSyntax.analyze(event.text) }
 
     LaunchedEffect(event.text) {
@@ -1097,32 +1103,58 @@ private fun FocusedEventEditor(
             TextButton(onClick = { viewModel.updateFocusedTimes(startText, endText) }, modifier = Modifier.height(36.dp)) {
                 Text("应用", style = MaterialTheme.typography.labelSmall)
             }
-            TextButton(onClick = viewModel::setFocusedStartToPlayback, modifier = Modifier.height(36.dp)) {
-                Text("当前→S", style = MaterialTheme.typography.labelSmall)
-            }
-            TextButton(onClick = viewModel::setFocusedEndToPlayback, modifier = Modifier.height(36.dp)) {
-                Text("当前→E", style = MaterialTheme.typography.labelSmall)
-            }
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("整体", style = MaterialTheme.typography.labelSmall)
-            listOf(-500L, -100L, -10L, 10L, 100L, 500L).forEach { delta ->
-                TextButton(onClick = { viewModel.nudgeFocusedTime(delta) }, modifier = Modifier.height(28.dp)) {
-                    Text((if (delta > 0) "+" else "") + delta, style = MaterialTheme.typography.labelSmall)
+            Box {
+                TextButton(onClick = { timingOpen = true }, modifier = Modifier.height(36.dp)) {
+                    Text("时间", style = MaterialTheme.typography.labelSmall)
                 }
-            }
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("起点", style = MaterialTheme.typography.labelSmall)
-            listOf(-100L, -10L, 10L, 100L).forEach { delta ->
-                TextButton(onClick = { viewModel.nudgeFocusedStart(delta) }, modifier = Modifier.height(28.dp)) {
-                    Text((if (delta > 0) "+" else "") + delta, style = MaterialTheme.typography.labelSmall)
-                }
-            }
-            Text("终点", style = MaterialTheme.typography.labelSmall)
-            listOf(-100L, -10L, 10L, 100L).forEach { delta ->
-                TextButton(onClick = { viewModel.nudgeFocusedEnd(delta) }, modifier = Modifier.height(28.dp)) {
-                    Text((if (delta > 0) "+" else "") + delta, style = MaterialTheme.typography.labelSmall)
+                DropdownMenu(expanded = timingOpen, onDismissRequest = { timingOpen = false }) {
+                    DropdownMenuItem(
+                        text = { Text("当前播放位置 → Start") },
+                        onClick = { viewModel.setFocusedStartToPlayback(); timingOpen = false },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("当前播放位置 → End") },
+                        onClick = { viewModel.setFocusedEndToPlayback(); timingOpen = false },
+                    )
+                    Text(
+                        "整体平移",
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Row(Modifier.padding(horizontal = 6.dp)) {
+                        listOf(-500L, -100L, -10L, 10L, 100L, 500L).forEach { delta ->
+                            TextButton(onClick = { viewModel.nudgeFocusedTime(delta) }, modifier = Modifier.height(28.dp)) {
+                                Text((if (delta > 0) "+" else "") + delta, style = MaterialTheme.typography.labelSmall)
+                            }
+                        }
+                    }
+                    Text(
+                        "起点",
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Row(Modifier.padding(horizontal = 6.dp)) {
+                        listOf(-100L, -10L, 10L, 100L).forEach { delta ->
+                            TextButton(onClick = { viewModel.nudgeFocusedStart(delta) }, modifier = Modifier.height(28.dp)) {
+                                Text((if (delta > 0) "+" else "") + delta, style = MaterialTheme.typography.labelSmall)
+                            }
+                        }
+                    }
+                    Text(
+                        "终点",
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Row(Modifier.padding(horizontal = 6.dp, vertical = 2.dp)) {
+                        listOf(-100L, -10L, 10L, 100L).forEach { delta ->
+                            TextButton(onClick = { viewModel.nudgeFocusedEnd(delta) }, modifier = Modifier.height(28.dp)) {
+                                Text((if (delta > 0) "+" else "") + delta, style = MaterialTheme.typography.labelSmall)
+                            }
+                        }
+                    }
                 }
             }
         }
