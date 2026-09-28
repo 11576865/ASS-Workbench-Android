@@ -1,5 +1,11 @@
 pluginManagement {
     repositories {
+        val rendererRepo = providers.gradleProperty("asswb.rendererRepo").orNull
+        if (!rendererRepo.isNullOrBlank()) {
+            maven(uri(rendererRepo)) {
+                content { includeModuleByRegex("io\\.github\\.yuroyami", "libmpvkt.*") }
+            }
+        }
         google()
         mavenCentral()
         gradlePluginPortal()
