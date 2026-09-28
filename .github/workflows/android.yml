@@ -60,12 +60,14 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      - uses: android-actions/setup-android@v3
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: 'platform-tools'
 
-      - name: Install Android SDK 37
+      - name: Install Android 17 preview SDK platform
         shell: bash
         run: |
-          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-37" >/dev/null
+          yes | sdkmanager "platforms;android-37" --channel=3 >/dev/null
 
       - uses: gradle/actions/setup-gradle@v4
         with:
