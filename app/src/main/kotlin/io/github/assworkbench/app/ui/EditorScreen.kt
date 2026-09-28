@@ -1176,13 +1176,23 @@ private fun SubtitleRow(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            Text(
-                text = rememberAssAnnotatedText(event.text),
-                modifier = Modifier.weight(1f),
-                maxLines = if (focused) 3 else 2,
-                overflow = TextOverflow.Ellipsis,
-                style = MaterialTheme.typography.bodySmall,
-            )
+            Column(Modifier.weight(1f)) {
+                Text(
+                    text = AssInlineSyntax.visibleText(event.text).ifBlank { "（空字幕）" },
+                    maxLines = if (focused) 3 else 2,
+                    overflow = TextOverflow.Ellipsis,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                if (event.name.isNotBlank()) {
+                    Text(
+                        "Actor · " + event.name,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
             HintIconButton(Icons.Filled.PlayArrow, "跳转到这条字幕", onJump, compact = true)
         }
         if (focused) {
