@@ -9,7 +9,11 @@ class MatroskaReader(
     private val maxAttachmentBytes: Int = 64 * 1024 * 1024,
     private val maxTotalAttachmentBytes: Int = 256 * 1024 * 1024,
 ) {
-    fun scan(input: InputStream): MatroskaScanResult {
+    fun scan(
+        input: InputStream,
+        retainAttachments: Boolean = true,
+        onAttachment: ((MatroskaAttachment) -> Unit)? = null,
+    ): MatroskaScanResult {
         val reader = EbmlReader(input)
         var timecodeScaleNs = 1_000_000L
         val trackBuilders = linkedMapOf<Long, TrackBuilder>()
@@ -54,10 +58,15 @@ class MatroskaReader(
                                     val e = reader.headerOrNull() ?: break
                                     if (e.id == ID_ATTACHED_FILE) {
                                         val maxRemaining = (maxTotalAttachmentBytes - totalAttachmentBytes).coerceAtLeast(0)
-                                        val parsed = parseAttachment(reader.readBytesChecked(e.size, maxAttachmentBytes.coerceAtMost(maxRemaining)))
+                                        val parsed = parseAttachment(
+                                            reader = reader,
+                                            size = e.size,
+                                            maxDataBytes = maxAttachmentBytes.coerceAtMost(maxRemaining),
+                                        )
                                         if (parsed != null) {
                                             totalAttachmentBytes += parsed.data.size
-                                            attachments += parsed
+                                            onAttachment?.invoke(parsed)
+                                            if (retainAttachments) attachments += parsed
                                         }
                                     } else {
                                         reader.skipFully(e.size)
@@ -114,25 +123,39 @@ class MatroskaReader(
         return TrackBuilder(n, uid, name, language, codecId, codecPrivate)
     }
 
-    private fun parseAttachment(bytes: ByteArray): MatroskaAttachment? {
-        val r = EbmlReader(ByteArrayInputStream(bytes))
+    private fun parseAttachment(
+        reader: EbmlReader,
+        size: Long,
+        maxDataBytes: Int,
+    ): MatroskaAttachment? {
+        val end = ElementHeader.end(size, reader.position)
         var uid: Long? = null
         var fileName = ""
         var mime = ""
         var description = ""
         var data = ByteArray(0)
-        while (true) {
-            val h = r.headerOrNull() ?: break
+        var dataSkipped = false
+
+        while (!reader.atEnd(end)) {
+            val h = reader.headerOrNull() ?: break
             when (h.id) {
-                ID_FILE_UID -> uid = r.readUnsigned(h.size)
-                ID_FILE_NAME -> fileName = r.readString(h.size)
-                ID_FILE_MIME -> mime = r.readString(h.size)
-                ID_FILE_DESCRIPTION -> description = r.readString(h.size)
-                ID_FILE_DATA -> data = r.readBytesChecked(h.size, maxAttachmentBytes)
-                else -> r.skipFully(h.size)
+                ID_FILE_UID -> uid = reader.readUnsigned(h.size)
+                ID_FILE_NAME -> fileName = reader.readString(h.size)
+                ID_FILE_MIME -> mime = reader.readString(h.size)
+                ID_FILE_DESCRIPTION -> description = reader.readString(h.size)
+                ID_FILE_DATA -> {
+                    if (maxDataBytes <= 0 || h.size < 0 || h.size > maxDataBytes.toLong() || h.size > Int.MAX_VALUE) {
+                        reader.skipFully(h.size)
+                        dataSkipped = true
+                    } else {
+                        data = reader.readBytesChecked(h.size, maxDataBytes)
+                    }
+                }
+                else -> reader.skipFully(h.size)
             }
         }
-        if (fileName.isBlank() || data.isEmpty()) return null
+
+        if (dataSkipped || fileName.isBlank() || data.isEmpty()) return null
         return MatroskaAttachment(uid, fileName, mime, description, data)
     }
 
