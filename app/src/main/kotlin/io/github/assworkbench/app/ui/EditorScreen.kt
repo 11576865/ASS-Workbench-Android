@@ -29,6 +29,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Redo
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ChevronLeft
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Movie
@@ -816,6 +818,9 @@ private fun SubtitleDock(
     val visibleIds = state.filteredEvents.map { it.id }
     val visibleSelected = visibleIds.count { it in state.selectedEventIds }
     val allVisibleSelected = visibleIds.isNotEmpty() && visibleSelected == visibleIds.size
+    val qcByEvent = remember(state.document) {
+        AssQualityCheck.inspect(state.document).groupBy { it.eventId }
+    }
     var searchOpen by remember { mutableStateOf(false) }
     var actionsOpen by remember { mutableStateOf(false) }
     var replaceOpen by remember { mutableStateOf(false) }
@@ -896,6 +901,20 @@ private fun SubtitleDock(
                         compact = true,
                         tint = if (followPlayback) MaterialTheme.colorScheme.primary
                             else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    HintIconButton(
+                        Icons.Filled.ChevronLeft,
+                        "上一条字幕",
+                        viewModel::focusPreviousEvent,
+                        enabled = state.document.events.isNotEmpty(),
+                        compact = true,
+                    )
+                    HintIconButton(
+                        Icons.Filled.ChevronRight,
+                        "下一条字幕",
+                        viewModel::focusNextEvent,
+                        enabled = state.document.events.isNotEmpty(),
+                        compact = true,
                     )
                     HintIconButton(
                         Icons.Filled.Add,
@@ -1007,6 +1026,7 @@ private fun SubtitleDock(
                             checked = event.id in state.selectedEventIds,
                             focused = event.id == state.focusedEventId,
                             active = event.id in activeIds,
+                            issueCount = qcByEvent[event.id].orEmpty().size,
                             viewModel = viewModel,
                             onCheck = { viewModel.toggleSelected(event.id) },
                             onFocus = { viewModel.focusEvent(event.id, seek = false) },
@@ -1265,6 +1285,7 @@ private fun SubtitleRow(
     checked: Boolean,
     focused: Boolean,
     active: Boolean,
+    issueCount: Int,
     viewModel: EditorViewModel,
     onCheck: () -> Unit,
     onFocus: () -> Unit,
@@ -1297,9 +1318,12 @@ private fun SubtitleRow(
                     maxLines = 1,
                 )
                 Text(
-                    "L${event.layer} · ${event.style}",
+                    "L${event.layer} · ${event.style}" +
+                        if (event.comment) " · Comment" else "" +
+                        if (issueCount > 0) " · ⚠$issueCount" else "",
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = if (issueCount > 0) MaterialTheme.colorScheme.tertiary
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -1344,8 +1368,12 @@ private fun FocusedEventEditor(
     var marginL by remember(event.id, event.marginL) { mutableStateOf(event.marginL.toString()) }
     var marginR by remember(event.id, event.marginR) { mutableStateOf(event.marginR.toString()) }
     var marginV by remember(event.id, event.marginV) { mutableStateOf(event.marginV.toString()) }
+    var layerText by remember(event.id, event.layer) { mutableStateOf(event.layer.toString()) }
+    var actorText by remember(event.id, event.name) { mutableStateOf(event.name) }
+    var comment by remember(event.id, event.comment) { mutableStateOf(event.comment) }
     var eventText by remember(event.id) { mutableStateOf(TextFieldValue(event.text)) }
     var timingOpen by remember { mutableStateOf(false) }
+    var alignmentOpen by remember { mutableStateOf(false) }
     val syntax = remember(event.text) { AssInlineSyntax.analyze(event.text) }
 
     LaunchedEffect(event.text) {
@@ -1416,6 +1444,40 @@ private fun FocusedEventEditor(
                     }
                 }
             }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+            CompactEventField("Layer", layerText, { layerText = it }, Modifier.width(70.dp))
+            CompactEventField("Actor", actorText, { actorText = it }, Modifier.weight(1f))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Checkbox(checked = comment, onCheckedChange = { comment = it })
+                Text("Comment", style = MaterialTheme.typography.labelSmall)
+            }
+            Box {
+                TextButton(onClick = { alignmentOpen = true }, modifier = Modifier.height(36.dp)) {
+                    Text("对齐", style = MaterialTheme.typography.labelSmall)
+                }
+                DropdownMenu(expanded = alignmentOpen, onDismissRequest = { alignmentOpen = false }) {
+                    listOf(7, 8, 9, 4, 5, 6, 1, 2, 3).forEach { value ->
+                        DropdownMenuItem(
+                            text = { Text("\\an" + value) },
+                            onClick = {
+                                alignmentOpen = false
+                                viewModel.setFocusedAlignment(value)
+                            },
+                        )
+                    }
+                }
+            }
+            TextButton(
+                onClick = {
+                    viewModel.updateFocusedMetadata(
+                        layer = layerText.toIntOrNull() ?: event.layer,
+                        actor = actorText,
+                        comment = comment,
+                    )
+                },
+                modifier = Modifier.height(36.dp),
+            ) { Text("应用", style = MaterialTheme.typography.labelSmall) }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
             CompactEventField("L", marginL, { marginL = it }, Modifier.weight(1f))
