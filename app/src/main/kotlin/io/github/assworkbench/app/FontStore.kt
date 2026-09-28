@@ -61,8 +61,8 @@ class FontStore(private val context: Context) {
     fun glyphDiagnostic(family: String, text: String): FontGlyphDiagnostic? {
         val normalized = family.trim().lowercase()
         val asset = listImported().firstOrNull { candidate ->
-            val names = candidate.metadata.aliases + candidate.metadata.family +
-                listOfNotNull(candidate.metadata.fullName, candidate.metadata.postScriptName)
+            val names = candidate.metadata.aliases + candidate.metadata.family + candidate.metadata.rendererFamily +
+                listOfNotNull(candidate.metadata.legacyFamily, candidate.metadata.fullName, candidate.metadata.postScriptName)
             names.any { it.trim().lowercase() == normalized }
         } ?: return FontGlyphDiagnostic(family, null, 0, emptyList())
 
