@@ -2,7 +2,7 @@
 
 A focused Android ASS subtitle workbench for phones and tablets.
 
-**Current version: 0.15.1**
+**Current version: 0.15.2**
 
 ASS Workbench treats ASS as the primary editable document. A local video may be attached as reference media, or an MKV can be opened as a subtitle project.
 
@@ -86,6 +86,12 @@ An MKV can be opened as a subtitle project. The reader scans Matroska tracks and
 The original MKV is never modified in place. The write-back path copies the source into app-private storage and writes one new result container; it no longer creates a second full-size intermediate container.
 
 ## Current hardening work
+
+0.15.2 is a startup compatibility hotfix:
+
+- fixes an Android/ICU `java.util.regex.PatternSyntaxException` caused by an unescaped closing brace in the ASS override-block regex;
+- applies the same brace-safe regex in startup font diagnostics;
+- keeps the Fontconfig renderer experiment unchanged so the next device run can test the actual renderer path rather than failing during `EditorViewModel` construction.
 
 0.15.1 is a focused hotfix:
 
