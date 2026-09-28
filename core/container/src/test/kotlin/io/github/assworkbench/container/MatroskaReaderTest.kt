@@ -45,6 +45,36 @@ class MatroskaReaderTest {
         assertTrue(ass.contains("Hello"))
     }
 
+    @Test
+    fun canStreamAttachmentsWithoutRetainingTheirBytes() {
+        val codecPrivate = "[Script Info]\nScriptType: v4.00+"
+        val trackEntry = master(0xAE,
+            uint(0xD7, 1) +
+            uint(0x83, 0x11) +
+            text(0x86, "S_TEXT/ASS") +
+            binary(0x63A2, codecPrivate.toByteArray())
+        )
+        val tracks = master(0x1654AE6B, trackEntry)
+        val attachment = master(0x61A7,
+            text(0x466E, "TestFont.ttf") +
+            text(0x4660, "font/ttf") +
+            binary(0x465C, byteArrayOf(9,8,7,6))
+        )
+        val segment = master(0x18538067, tracks + master(0x1941A469, attachment))
+
+        val seen = mutableListOf<MatroskaAttachment>()
+        val result = MatroskaReader().scan(
+            ByteArrayInputStream(segment),
+            retainAttachments = false,
+            onAttachment = { seen += it },
+        )
+
+        assertEquals(0, result.attachments.size)
+        assertEquals(1, seen.size)
+        assertEquals("TestFont.ttf", seen.single().fileName)
+        assertTrue(seen.single().data.contentEquals(byteArrayOf(9,8,7,6)))
+    }
+
     private fun master(id: Long, content: ByteArray) = id(id) + size(content.size.toLong()) + content
     private fun binary(id: Long, content: ByteArray) = master(id, content)
     private fun text(id: Long, value: String) = binary(id, value.toByteArray())
