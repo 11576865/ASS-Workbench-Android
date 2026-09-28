@@ -253,7 +253,11 @@ private fun FontStatusRow(state: EditorState, viewModel: EditorViewModel, onImpo
             Text(
                 "字体：" + state.importedFonts.size + " imported · " + exact + " renderer exact · " + aliasOnly + " alias-only · " + fallback + " fallback · " + missing + " missing",
                 style = MaterialTheme.typography.labelSmall,
-                color = if (missing > 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                color = when {
+                    missing > 0 -> MaterialTheme.colorScheme.error
+                    aliasOnly > 0 || fallback > 0 -> MaterialTheme.colorScheme.tertiary
+                    else -> MaterialTheme.colorScheme.onSurfaceVariant
+                },
                 modifier = Modifier.weight(1f),
             )
             androidx.compose.material3.TextButton(onClick = onImportFont) { Text("导入字体") }
