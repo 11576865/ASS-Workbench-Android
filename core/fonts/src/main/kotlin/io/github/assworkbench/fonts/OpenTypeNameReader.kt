@@ -15,6 +15,12 @@ object OpenTypeNameReader {
         val numTables = b.short.toInt() and 0xFFFF
         require(bytes.size >= 12 + numTables * 16) { "Invalid sfnt table directory" }
 
+        // sfnt offset table is 12 bytes. After numTables come searchRange,
+        // entrySelector and rangeShift (6 bytes) before the first 16-byte table record.
+        b.short
+        b.short
+        b.short
+
         var nameOffset = -1
         var nameLength = -1
         repeat(numTables) {
