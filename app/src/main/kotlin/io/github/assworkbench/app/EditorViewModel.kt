@@ -13,6 +13,9 @@ import io.github.assworkbench.domain.AssDocumentEditing
 import io.github.assworkbench.domain.AssTextDecoder
 import io.github.assworkbench.domain.AssTextEncoding
 import io.github.assworkbench.domain.EventOverrideEditor
+import io.github.assworkbench.domain.EventFormatClipboard
+import io.github.assworkbench.domain.EventFormatClipboardOps
+import io.github.assworkbench.domain.EventFormatPasteMode
 import io.github.assworkbench.domain.FontBindingRewriter
 import io.github.assworkbench.domain.ReviewEventKey
 import io.github.assworkbench.domain.ReviewSidecar
@@ -55,6 +58,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     private var reviewPersistJob: Job? = null
     private var fontDiagnosticJob: Job? = null
     private var containerScan: MatroskaScanResult? = null
+    private var eventFormatClipboard: EventFormatClipboard? = null
     private val _state = MutableStateFlow(
         EditorState(
             project = io.github.assworkbench.domain.SubtitleProject(
@@ -680,6 +684,32 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         editDocument("结束时间已设为当前播放位置。") { doc ->
             doc.copy(events = doc.events.map { event ->
                 if (event.id != id) event else event.copy(end = SubTime(now.coerceAtLeast(event.start.millis)))
+            })
+        }
+    }
+
+    fun copyFocusedFormatToClipboard() {
+        val snapshot = _state.value
+        val event = snapshot.focusedEventId?.let { id ->
+            snapshot.document.events.firstOrNull { it.id == id }
+        } ?: return
+        eventFormatClipboard = EventFormatClipboardOps.capture(event)
+        _state.update { it.copy(status = "已复制字幕 #" + event.id + " 的格式到内部剪贴板。") }
+    }
+
+    fun pasteFormatClipboardToSelected(mode: EventFormatPasteMode) {
+        val clipboard = eventFormatClipboard ?: run {
+            _state.update { it.copy(status = "格式剪贴板为空。") }
+            return
+        }
+        val snapshot = _state.value
+        val ids = snapshot.selectedEventIds.ifEmpty {
+            snapshot.focusedEventId?.let(::setOf).orEmpty()
+        }
+        if (ids.isEmpty()) return
+        editDocument("已粘贴格式到 " + ids.size + " 条字幕。") { doc ->
+            doc.copy(events = doc.events.map { event ->
+                if (event.id in ids) EventFormatClipboardOps.apply(event, clipboard, mode) else event
             })
         }
     }
