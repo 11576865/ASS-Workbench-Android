@@ -580,9 +580,10 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                         event.copy(name = event.name.replace(find, replacement))
                     }
                 } else {
-                    if (!event.text.contains(find, ignoreCase = false)) event else {
+                    val (text, changed) = AssDocumentEditing.replacePlainDialogueText(event.text, find, replacement)
+                    if (!changed) event else {
                         count++
-                        event.copy(text = event.text.replace(find, replacement))
+                        event.copy(text = text)
                     }
                 }
             })
