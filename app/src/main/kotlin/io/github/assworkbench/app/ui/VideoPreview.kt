@@ -31,6 +31,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import io.github.assworkbench.app.BuildConfig
 import io.github.assworkbench.domain.AssCodec
 import io.github.assworkbench.domain.AssDocument
 import io.github.assworkbench.domain.TypesettingMath
@@ -103,7 +104,7 @@ private fun AuthoritativeMpvPreview(
                 "sub-ass-override" to "no",
                 "embeddedfonts" to "yes",
                 "sub-fonts-dir" to fontsDir.absolutePath,
-                "sub-font-provider" to "none",
+                "sub-font-provider" to BuildConfig.ASSWB_RENDERER_FONT_PROVIDER,
                 "log-file" to rendererLogFile.absolutePath,
                 "msg-level" to "all=v",
             ),

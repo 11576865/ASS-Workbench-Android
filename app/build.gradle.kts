@@ -3,6 +3,9 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+val rendererVersion = providers.gradleProperty("asswb.rendererVersion").getOrElse("0.3.0")
+val rendererProvider = providers.gradleProperty("asswb.rendererProvider").getOrElse("none")
+
 android {
     namespace = "io.github.assworkbench.app"
     compileSdk = 36
@@ -13,9 +16,13 @@ android {
         targetSdk = 35
         versionCode = 16
         versionName = "0.15.1"
+        buildConfigField("String", "ASSWB_RENDERER_FONT_PROVIDER", "\"$rendererProvider\"")
     }
 
-    buildFeatures { compose = true }
+    buildFeatures {
+        compose = true
+        buildConfig = true
+    }
 
     packaging {
         jniLibs.useLegacyPackaging = true
@@ -43,7 +50,7 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
 
-    implementation("io.github.yuroyami:libmpvkt-compose:0.3.0")
+    implementation("io.github.yuroyami:libmpvkt-compose:$rendererVersion")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
 }

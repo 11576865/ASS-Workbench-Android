@@ -267,7 +267,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         val asset = fontStore.import(uri)
         refreshFonts(
             initial = false,
-            status = "已导入字体 ${asset.metadata.family}；已作为 libass 项目字体与预览 fallback 重新加载。",
+            status = "已导入字体 ${asset.metadata.family}；libass renderer family=${asset.metadata.rendererFamily}；已重新加载。",
         )
     }
 
@@ -822,7 +822,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         _state.update {
             it.copy(
                 importedFonts = imported,
-                fallbackFontFamily = fallback?.family,
+                fallbackFontFamily = fallback?.rendererFamily,
                 fontRevision = if (initial) it.fontRevision else it.fontRevision + 1,
                 status = status ?: it.status,
             )
