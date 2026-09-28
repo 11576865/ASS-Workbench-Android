@@ -47,8 +47,9 @@ fun ReviewWorkspace(
         targetStyle = state.reviewTargetStyle,
     )
     val rows = allRows.filter { row ->
-        val targetId = row.target?.id
-        val modified = targetId != null && row.target.text != state.originalTextById[targetId]
+        val target = row.target
+        val targetId = target?.id
+        val modified = target != null && target.text != state.originalTextById[targetId]
         val confirmed = targetId != null && targetId in state.confirmedReviewIds
         when (state.reviewFilter) {
             "modified" -> modified
