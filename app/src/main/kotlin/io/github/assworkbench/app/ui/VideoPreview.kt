@@ -557,14 +557,17 @@ private fun AuthoritativeMpvPreview(
                 }
             }
         }
-        PlaybackBar(
-            playback = playback,
-            onPlayPause = {
-                val shouldPause = playback.status == MpvPlaybackState.Status.Playing || playback.status == MpvPlaybackState.Status.Buffering
-                mpv[MpvProperties.Pause] = shouldPause
-            },
-            onSeek = { seconds -> mpv.command("seek", seconds.toString(), "absolute+exact") },
-        )
+        if (!videoUri.isNullOrBlank()) {
+            PlaybackBar(
+                playback = playback,
+                onPlayPause = {
+                    val shouldPause = playback.status == MpvPlaybackState.Status.Playing ||
+                        playback.status == MpvPlaybackState.Status.Buffering
+                    mpv[MpvProperties.Pause] = shouldPause
+                },
+                onSeek = { seconds -> mpv.command("seek", seconds.toString(), "absolute+exact") },
+            )
+        }
     }
 }
 
