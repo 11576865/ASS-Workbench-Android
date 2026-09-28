@@ -294,11 +294,23 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
 
     fun importFonts(uris: List<Uri>) {
         if (uris.isEmpty()) return
-        val assets = fontStore.importAll(uris)
-        val families = assets.map { it.metadata.rendererFamily }.distinct()
+        val batch = fontStore.importAll(uris)
+        if (batch.assets.isEmpty()) {
+            error(
+                "没有字体导入成功" +
+                    batch.failures.firstOrNull()?.let { "：$it" }.orEmpty()
+            )
+        }
+        val families = batch.assets.map { it.metadata.rendererFamily }.distinct()
+        val failureSuffix = if (batch.failures.isEmpty()) {
+            ""
+        } else {
+            " · 失败 " + batch.failures.size + " 个"
+        }
         refreshFonts(
             initial = false,
-            status = "已导入 " + assets.size + " 个字体文件 · renderer family：" +
+            status = "已导入 " + batch.assets.size + " 个字体文件" + failureSuffix +
+                " · renderer family：" +
                 families.take(4).joinToString(", ") +
                 if (families.size > 4) " …" else "",
         )
