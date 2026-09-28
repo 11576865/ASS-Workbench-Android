@@ -31,6 +31,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Movie
+import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Search
@@ -77,6 +78,7 @@ import io.github.assworkbench.app.EditorState
 import io.github.assworkbench.app.EditorViewModel
 import io.github.assworkbench.domain.AssEvent
 import io.github.assworkbench.domain.AssInlineSyntax
+import io.github.assworkbench.domain.SubTime
 import io.github.assworkbench.fonts.FontMatchStatus
 import androidx.window.core.layout.WindowSizeClass.Companion.WIDTH_DP_EXPANDED_LOWER_BOUND
 import androidx.window.core.layout.WindowSizeClass.Companion.WIDTH_DP_MEDIUM_LOWER_BOUND
@@ -184,6 +186,10 @@ private fun CompactEditorToolbar(
                     HintIconButton(Icons.Filled.MoreVert, "更多", { overflowOpen = true })
                     DropdownMenu(expanded = overflowOpen, onDismissRequest = { overflowOpen = false }) {
                         DropdownMenuItem(
+                            text = { Text("新建空白 ASS") },
+                            onClick = { overflowOpen = false; viewModel.newSubtitleProject() },
+                        )
+                        DropdownMenuItem(
                             text = { Text("另存 ASS") },
                             enabled = state.subtitleLoaded,
                             onClick = { overflowOpen = false; onSaveAs() },
@@ -200,6 +206,7 @@ private fun CompactEditorToolbar(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun HintIconButton(
     icon: ImageVector,
@@ -282,6 +289,13 @@ private fun ExpandedEditorWorkspace(
     onSaveMkv: () -> Unit,
     onOpenVideo: () -> Unit,
 ) {
+    val inspectorWidth = when (section) {
+        WorkspaceSection.SUBTITLES -> 320.dp
+        WorkspaceSection.STYLE -> 500.dp
+        WorkspaceSection.EFFECTS -> 400.dp
+        WorkspaceSection.REVIEW -> 500.dp
+        WorkspaceSection.PROJECT -> 410.dp
+    }
     Row(Modifier.fillMaxSize()) {
         Column(Modifier.weight(1f).fillMaxHeight()) {
             PreviewPane(state, viewModel, onOpenVideo, Modifier.fillMaxWidth())
@@ -299,7 +313,7 @@ private fun ExpandedEditorWorkspace(
             onSectionChange = onSectionChange,
             onImportFont = onImportFont,
             onSaveMkv = onSaveMkv,
-            modifier = Modifier.width(420.dp).fillMaxHeight(),
+            modifier = Modifier.width(inspectorWidth).fillMaxHeight(),
         )
     }
 }
@@ -314,11 +328,18 @@ private fun TabletEditorWorkspace(
     onSaveMkv: () -> Unit,
     onOpenVideo: () -> Unit,
 ) {
+    val inspectorWeight = when (section) {
+        WorkspaceSection.SUBTITLES -> 0.36f
+        WorkspaceSection.STYLE -> 0.50f
+        WorkspaceSection.EFFECTS -> 0.44f
+        WorkspaceSection.REVIEW -> 0.50f
+        WorkspaceSection.PROJECT -> 0.44f
+    }
     Column(Modifier.fillMaxSize()) {
         PreviewPane(state, viewModel, onOpenVideo, Modifier.fillMaxWidth())
         Divider()
         Row(Modifier.weight(1f).fillMaxWidth()) {
-            SubtitleDock(state, viewModel, Modifier.weight(0.54f).fillMaxHeight())
+            SubtitleDock(state, viewModel, Modifier.weight(1f - inspectorWeight).fillMaxHeight())
             Box(
                 Modifier.width(1.dp).fillMaxHeight()
                     .background(MaterialTheme.colorScheme.outlineVariant),
@@ -330,7 +351,7 @@ private fun TabletEditorWorkspace(
                 onSectionChange = onSectionChange,
                 onImportFont = onImportFont,
                 onSaveMkv = onSaveMkv,
-                modifier = Modifier.weight(0.46f).fillMaxHeight(),
+                modifier = Modifier.weight(inspectorWeight).fillMaxHeight(),
             )
         }
     }
@@ -634,7 +655,20 @@ private fun SubtitleDock(
     var searchOpen by remember { mutableStateOf(false) }
     var actionsOpen by remember { mutableStateOf(false) }
     var replaceOpen by remember { mutableStateOf(false) }
+    var followPlayback by rememberSaveable { mutableStateOf(true) }
     val listState = rememberLazyListState()
+    val activeIds = remember(state.playbackPositionMs, state.document.events) {
+        state.document.activeEvents(SubTime(state.playbackPositionMs)).map { it.id }.toSet()
+    }
+    val primaryActiveId = activeIds.firstOrNull()
+    LaunchedEffect(primaryActiveId, followPlayback, state.query) {
+        if (!followPlayback || primaryActiveId == null) return@LaunchedEffect
+        val index = state.filteredEvents.indexOfFirst { it.id == primaryActiveId }
+        if (index >= 0) {
+            val visible = listState.layoutInfo.visibleItemsInfo.any { it.index == index }
+            if (!visible) listState.animateScrollToItem(index)
+        }
+    }
 
     Surface(modifier, tonalElevation = 1.dp) {
         CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 28.dp) {
@@ -692,6 +726,14 @@ private fun SubtitleDock(
                         }
                     }
                     HintIconButton(
+                        icon = Icons.Filled.MyLocation,
+                        label = if (followPlayback) "关闭字幕列表跟随播放" else "开启字幕列表跟随播放",
+                        onClick = { followPlayback = !followPlayback },
+                        compact = true,
+                        tint = if (followPlayback) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    HintIconButton(
                         Icons.Filled.Add,
                         "在当前播放位置添加字幕",
                         viewModel::insertEventAtPlayback,
@@ -742,6 +784,22 @@ private fun SubtitleDock(
                     )
                 }
 
+                if (!state.subtitleLoaded) {
+                    Column(
+                        Modifier.weight(1f).fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center,
+                    ) {
+                        Text("未选择 ASS 字幕", style = MaterialTheme.typography.titleSmall)
+                        Text(
+                            "可从顶部文件夹图标打开现有 ASS，或在 ⋮ → 新建空白 ASS 后直接开始。",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    return@Column
+                }
+
                 var dragLastId by remember { mutableStateOf<Long?>(null) }
                 LazyColumn(
                     state = listState,
@@ -784,6 +842,7 @@ private fun SubtitleDock(
                             event = event,
                             checked = event.id in state.selectedEventIds,
                             focused = event.id == state.focusedEventId,
+                            active = event.id in activeIds,
                             viewModel = viewModel,
                             onCheck = { viewModel.toggleSelected(event.id) },
                             onFocus = { viewModel.focusEvent(event.id, seek = false) },
@@ -804,7 +863,11 @@ private fun TimelineInspector(
     modifier: Modifier = Modifier,
 ) {
     val focused = state.document.events.firstOrNull { it.id == state.focusedEventId }
-    val centerMs = focused?.start?.millis ?: state.playbackPositionMs
+    val centerMs = when {
+        state.project.videoUri != null -> state.playbackPositionMs
+        state.playbackPositionMs > 0L -> state.playbackPositionMs
+        else -> focused?.start?.millis ?: 0L
+    }
     val windowStart = (centerMs - 15_000L).coerceAtLeast(0L)
     val windowEnd = windowStart + 30_000L
     val visible = state.document.events.filter { event ->
@@ -1024,6 +1087,7 @@ private fun SubtitleRow(
     event: AssEvent,
     checked: Boolean,
     focused: Boolean,
+    active: Boolean,
     viewModel: EditorViewModel,
     onCheck: () -> Unit,
     onFocus: () -> Unit,
@@ -1032,8 +1096,11 @@ private fun SubtitleRow(
     Column(
         Modifier.fillMaxWidth()
             .background(
-                if (focused) MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.24f)
-                else MaterialTheme.colorScheme.surface,
+                when {
+                    focused -> MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.30f)
+                    active -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.18f)
+                    else -> MaterialTheme.colorScheme.surface
+                },
             )
     ) {
         Row(
