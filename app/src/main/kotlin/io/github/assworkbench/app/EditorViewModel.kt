@@ -453,10 +453,47 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
 
     fun clearFocusedStyleOverrides() {
         val id = _state.value.focusedEventId ?: return
-        editDocument("已移除当前字幕中覆盖 Style 的内联排版标签。") { doc ->
+        editDocument("已清除当前字幕的样式/位置覆盖；该字幕现在继承 Style。") { doc ->
             doc.copy(events = doc.events.map { event ->
-                if (event.id != id) event else event.copy(text = stripInlineStyleOverrides(event.text))
+                if (event.id != id) {
+                    event
+                } else {
+                    event.copy(
+                        text = stripInlineStyleOverrides(event.text),
+                        marginL = 0,
+                        marginR = 0,
+                        marginV = 0,
+                    )
+                }
             })
+        }
+    }
+
+    fun makeSelectedStyleIndependent(styleName: String) {
+        val selectedIds = _state.value.selectedEventIds
+        if (selectedIds.isEmpty()) return
+        editDocument("已为选中字幕创建独立 Style。") { doc ->
+            val source = doc.styles.firstOrNull { it.name == styleName } ?: return@editDocument doc
+            val targetIds = doc.events.asSequence()
+                .filter { it.id in selectedIds && it.style == styleName }
+                .map { it.id }
+                .toSet()
+            if (targetIds.isEmpty()) return@editDocument doc
+
+            val usedNames = doc.styles.mapTo(hashSetOf()) { it.name }
+            val base = styleName + "_selection"
+            var candidate = base
+            var suffix = 2
+            while (candidate in usedNames) {
+                candidate = base + "_" + suffix++
+            }
+
+            doc.copy(
+                styles = doc.styles + source.copy(name = candidate),
+                events = doc.events.map { event ->
+                    if (event.id in targetIds) event.copy(style = candidate) else event
+                },
+            )
         }
     }
 
@@ -899,7 +936,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     private fun stripInlineStyleOverrides(text: String): String {
         val overrideBlock = Regex("""\{[^}]*\}""")
         val managedTag = Regex(
-            """\\(?:fn[^\\}]*|fs(?!c)[+-]?(?:\d+(?:\.\d+)?)?|b-?\d+|i-?\d+|u-?\d+|s-?\d+|fsp[+-]?(?:\d+(?:\.\d+)?)?|bord[+-]?(?:\d+(?:\.\d+)?)?|shad[+-]?(?:\d+(?:\.\d+)?)?|an[1-9]|(?:c|1c|3c|4c)&H[0-9A-Fa-f]+&)""",
+            """\\(?:fn[^\\}]*|fs(?!c)[+-]?(?:\d+(?:\.\d+)?)?|b-?\d+|i-?\d+|u-?\d+|s-?\d+|fsp[+-]?(?:\d+(?:\.\d+)?)?|bord[+-]?(?:\d+(?:\.\d+)?)?|shad[+-]?(?:\d+(?:\.\d+)?)?|an[1-9]|a\d+|pos\([^)]*\)|move\([^)]*\)|org\([^)]*\)|r[^\\}]*|(?:c|1c|3c|4c)&H[0-9A-Fa-f]+&)""",
             RegexOption.IGNORE_CASE,
         )
         return overrideBlock.replace(text) { block ->
