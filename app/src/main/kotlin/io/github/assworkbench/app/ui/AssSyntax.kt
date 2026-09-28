@@ -22,6 +22,7 @@ private data class AssSyntaxPalette(
     val tag: Color,
     val value: Color,
     val escape: Color,
+    val error: Color,
     val blockBackground: Color,
 )
 
@@ -34,6 +35,7 @@ fun rememberAssSyntaxTransformation(): VisualTransformation {
         tag = scheme.primary,
         value = scheme.tertiary,
         escape = scheme.secondary,
+        error = scheme.error,
         blockBackground = scheme.surfaceVariant.copy(alpha = 0.42f),
     )
     return remember(palette) { AssSyntaxTransformation(palette) }
@@ -48,6 +50,7 @@ fun rememberAssAnnotatedText(text: String): AnnotatedString {
         tag = scheme.primary,
         value = scheme.tertiary,
         escape = scheme.secondary,
+        error = scheme.error,
         blockBackground = scheme.surfaceVariant.copy(alpha = 0.34f),
     )
     return remember(text, palette) { buildAssAnnotatedString(text, palette) }
@@ -97,7 +100,7 @@ private fun buildAssAnnotatedString(
                 fontFamily = FontFamily.Monospace,
             )
             AssInlineTokenKind.MALFORMED_BLOCK -> SpanStyle(
-                color = MaterialTheme.colorScheme.error,
+                color = palette.error,
                 fontFamily = FontFamily.Monospace,
                 textDecoration = TextDecoration.Underline,
             )
