@@ -39,6 +39,21 @@ object StartupProbe {
         }
     }.getOrDefault("无法读取启动记录")
 
+    fun readLatest(context: Context, maxEntries: Int = 4): String = runCatching {
+        val file = File(context.filesDir, FILE_NAME)
+        if (!file.isFile) {
+            "无启动记录"
+        } else {
+            file.readText(Charsets.UTF_8)
+                .split("\n---\n")
+                .map(String::trim)
+                .filter(String::isNotBlank)
+                .takeLast(maxEntries)
+                .asReversed()
+                .joinToString("\n\n---\n\n")
+        }
+    }.getOrDefault("无法读取最新启动记录")
+
     fun describe(t: Throwable, maxDepth: Int = 8): String {
         val seen = HashSet<Throwable>()
         val parts = ArrayList<String>()
