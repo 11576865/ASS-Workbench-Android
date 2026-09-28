@@ -75,6 +75,7 @@ class FontStore(private val context: Context) {
             configDir = mpvConfigDir,
             importedDir = importedDir,
             cacheRoot = fontconfigCacheRoot,
+            environmentFingerprint = android.os.Build.FINGERPRINT,
             pruneOldCaches = pruneOldCaches,
         )
         fontconfigPrepared = prepared
