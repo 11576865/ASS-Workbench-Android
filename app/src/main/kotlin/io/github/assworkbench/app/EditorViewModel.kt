@@ -114,6 +114,9 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                         status = "MKV：发现 " + tracks.size + " 个 ASS 轨；注册字体 " + imported + " 个。",
                     )
                 }
+                if (imported > 0) {
+                    runCatching { fontStore.refreshFontconfig(pruneOldCaches = true) }
+                }
                 refreshFonts(initial = false)
                 if (tracks.size == 1) selectContainerTrack(tracks.single().number)
             }.onFailure { error ->
