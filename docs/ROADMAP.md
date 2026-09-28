@@ -66,7 +66,7 @@
 - [x] Add persisted System / Light / Dark appearance modes.
 - [x] Cache imported font metadata/font bytes.
 - [x] Debounce and bound expensive glyph diagnostics.
-- [x] Refresh stable Compose/Core/Lifecycle dependencies and compile against Android 37.
+- [x] Refresh stable Compose/Core/Lifecycle dependencies and compile against the stable Android 16 / API 36 platform.
 - [x] Switch editor composition to Material3 Adaptive window size classes.
 - [x] Preserve common BOM-marked ASS encodings on standalone open/save.
 - [x] Support multi-font import batches with one Fontconfig refresh.
