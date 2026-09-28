@@ -107,6 +107,9 @@ class FontStore(private val context: Context) {
         if (!target.exists()) target.writeBytes(bytes)
         fontBytesCache[target.name] = bytes
         invalidateImportedCache()
+        // Embedded MKV fonts must feed the same provider=none fallback path as manually imported fonts.
+        // This removes the old "standalone import vs MKV attachment" renderer asymmetry.
+        File(mpvConfigDir, "subfont.ttf").writeBytes(bytes)
         return FontAsset(target.name, sha, metadata)
     }
 
@@ -160,15 +163,35 @@ class FontStore(private val context: Context) {
     fun ensureFallbackFont(): FontMetadata? {
         val target = File(mpvConfigDir, "subfont.ttf")
         if (!target.exists()) {
+            val systemFonts = File("/system/fonts").listFiles().orEmpty().filter { it.isFile && it.canRead() }
             val source = listOf(
-                File("/system/fonts/Roboto-Regular.ttf"),
-                File("/system/fonts/NotoSans-Regular.ttf"),
-            ).firstOrNull { it.isFile && it.canRead() }
+                "NotoSansCJK-Regular.ttc",
+                "NotoSansSC-Regular.otf",
+                "NotoSansSC-Regular.ttf",
+                "NotoSansCJKsc-Regular.otf",
+                "DroidSansFallback.ttf",
+                "NotoSans-Regular.ttf",
+                "Roboto-Regular.ttf",
+            ).asSequence()
+                .map { name -> File("/system/fonts", name) }
+                .firstOrNull { it.isFile && it.canRead() }
+                ?: systemFonts.firstOrNull { file ->
+                    val n = file.name.lowercase()
+                    (n.contains("cjk") || n.contains("hans") || n.contains("sc") || n.contains("fallback")) &&
+                        file.extension.lowercase() in setOf("ttf", "otf", "ttc")
+                }
             if (source != null) runCatching {
                 source.inputStream().use { input -> target.outputStream().use { input.copyTo(it) } }
             }
         }
-        return if (target.isFile) runCatching { OpenTypeNameReader.read(target.readBytes()) }.getOrNull() else null
+        return if (target.isFile) {
+            runCatching { OpenTypeNameReader.read(target.readBytes()) }.getOrNull()
+                ?: FontMetadata(
+                    family = "Android system fallback",
+                    rendererFamily = "sans-serif",
+                    aliases = setOf("sans-serif"),
+                )
+        } else null
     }
 
     private fun queryName(uri: Uri): String? {
