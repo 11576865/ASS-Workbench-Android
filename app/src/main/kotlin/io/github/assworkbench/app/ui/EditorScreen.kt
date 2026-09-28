@@ -16,6 +16,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -44,10 +46,14 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TooltipBox
+import androidx.compose.material3.TooltipDefaults
+import androidx.compose.material3.rememberTooltipState
 import androidx.compose.material3.adaptive.currentWindowAdaptiveInfo
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -58,12 +64,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import io.github.assworkbench.app.AppThemeMode
 import io.github.assworkbench.app.BuildConfig
 import io.github.assworkbench.app.EditorState
 import io.github.assworkbench.app.EditorViewModel
@@ -93,8 +99,6 @@ fun EditorScreen(
     onSave: () -> Unit,
     onSaveAs: () -> Unit,
     onSaveMkv: () -> Unit,
-    themeMode: AppThemeMode,
-    onThemeModeChange: (AppThemeMode) -> Unit,
 ) {
     var sectionName by rememberSaveable { mutableStateOf(WorkspaceSection.SUBTITLES.name) }
     val section = WorkspaceSection.entries.firstOrNull { it.name == sectionName } ?: WorkspaceSection.SUBTITLES
@@ -109,14 +113,12 @@ fun EditorScreen(
                 onImportFont = onImportFont,
                 onSave = onSave,
                 onSaveAs = onSaveAs,
-                themeMode = themeMode,
-                onThemeModeChange = onThemeModeChange,
             )
         },
         bottomBar = {
             Text(
                 state.status,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 4.dp),
+                modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 10.dp, vertical = 3.dp),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
@@ -131,6 +133,7 @@ fun EditorScreen(
             onSectionChange = { sectionName = it.name },
             onImportFont = onImportFont,
             onSaveMkv = onSaveMkv,
+            onOpenVideo = onOpenVideo,
             modifier = Modifier.fillMaxSize().padding(padding),
         )
     }
@@ -146,12 +149,10 @@ private fun CompactEditorToolbar(
     onImportFont: () -> Unit,
     onSave: () -> Unit,
     onSaveAs: () -> Unit,
-    themeMode: AppThemeMode,
-    onThemeModeChange: (AppThemeMode) -> Unit,
 ) {
     var overflowOpen by remember { mutableStateOf(false) }
     CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 32.dp) {
-        Surface(tonalElevation = 1.dp) {
+        Surface(Modifier.statusBarsPadding(), tonalElevation = 1.dp) {
             Row(
                 Modifier.fillMaxWidth().height(42.dp).padding(horizontal = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -171,26 +172,14 @@ private fun CompactEditorToolbar(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                 )
-                IconButton(onClick = onOpenVideo, modifier = Modifier.width(34.dp).height(34.dp)) {
-                    Icon(Icons.Filled.Movie, "打开/更换视频")
-                }
-                IconButton(onClick = onOpenSubtitle, modifier = Modifier.width(34.dp).height(34.dp)) {
-                    Icon(Icons.Filled.FolderOpen, "打开/更换字幕")
-                }
+                HintIconButton(Icons.Filled.Movie, "打开 / 更换参考视频", onOpenVideo)
+                HintIconButton(Icons.Filled.FolderOpen, "打开 / 更换 ASS 字幕", onOpenSubtitle)
                 TextButton(onClick = onOpenMkvProject, modifier = Modifier.height(32.dp)) { Text("MKV") }
-                IconButton(onClick = onSave, enabled = state.subtitleLoaded, modifier = Modifier.width(34.dp).height(34.dp)) {
-                    Icon(Icons.Filled.Save, "保存")
-                }
-                IconButton(onClick = viewModel::undo, enabled = state.canUndo, modifier = Modifier.width(34.dp).height(34.dp)) {
-                    Icon(Icons.AutoMirrored.Filled.Undo, "撤销")
-                }
-                IconButton(onClick = viewModel::redo, enabled = state.canRedo, modifier = Modifier.width(34.dp).height(34.dp)) {
-                    Icon(Icons.AutoMirrored.Filled.Redo, "重做")
-                }
+                HintIconButton(Icons.Filled.Save, "保存字幕", onSave, enabled = state.subtitleLoaded)
+                HintIconButton(Icons.AutoMirrored.Filled.Undo, "撤销", viewModel::undo, enabled = state.canUndo)
+                HintIconButton(Icons.AutoMirrored.Filled.Redo, "重做", viewModel::redo, enabled = state.canRedo)
                 Box {
-                    IconButton(onClick = { overflowOpen = true }, modifier = Modifier.width(34.dp).height(34.dp)) {
-                        Icon(Icons.Filled.MoreVert, "更多")
-                    }
+                    HintIconButton(Icons.Filled.MoreVert, "更多", { overflowOpen = true })
                     DropdownMenu(expanded = overflowOpen, onDismissRequest = { overflowOpen = false }) {
                         DropdownMenuItem(
                             text = { Text("另存 ASS") },
@@ -202,21 +191,34 @@ private fun CompactEditorToolbar(
                             text = { Text("重建字体缓存") },
                             onClick = { overflowOpen = false; viewModel.rebuildRendererFontCache() },
                         )
-                        androidx.compose.material3.HorizontalDivider()
-                        AppThemeMode.entries.forEach { mode ->
-                            val label = when (mode) {
-                                AppThemeMode.SYSTEM -> "跟随系统"
-                                AppThemeMode.LIGHT -> "浅色"
-                                AppThemeMode.DARK -> "深色"
-                            }
-                            DropdownMenuItem(
-                                text = { Text((if (themeMode == mode) "✓ " else "") + "主题 · " + label) },
-                                onClick = { overflowOpen = false; onThemeModeChange(mode) },
-                            )
-                        }
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun HintIconButton(
+    icon: ImageVector,
+    label: String,
+    onClick: () -> Unit,
+    enabled: Boolean = true,
+    compact: Boolean = false,
+    tint: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.onSurfaceVariant,
+) {
+    TooltipBox(
+        positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+        tooltip = { PlainTooltip { Text(label) } },
+        state = rememberTooltipState(),
+    ) {
+        IconButton(
+            onClick = onClick,
+            enabled = enabled,
+            modifier = if (compact) Modifier.width(30.dp).height(30.dp)
+                else Modifier.width(34.dp).height(34.dp),
+        ) {
+            Icon(icon, contentDescription = label, tint = tint)
         }
     }
 }
@@ -229,6 +231,7 @@ private fun EditorWorkspace(
     onSectionChange: (WorkspaceSection) -> Unit,
     onImportFont: () -> Unit,
     onSaveMkv: () -> Unit,
+    onOpenVideo: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val windowSizeClass = currentWindowAdaptiveInfo(supportLargeAndXLargeWidth = true).windowSizeClass
@@ -242,6 +245,7 @@ private fun EditorWorkspace(
                     onSectionChange,
                     onImportFont,
                     onSaveMkv,
+                    onOpenVideo,
                 )
             windowSizeClass.isWidthAtLeastBreakpoint(WIDTH_DP_MEDIUM_LOWER_BOUND) ->
                 TabletEditorWorkspace(
@@ -251,6 +255,7 @@ private fun EditorWorkspace(
                     onSectionChange,
                     onImportFont,
                     onSaveMkv,
+                    onOpenVideo,
                 )
             else -> CompactEditorWorkspace(
                 state,
@@ -259,6 +264,7 @@ private fun EditorWorkspace(
                 onSectionChange,
                 onImportFont,
                 onSaveMkv,
+                onOpenVideo,
             )
         }
     }
@@ -272,10 +278,11 @@ private fun ExpandedEditorWorkspace(
     onSectionChange: (WorkspaceSection) -> Unit,
     onImportFont: () -> Unit,
     onSaveMkv: () -> Unit,
+    onOpenVideo: () -> Unit,
 ) {
     Row(Modifier.fillMaxSize()) {
         Column(Modifier.weight(1f).fillMaxHeight()) {
-            PreviewPane(state, viewModel, Modifier.fillMaxWidth())
+            PreviewPane(state, viewModel, onOpenVideo, Modifier.fillMaxWidth())
             Divider()
             SubtitleDock(state, viewModel, Modifier.weight(1f).fillMaxWidth())
         }
@@ -303,9 +310,10 @@ private fun TabletEditorWorkspace(
     onSectionChange: (WorkspaceSection) -> Unit,
     onImportFont: () -> Unit,
     onSaveMkv: () -> Unit,
+    onOpenVideo: () -> Unit,
 ) {
     Column(Modifier.fillMaxSize()) {
-        PreviewPane(state, viewModel, Modifier.fillMaxWidth())
+        PreviewPane(state, viewModel, onOpenVideo, Modifier.fillMaxWidth())
         Divider()
         Row(Modifier.weight(1f).fillMaxWidth()) {
             SubtitleDock(state, viewModel, Modifier.weight(0.54f).fillMaxHeight())
@@ -334,9 +342,10 @@ private fun CompactEditorWorkspace(
     onSectionChange: (WorkspaceSection) -> Unit,
     onImportFont: () -> Unit,
     onSaveMkv: () -> Unit,
+    onOpenVideo: () -> Unit,
 ) {
     Column(Modifier.fillMaxSize()) {
-        PreviewPane(state, viewModel, Modifier.fillMaxWidth())
+        PreviewPane(state, viewModel, onOpenVideo, Modifier.fillMaxWidth())
         Divider()
         WorkspaceTabs(section, onSectionChange)
         Divider()
@@ -359,6 +368,7 @@ private fun CompactEditorWorkspace(
 private fun PreviewPane(
     state: EditorState,
     viewModel: EditorViewModel,
+    onOpenVideo: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     VideoPreview(
@@ -373,6 +383,7 @@ private fun PreviewPane(
         fontRevision = state.fontRevision,
         initialPositionMs = state.playbackPositionMs,
         showLayoutGuides = state.showLayoutGuides,
+        onOpenVideo = onOpenVideo,
         modifier = modifier,
     )
 }
@@ -632,17 +643,14 @@ private fun SubtitleDock(
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     Box {
-                        IconButton(
+                        HintIconButton(
+                            icon = Icons.Filled.Search,
+                            label = "搜索字幕",
                             onClick = { searchOpen = true },
-                            modifier = Modifier.width(30.dp).height(30.dp),
-                        ) {
-                            Icon(
-                                Icons.Filled.Search,
-                                "搜索字幕",
-                                tint = if (state.query.isNotBlank()) MaterialTheme.colorScheme.primary
-                                    else MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
+                            compact = true,
+                            tint = if (state.query.isNotBlank()) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                         DropdownMenu(expanded = searchOpen, onDismissRequest = { searchOpen = false }) {
                             OutlinedTextField(
                                 value = state.query,
@@ -653,18 +661,15 @@ private fun SubtitleDock(
                             )
                         }
                     }
-                    IconButton(
+                    HintIconButton(
+                        icon = Icons.Filled.SelectAll,
+                        label = if (allVisibleSelected) "取消全选" else "全选当前筛选结果",
                         onClick = viewModel::toggleSelectAllVisible,
                         enabled = visibleIds.isNotEmpty(),
-                        modifier = Modifier.width(30.dp).height(30.dp),
-                    ) {
-                        Icon(
-                            Icons.Filled.SelectAll,
-                            if (allVisibleSelected) "取消全选" else "全选当前筛选结果",
-                            tint = if (visibleSelected > 0) MaterialTheme.colorScheme.primary
-                                else MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
+                        compact = true,
+                        tint = if (visibleSelected > 0) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                     if (state.selectedEventIds.isNotEmpty()) {
                         Text(
                             "已选 " + state.selectedEventIds.size,
@@ -684,19 +689,19 @@ private fun SubtitleDock(
                             Text("清筛", style = MaterialTheme.typography.labelSmall)
                         }
                     }
-                    IconButton(
-                        onClick = viewModel::insertEventAtPlayback,
-                        modifier = Modifier.width(30.dp).height(30.dp),
-                    ) {
-                        Icon(Icons.Filled.Add, "在当前播放位置添加字幕")
-                    }
+                    HintIconButton(
+                        Icons.Filled.Add,
+                        "在当前播放位置添加字幕",
+                        viewModel::insertEventAtPlayback,
+                        compact = true,
+                    )
                     Box {
-                        IconButton(
-                            onClick = { actionsOpen = true },
-                            modifier = Modifier.width(30.dp).height(30.dp),
-                        ) {
-                            Icon(Icons.Filled.MoreVert, "字幕操作")
-                        }
+                        HintIconButton(
+                            Icons.Filled.MoreVert,
+                            "字幕操作：删除 / 合并 / 复制格式 / 替换",
+                            { actionsOpen = true },
+                            compact = true,
+                        )
                         DropdownMenu(expanded = actionsOpen, onDismissRequest = { actionsOpen = false }) {
                             DropdownMenuItem(
                                 text = { Text("删除选中 / 当前字幕") },
@@ -1060,9 +1065,7 @@ private fun SubtitleRow(
                 overflow = TextOverflow.Ellipsis,
                 style = MaterialTheme.typography.bodySmall,
             )
-            IconButton(onClick = onJump, modifier = Modifier.width(28.dp).height(28.dp)) {
-                Icon(Icons.Filled.PlayArrow, "跳转")
-            }
+            HintIconButton(Icons.Filled.PlayArrow, "跳转到这条字幕", onJump, compact = true)
         }
         if (focused) {
             FocusedEventEditor(
