@@ -25,13 +25,14 @@ object AndroidFontconfigPolicy {
         importedDir: File,
         cacheRoot: File,
         systemFontDirs: List<String> = defaultSystemFontDirs,
+        environmentFingerprint: String = "",
         pruneOldCaches: Boolean = false,
     ): FontconfigPrepared {
         configDir.mkdirs()
         importedDir.mkdirs()
         cacheRoot.mkdirs()
 
-        val fingerprint = fingerprint(importedDir)
+        val fingerprint = fingerprint(importedDir, environmentFingerprint)
         val cacheDir = File(cacheRoot, CACHE_PREFIX + fingerprint.take(12)).apply { mkdirs() }
         val configText = render(importedDir, cacheDir, systemFontDirs)
         val configFile = File(configDir, "fonts.conf")
@@ -80,9 +81,10 @@ object AndroidFontconfigPolicy {
         appendLine("</fontconfig>")
     }
 
-    fun fingerprint(importedDir: File): String {
+    fun fingerprint(importedDir: File, environmentFingerprint: String = ""): String {
         val descriptor = buildString {
             append("schema=").append(SCHEMA_VERSION).append('\n')
+            append("environment=").append(environmentFingerprint).append('\n')
             importedDir.listFiles()
                 .orEmpty()
                 .filter { it.isFile && it.extension.lowercase() in setOf("ttf", "otf", "ttc", "otc") }
@@ -91,6 +93,8 @@ object AndroidFontconfigPolicy {
                     append(file.name)
                         .append(':')
                         .append(file.length())
+                        .append(':')
+                        .append(file.lastModified())
                         .append('\n')
                 }
         }
