@@ -871,7 +871,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             state.document.styles.forEach { style ->
                 val sampleText = byStyle[style.name].orEmpty()
                     .asSequence()
-                    .map { it.text.replace(Regex("\\{[^}]*}"), "").replace("\\N", " ") }
+                    .map { it.text.replace(Regex("\\{[^}]*\\}"), "").replace("\\N", " ") }
                     .joinToString(" ")
                 fontStore.glyphDiagnostic(style.fontName, sampleText)?.let { glyphs[style.name] = it }
             }
