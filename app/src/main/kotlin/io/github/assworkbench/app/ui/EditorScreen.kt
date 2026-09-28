@@ -1,10 +1,12 @@
 package io.github.assworkbench.app.ui
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -12,10 +14,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -26,32 +30,33 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Divider
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TriStateCheckbox
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.adaptive.currentWindowAdaptiveInfo
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.github.assworkbench.app.AppThemeMode
@@ -89,90 +94,19 @@ fun EditorScreen(
 ) {
     var sectionName by rememberSaveable { mutableStateOf(WorkspaceSection.SUBTITLES.name) }
     val section = WorkspaceSection.entries.firstOrNull { it.name == sectionName } ?: WorkspaceSection.SUBTITLES
-    var overflowOpen by remember { mutableStateOf(false) }
-
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text(
-                            state.project.title + if (state.dirty) " *" else "",
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        Text(
-                            "${state.document.events.size} 条字幕 · " +
-                                if (BuildConfig.ASSWB_RENDERER_EXPERIMENTAL) "Fontconfig renderer" else "libass preview",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                        )
-                    }
-                },
-                actions = {
-                    IconButton(onClick = onOpenVideo) { Icon(Icons.Filled.Movie, "打开/更换视频") }
-                    IconButton(onClick = onOpenSubtitle) { Icon(Icons.Filled.FolderOpen, "打开/更换字幕") }
-                    TextButton(onClick = onOpenMkvProject) { Text("MKV") }
-                    IconButton(onClick = onSave, enabled = state.subtitleLoaded) { Icon(Icons.Filled.Save, "保存") }
-                    IconButton(onClick = viewModel::undo, enabled = state.canUndo) {
-                        Icon(Icons.AutoMirrored.Filled.Undo, "撤销")
-                    }
-                    IconButton(onClick = viewModel::redo, enabled = state.canRedo) {
-                        Icon(Icons.AutoMirrored.Filled.Redo, "重做")
-                    }
-                    Box {
-                        IconButton(onClick = { overflowOpen = true }) {
-                            Icon(Icons.Filled.MoreVert, "更多")
-                        }
-                        DropdownMenu(
-                            expanded = overflowOpen,
-                            onDismissRequest = { overflowOpen = false },
-                        ) {
-                            DropdownMenuItem(
-                                text = { Text("另存 ASS") },
-                                enabled = state.subtitleLoaded,
-                                onClick = {
-                                    overflowOpen = false
-                                    onSaveAs()
-                                },
-                            )
-                            DropdownMenuItem(
-                                text = { Text("导入字体") },
-                                onClick = {
-                                    overflowOpen = false
-                                    onImportFont()
-                                },
-                            )
-                            DropdownMenuItem(
-                                text = { Text("重建字体缓存") },
-                                onClick = {
-                                    overflowOpen = false
-                                    viewModel.rebuildRendererFontCache()
-                                },
-                            )
-                            androidx.compose.material3.HorizontalDivider()
-                            AppThemeMode.entries.forEach { mode ->
-                                val label = when (mode) {
-                                    AppThemeMode.SYSTEM -> "跟随系统"
-                                    AppThemeMode.LIGHT -> "浅色"
-                                    AppThemeMode.DARK -> "深色"
-                                }
-                                DropdownMenuItem(
-                                    text = {
-                                        Text(
-                                            (if (themeMode == mode) "✓ " else "") + "主题 · " + label
-                                        )
-                                    },
-                                    onClick = {
-                                        overflowOpen = false
-                                        onThemeModeChange(mode)
-                                    },
-                                )
-                            }
-                        }
-                    }
-                },
+            CompactEditorToolbar(
+                state = state,
+                viewModel = viewModel,
+                onOpenVideo = onOpenVideo,
+                onOpenMkvProject = onOpenMkvProject,
+                onOpenSubtitle = onOpenSubtitle,
+                onImportFont = onImportFont,
+                onSave = onSave,
+                onSaveAs = onSaveAs,
+                themeMode = themeMode,
+                onThemeModeChange = onThemeModeChange,
             )
         },
         bottomBar = {
@@ -195,6 +129,91 @@ fun EditorScreen(
             onSaveMkv = onSaveMkv,
             modifier = Modifier.fillMaxSize().padding(padding),
         )
+    }
+}
+
+@Composable
+private fun CompactEditorToolbar(
+    state: EditorState,
+    viewModel: EditorViewModel,
+    onOpenVideo: () -> Unit,
+    onOpenMkvProject: () -> Unit,
+    onOpenSubtitle: () -> Unit,
+    onImportFont: () -> Unit,
+    onSave: () -> Unit,
+    onSaveAs: () -> Unit,
+    themeMode: AppThemeMode,
+    onThemeModeChange: (AppThemeMode) -> Unit,
+) {
+    var overflowOpen by remember { mutableStateOf(false) }
+    CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 32.dp) {
+        Surface(tonalElevation = 1.dp) {
+            Row(
+                Modifier.fillMaxWidth().height(42.dp).padding(horizontal = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Text(
+                    state.project.title + if (state.dirty) " *" else "",
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.labelLarge,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    state.document.events.size.toString() + " · " +
+                        if (BuildConfig.ASSWB_RENDERER_EXPERIMENTAL) "FC" else "libass",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                )
+                IconButton(onClick = onOpenVideo, modifier = Modifier.width(34.dp).height(34.dp)) {
+                    Icon(Icons.Filled.Movie, "打开/更换视频")
+                }
+                IconButton(onClick = onOpenSubtitle, modifier = Modifier.width(34.dp).height(34.dp)) {
+                    Icon(Icons.Filled.FolderOpen, "打开/更换字幕")
+                }
+                TextButton(onClick = onOpenMkvProject, modifier = Modifier.height(32.dp)) { Text("MKV") }
+                IconButton(onClick = onSave, enabled = state.subtitleLoaded, modifier = Modifier.width(34.dp).height(34.dp)) {
+                    Icon(Icons.Filled.Save, "保存")
+                }
+                IconButton(onClick = viewModel::undo, enabled = state.canUndo, modifier = Modifier.width(34.dp).height(34.dp)) {
+                    Icon(Icons.AutoMirrored.Filled.Undo, "撤销")
+                }
+                IconButton(onClick = viewModel::redo, enabled = state.canRedo, modifier = Modifier.width(34.dp).height(34.dp)) {
+                    Icon(Icons.AutoMirrored.Filled.Redo, "重做")
+                }
+                Box {
+                    IconButton(onClick = { overflowOpen = true }, modifier = Modifier.width(34.dp).height(34.dp)) {
+                        Icon(Icons.Filled.MoreVert, "更多")
+                    }
+                    DropdownMenu(expanded = overflowOpen, onDismissRequest = { overflowOpen = false }) {
+                        DropdownMenuItem(
+                            text = { Text("另存 ASS") },
+                            enabled = state.subtitleLoaded,
+                            onClick = { overflowOpen = false; onSaveAs() },
+                        )
+                        DropdownMenuItem(text = { Text("导入字体") }, onClick = { overflowOpen = false; onImportFont() })
+                        DropdownMenuItem(
+                            text = { Text("重建字体缓存") },
+                            onClick = { overflowOpen = false; viewModel.rebuildRendererFontCache() },
+                        )
+                        androidx.compose.material3.HorizontalDivider()
+                        AppThemeMode.entries.forEach { mode ->
+                            val label = when (mode) {
+                                AppThemeMode.SYSTEM -> "跟随系统"
+                                AppThemeMode.LIGHT -> "浅色"
+                                AppThemeMode.DARK -> "深色"
+                            }
+                            DropdownMenuItem(
+                                text = { Text((if (themeMode == mode) "✓ " else "") + "主题 · " + label) },
+                                onClick = { overflowOpen = false; onThemeModeChange(mode) },
+                            )
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -252,9 +271,9 @@ private fun ExpandedEditorWorkspace(
 ) {
     Row(Modifier.fillMaxSize()) {
         Column(Modifier.weight(1f).fillMaxHeight()) {
-            PreviewPane(state, viewModel, Modifier.weight(0.64f).fillMaxWidth())
+            PreviewPane(state, viewModel, Modifier.fillMaxWidth())
             Divider()
-            SubtitleDock(state, viewModel, Modifier.weight(0.36f).fillMaxWidth())
+            SubtitleDock(state, viewModel, Modifier.weight(1f).fillMaxWidth())
         }
         Box(
             Modifier.width(1.dp).fillMaxHeight()
@@ -267,7 +286,7 @@ private fun ExpandedEditorWorkspace(
             onSectionChange = onSectionChange,
             onImportFont = onImportFont,
             onSaveMkv = onSaveMkv,
-            modifier = Modifier.width(372.dp).fillMaxHeight(),
+            modifier = Modifier.width(420.dp).fillMaxHeight(),
         )
     }
 }
@@ -282,10 +301,10 @@ private fun TabletEditorWorkspace(
     onSaveMkv: () -> Unit,
 ) {
     Column(Modifier.fillMaxSize()) {
-        PreviewPane(state, viewModel, Modifier.weight(0.56f).fillMaxWidth())
+        PreviewPane(state, viewModel, Modifier.fillMaxWidth())
         Divider()
-        Row(Modifier.weight(0.44f).fillMaxWidth()) {
-            SubtitleDock(state, viewModel, Modifier.weight(0.58f).fillMaxHeight())
+        Row(Modifier.weight(1f).fillMaxWidth()) {
+            SubtitleDock(state, viewModel, Modifier.weight(0.54f).fillMaxHeight())
             Box(
                 Modifier.width(1.dp).fillMaxHeight()
                     .background(MaterialTheme.colorScheme.outlineVariant),
@@ -297,7 +316,7 @@ private fun TabletEditorWorkspace(
                 onSectionChange = onSectionChange,
                 onImportFont = onImportFont,
                 onSaveMkv = onSaveMkv,
-                modifier = Modifier.weight(0.42f).fillMaxHeight(),
+                modifier = Modifier.weight(0.46f).fillMaxHeight(),
             )
         }
     }
@@ -313,12 +332,12 @@ private fun CompactEditorWorkspace(
     onSaveMkv: () -> Unit,
 ) {
     Column(Modifier.fillMaxSize()) {
-        PreviewPane(state, viewModel, Modifier.weight(0.46f).fillMaxWidth())
+        PreviewPane(state, viewModel, Modifier.fillMaxWidth())
         Divider()
         WorkspaceTabs(section, onSectionChange)
         Divider()
         if (section == WorkspaceSection.SUBTITLES) {
-            SubtitleDock(state, viewModel, Modifier.weight(0.54f).fillMaxWidth())
+            SubtitleDock(state, viewModel, Modifier.weight(1f).fillMaxWidth())
         } else {
             InspectorBody(
                 state = state,
@@ -326,7 +345,7 @@ private fun CompactEditorWorkspace(
                 section = section,
                 onImportFont = onImportFont,
                 onSaveMkv = onSaveMkv,
-                modifier = Modifier.weight(0.54f).fillMaxWidth(),
+                modifier = Modifier.weight(1f).fillMaxWidth(),
             )
         }
     }
@@ -363,7 +382,7 @@ private fun WorkspaceTabs(
     Row(
         modifier.fillMaxWidth()
             .horizontalScroll(rememberScrollState())
-            .padding(horizontal = 6.dp, vertical = 4.dp),
+            .padding(horizontal = 4.dp, vertical = 2.dp),
         horizontalArrangement = Arrangement.spacedBy(4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -376,7 +395,7 @@ private fun WorkspaceTabs(
             ) {
                 TextButton(
                     onClick = { onSectionChange(item) },
-                    modifier = Modifier.height(40.dp),
+                    modifier = Modifier.height(32.dp),
                 ) {
                     Text(
                         item.label,
@@ -432,26 +451,11 @@ private fun InspectorBody(
     Box(modifier.fillMaxSize()) {
         when (section) {
             WorkspaceSection.SUBTITLES -> {
-                Column(
-                    Modifier.fillMaxSize()
-                        .verticalScroll(rememberScrollState())
-                        .padding(10.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    Text("字幕检查器", style = MaterialTheme.typography.titleSmall)
-                    if (state.selectedEventIds.isNotEmpty()) {
-                        BatchSelectionPanel(state, viewModel)
-                        Divider()
-                    }
-                    if (focused != null) {
-                        FocusedEventEditor(focused, viewModel)
-                    } else {
-                        Text(
-                            "从下方字幕列表选择一条字幕后，在这里编辑时间与文本。",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
+                TimelineInspector(
+                    state = state,
+                    viewModel = viewModel,
+                    modifier = Modifier.fillMaxSize(),
+                )
             }
 
             WorkspaceSection.STYLE -> {
@@ -609,36 +613,52 @@ private fun SubtitleDock(
 ) {
     val visibleIds = state.filteredEvents.map { it.id }
     val visibleSelected = visibleIds.count { it in state.selectedEventIds }
-    val selectState = when {
-        visibleIds.isEmpty() || visibleSelected == 0 -> ToggleableState.Off
-        visibleSelected == visibleIds.size -> ToggleableState.On
-        else -> ToggleableState.Indeterminate
-    }
+    val allVisibleSelected = visibleIds.isNotEmpty() && visibleSelected == visibleIds.size
+    var searchOpen by remember { mutableStateOf(false) }
+    val listState = rememberLazyListState()
 
     Surface(modifier, tonalElevation = 1.dp) {
-        Column(Modifier.fillMaxSize().padding(horizontal = 8.dp, vertical = 6.dp)) {
-            Row(
-                Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                OutlinedTextField(
-                    value = state.query,
-                    onValueChange = viewModel::setQuery,
-                    singleLine = true,
-                    placeholder = { Text("搜索正文 / Actor / Style") },
-                    modifier = Modifier.weight(1f),
-                )
-                TriStateCheckbox(
-                    state = selectState,
-                    onClick = viewModel::toggleSelectAllVisible,
-                    enabled = visibleIds.isNotEmpty(),
-                )
-                Column(horizontalAlignment = Alignment.End) {
-                    Text(
-                        state.filteredEvents.size.toString() + "/" + state.document.events.size,
-                        style = MaterialTheme.typography.labelMedium,
-                    )
+        CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 28.dp) {
+            Column(Modifier.fillMaxSize().padding(horizontal = 6.dp, vertical = 3.dp)) {
+                Row(
+                    Modifier.fillMaxWidth().height(32.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Box {
+                        IconButton(
+                            onClick = { searchOpen = true },
+                            modifier = Modifier.width(30.dp).height(30.dp),
+                        ) {
+                            Icon(
+                                Icons.Filled.Search,
+                                "搜索字幕",
+                                tint = if (state.query.isNotBlank()) MaterialTheme.colorScheme.primary
+                                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        DropdownMenu(expanded = searchOpen, onDismissRequest = { searchOpen = false }) {
+                            OutlinedTextField(
+                                value = state.query,
+                                onValueChange = viewModel::setQuery,
+                                singleLine = true,
+                                placeholder = { Text("正文 / Actor / Style") },
+                                modifier = Modifier.width(300.dp).padding(horizontal = 8.dp, vertical = 4.dp),
+                            )
+                        }
+                    }
+                    IconButton(
+                        onClick = viewModel::toggleSelectAllVisible,
+                        enabled = visibleIds.isNotEmpty(),
+                        modifier = Modifier.width(30.dp).height(30.dp),
+                    ) {
+                        Icon(
+                            Icons.Filled.SelectAll,
+                            if (allVisibleSelected) "取消全选" else "全选当前筛选结果",
+                            tint = if (visibleSelected > 0) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                     if (state.selectedEventIds.isNotEmpty()) {
                         Text(
                             "已选 " + state.selectedEventIds.size,
@@ -646,27 +666,177 @@ private fun SubtitleDock(
                             color = MaterialTheme.colorScheme.primary,
                         )
                     }
-                }
-            }
-            LazyColumn(Modifier.weight(1f).fillMaxWidth()) {
-                items(state.filteredEvents, key = { it.id }) { event ->
-                    SubtitleRow(
-                        event = event,
-                        checked = event.id in state.selectedEventIds,
-                        focused = event.id == state.focusedEventId,
-                        onCheck = { viewModel.toggleSelected(event.id) },
-                        onFocus = {
-                            if (state.selectionAnchorId != null) viewModel.selectRangeTo(event.id)
-                            else viewModel.focusEvent(event.id, seek = false)
-                        },
-                        onLongPress = { viewModel.beginRangeSelection(event.id) },
-                        onJump = { viewModel.focusEvent(event.id, seek = true) },
+                    Text(
+                        state.filteredEvents.size.toString() + "/" + state.document.events.size,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f),
+                        maxLines = 1,
                     )
-                    Divider()
+                    if (state.query.isNotBlank()) {
+                        TextButton(onClick = { viewModel.setQuery("") }, modifier = Modifier.height(28.dp)) {
+                            Text("清筛", style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
+                }
+
+                var dragLastId by remember { mutableStateOf<Long?>(null) }
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier.weight(1f).fillMaxWidth()
+                        .pointerInput(state.filteredEvents.map { it.id }) {
+                            fun eventAt(y: Float): Long? {
+                                val item = listState.layoutInfo.visibleItemsInfo.firstOrNull { info ->
+                                    y >= info.offset && y < info.offset + info.size
+                                } ?: return null
+                                return state.filteredEvents.getOrNull(item.index)?.id
+                            }
+                            detectDragGesturesAfterLongPress(
+                                onDragStart = { point ->
+                                    eventAt(point.y)?.let { id ->
+                                        dragLastId = id
+                                        viewModel.beginRangeSelection(id)
+                                    }
+                                },
+                                onDrag = { change, _ ->
+                                    change.consume()
+                                    val id = eventAt(change.position.y)
+                                    if (id != null && id != dragLastId) {
+                                        dragLastId = id
+                                        viewModel.previewRangeSelection(id)
+                                    }
+                                },
+                                onDragEnd = {
+                                    viewModel.finishRangeSelection()
+                                    dragLastId = null
+                                },
+                                onDragCancel = {
+                                    viewModel.finishRangeSelection()
+                                    dragLastId = null
+                                },
+                            )
+                        },
+                ) {
+                    items(state.filteredEvents, key = { it.id }) { event ->
+                        SubtitleRow(
+                            event = event,
+                            checked = event.id in state.selectedEventIds,
+                            focused = event.id == state.focusedEventId,
+                            viewModel = viewModel,
+                            onCheck = { viewModel.toggleSelected(event.id) },
+                            onFocus = { viewModel.focusEvent(event.id, seek = false) },
+                            onJump = { viewModel.focusEvent(event.id, seek = true) },
+                        )
+                        Divider()
+                    }
                 }
             }
         }
     }
+}
+
+@Composable
+private fun TimelineInspector(
+    state: EditorState,
+    viewModel: EditorViewModel,
+    modifier: Modifier = Modifier,
+) {
+    val focused = state.document.events.firstOrNull { it.id == state.focusedEventId }
+    val centerMs = focused?.start?.millis ?: state.playbackPositionMs
+    val windowStart = (centerMs - 15_000L).coerceAtLeast(0L)
+    val windowEnd = windowStart + 30_000L
+    val visible = state.document.events.filter { event ->
+        event.end.millis >= windowStart && event.start.millis <= windowEnd
+    }.take(28)
+
+    Column(modifier.padding(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text("时间轴", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+            Text(
+                formatTimelineClock(centerMs) + " · ±15s",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        if (visible.isEmpty()) {
+            Text(
+                "当前窗口没有字幕事件。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        } else {
+            LazyColumn(Modifier.weight(1f).fillMaxWidth()) {
+                items(visible, key = { it.id }) { event ->
+                    TimelineEventRow(
+                        event = event,
+                        windowStartMs = windowStart,
+                        windowEndMs = windowEnd,
+                        playheadMs = state.playbackPositionMs,
+                        focused = event.id == state.focusedEventId,
+                        onClick = { viewModel.focusEvent(event.id, seek = true) },
+                    )
+                }
+            }
+        }
+        if (state.selectedEventIds.isNotEmpty()) {
+            Divider()
+            BatchSelectionPanel(state, viewModel)
+        }
+    }
+}
+
+@Composable
+private fun TimelineEventRow(
+    event: AssEvent,
+    windowStartMs: Long,
+    windowEndMs: Long,
+    playheadMs: Long,
+    focused: Boolean,
+    onClick: () -> Unit,
+) {
+    Row(
+        Modifier.fillMaxWidth().height(28.dp).clickable(onClick = onClick),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        Text(
+            "#${event.id}",
+            style = MaterialTheme.typography.labelSmall,
+            modifier = Modifier.width(42.dp),
+            color = if (focused) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        BoxWithConstraints(
+            Modifier.weight(1f).height(16.dp)
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f))
+        ) {
+            val span = (windowEndMs - windowStartMs).coerceAtLeast(1L).toFloat()
+            val startFraction = ((event.start.millis - windowStartMs) / span).coerceIn(0f, 1f)
+            val endFraction = ((event.end.millis - windowStartMs) / span).coerceIn(0f, 1f)
+            val playFraction = ((playheadMs - windowStartMs) / span).coerceIn(0f, 1f)
+            val eventWidth = maxWidth * (endFraction - startFraction).coerceAtLeast(0.012f)
+            Box(
+                Modifier.offset(x = maxWidth * startFraction)
+                    .width(eventWidth).height(16.dp)
+                    .background(
+                        if (focused) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.secondary.copy(alpha = 0.72f)
+                    )
+            )
+            Box(
+                Modifier.offset(x = maxWidth * playFraction)
+                    .width(1.dp).height(16.dp)
+                    .background(MaterialTheme.colorScheme.error)
+            )
+        }
+    }
+}
+
+private fun formatTimelineClock(ms: Long): String {
+    val totalSeconds = ms.coerceAtLeast(0L) / 1000
+    val h = totalSeconds / 3600
+    val m = (totalSeconds % 3600) / 60
+    val sec = totalSeconds % 60
+    return if (h > 0) "%d:%02d:%02d".format(h, m, sec) else "%02d:%02d".format(m, sec)
 }
 
 @Composable
