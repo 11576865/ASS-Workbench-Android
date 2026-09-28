@@ -67,6 +67,9 @@
 - [x] Cache imported font metadata/font bytes.
 - [x] Debounce and bound expensive glyph diagnostics.
 - [x] Refresh stable Compose/Core/Lifecycle dependencies and compile against Android 37.
+- [x] Switch editor composition to Material3 Adaptive window size classes.
+- [x] Preserve common BOM-marked ASS encodings on standalone open/save.
+- [x] Support multi-font import batches with one Fontconfig refresh.
 - [x] Remove redundant nested cards from supporting inspectors.
 - [ ] Device-check 0.20 as one batch on the primary tablet.
 - [ ] Validate large-event-list performance with real ASS files.
