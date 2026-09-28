@@ -237,6 +237,7 @@ private fun SubtitleWorkbench(
 @Composable
 private fun FontStatusRow(state: EditorState, viewModel: EditorViewModel, onImportFont: () -> Unit) {
     val exact = state.fontDiagnostics.count { it.status == FontMatchStatus.EXACT_IMPORTED }
+    val aliasOnly = state.fontDiagnostics.count { it.status == FontMatchStatus.METADATA_ALIAS }
     val missing = state.fontDiagnostics.count { it.status == FontMatchStatus.MISSING }
     val fallback = state.fontDiagnostics.count { it.status == FontMatchStatus.FALLBACK_ONLY }
     var menuOpen by remember { mutableStateOf(false) }
@@ -250,7 +251,7 @@ private fun FontStatusRow(state: EditorState, viewModel: EditorViewModel, onImpo
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Text(
-                "字体：" + state.importedFonts.size + " imported · " + exact + " exact · " + fallback + " fallback · " + missing + " missing",
+                "字体：" + state.importedFonts.size + " imported · " + exact + " renderer exact · " + aliasOnly + " alias-only · " + fallback + " fallback · " + missing + " missing",
                 style = MaterialTheme.typography.labelSmall,
                 color = if (missing > 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.weight(1f),
