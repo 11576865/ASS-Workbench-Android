@@ -127,7 +127,8 @@ jobs:
 
       - name: Install stable Android SDK 36
         run: |
-          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" >/dev/null
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" >/dev/null
+          test -d "$ANDROID_HOME/platforms/android-36"
 
       - name: Give patched renderer an isolated Maven version
         working-directory: .libmpvkt-src
