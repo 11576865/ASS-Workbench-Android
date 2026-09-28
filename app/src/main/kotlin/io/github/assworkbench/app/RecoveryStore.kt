@@ -3,6 +3,7 @@ package io.github.assworkbench.app
 import android.content.Context
 import io.github.assworkbench.domain.AssCodec
 import io.github.assworkbench.domain.AssDocument
+import io.github.assworkbench.domain.AssTextEncoding
 import io.github.assworkbench.domain.SubtitleProject
 import java.io.File
 import java.util.Base64
@@ -10,6 +11,7 @@ import java.util.Base64
 data class RecoverySnapshot(
     val project: SubtitleProject,
     val document: AssDocument,
+    val textEncoding: AssTextEncoding,
 )
 
 class RecoveryStore(context: Context) {
@@ -21,7 +23,7 @@ class RecoveryStore(context: Context) {
 
     fun label(): String = readMeta().getOrNull(0).orEmpty().ifBlank { "未保存字幕工程" }
 
-    fun write(project: SubtitleProject, document: AssDocument) {
+    fun write(project: SubtitleProject, document: AssDocument, textEncoding: AssTextEncoding) {
         val tmpAss = File(dir, "latest.ass.tmp")
         val tmpMeta = File(dir, "latest.meta.tmp")
         tmpAss.writeText(AssCodec.write(document), Charsets.UTF_8)
@@ -30,6 +32,7 @@ class RecoveryStore(context: Context) {
             encode(project.subtitleUri.orEmpty()),
             encode(project.videoUri.orEmpty()),
             project.splitRatio.toString(),
+            textEncoding.storageValue(),
         )
         tmpMeta.writeText(lines.joinToString("\n"), Charsets.UTF_8)
         if (assFile.exists()) assFile.delete()
@@ -48,7 +51,11 @@ class RecoveryStore(context: Context) {
                 videoUri = meta.getOrNull(2)?.ifBlank { null },
                 splitRatio = meta.getOrNull(3)?.toFloatOrNull()?.coerceIn(0.28f, 0.78f) ?: 0.56f,
             )
-            RecoverySnapshot(project, AssCodec.parse(assFile.readText(Charsets.UTF_8)))
+            RecoverySnapshot(
+                project = project,
+                document = AssCodec.parse(assFile.readText(Charsets.UTF_8)),
+                textEncoding = parseEncoding(meta.getOrNull(4)),
+            )
         }.getOrNull()
     }
 
@@ -57,6 +64,20 @@ class RecoveryStore(context: Context) {
         metaFile.delete()
         File(dir, "latest.ass.tmp").delete()
         File(dir, "latest.meta.tmp").delete()
+    }
+
+    private fun parseEncoding(value: String?): AssTextEncoding = when (value) {
+        "utf8-bom" -> AssTextEncoding.UTF8_BOM
+        "utf16-le" -> AssTextEncoding.UTF16_LE
+        "utf16-be" -> AssTextEncoding.UTF16_BE
+        else -> AssTextEncoding.UTF8
+    }
+
+    private fun AssTextEncoding.storageValue(): String = when (this) {
+        AssTextEncoding.UTF8 -> "utf8"
+        AssTextEncoding.UTF8_BOM -> "utf8-bom"
+        AssTextEncoding.UTF16_LE -> "utf16-le"
+        AssTextEncoding.UTF16_BE -> "utf16-be"
     }
 
     private fun readMeta(): List<String> {
