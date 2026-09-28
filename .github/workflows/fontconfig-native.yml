@@ -107,8 +107,6 @@ jobs:
             echo "libmpvkt_bundle_version=0.3.0-asswb-fontconfig"
             echo "meson=1.11.0"
             grep '^v_' .libmpvkt-src/buildscripts/include/depinfo.sh
-            echo "v_libxml2=2.15.4"
-            echo "v_fontconfig=2.18.3"
             echo "fontconfig_pc_version=$(sed -nE 's/^Version:[[:space:]]*//p' .libmpvkt-src/buildscripts/prefix/arm64/lib/pkgconfig/fontconfig.pc | head -1)"
             echo "libass_pc_version=$(sed -nE 's/^Version:[[:space:]]*//p' .libmpvkt-src/buildscripts/prefix/arm64/lib/pkgconfig/libass.pc | head -1)"
             echo "libmpv_sha256=$(sha256sum .libmpvkt-src/libmpvkt-native/native-libs/arm64-v8a/libmpv.so | awk '{print $1}')"
