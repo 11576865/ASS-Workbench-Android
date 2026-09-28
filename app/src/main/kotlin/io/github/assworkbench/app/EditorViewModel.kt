@@ -446,6 +446,101 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         it.copy(selectedEventIds = emptySet(), selectionAnchorId = null, status = "已清除选择。")
     }
 
+    fun focusPreviousEvent() {
+        val events = _state.value.document.events
+        if (events.isEmpty()) return
+        val current = _state.value.focusedEventId
+        val index = events.indexOfFirst { it.id == current }
+        val target = events[(if (index <= 0) 0 else index - 1)]
+        focusEvent(target.id, seek = true)
+    }
+
+    fun focusNextEvent() {
+        val events = _state.value.document.events
+        if (events.isEmpty()) return
+        val current = _state.value.focusedEventId
+        val index = events.indexOfFirst { it.id == current }
+        val target = events[(if (index < 0) 0 else (index + 1).coerceAtMost(events.lastIndex))]
+        focusEvent(target.id, seek = true)
+    }
+
+    fun alignSelectedStartToPlayback() {
+        val snapshot = _state.value
+        val ids = snapshot.selectedEventIds
+        if (ids.isEmpty()) return
+        val selected = snapshot.document.events.filter { it.id in ids }
+        val earliest = selected.minOfOrNull { it.start.millis } ?: return
+        val delta = snapshot.playbackPositionMs - earliest
+        shiftSelected(delta)
+    }
+
+    fun updateFocusedMetadata(layer: Int, actor: String, comment: Boolean) {
+        val id = _state.value.focusedEventId ?: return
+        editDocument("已更新当前字幕的 Layer / Actor / 类型。") { doc ->
+            doc.copy(events = doc.events.map { event ->
+                if (event.id == id) {
+                    event.copy(
+                        layer = layer.coerceIn(-999, 999),
+                        name = actor,
+                        comment = comment,
+                    )
+                } else event
+            })
+        }
+    }
+
+    fun setSelectedComment(comment: Boolean) {
+        val ids = _state.value.selectedEventIds
+        if (ids.isEmpty()) return
+        editDocument(if (comment) "已把选中字幕设为 Comment。" else "已把选中字幕设为 Dialogue。") { doc ->
+            doc.copy(events = doc.events.map { event ->
+                if (event.id in ids) event.copy(comment = comment) else event
+            })
+        }
+    }
+
+    fun setEventTiming(id: Long, startMs: Long, endMs: Long) {
+        if (endMs < startMs) return
+        editDocument("已在时间轴修改字幕 #" + id + "。") { doc ->
+            doc.copy(events = doc.events.map { event ->
+                if (event.id == id) event.copy(
+                    start = SubTime(startMs.coerceAtLeast(0L)),
+                    end = SubTime(endMs.coerceAtLeast(startMs.coerceAtLeast(0L))),
+                ) else event
+            })
+        }
+    }
+
+    fun setFocusedPosition(x: Double, y: Double) {
+        val state = _state.value
+        val id = state.focusedEventId ?: return
+        val event = state.document.events.firstOrNull { it.id == id } ?: return
+        val current = EventOverrideEditor.inspect(event.text)
+        applyEventOverrides(
+            id = id,
+            x = x.coerceIn(0.0, state.document.playResX.toDouble()),
+            y = y.coerceIn(0.0, state.document.playResY.toDouble()),
+            blur = current.blur,
+            fadeInMs = current.fadeInMs,
+            fadeOutMs = current.fadeOutMs,
+            softEntry = current.softEntry,
+        )
+    }
+
+    fun setFocusedAlignment(alignment: Int) {
+        val id = _state.value.focusedEventId ?: return
+        editDocument("已设置当前字幕对齐点。") { doc ->
+            doc.copy(events = doc.events.map { event ->
+                if (event.id != id) event else {
+                    val leading = Regex("""^(?:\{[^}]*\})*""").find(event.text)?.value.orEmpty()
+                    val body = event.text.removePrefix(leading)
+                    val cleaned = leading.replace(Regex("""\\an[1-9]"""), "").replace(Regex("""\{\s*\}"""), "")
+                    event.copy(text = cleaned + "{\\an" + alignment.coerceIn(1, 9) + "}" + body)
+                }
+            })
+        }
+    }
+
     fun insertEventAtPlayback() {
         val snapshot = _state.value
         val result = AssDocumentEditing.insertAtPlayback(
