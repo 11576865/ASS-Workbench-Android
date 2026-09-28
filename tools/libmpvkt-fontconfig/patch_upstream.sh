@@ -49,6 +49,11 @@ s = s.replace(
     "--enable-libunibreak --enable-fontconfig",
 )
 libass.write_text(s)
+
+for path in Path(".").glob("libmpvkt*/build.gradle.kts"):
+    text = path.read_text()
+    if "compileSdk = 37" in text:
+        path.write_text(text.replace("compileSdk = 37", "compileSdk = 36"))
 PY
 
 cat > buildscripts/scripts/libxml2.sh <<'EOF'
@@ -105,5 +110,6 @@ chmod +x buildscripts/scripts/libxml2.sh buildscripts/scripts/fontconfig.sh
 grep -q 'v_fontconfig=2.18.3' buildscripts/include/depinfo.sh
 grep -q 'dep_libass=(freetype2 fontconfig fribidi harfbuzz unibreak)' buildscripts/include/depinfo.sh
 grep -q -- '--enable-libunibreak --enable-fontconfig' buildscripts/scripts/libass.sh
+! grep -R --include='build.gradle.kts' -q 'compileSdk = 37' libmpvkt*
 
 echo "libmpvKt fontconfig patch applied"
