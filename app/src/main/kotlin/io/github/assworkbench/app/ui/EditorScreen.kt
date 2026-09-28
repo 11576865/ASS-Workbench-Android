@@ -52,6 +52,7 @@ import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -108,8 +109,17 @@ fun EditorScreen(
     var sectionName by rememberSaveable { mutableStateOf(WorkspaceSection.SUBTITLES.name) }
     val section = WorkspaceSection.entries.firstOrNull { it.name == sectionName } ?: WorkspaceSection.SUBTITLES
     val snackbarHostState = remember { SnackbarHostState() }
+    var initialStatusConsumed by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(state.status) {
-        if (state.status.isNotBlank()) snackbarHostState.showSnackbar(state.status)
+        if (!initialStatusConsumed) {
+            initialStatusConsumed = true
+        } else if (state.status.isNotBlank()) {
+            snackbarHostState.currentSnackbarData?.dismiss()
+            snackbarHostState.showSnackbar(
+                message = state.status,
+                duration = SnackbarDuration.Short,
+            )
+        }
     }
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
