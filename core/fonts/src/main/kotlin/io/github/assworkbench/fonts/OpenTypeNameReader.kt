@@ -68,19 +68,35 @@ object OpenTypeNameReader {
             return null
         }
 
-        val family = best(16, 1) ?: best(4, 6) ?: error("Font name table has no family name")
+        val typographicFamily = best(16)
+        val legacyFamily = best(1)
+        val fullName = best(4)
+        val postScriptName = best(6)
+        val displayFamily = typographicFamily ?: legacyFamily ?: fullName ?: postScriptName
+            ?: error("Font name table has no family name")
+        val rendererFamily = legacyFamily ?: fullName ?: postScriptName ?: displayFamily
+
         val aliases = records
             .filter { it.nameId in setOf(1, 4, 6, 16) }
             .map { it.value }
             .filter { it.isNotBlank() }
             .toSet()
+        val rendererAliases = records
+            .filter { it.nameId in setOf(1, 4, 6) }
+            .map { it.value }
+            .filter { it.isNotBlank() }
+            .toSet()
 
         return FontMetadata(
-            family = family,
+            family = displayFamily,
+            rendererFamily = rendererFamily,
+            legacyFamily = legacyFamily,
+            typographicFamily = typographicFamily,
             subfamily = best(17, 2),
-            fullName = best(4),
-            postScriptName = best(6),
+            fullName = fullName,
+            postScriptName = postScriptName,
             aliases = aliases,
+            rendererAliases = rendererAliases,
         )
     }
 
