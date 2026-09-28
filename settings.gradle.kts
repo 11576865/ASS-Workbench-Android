@@ -21,3 +21,5 @@ rootProject.name = "ASS-Workbench-Android"
 include(":app")
 include(":core:domain")
 include(":core:fonts")
+
+include(":core:container")

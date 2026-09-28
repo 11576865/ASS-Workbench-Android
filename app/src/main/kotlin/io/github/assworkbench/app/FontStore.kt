@@ -45,6 +45,17 @@ class FontStore(private val context: Context) {
         return FontAsset(target.name, sha, metadata)
     }
 
+    fun importEmbeddedFont(fileName: String, bytes: ByteArray): FontAsset? {
+        val ext = fileName.substringAfterLast('.', "").lowercase()
+        if (ext !in setOf("ttf", "otf")) return null
+        val metadata = OpenTypeNameReader.read(bytes)
+        val sha = OpenTypeNameReader.sha256(bytes)
+        val safeStem = metadata.family.replace(Regex("[^A-Za-z0-9._-]+"), "_").trim('_').ifBlank { "font" }
+        val target = File(importedDir, "${safeStem}-${sha.take(10)}.$ext")
+        if (!target.exists()) target.writeBytes(bytes)
+        return FontAsset(target.name, sha, metadata)
+    }
+
     fun ensureFallbackFont(): FontMetadata? {
         val target = File(mpvConfigDir, "subfont.ttf")
         if (!target.exists()) {

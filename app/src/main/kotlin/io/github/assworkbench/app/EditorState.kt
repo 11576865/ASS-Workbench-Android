@@ -28,6 +28,7 @@ data class EditorState(
     val originalTextById: Map<Long, String> = emptyMap(),
     val confirmedReviewIds: Set<Long> = emptySet(),
     val reviewFilter: String = "all",
+    val container: ContainerBridgeState = ContainerBridgeState(),
     val status: String = "可先打开 ASS，也可先选择参考视频；两者互不依赖。",
 ) {
     val filteredEvents get() = document.events.filter {

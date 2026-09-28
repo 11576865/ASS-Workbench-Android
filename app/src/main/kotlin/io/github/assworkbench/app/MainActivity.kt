@@ -23,6 +23,12 @@ class MainActivity : ComponentActivity() {
         viewModel.attachVideo(uri)
     }
 
+    private val openMkvProject = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri ?: return@registerForActivityResult
+        persist(uri, read = true, write = false)
+        viewModel.openMkvProject(uri)
+    }
+
     private val openSubtitle = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri ?: return@registerForActivityResult
         persist(uri, read = true, write = true)
@@ -54,6 +60,7 @@ class MainActivity : ComponentActivity() {
                     state = state,
                     viewModel = viewModel,
                     onOpenVideo = { openVideo.launch(arrayOf("video/*")) },
+                    onOpenMkvProject = { openMkvProject.launch(arrayOf("video/x-matroska", "video/*", "application/octet-stream")) },
                     onOpenSubtitle = { openSubtitle.launch(arrayOf("text/*", "application/x-ass", "application/x-ssa")) },
                     onImportFont = { importFont.launch(arrayOf("font/ttf", "font/otf", "application/x-font-ttf", "application/x-font-opentype", "application/octet-stream")) },
                     onSave = {

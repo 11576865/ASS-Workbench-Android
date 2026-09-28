@@ -1,0 +1,81 @@
+package io.github.assworkbench.app.ui
+
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Card
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import io.github.assworkbench.app.ContainerBridgeState
+import io.github.assworkbench.app.EditorViewModel
+
+@Composable
+fun ContainerBridgePanel(
+    state: ContainerBridgeState,
+    viewModel: EditorViewModel,
+    modifier: Modifier = Modifier,
+) {
+    if (state.uri == null) return
+    var menuOpen by remember { mutableStateOf(false) }
+    Card(modifier.fillMaxWidth()) {
+        Column(Modifier.fillMaxWidth().padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text("MKV Container Bridge")
+            Text(state.name)
+            when {
+                state.loading -> Text("正在扫描字幕轨与附件……")
+                state.error != null -> Text("错误：" + state.error)
+                else -> {
+                    Text(
+                        "ASS 轨 " + state.tracks.size +
+                            " · 已注册字体 " + state.extractedFontCount +
+                            " · 其他/未支持附件 " + state.skippedAttachmentCount
+                    )
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        val selected = state.tracks.firstOrNull { it.number == state.selectedTrackNumber }
+                        Text(
+                            selected?.name ?: "选择 ASS 轨",
+                            modifier = Modifier.weight(1f),
+                        )
+                        TextButton(
+                            onClick = { menuOpen = true },
+                            enabled = state.tracks.isNotEmpty(),
+                        ) { Text("轨道") }
+                        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                            state.tracks.forEach { track ->
+                                DropdownMenuItem(
+                                    text = {
+                                        Column {
+                                            Text(track.name)
+                                            Text("Track #" + track.number + " · " + track.eventCount + " events")
+                                        }
+                                    },
+                                    onClick = {
+                                        menuOpen = false
+                                        viewModel.selectContainerTrack(track.number)
+                                    },
+                                )
+                            }
+                        }
+                    }
+                    Text("当前 0.7.0：MKV 导入/字体附件桥接已工作；无重编码回写 MKV 将在 0.7.x 接上。")
+                }
+            }
+        }
+    }
+}

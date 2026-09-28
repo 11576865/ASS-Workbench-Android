@@ -3,6 +3,9 @@ package io.github.assworkbench.app
 import android.app.Application
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
+import io.github.assworkbench.container.MatroskaReader
+import io.github.assworkbench.container.MatroskaScanResult
 import io.github.assworkbench.domain.AssCodec
 import io.github.assworkbench.domain.AssDocument
 import io.github.assworkbench.domain.SubTime
@@ -12,17 +15,111 @@ import io.github.assworkbench.fonts.FontDiagnostics
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class EditorViewModel(application: Application) : AndroidViewModel(application) {
     private val app get() = getApplication<Application>()
     private val history = UndoHistory(AssDocument(), limit = 80)
     private val fontStore = FontStore(application)
+    private var containerScan: MatroskaScanResult? = null
     private val _state = MutableStateFlow(EditorState())
     val state: StateFlow<EditorState> = _state.asStateFlow()
 
     init {
         refreshFonts(initial = true)
+    }
+
+    fun openMkvProject(uri: Uri) {
+        _state.update {
+            it.copy(
+                container = ContainerBridgeState(
+                    uri = uri.toString(),
+                    name = displayName(uri) ?: "Matroska project",
+                    loading = true,
+                ),
+                status = "正在扫描 MKV 字幕轨与字体附件……",
+            )
+        }
+        viewModelScope.launch {
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    val stream = app.contentResolver.openInputStream(uri) ?: error("无法读取 MKV")
+                    stream.use { MatroskaReader().scan(it) }
+                }
+            }.onSuccess { scan ->
+                containerScan = scan
+                var imported = 0
+                var skipped = 0
+                withContext(Dispatchers.IO) {
+                    scan.attachments.forEach { attachment ->
+                        if (!attachment.isSupportedFont) {
+                            skipped++
+                        } else {
+                            val asset = runCatching {
+                                fontStore.importEmbeddedFont(attachment.fileName, attachment.data)
+                            }.getOrNull()
+                            if (asset != null) imported++ else skipped++
+                        }
+                    }
+                }
+                val tracks = scan.subtitleTracks.map {
+                    ContainerTrackUi(it.number, it.displayName, it.language, it.packets.size)
+                }
+                _state.update {
+                    it.copy(
+                        project = it.project.copy(videoUri = uri.toString()),
+                        container = it.container.copy(
+                            loading = false,
+                            tracks = tracks,
+                            extractedFontCount = imported,
+                            skippedAttachmentCount = skipped,
+                            error = null,
+                        ),
+                        status = "MKV：发现 " + tracks.size + " 个 ASS 轨；注册字体 " + imported + " 个。",
+                    )
+                }
+                refreshFonts(initial = false)
+                if (tracks.size == 1) selectContainerTrack(tracks.single().number)
+            }.onFailure { error ->
+                _state.update {
+                    it.copy(
+                        container = it.container.copy(loading = false, error = error.message ?: "MKV 扫描失败"),
+                        status = "MKV 扫描失败：" + (error.message ?: error::class.java.simpleName),
+                    )
+                }
+            }
+        }
+    }
+
+    fun selectContainerTrack(trackNumber: Long) {
+        val scan = containerScan ?: return
+        val track = scan.subtitleTracks.firstOrNull { it.number == trackNumber } ?: return
+        val document = AssCodec.parse(track.toAss())
+        history.reset(document)
+        val styleNames = document.styles.map { it.name }
+        _state.update {
+            it.copy(
+                project = it.project.copy(subtitleUri = null, title = it.container.name + " · " + track.displayName),
+                document = document,
+                subtitleLoaded = true,
+                selectedEventIds = emptySet(),
+                focusedEventId = document.events.firstOrNull()?.id,
+                dirty = false,
+                canUndo = false,
+                canRedo = false,
+                reviewSourceStyle = styleNames.firstOrNull().orEmpty(),
+                reviewTargetStyle = styleNames.drop(1).firstOrNull().orEmpty(),
+                originalTextById = document.events.associate { event -> event.id to event.text },
+                confirmedReviewIds = emptySet(),
+                reviewFilter = "all",
+                container = it.container.copy(selectedTrackNumber = trackNumber),
+                status = "已从 MKV 载入 " + track.displayName + "，共 " + document.events.size + " 条。",
+            )
+        }
+        refreshFontDiagnostics()
     }
 
     fun attachVideo(uri: Uri) {

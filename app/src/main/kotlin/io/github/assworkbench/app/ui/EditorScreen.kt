@@ -55,6 +55,7 @@ fun EditorScreen(
     state: EditorState,
     viewModel: EditorViewModel,
     onOpenVideo: () -> Unit,
+    onOpenMkvProject: () -> Unit,
     onOpenSubtitle: () -> Unit,
     onImportFont: () -> Unit,
     onSave: () -> Unit,
@@ -75,6 +76,7 @@ fun EditorScreen(
                 },
                 actions = {
                     IconButton(onClick = onOpenVideo) { Icon(Icons.Filled.Movie, "打开/更换视频") }
+                    androidx.compose.material3.TextButton(onClick = onOpenMkvProject) { Text("MKV") }
                     IconButton(onClick = onOpenSubtitle) { Icon(Icons.Filled.FolderOpen, "打开/更换字幕") }
                     IconButton(onClick = onImportFont) { Icon(Icons.Filled.FontDownload, "导入 TTF/OTF 字体") }
                     IconButton(onClick = onSave, enabled = state.subtitleLoaded) { Icon(Icons.Filled.Save, "保存") }
@@ -139,6 +141,7 @@ private fun SubtitleWorkbench(
             label = { Text("搜索字幕") },
             modifier = Modifier.fillMaxWidth(),
         )
+        ContainerBridgePanel(state.container, viewModel)
         FontStatusRow(state, viewModel, onImportFont)
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text("工作区", style = MaterialTheme.typography.labelMedium, modifier = Modifier.weight(1f))
