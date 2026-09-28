@@ -174,3 +174,17 @@
 - General ASR, OCR or translation.
 - Video encoding, filters or hard-sub rendering.
 - Full Aegisub parity, Lua Automation, vector drawing and professional waveform/spectrogram timing.
+
+
+## 0.21 compact workbench
+- [x] Replace the tall two-line top app bar with a compact 42dp editor toolbar.
+- [x] Make preview workspace geometry fixed at 16:9 and let unusual source aspect ratios letterbox inside it.
+- [x] Reduce playback chrome to a 34dp strip.
+- [x] Move subtitle search into an overlay; replace the large select-all checkbox with a compact action.
+- [x] Add long-press drag range selection.
+- [x] Move focused Event time/Margin/raw text editing into the expanded subtitle row.
+- [x] Replace the duplicate subtitle inspector with a timeline surface.
+- [x] Reallocate more inspector width to Style and trim nonessential explanatory prose.
+- [x] Unify embedded-MKV and standalone font fallback handling.
+- [x] Prefer CJK-capable Android system fonts for the no-import fallback path.
+- [ ] Device-check compact landscape layout, drag selection, 16:9 preview fill, CJK fallback, and MKV/external font parity.
