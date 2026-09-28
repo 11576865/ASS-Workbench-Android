@@ -70,6 +70,7 @@ fun TypesettingPanel(
     var borderStyle by remember(style) { mutableStateOf(style.borderStyle.toString()) }
     var encoding by remember(style) { mutableStateOf(style.encoding.toString()) }
     var advancedOpen by remember { mutableStateOf(false) }
+    var bilingualOpen by remember { mutableStateOf(false) }
     var styleMenuOpen by remember { mutableStateOf(false) }
     var styleManageMode by remember { mutableStateOf<StyleManageMode?>(null) }
     var styleNameDraft by remember(style.name) { mutableStateOf(style.name) }
@@ -322,11 +323,15 @@ fun TypesettingPanel(
                 )
             }
             item {
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    SmallField("字号", fontSize, { fontSize = it }, Modifier.weight(1f))
-                    SmallField("字距", spacing, { spacing = it }, Modifier.weight(1f))
-                    SmallField("描边", outline, { outline = it }, Modifier.weight(1f))
-                    SmallField("阴影", shadow, { shadow = it }, Modifier.weight(1f))
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        SmallField("字号", fontSize, { fontSize = it }, Modifier.weight(1f))
+                        SmallField("字距", spacing, { spacing = it }, Modifier.weight(1f))
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        SmallField("描边", outline, { outline = it }, Modifier.weight(1f))
+                        SmallField("阴影", shadow, { shadow = it }, Modifier.weight(1f))
+                    }
                 }
             }
             item {
@@ -341,12 +346,15 @@ fun TypesettingPanel(
                 Text("九宫格对齐")
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     listOf(listOf(7, 8, 9), listOf(4, 5, 6), listOf(1, 2, 3)).forEach { row ->
-                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
                             row.forEach { value ->
                                 if (alignment == value) {
-                                    Button(onClick = { alignment = value }, modifier = Modifier.width(54.dp)) { Text(value.toString()) }
+                                    Button(onClick = { alignment = value }, modifier = Modifier.weight(1f)) { Text(value.toString()) }
                                 } else {
-                                    OutlinedButton(onClick = { alignment = value }, modifier = Modifier.width(54.dp)) { Text(value.toString()) }
+                                    OutlinedButton(onClick = { alignment = value }, modifier = Modifier.weight(1f)) { Text(value.toString()) }
                                 }
                             }
                         }
@@ -362,34 +370,41 @@ fun TypesettingPanel(
             }
             item {
                 Text("颜色")
-                Row(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    AssColorControl(
-                        label = "文字",
-                        value = primaryColor,
-                        onValue = { primaryColor = it },
-                        modifier = Modifier.weight(1f),
-                    )
-                    AssColorControl(
-                        label = "次要",
-                        value = secondaryColor,
-                        onValue = { secondaryColor = it },
-                        modifier = Modifier.weight(1f),
-                    )
-                    AssColorControl(
-                        label = "描边",
-                        value = outlineColor,
-                        onValue = { outlineColor = it },
-                        modifier = Modifier.weight(1f),
-                    )
-                    AssColorControl(
-                        label = "阴影/背景",
-                        value = backColor,
-                        onValue = { backColor = it },
-                        modifier = Modifier.weight(1f),
-                    )
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        AssColorControl(
+                            label = "文字",
+                            value = primaryColor,
+                            onValue = { primaryColor = it },
+                            modifier = Modifier.weight(1f),
+                        )
+                        AssColorControl(
+                            label = "次要",
+                            value = secondaryColor,
+                            onValue = { secondaryColor = it },
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        AssColorControl(
+                            label = "描边",
+                            value = outlineColor,
+                            onValue = { outlineColor = it },
+                            modifier = Modifier.weight(1f),
+                        )
+                        AssColorControl(
+                            label = "阴影 / 背景",
+                            value = backColor,
+                            onValue = { backColor = it },
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
                 }
             }
             item {
@@ -420,78 +435,75 @@ fun TypesettingPanel(
             }
             item {
                 Text("有效值来源", style = androidx.compose.material3.MaterialTheme.typography.titleSmall)
-                if (focusedEvent != null) {
+                if (focusedEvent == null || (!hasInlineStyleOverrides && !hasEventMarginOverrides)) {
                     Text(
-                        if (focusedSources.isEmpty() && !hasEventMarginOverrides)
-                            "当前字幕没有检测到样式覆盖：以下参数由 Style 决定。"
-                        else
-                            buildString {
-                                if (focusedSources.isNotEmpty()) append("内联覆盖：").append(focusedSources.joinToString("、"))
-                                if (hasEventMarginOverrides) {
-                                    if (isNotEmpty()) append(" · ")
-                                    append("事件 Margin=")
-                                        .append(focusedEvent.marginL).append("/")
-                                        .append(focusedEvent.marginR).append("/")
-                                        .append(focusedEvent.marginV)
-                                }
-                            },
-                        color = if (focusedSources.isEmpty() && !hasEventMarginOverrides)
-                            androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
-                        else
-                            androidx.compose.material3.MaterialTheme.colorScheme.tertiary,
+                        "当前值由 Style 控制。",
+                        style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
+                        color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                }
-                Text(
-                    "Style → Override → Effective",
-                    style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
-                    color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                if (hasInlineStyleOverrides || hasEventMarginOverrides) {
+                } else {
                     val reasons = buildList {
-                        if (hasInlineStyleOverrides) add("内联 ASS 标签")
-                        if (hasEventMarginOverrides) add("事件级 Margin")
-                    }.joinToString("、")
+                        if (focusedSources.isNotEmpty()) add(focusedSources.joinToString(" / "))
+                        if (hasEventMarginOverrides) {
+                            add(
+                                "Margin " + focusedEvent.marginL + "/" +
+                                    focusedEvent.marginR + "/" + focusedEvent.marginV
+                            )
+                        }
+                    }
                     Text(
-                        "当前字幕存在 $reasons，会覆盖同名 Style 属性。你的文件中像 \\fs56、\\b0、\\i0、\\bord6、\\an2 这类标签就是这种情况。",
+                        "当前 Event 覆盖 Style · " + reasons.joinToString(" · "),
+                        style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
+                        color = androidx.compose.material3.MaterialTheme.colorScheme.tertiary,
                     )
                     OutlinedButton(
                         onClick = viewModel::clearFocusedStyleOverrides,
                         modifier = Modifier.fillMaxWidth(),
-                    ) { Text("让当前字幕完全继承 Style") }
+                    ) { Text("清除覆盖，改由 Style 控制") }
                 }
             }
             item {
-                Text("双语 60/40 预设")
-                Text(
-                    "3% 横向安全边距 · 5% 纵向安全边距 · 中央间隔 " +
-                        geometry.centralGap + " · 分界 Y " +
-                        geometry.sourceBoundaryY + "/" + geometry.targetBoundaryY
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    StylePicker(
-                        label = "上方/源",
-                        value = sourceStyle,
-                        names = styleNames,
-                        expanded = sourceMenu,
-                        onExpanded = { sourceMenu = it },
-                        onPick = { sourceStyle = it; sourceMenu = false },
-                        modifier = Modifier.weight(1f),
-                    )
-                    StylePicker(
-                        label = "下方/目标",
-                        value = targetStyle,
-                        names = styleNames,
-                        expanded = targetMenu,
-                        onExpanded = { targetMenu = it },
-                        onPick = { targetStyle = it; targetMenu = false },
-                        modifier = Modifier.weight(1f),
-                    )
-                }
-                Button(
-                    onClick = { viewModel.applyBilingual6040Preset(sourceStyle, targetStyle) },
-                    enabled = sourceStyle.isNotBlank() && targetStyle.isNotBlank() && sourceStyle != targetStyle,
+                TextButton(
+                    onClick = { bilingualOpen = !bilingualOpen },
                     modifier = Modifier.fillMaxWidth(),
-                ) { Text("应用 60/40 几何预设") }
+                ) {
+                    Text(if (bilingualOpen) "收起双语布局工具" else "双语 60/40 布局工具")
+                }
+                if (bilingualOpen) {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            "安全区 3% / 5% · 中央间隔 " + geometry.centralGap +
+                                " · 分界 Y " + geometry.sourceBoundaryY + "/" + geometry.targetBoundaryY,
+                            style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
+                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            StylePicker(
+                                label = "上方 / 源",
+                                value = sourceStyle,
+                                names = styleNames,
+                                expanded = sourceMenu,
+                                onExpanded = { sourceMenu = it },
+                                onPick = { sourceStyle = it; sourceMenu = false },
+                                modifier = Modifier.weight(1f),
+                            )
+                            StylePicker(
+                                label = "下方 / 目标",
+                                value = targetStyle,
+                                names = styleNames,
+                                expanded = targetMenu,
+                                onExpanded = { targetMenu = it },
+                                onPick = { targetStyle = it; targetMenu = false },
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                        Button(
+                            onClick = { viewModel.applyBilingual6040Preset(sourceStyle, targetStyle) },
+                            enabled = sourceStyle.isNotBlank() && targetStyle.isNotBlank() && sourceStyle != targetStyle,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) { Text("应用 60/40 预设") }
+                    }
+                }
             }
         }
 }
