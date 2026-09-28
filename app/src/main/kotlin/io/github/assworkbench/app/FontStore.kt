@@ -13,6 +13,11 @@ import io.github.assworkbench.fonts.OpenTypeNameReader
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 
+data class FontImportBatchResult(
+    val assets: List<FontAsset>,
+    val failures: List<String>,
+)
+
 class FontStore(private val context: Context) {
     val rootDir: File = File(context.filesDir, "ass-fonts").apply { mkdirs() }
     val mpvConfigDir: File = File(context.filesDir, "mpv").apply { mkdirs() }
@@ -59,11 +64,20 @@ class FontStore(private val context: Context) {
         return asset
     }
 
-    fun importAll(uris: List<Uri>): List<FontAsset> {
-        if (uris.isEmpty()) return emptyList()
-        val assets = uris.map(::importOne)
-        refreshFontconfig(pruneOldCaches = true)
-        return assets
+    fun importAll(uris: List<Uri>): FontImportBatchResult {
+        if (uris.isEmpty()) return FontImportBatchResult(emptyList(), emptyList())
+        val assets = mutableListOf<FontAsset>()
+        val failures = mutableListOf<String>()
+        uris.forEach { uri ->
+            runCatching { importOne(uri) }
+                .onSuccess(assets::add)
+                .onFailure { error ->
+                    failures += (queryName(uri) ?: uri.lastPathSegment ?: "font") +
+                        "：" + (error.message ?: error::class.java.simpleName)
+                }
+        }
+        if (assets.isNotEmpty()) refreshFontconfig(pruneOldCaches = true)
+        return FontImportBatchResult(assets, failures)
     }
 
     private fun importOne(uri: Uri): FontAsset {
