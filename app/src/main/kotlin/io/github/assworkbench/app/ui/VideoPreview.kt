@@ -37,6 +37,7 @@ import io.github.assworkbench.app.BuildConfig
 import io.github.assworkbench.domain.AssCodec
 import io.github.assworkbench.domain.AssDocument
 import io.github.assworkbench.domain.TypesettingMath
+import io.github.assworkbench.fonts.RendererLogParser
 import io.github.yuroyami.libmpvkt.Mpv
 import io.github.yuroyami.libmpvkt.MpvCommands
 import io.github.yuroyami.libmpvkt.MpvResult
@@ -553,26 +554,18 @@ private fun writeStartupProbe(configDir: File, stage: String, status: String, de
 private fun readRendererFontDiagnostics(file: File): List<String> {
     if (!file.isFile || file.length() <= 0L) return emptyList()
     return runCatching {
-        val maxBytes = 256L * 1024L
+        val maxBytes = 512L * 1024L
         val bytes = java.io.RandomAccessFile(file, "r").use { input ->
             val length = input.length()
             val start = (length - maxBytes).coerceAtLeast(0L)
             input.seek(start)
             ByteArray((length - start).toInt()).also(input::readFully)
         }
-        String(bytes, Charsets.UTF_8)
-            .lineSequence()
-            .map { it.trim() }
-            .filter { line ->
-                val lower = line.lowercase()
-                lower.contains("fontselect") ||
-                    lower.contains("[sub/ass]") ||
-                    lower.contains("libass") ||
-                    lower.contains("font provider") ||
-                    lower.contains("fontconfig")
-            }
-            .filter(String::isNotBlank)
-            .toList()
-            .takeLast(12)
+        val lines = String(bytes, Charsets.UTF_8).lineSequence().toList()
+        val snapshot = RendererLogParser.parse(
+            lines = lines,
+            requestedProvider = BuildConfig.ASSWB_RENDERER_FONT_PROVIDER,
+        )
+        snapshot.summaryLines(limitSelections = 3)
     }.getOrDefault(emptyList())
 }
