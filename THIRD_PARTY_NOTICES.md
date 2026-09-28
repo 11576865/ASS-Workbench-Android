@@ -1,6 +1,6 @@
 # Third-party notices
 
-ASS Workbench Android 0.2 uses the following major third-party components.
+ASS Workbench Android uses the following major third-party components.
 
 ## libmpvKt
 
