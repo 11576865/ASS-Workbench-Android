@@ -9,6 +9,8 @@ import io.github.assworkbench.container.MatroskaReader
 import io.github.assworkbench.container.MatroskaScanResult
 import io.github.assworkbench.domain.AssCodec
 import io.github.assworkbench.domain.AssDocument
+import io.github.assworkbench.domain.AssTextDecoder
+import io.github.assworkbench.domain.AssTextEncoding
 import io.github.assworkbench.domain.EventOverrideEditor
 import io.github.assworkbench.domain.FontBindingRewriter
 import io.github.assworkbench.domain.ReviewEventKey
@@ -160,6 +162,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 project = it.project.copy(subtitleUri = null, title = it.container.name + " · " + track.displayName),
                 document = document,
                 subtitleLoaded = true,
+                subtitleTextEncoding = decoded.encoding,
                 selectedEventIds = emptySet(),
                 focusedEventId = document.events.firstOrNull()?.id,
                 dirty = false,
@@ -256,9 +259,10 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun openSubtitle(uri: Uri) {
-        val text = app.contentResolver.openInputStream(uri)?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }
+        val bytes = app.contentResolver.openInputStream(uri)?.use { it.readBytes() }
             ?: error("无法读取字幕")
-        val document = AssCodec.parse(text)
+        val decoded = AssTextDecoder.decode(bytes)
+        val document = AssCodec.parse(decoded.text)
         history.reset(document)
         val styleNames = document.styles.map { it.name }
         val review = restoreReviewSidecar(uri.toString(), document, styleNames)
@@ -277,7 +281,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 originalTextById = review.originalTextById,
                 confirmedReviewIds = review.confirmedIds,
                 reviewFilter = "all",
-                status = "已载入 ${document.events.size} 条 ASS 事件。",
+                status = "已载入 ${document.events.size} 条 ASS 事件 · ${decoded.encoding.displayName}。",
             )
         }
         refreshFontDiagnostics()
@@ -306,8 +310,10 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun saveTo(uri: Uri) {
-        val text = AssCodec.write(_state.value.document)
-        app.contentResolver.openOutputStream(uri, "wt")?.bufferedWriter(Charsets.UTF_8)?.use { it.write(text) }
+        val snapshot = _state.value
+        val text = AssCodec.write(snapshot.document)
+        val bytes = snapshot.subtitleTextEncoding.encode(text)
+        app.contentResolver.openOutputStream(uri, "wt")?.use { it.write(bytes) }
             ?: error("无法写入字幕")
         recoveryStore.clear()
         _state.update {
