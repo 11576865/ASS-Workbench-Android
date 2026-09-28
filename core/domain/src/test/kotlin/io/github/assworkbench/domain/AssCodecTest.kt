@@ -81,6 +81,34 @@ class AssCodecTest {
     }
 
     @Test
+    fun preservesCustomFormatColumnsAndValues() {
+        val source = """
+            [Script Info]
+            ScriptType: v4.00+
+
+            [V4+ Styles]
+            Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding, VendorMeta
+            Style: Default,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&H64000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1,style-extra
+
+            [Events]
+            Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, VendorID, Text
+            Dialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,abc-123,Hello
+        """.trimIndent()
+
+        val parsed = AssCodec.parse(source)
+        assertEquals("style-extra", parsed.styles.single().extraFields["vendormeta"])
+        assertEquals("abc-123", parsed.events.single().extraFields["vendorid"])
+        val output = AssCodec.write(parsed.copy(events = parsed.events.map { it.copy(text = "Edited") }))
+        assertTrue(output.contains("VendorMeta"))
+        assertTrue(output.contains("style-extra"))
+        assertTrue(output.contains("VendorID"))
+        assertTrue(output.contains("abc-123"))
+        assertTrue(output.contains(",Edited"))
+        val again = AssCodec.parse(output)
+        assertEquals("abc-123", again.events.single().extraFields["vendorid"])
+    }
+
+    @Test
     fun undoHistoryIsBoundedAndRedoable() {
         val history = UndoHistory(1, limit = 3)
         history.commit(2)

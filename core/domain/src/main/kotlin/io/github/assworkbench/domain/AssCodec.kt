@@ -3,6 +3,15 @@ package io.github.assworkbench.domain
 import java.util.Locale
 
 object AssCodec {
+    private val knownStyleFields = setOf(
+        "name", "fontname", "fontsize", "primarycolour", "secondarycolour", "outlinecolour", "backcolour",
+        "bold", "italic", "underline", "strikeout", "scalex", "scaley", "spacing", "angle", "borderstyle",
+        "outline", "shadow", "alignment", "marginl", "marginr", "marginv", "encoding",
+    )
+    private val knownEventFields = setOf(
+        "layer", "marked", "start", "end", "style", "name", "actor", "marginl", "marginr", "marginv", "effect", "text",
+    )
+
     private val defaultStyleFormat = listOf(
         "Name", "Fontname", "Fontsize", "PrimaryColour", "SecondaryColour", "OutlineColour", "BackColour",
         "Bold", "Italic", "Underline", "StrikeOut", "ScaleX", "ScaleY", "Spacing", "Angle", "BorderStyle",
@@ -44,15 +53,17 @@ object AssCodec {
         val scriptInfoExtras = mutableListOf<String>()
         val styleExtras = mutableListOf<String>()
         val eventExtras = mutableListOf<String>()
+        var styleFormat: List<String> = emptyList()
+        var eventFormat: List<String> = emptyList()
         val unknown = mutableListOf<RawSection>()
         var nextEventId = 1L
 
         for (section in sections) {
             when (section.name.lowercase(Locale.ROOT)) {
                 "script info" -> parseScriptInfo(section.lines, scriptInfo, scriptInfoExtras)
-                "v4+ styles" -> styles += parseStyles(section.lines, styleExtras)
+                "v4+ styles" -> styles += parseStyles(section.lines, styleExtras) { styleFormat = it }
                 "events" -> {
-                    val parsed = parseEvents(section.lines, nextEventId, eventExtras)
+                    val parsed = parseEvents(section.lines, nextEventId, eventExtras) { eventFormat = it }
                     events += parsed
                     nextEventId += parsed.size
                 }
@@ -75,6 +86,8 @@ object AssCodec {
             scriptInfoExtras = scriptInfoExtras,
             styleSectionExtras = styleExtras,
             eventSectionExtras = eventExtras,
+            styleFormat = styleFormat,
+            eventFormat = eventFormat,
             unknownSections = unknown,
         )
     }
@@ -88,12 +101,14 @@ object AssCodec {
         document.scriptInfo.forEach { (key, value) -> append(key).append(": ").append(value).append('\n') }
         appendExtras(document.scriptInfoExtras)
         append("\n[V4+ Styles]\n")
-        append("Format: ").append(defaultStyleFormat.joinToString(", ")).append('\n')
-        document.styles.forEach { style -> append(styleToLine(style)).append('\n') }
+        val styleFormat = document.styleFormat.ifEmpty { defaultStyleFormat }
+        append("Format: ").append(styleFormat.joinToString(", ")).append('\n')
+        document.styles.forEach { style -> append(styleToLine(style, styleFormat)).append('\n') }
         appendExtras(document.styleSectionExtras)
         append("\n[Events]\n")
-        append("Format: ").append(defaultEventFormat.joinToString(", ")).append('\n')
-        document.events.forEach { event -> append(eventToLine(event)).append('\n') }
+        val eventFormat = document.eventFormat.ifEmpty { defaultEventFormat }
+        append("Format: ").append(eventFormat.joinToString(", ")).append('\n')
+        document.events.forEach { event -> append(eventToLine(event, eventFormat)).append('\n') }
         appendExtras(document.eventSectionExtras)
         document.unknownSections.forEach { section ->
             append('\n').append('[').append(section.name).append("]\n")
@@ -121,13 +136,19 @@ object AssCodec {
         }
     }
 
-    private fun parseStyles(lines: List<String>, extras: MutableList<String>): List<AssStyle> {
+    private fun parseStyles(
+        lines: List<String>,
+        extras: MutableList<String>,
+        onFormat: (List<String>) -> Unit,
+    ): List<AssStyle> {
         var format = defaultStyleFormat
         val result = mutableListOf<AssStyle>()
         for (line in lines) {
             when {
-                line.startsWith("Format:", ignoreCase = true) ->
+                line.startsWith("Format:", ignoreCase = true) -> {
                     format = line.substringAfter(':').split(',').map(String::trim)
+                    onFormat(format)
+                }
                 line.startsWith("Style:", ignoreCase = true) -> {
                     val values = splitCsvLimit(line.substringAfter(':'), format.size)
                     val map = format.zip(values).associate { it.first.lowercase(Locale.ROOT) to it.second.trim() }
@@ -155,6 +176,7 @@ object AssCodec {
                         marginR = map["marginr"]?.toIntOrNull() ?: 10,
                         marginV = map["marginv"]?.toIntOrNull() ?: 10,
                         encoding = map["encoding"]?.toIntOrNull() ?: 1,
+                        extraFields = map.filterKeys { it !in knownStyleFields },
                     )
                 }
                 else -> extras += line
@@ -163,14 +185,21 @@ object AssCodec {
         return result
     }
 
-    private fun parseEvents(lines: List<String>, firstId: Long, extras: MutableList<String>): List<AssEvent> {
+    private fun parseEvents(
+        lines: List<String>,
+        firstId: Long,
+        extras: MutableList<String>,
+        onFormat: (List<String>) -> Unit,
+    ): List<AssEvent> {
         var format = defaultEventFormat
         val result = mutableListOf<AssEvent>()
         var id = firstId
         for (line in lines) {
             when {
-                line.startsWith("Format:", ignoreCase = true) ->
+                line.startsWith("Format:", ignoreCase = true) -> {
                     format = line.substringAfter(':').split(',').map(String::trim)
+                    onFormat(format)
+                }
                 line.startsWith("Dialogue:", ignoreCase = true) || line.startsWith("Comment:", ignoreCase = true) -> {
                     val comment = line.startsWith("Comment:", ignoreCase = true)
                     val values = splitCsvLimit(line.substringAfter(':'), format.size)
@@ -190,6 +219,7 @@ object AssCodec {
                         effect = map["effect"].orEmpty(),
                         text = map["text"].orEmpty(),
                         comment = comment,
+                        extraFields = map.filterKeys { it !in knownEventFields },
                     )
                 }
                 else -> extras += line
@@ -203,17 +233,53 @@ object AssCodec {
         lines.forEach { append(it).append('\n') }
     }
 
-    private fun styleToLine(s: AssStyle): String = "Style: " + listOf(
-        s.name, s.fontName, trimDouble(s.fontSize), s.primaryColor, s.secondaryColor, s.outlineColor, s.backColor,
-        assBool(s.bold), assBool(s.italic), assBool(s.underline), assBool(s.strikeOut), trimDouble(s.scaleX), trimDouble(s.scaleY),
-        trimDouble(s.spacing), trimDouble(s.angle), s.borderStyle.toString(), trimDouble(s.outline), trimDouble(s.shadow),
-        s.alignment.toString(), s.marginL.toString(), s.marginR.toString(), s.marginV.toString(), s.encoding.toString(),
-    ).joinToString(",")
+    private fun styleToLine(s: AssStyle, format: List<String>): String =
+        "Style: " + format.joinToString(",") { field -> styleFieldValue(s, field) }
 
-    private fun eventToLine(e: AssEvent): String = (if (e.comment) "Comment: " else "Dialogue: ") + listOf(
-        e.layer.toString(), e.start.toAss(), e.end.toAss(), e.style, e.name, e.marginL.toString(), e.marginR.toString(),
-        e.marginV.toString(), e.effect, e.text,
-    ).joinToString(",")
+    private fun styleFieldValue(s: AssStyle, field: String): String = when (field.lowercase(Locale.ROOT)) {
+        "name" -> s.name
+        "fontname" -> s.fontName
+        "fontsize" -> trimDouble(s.fontSize)
+        "primarycolour" -> s.primaryColor
+        "secondarycolour" -> s.secondaryColor
+        "outlinecolour" -> s.outlineColor
+        "backcolour" -> s.backColor
+        "bold" -> assBool(s.bold)
+        "italic" -> assBool(s.italic)
+        "underline" -> assBool(s.underline)
+        "strikeout" -> assBool(s.strikeOut)
+        "scalex" -> trimDouble(s.scaleX)
+        "scaley" -> trimDouble(s.scaleY)
+        "spacing" -> trimDouble(s.spacing)
+        "angle" -> trimDouble(s.angle)
+        "borderstyle" -> s.borderStyle.toString()
+        "outline" -> trimDouble(s.outline)
+        "shadow" -> trimDouble(s.shadow)
+        "alignment" -> s.alignment.toString()
+        "marginl" -> s.marginL.toString()
+        "marginr" -> s.marginR.toString()
+        "marginv" -> s.marginV.toString()
+        "encoding" -> s.encoding.toString()
+        else -> s.extraFields[field.lowercase(Locale.ROOT)].orEmpty()
+    }
+
+    private fun eventToLine(e: AssEvent, format: List<String>): String =
+        (if (e.comment) "Comment: " else "Dialogue: ") +
+            format.joinToString(",") { field -> eventFieldValue(e, field) }
+
+    private fun eventFieldValue(e: AssEvent, field: String): String = when (field.lowercase(Locale.ROOT)) {
+        "layer", "marked" -> e.layer.toString()
+        "start" -> e.start.toAss()
+        "end" -> e.end.toAss()
+        "style" -> e.style
+        "name", "actor" -> e.name
+        "marginl" -> e.marginL.toString()
+        "marginr" -> e.marginR.toString()
+        "marginv" -> e.marginV.toString()
+        "effect" -> e.effect
+        "text" -> e.text
+        else -> e.extraFields[field.lowercase(Locale.ROOT)].orEmpty()
+    }
 
     private fun splitCsvLimit(value: String, fieldCount: Int): List<String> {
         if (fieldCount <= 1) return listOf(value)

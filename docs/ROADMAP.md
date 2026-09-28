@@ -43,3 +43,11 @@
 - [x] Keep unknown standalone sections as before.
 - [ ] Preserve exact original placement/order of extras relative to structured records.
 - [ ] Preserve nonstandard custom columns in Style/Event Format records.
+
+
+## 0.13 — Preserve custom ASS Format columns
+- [x] Retain original Style/Event Format column order.
+- [x] Store unknown custom column values per Style/Event record.
+- [x] Write those custom values back after structured edits.
+- [x] Keep Text comma handling correct when Text remains the final field.
+- [ ] Arbitrary nonstandard formats with Text before later comma-bearing fields remain outside the guaranteed subset.

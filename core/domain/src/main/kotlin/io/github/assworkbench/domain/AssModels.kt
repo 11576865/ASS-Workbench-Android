@@ -24,6 +24,7 @@ data class AssStyle(
     val marginR: Int = 10,
     val marginV: Int = 10,
     val encoding: Int = 1,
+    val extraFields: Map<String, String> = emptyMap(),
 )
 
 data class AssEvent(
@@ -39,6 +40,7 @@ data class AssEvent(
     val effect: String = "",
     val text: String,
     val comment: Boolean = false,
+    val extraFields: Map<String, String> = emptyMap(),
 ) {
     init {
         require(end >= start) { "Subtitle end must not precede start" }
@@ -63,6 +65,8 @@ data class AssDocument(
     val scriptInfoExtras: List<String> = emptyList(),
     val styleSectionExtras: List<String> = emptyList(),
     val eventSectionExtras: List<String> = emptyList(),
+    val styleFormat: List<String> = emptyList(),
+    val eventFormat: List<String> = emptyList(),
     val unknownSections: List<RawSection> = emptyList(),
 ) {
     val playResX: Int get() = scriptInfo["PlayResX"]?.toIntOrNull() ?: 1920
