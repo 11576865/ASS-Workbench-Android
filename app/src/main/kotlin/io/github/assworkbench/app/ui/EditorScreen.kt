@@ -199,7 +199,7 @@ private fun CompactEditorToolbar(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                 )
-                HintIconButton(Icons.Filled.Movie, "打开 / 更换参考视频", onOpenVideo)
+                HintIconButton(Icons.Filled.Movie, "打开视频 / MKV（MKV 自动作为工程载入）", onOpenVideo)
                 HintIconButton(Icons.Filled.FolderOpen, "打开 / 更换 ASS 字幕", onOpenSubtitle)
                 TextButton(onClick = onOpenMkvProject, modifier = Modifier.height(32.dp)) { Text("MKV") }
                 HintIconButton(Icons.Filled.Save, "保存字幕", onSave, enabled = state.subtitleLoaded)
@@ -365,33 +365,45 @@ private fun TabletEditorWorkspace(
     onOpenSubtitle: () -> Unit,
 ) {
     var inspectorVisible by rememberSaveable { mutableStateOf(true) }
-    val inspectorWeight = 0.50f
     Column(Modifier.fillMaxSize()) {
         PreviewPane(state, viewModel, onOpenVideo, section == WorkspaceSection.EFFECTS, Modifier.fillMaxWidth())
         Divider()
-        Row(Modifier.weight(1f).fillMaxWidth()) {
-            SubtitleDock(
-                state = state,
-                viewModel = viewModel,
-                onOpenSubtitle = onOpenSubtitle,
-                modifier = Modifier.weight(1f - inspectorWeight).fillMaxHeight(),
-            )
-            Box(
-                Modifier.width(1.dp).fillMaxHeight()
-                    .background(MaterialTheme.colorScheme.outlineVariant),
-            )
-            if (inspectorVisible) {
-                InspectorPane(
+        if (inspectorVisible) {
+            Box(Modifier.weight(1f).fillMaxWidth()) {
+                ResizableSplitPane(
+                    ratio = state.project.splitRatio,
+                    horizontal = true,
+                    onRatioChange = viewModel::setSplitRatio,
+                    first = { paneModifier ->
+                        SubtitleDock(
+                            state = state,
+                            viewModel = viewModel,
+                            onOpenSubtitle = onOpenSubtitle,
+                            modifier = paneModifier,
+                        )
+                    },
+                    second = { paneModifier ->
+                        InspectorPane(
+                            state = state,
+                            viewModel = viewModel,
+                            section = section,
+                            onSectionChange = onSectionChange,
+                            onImportFont = onImportFont,
+                            onSaveMkv = onSaveMkv,
+                            onCollapse = { inspectorVisible = false },
+                            modifier = paneModifier,
+                        )
+                    },
+                )
+            }
+        } else {
+            Row(Modifier.weight(1f).fillMaxWidth()) {
+                SubtitleDock(
                     state = state,
                     viewModel = viewModel,
-                    section = section,
-                    onSectionChange = onSectionChange,
-                    onImportFont = onImportFont,
-                    onSaveMkv = onSaveMkv,
-                    onCollapse = { inspectorVisible = false },
-                    modifier = Modifier.weight(inspectorWeight).fillMaxHeight(),
+                    onOpenSubtitle = onOpenSubtitle,
+                    modifier = Modifier.weight(1f).fillMaxHeight(),
                 )
-            } else {
                 Surface(
                     Modifier.width(30.dp).fillMaxHeight().clickable { inspectorVisible = true },
                     tonalElevation = 1.dp,
@@ -1531,7 +1543,7 @@ private fun SubtitleRow(
                 onCheckedChange = { onCheck() },
                 modifier = Modifier.width(26.dp).height(26.dp),
             )
-            Column(Modifier.width(158.dp)) {
+            Column(Modifier.width(132.dp)) {
                 Text(
                     "#${event.id} · L${event.layer} · ${event.style}" +
                         if (event.comment) " · Comment" else "" +
@@ -1551,7 +1563,7 @@ private fun SubtitleRow(
             Column(Modifier.weight(1f)) {
                 Text(
                     text = AssInlineSyntax.visibleText(event.text).ifBlank { "（空字幕）" },
-                    maxLines = if (focused) 3 else 2,
+                    maxLines = if (focused) 4 else 3,
                     overflow = TextOverflow.Ellipsis,
                     style = MaterialTheme.typography.bodySmall,
                 )
@@ -1594,6 +1606,9 @@ private fun FocusedEventEditor(
     var eventText by remember(event.id) { mutableStateOf(TextFieldValue(event.text)) }
     var timingOpen by remember { mutableStateOf(false) }
     var alignmentOpen by remember { mutableStateOf(false) }
+    var advancedEventOpen by remember(event.id) { mutableStateOf(false) }
+    var plainBody by remember(event.id) { mutableStateOf(editableAssBody(event.text)) }
+    val simpleBodyEditable = remember(event.text) { hasSimpleEditableAssBody(event.text) }
     val syntax = remember(event.text) { AssInlineSyntax.analyze(event.text) }
 
     LaunchedEffect(event.text) {
@@ -1601,6 +1616,8 @@ private fun FocusedEventEditor(
             val cursor = eventText.selection.start.coerceIn(0, event.text.length)
             eventText = TextFieldValue(event.text, selection = androidx.compose.ui.text.TextRange(cursor))
         }
+        val nextPlain = editableAssBody(event.text)
+        if (plainBody != nextPlain) plainBody = nextPlain
     }
 
     Column(modifier, verticalArrangement = Arrangement.spacedBy(3.dp)) {
@@ -1665,89 +1682,144 @@ private fun FocusedEventEditor(
                 }
             }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-            CompactEventField("Layer", layerText, { layerText = it }, Modifier.width(70.dp))
-            CompactEventField("Actor", actorText, { actorText = it }, Modifier.weight(1f))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Checkbox(checked = comment, onCheckedChange = { comment = it })
-                Text("Comment", style = MaterialTheme.typography.labelSmall)
-            }
-            Box {
-                TextButton(onClick = { alignmentOpen = true }, modifier = Modifier.height(36.dp)) {
-                    Text("对齐", style = MaterialTheme.typography.labelSmall)
+        Text(
+            if (simpleBodyEditable) "字幕正文" else "字幕正文 · 含复杂内联标签",
+            style = MaterialTheme.typography.labelSmall,
+            color = if (simpleBodyEditable) MaterialTheme.colorScheme.onSurfaceVariant
+                else MaterialTheme.colorScheme.tertiary,
+        )
+        if (simpleBodyEditable) {
+            OutlinedTextField(
+                value = plainBody,
+                onValueChange = { value ->
+                    plainBody = value
+                    viewModel.updateFocusedText(replaceEditableAssBody(event.text, value))
+                },
+                placeholder = { Text("输入字幕正文") },
+                textStyle = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.fillMaxWidth().heightIn(min = 68.dp, max = 120.dp),
+            )
+        } else {
+            Text(
+                AssInlineSyntax.visibleText(event.text),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+        }
+
+        TextButton(
+            onClick = { advancedEventOpen = !advancedEventOpen },
+            modifier = Modifier.fillMaxWidth().height(30.dp),
+        ) {
+            Text(if (advancedEventOpen) "收起 ASS / 事件高级字段" else "ASS / 事件高级字段")
+        }
+
+        if (advancedEventOpen) {
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                CompactEventField("Layer", layerText, { layerText = it }, Modifier.width(70.dp))
+                CompactEventField("Actor", actorText, { actorText = it }, Modifier.weight(1f))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(checked = comment, onCheckedChange = { comment = it })
+                    Text("Comment", style = MaterialTheme.typography.labelSmall)
                 }
-                DropdownMenu(expanded = alignmentOpen, onDismissRequest = { alignmentOpen = false }) {
-                    listOf(7, 8, 9, 4, 5, 6, 1, 2, 3).forEach { value ->
-                        DropdownMenuItem(
-                            text = { Text("\\an" + value) },
-                            onClick = {
-                                alignmentOpen = false
-                                viewModel.setFocusedAlignment(value)
-                            },
-                        )
+                Box {
+                    TextButton(onClick = { alignmentOpen = true }, modifier = Modifier.height(36.dp)) {
+                        Text("对齐", style = MaterialTheme.typography.labelSmall)
+                    }
+                    DropdownMenu(expanded = alignmentOpen, onDismissRequest = { alignmentOpen = false }) {
+                        listOf(7, 8, 9, 4, 5, 6, 1, 2, 3).forEach { value ->
+                            DropdownMenuItem(
+                                text = { Text("\\an" + value) },
+                                onClick = {
+                                    alignmentOpen = false
+                                    viewModel.setFocusedAlignment(value)
+                                },
+                            )
+                        }
                     }
                 }
+                TextButton(
+                    onClick = {
+                        viewModel.updateFocusedMetadata(
+                            layer = layerText.toIntOrNull() ?: event.layer,
+                            actor = actorText,
+                            comment = comment,
+                        )
+                    },
+                    modifier = Modifier.height(36.dp),
+                ) { Text("应用", style = MaterialTheme.typography.labelSmall) }
             }
-            TextButton(
-                onClick = {
-                    viewModel.updateFocusedMetadata(
-                        layer = layerText.toIntOrNull() ?: event.layer,
-                        actor = actorText,
-                        comment = comment,
-                    )
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                CompactEventField("L", marginL, { marginL = it }, Modifier.weight(1f))
+                CompactEventField("R", marginR, { marginR = it }, Modifier.weight(1f))
+                CompactEventField("V", marginV, { marginV = it }, Modifier.weight(1f))
+                TextButton(
+                    onClick = {
+                        viewModel.updateFocusedMargins(
+                            marginL.toIntOrNull() ?: event.marginL,
+                            marginR.toIntOrNull() ?: event.marginR,
+                            marginV.toIntOrNull() ?: event.marginV,
+                        )
+                    },
+                    modifier = Modifier.height(36.dp),
+                ) { Text("Margin", style = MaterialTheme.typography.labelSmall) }
+                TextButton(
+                    onClick = {
+                        marginL = "0"; marginR = "0"; marginV = "0"
+                        viewModel.clearFocusedMargins()
+                    },
+                    modifier = Modifier.height(36.dp),
+                ) { Text("继承", style = MaterialTheme.typography.labelSmall) }
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "Raw ASS · " + syntax.tags.size + " tags" +
+                        if (syntax.hasErrors) " · " + syntax.issues.size + " issue" else "",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (syntax.hasErrors) MaterialTheme.colorScheme.error
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f),
+                )
+                TextButton(
+                    onClick = { viewModel.splitFocusedEvent(eventText.selection.start) },
+                    enabled = eventText.selection.start in 1 until eventText.text.length,
+                    modifier = Modifier.height(28.dp),
+                ) { Text("光标处分割", style = MaterialTheme.typography.labelSmall) }
+            }
+            OutlinedTextField(
+                value = eventText,
+                onValueChange = { value ->
+                    eventText = value
+                    viewModel.updateFocusedText(value.text)
                 },
-                modifier = Modifier.height(36.dp),
-            ) { Text("应用", style = MaterialTheme.typography.labelSmall) }
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
-            CompactEventField("L", marginL, { marginL = it }, Modifier.weight(1f))
-            CompactEventField("R", marginR, { marginR = it }, Modifier.weight(1f))
-            CompactEventField("V", marginV, { marginV = it }, Modifier.weight(1f))
-            TextButton(
-                onClick = {
-                    viewModel.updateFocusedMargins(
-                        marginL.toIntOrNull() ?: event.marginL,
-                        marginR.toIntOrNull() ?: event.marginR,
-                        marginV.toIntOrNull() ?: event.marginV,
-                    )
-                },
-                modifier = Modifier.height(36.dp),
-            ) { Text("Margin", style = MaterialTheme.typography.labelSmall) }
-            TextButton(
-                onClick = {
-                    marginL = "0"; marginR = "0"; marginV = "0"
-                    viewModel.clearFocusedMargins()
-                },
-                modifier = Modifier.height(36.dp),
-            ) { Text("继承", style = MaterialTheme.typography.labelSmall) }
-        }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                "Event Text · " + syntax.tags.size + " tags" +
-                    if (syntax.hasErrors) " · " + syntax.issues.size + " issue" else "",
-                style = MaterialTheme.typography.labelSmall,
-                color = if (syntax.hasErrors) MaterialTheme.colorScheme.error
-                    else MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.weight(1f),
+                visualTransformation = rememberAssSyntaxTransformation(),
+                isError = syntax.hasErrors,
+                textStyle = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.fillMaxWidth().heightIn(min = 92.dp, max = 220.dp),
             )
-            TextButton(
-                onClick = { viewModel.splitFocusedEvent(eventText.selection.start) },
-                enabled = eventText.selection.start in 1 until eventText.text.length,
-                modifier = Modifier.height(28.dp),
-            ) { Text("光标处分割", style = MaterialTheme.typography.labelSmall) }
         }
-        OutlinedTextField(
-            value = eventText,
-            onValueChange = { value ->
-                eventText = value
-                viewModel.updateFocusedText(value.text)
-            },
-            visualTransformation = rememberAssSyntaxTransformation(),
-            isError = syntax.hasErrors,
-            textStyle = MaterialTheme.typography.bodySmall,
-            modifier = Modifier.fillMaxWidth().heightIn(min = 84.dp, max = 180.dp),
-        )
     }
+}
+
+private val leadingAssOverrideBlocks = Regex("""^(?:\\{[^}]*\\})*""")
+
+private fun hasSimpleEditableAssBody(text: String): Boolean {
+    val leading = leadingAssOverrideBlocks.find(text)?.value.orEmpty()
+    val body = text.removePrefix(leading)
+    return '{' !in body && '}' !in body
+}
+
+private fun editableAssBody(text: String): String {
+    val leading = leadingAssOverrideBlocks.find(text)?.value.orEmpty()
+    return text.removePrefix(leading)
+        .replace("\\N", "\n")
+        .replace("\\n", "\n")
+        .replace("\\h", " ")
+}
+
+private fun replaceEditableAssBody(original: String, body: String): String {
+    val leading = leadingAssOverrideBlocks.find(original)?.value.orEmpty()
+    return leading + body.replace("\r\n", "\n").replace("\r", "\n").replace("\n", "\\N")
 }
 
 @Composable
