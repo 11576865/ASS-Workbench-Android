@@ -2,13 +2,13 @@
 
 ## Product boundary
 
-ASS Workbench is a mobile/tablet **ASS editing and visual typesetting workbench**. Video is reference media used for synchronized preview. The product output is an `.ass` subtitle file.
+ASS Workbench is a mobile/tablet **ASS editing, review and visual typesetting workbench**. ASS is the canonical editable representation. Video is reference media used for synchronized preview. An MKV may also be opened through the **Container Bridge** so an embedded ASS track and relevant font attachments can be exposed to the same editor.
 
-Video encoding, burn-in, container muxing, ASR, OCR and translation are outside 1.0.
+Primary outputs are a standalone `.ass` file or a new MKV in which the selected ASS track is replaced at container level without re-encoding video/audio. Video encoding, burn-in, video filtering/editing, general-purpose muxing, ASR, OCR and translation are outside 1.0.
 
 ## 1.0 acceptance sentence
 
-On an Android phone or tablet, a user can open a local video and ASS/SRT independently or as a saved project, preview subtitles while the video plays, search and batch-manage events, change global styles or per-event overrides (font, size, emphasis, colors, outline/shadow, spacing, nine-grid alignment, position and simple fade), support overlapping events/layers, import project fonts, undo/redo safely, inspect raw ASS when needed, and save/Save As a standalone ASS without destroying unsupported content.
+On an Android phone or tablet, a user can open local video and ASS independently, or open an MKV subtitle project, preview subtitles while the video plays, search and batch-manage events, change global styles or per-event overrides (font, size, emphasis, colors, outline/shadow, spacing, nine-grid alignment, position and simple fade), support overlapping events/layers, import project fonts, undo/redo safely, inspect raw ASS when needed, and save/Save As a standalone ASS without destroying unsupported content.
 
 ## Required areas
 
@@ -19,7 +19,7 @@ On an Android phone or tablet, a user can open a local video and ASS/SRT indepen
 - Persistable Android SAF permissions where possible.
 
 ### Editing
-- ASS first-class; SRT import to an ASS editing document.
+- ASS first-class and canonical.
 - Event list: start/end/layer/style/text.
 - Multiple events may overlap in time.
 - Search and jump to event.
@@ -51,6 +51,13 @@ On an Android phone or tablet, a user can open a local video and ASS/SRT indepen
 - Final visual authority is libass.
 - Preview supports multiple simultaneous events ordered by Layer.
 
+### Container Bridge
+- Open an MKV as a subtitle project and select an embedded `S_TEXT/ASS` track.
+- Register supported TTF/OTF attachments.
+- Save a new MKV by replacing the selected ASS track without transcoding video/audio.
+- Never modify the source MKV in place.
+- Audit preservation of attachments, chapters, tags and track metadata before 1.0.
+
 ### ASS safety
 - Preserve unknown sections and unsupported tags where possible.
 - Raw Event/override view hidden by default but available.
@@ -58,8 +65,9 @@ On an Android phone or tablet, a user can open a local video and ASS/SRT indepen
 - Validation warns rather than silently rewriting questionable content.
 
 ## Not required for 1.0
+- SRT import;
 - hard-sub video rendering;
-- subtitle muxing;
+- general-purpose container editing/muxing;
 - professional waveform/spectrogram timing;
 - Lua Automation;
 - OCR/ASR;
