@@ -24,6 +24,7 @@ object AndroidFontconfigPolicy {
         configDir: File,
         importedDir: File,
         cacheRoot: File,
+        priorityFontDirs: List<File> = emptyList(),
         systemFontDirs: List<String> = defaultSystemFontDirs,
         environmentFingerprint: String = "",
         pruneOldCaches: Boolean = false,
@@ -32,9 +33,10 @@ object AndroidFontconfigPolicy {
         importedDir.mkdirs()
         cacheRoot.mkdirs()
 
-        val fingerprint = fingerprint(importedDir, environmentFingerprint)
+        priorityFontDirs.forEach { it.mkdirs() }
+        val fingerprint = fingerprint(importedDir, environmentFingerprint, priorityFontDirs)
         val cacheDir = File(cacheRoot, CACHE_PREFIX + fingerprint.take(12)).apply { mkdirs() }
-        val configText = render(importedDir, cacheDir, systemFontDirs)
+        val configText = render(importedDir, cacheDir, systemFontDirs, priorityFontDirs)
         val configFile = File(configDir, "fonts.conf")
         atomicWrite(configFile, configText)
 
@@ -57,14 +59,18 @@ object AndroidFontconfigPolicy {
         importedDir: File,
         cacheDir: File,
         systemFontDirs: List<String> = defaultSystemFontDirs,
+        priorityFontDirs: List<File> = emptyList(),
     ): String = buildString {
         appendLine("<fontconfig>")
+        priorityFontDirs
+            .distinctBy { it.absolutePath }
+            .forEach { appendLine("  <dir>" + xmlEscape(it.absolutePath) + "</dir>") }
+        appendLine("  <dir>" + xmlEscape(importedDir.absolutePath) + "</dir>")
         systemFontDirs
             .map(String::trim)
             .filter(String::isNotBlank)
             .distinct()
             .forEach { appendLine("  <dir>" + xmlEscape(it) + "</dir>") }
-        appendLine("  <dir>" + xmlEscape(importedDir.absolutePath) + "</dir>")
         appendLine("  <cachedir>" + xmlEscape(cacheDir.absolutePath) + "</cachedir>")
         appendLine("  <alias>")
         appendLine("    <family>sans-serif</family>")
@@ -81,22 +87,29 @@ object AndroidFontconfigPolicy {
         appendLine("</fontconfig>")
     }
 
-    fun fingerprint(importedDir: File, environmentFingerprint: String = ""): String {
+    fun fingerprint(
+        importedDir: File,
+        environmentFingerprint: String = "",
+        priorityFontDirs: List<File> = emptyList(),
+    ): String {
         val descriptor = buildString {
             append("schema=").append(SCHEMA_VERSION).append('\n')
             append("environment=").append(environmentFingerprint).append('\n')
-            importedDir.listFiles()
-                .orEmpty()
-                .filter { it.isFile && it.extension.lowercase() in setOf("ttf", "otf", "ttc", "otc") }
-                .sortedBy { it.name }
-                .forEach { file ->
-                    append(file.name)
-                        .append(':')
-                        .append(file.length())
-                        .append(':')
-                        .append(file.lastModified())
-                        .append('\n')
-                }
+            (listOf(importedDir) + priorityFontDirs).forEach { dir ->
+                append("dir=").append(dir.absolutePath).append('\n')
+                dir.listFiles()
+                    .orEmpty()
+                    .filter { it.isFile && it.extension.lowercase() in setOf("ttf", "otf", "ttc", "otc") }
+                    .sortedBy { it.name }
+                    .forEach { file ->
+                        append(file.name)
+                            .append(':')
+                            .append(file.length())
+                            .append(':')
+                            .append(file.lastModified())
+                            .append('\n')
+                    }
+            }
         }
         return MessageDigest.getInstance("SHA-256")
             .digest(descriptor.toByteArray(Charsets.UTF_8))
