@@ -10,7 +10,7 @@ val rendererExperimental = !rendererProvider.equals("none", ignoreCase = true)
 
 android {
     namespace = "io.github.assworkbench.app"
-    compileSdk = 37
+    compileSdk = 36
 
     defaultConfig {
         applicationId = if (rendererExperimental) {
