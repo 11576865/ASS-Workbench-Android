@@ -29,9 +29,10 @@ On an Android phone or tablet, a user can open local video and ASS independently
 
 ### Style and per-event presentation
 - Font family, size, bold, italic, underline, strikeout.
-- Primary/outline/shadow colors.
+- Primary/secondary/outline/shadow colors.
 - Border width, shadow depth, blur.
 - Character spacing.
+- Native Style geometry fields remain editable: ScaleX, ScaleY, Angle, BorderStyle and Encoding.
 - Nine-grid alignment (ASS 1–9).
 - Margin and fine X/Y positioning.
 - Simple `\\fad` and restrained transform presets.
@@ -65,6 +66,7 @@ On an Android phone or tablet, a user can open local video and ASS independently
 - Event Text is a first-class professional editing surface: raw ASS override blocks remain visible/directly editable, but syntax highlighting and structured controls distinguish control syntax from dialogue text.
 - Script resolution (PlayResX/Y) is explicit.
 - Validation warns rather than silently rewriting questionable content.
+- Unknown override tags remain losslessly editable even when the structured UI does not understand them.
 
 ## Not required for 1.0
 - SRT import;
