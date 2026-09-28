@@ -24,6 +24,7 @@ class FontStore(private val context: Context) {
     // mpv/libass scans config-dir/fonts even when Android has no system font provider.
     // Keep imported project fonts here so the UI registry and renderer consume the same files.
     val importedDir: File = File(mpvConfigDir, "fonts").apply { mkdirs() }
+    val projectFontDir: File = File(mpvConfigDir, "project-fonts").apply { mkdirs() }
 
     private val fontconfigCacheRoot: File = File(context.cacheDir, "fontconfig").apply { mkdirs() }
 
@@ -40,16 +41,17 @@ class FontStore(private val context: Context) {
 
     fun listImported(): List<FontAsset> {
         importedCache?.let { return it }
-        val scanned = importedDir.listFiles()
-            .orEmpty()
+        val scanned = (projectFontDir.listFiles().orEmpty() + importedDir.listFiles().orEmpty())
             .filter { it.isFile && it.extension.lowercase() in setOf("ttf", "otf") }
+            .distinctBy { it.absolutePath }
             .mapNotNull { file ->
                 runCatching {
-                    val bytes = fontBytesCache.computeIfAbsent(file.name) { file.readBytes() }
+                    val cacheKey = file.absolutePath
+                    val bytes = fontBytesCache.computeIfAbsent(cacheKey) { file.readBytes() }
                     FontAsset(file.name, OpenTypeNameReader.sha256(bytes), OpenTypeNameReader.read(bytes))
                 }.getOrNull()
             }
-            .sortedBy { it.metadata.family.lowercase() }
+            .sortedWith(compareBy<FontAsset> { it.metadata.family.lowercase() }.thenBy { it.sha256 })
         importedCache = scanned
         return scanned
     }
@@ -103,7 +105,7 @@ class FontStore(private val context: Context) {
         val metadata = OpenTypeNameReader.read(bytes)
         val sha = OpenTypeNameReader.sha256(bytes)
         val safeStem = metadata.family.replace(Regex("[^A-Za-z0-9._-]+"), "_").trim('_').ifBlank { "font" }
-        val target = File(importedDir, "${safeStem}-${sha.take(10)}.$ext")
+        val target = File(projectFontDir, "${safeStem}-${sha.take(10)}.$ext")
         if (!target.exists()) target.writeBytes(bytes)
         fontBytesCache[target.name] = bytes
         invalidateImportedCache()
@@ -124,6 +126,7 @@ class FontStore(private val context: Context) {
             configDir = mpvConfigDir,
             importedDir = importedDir,
             cacheRoot = fontconfigCacheRoot,
+            priorityFontDirs = listOf(projectFontDir),
             environmentFingerprint = android.os.Build.FINGERPRINT,
             pruneOldCaches = pruneOldCaches,
         )
@@ -139,8 +142,11 @@ class FontStore(private val context: Context) {
             names.any { it.trim().lowercase() == normalized }
         } ?: return FontGlyphDiagnostic(family, null, 0, emptyList())
 
-        val file = File(importedDir, asset.fileName)
-        if (!file.isFile) return FontGlyphDiagnostic(family, asset.metadata.family, 0, emptyList())
+        val file = listOf(
+            File(projectFontDir, asset.fileName),
+            File(importedDir, asset.fileName),
+        ).firstOrNull { it.isFile }
+            ?: return FontGlyphDiagnostic(family, asset.metadata.family, 0, emptyList())
         val bytes = runCatching {
             fontBytesCache.computeIfAbsent(asset.fileName) { file.readBytes() }
         }.getOrNull() ?: return FontGlyphDiagnostic(family, asset.metadata.family, 0, emptyList())
@@ -159,6 +165,16 @@ class FontStore(private val context: Context) {
             missingCodePoints = OpenTypeCmap.missingCodePoints(bytes, cps, limit = 24),
         )
     }
+
+    fun clearProjectFonts(refresh: Boolean = true) {
+        projectFontDir.listFiles().orEmpty().forEach { runCatching { it.delete() } }
+        fontBytesCache.keys.removeAll { it.startsWith(projectFontDir.absolutePath) }
+        invalidateImportedCache()
+        if (refresh) refreshFontconfig(pruneOldCaches = true)
+    }
+
+    fun activeRendererFontsDir(): File =
+        if (projectFontDir.listFiles().orEmpty().any { it.isFile }) projectFontDir else importedDir
 
     fun ensureFallbackFont(): FontMetadata? {
         val target = File(mpvConfigDir, "subfont.ttf")
