@@ -790,6 +790,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 project = snapshot.project,
                 document = snapshot.document,
                 subtitleLoaded = true,
+                subtitleTextEncoding = snapshot.textEncoding,
                 selectedEventIds = emptySet(),
                 selectionAnchorId = null,
                 focusedEventId = snapshot.document.events.firstOrNull()?.id,
@@ -944,8 +945,9 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         recoveryJob = viewModelScope.launch {
             delay(450)
             val project = _state.value.project
+            val textEncoding = _state.value.subtitleTextEncoding
             withContext(Dispatchers.IO) {
-                recoveryStore.write(project, document)
+                recoveryStore.write(project, document, textEncoding)
             }
             _state.update {
                 it.copy(recoveryAvailable = true, recoveryLabel = project.title)
