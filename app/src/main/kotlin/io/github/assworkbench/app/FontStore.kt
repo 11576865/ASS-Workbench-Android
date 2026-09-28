@@ -54,6 +54,19 @@ class FontStore(private val context: Context) {
     }
 
     fun import(uri: Uri): FontAsset {
+        val asset = importOne(uri)
+        refreshFontconfig(pruneOldCaches = true)
+        return asset
+    }
+
+    fun importAll(uris: List<Uri>): List<FontAsset> {
+        if (uris.isEmpty()) return emptyList()
+        val assets = uris.map(::importOne)
+        refreshFontconfig(pruneOldCaches = true)
+        return assets
+    }
+
+    private fun importOne(uri: Uri): FontAsset {
         val originalName = queryName(uri) ?: "font.ttf"
         val ext = originalName.substringAfterLast('.', "ttf").lowercase().takeIf { it in setOf("ttf", "otf") } ?: "ttf"
         val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: error("无法读取字体")
@@ -65,12 +78,8 @@ class FontStore(private val context: Context) {
         fontBytesCache[target.name] = bytes
         invalidateImportedCache()
 
-        // libmpvKt documents subfont.ttf as the reliable fallback when sub-font-provider=none.
-        // Point fallback at the most recently imported font so provider=none remains a useful
-        // compatibility/debug mode even after Fontconfig becomes available.
+        // Keep provider=none fallback deterministic: the last imported font becomes subfont.ttf.
         File(mpvConfigDir, "subfont.ttf").writeBytes(bytes)
-
-        refreshFontconfig(pruneOldCaches = true)
         return FontAsset(target.name, sha, metadata)
     }
 
