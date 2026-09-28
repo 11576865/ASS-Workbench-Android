@@ -36,7 +36,7 @@ jobs:
       - name: Install native build tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y autoconf automake libtool pkg-config ninja-build nasm python3-pip python3-jinja2
+          sudo apt-get install -y autoconf automake libtool pkg-config ninja-build nasm gperf python3-pip python3-jinja2
           python3 -m pip install --break-system-packages "meson==1.11.0"
           meson --version
           test "$(meson --version)" = "1.11.0"
