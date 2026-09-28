@@ -37,15 +37,17 @@ class AndroidFontconfigPolicyTest {
         val root = createTempDirectory("fontconfig-fingerprint").toFile()
         val fonts = File(root, "fonts").apply { mkdirs() }
 
-        val empty = AndroidFontconfigPolicy.fingerprint(fonts)
+        val empty = AndroidFontconfigPolicy.fingerprint(fonts, "os-a")
         File(fonts, "A.ttf").writeBytes(byteArrayOf(1, 2, 3))
-        val first = AndroidFontconfigPolicy.fingerprint(fonts)
+        val first = AndroidFontconfigPolicy.fingerprint(fonts, "os-a")
         File(fonts, "B.otf").writeBytes(byteArrayOf(4, 5))
-        val second = AndroidFontconfigPolicy.fingerprint(fonts)
+        val second = AndroidFontconfigPolicy.fingerprint(fonts, "os-a")
+        val osChanged = AndroidFontconfigPolicy.fingerprint(fonts, "os-b")
 
         assertNotEquals(empty, first)
         assertNotEquals(first, second)
-        assertEquals(second, AndroidFontconfigPolicy.fingerprint(fonts))
+        assertNotEquals(second, osChanged)
+        assertEquals(second, AndroidFontconfigPolicy.fingerprint(fonts, "os-a"))
     }
 
     @Test
