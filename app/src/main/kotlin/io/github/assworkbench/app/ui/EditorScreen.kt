@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -111,6 +112,7 @@ fun EditorScreen(
         if (state.status.isNotBlank()) snackbarHostState.showSnackbar(state.status)
     }
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         snackbarHost = {
             SnackbarHost(
                 hostState = snackbarHostState,
@@ -289,6 +291,7 @@ private fun ExpandedEditorWorkspace(
     onSaveMkv: () -> Unit,
     onOpenVideo: () -> Unit,
 ) {
+    var inspectorVisible by rememberSaveable { mutableStateOf(true) }
     val inspectorWidth = when (section) {
         WorkspaceSection.SUBTITLES -> 320.dp
         WorkspaceSection.STYLE -> 500.dp
@@ -306,15 +309,27 @@ private fun ExpandedEditorWorkspace(
             Modifier.width(1.dp).fillMaxHeight()
                 .background(MaterialTheme.colorScheme.outlineVariant),
         )
-        InspectorPane(
-            state = state,
-            viewModel = viewModel,
-            section = section,
-            onSectionChange = onSectionChange,
-            onImportFont = onImportFont,
-            onSaveMkv = onSaveMkv,
-            modifier = Modifier.width(inspectorWidth).fillMaxHeight(),
-        )
+        if (inspectorVisible) {
+            InspectorPane(
+                state = state,
+                viewModel = viewModel,
+                section = section,
+                onSectionChange = onSectionChange,
+                onImportFont = onImportFont,
+                onSaveMkv = onSaveMkv,
+                onCollapse = { inspectorVisible = false },
+                modifier = Modifier.width(inspectorWidth).fillMaxHeight(),
+            )
+        } else {
+            Surface(
+                Modifier.width(30.dp).fillMaxHeight().clickable { inspectorVisible = true },
+                tonalElevation = 1.dp,
+            ) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text("‹", style = MaterialTheme.typography.titleMedium)
+                }
+            }
+        }
     }
 }
 
@@ -328,6 +343,7 @@ private fun TabletEditorWorkspace(
     onSaveMkv: () -> Unit,
     onOpenVideo: () -> Unit,
 ) {
+    var inspectorVisible by rememberSaveable { mutableStateOf(true) }
     val inspectorWeight = when (section) {
         WorkspaceSection.SUBTITLES -> 0.36f
         WorkspaceSection.STYLE -> 0.50f
@@ -344,15 +360,27 @@ private fun TabletEditorWorkspace(
                 Modifier.width(1.dp).fillMaxHeight()
                     .background(MaterialTheme.colorScheme.outlineVariant),
             )
-            InspectorPane(
-                state = state,
-                viewModel = viewModel,
-                section = section,
-                onSectionChange = onSectionChange,
-                onImportFont = onImportFont,
-                onSaveMkv = onSaveMkv,
-                modifier = Modifier.weight(inspectorWeight).fillMaxHeight(),
-            )
+            if (inspectorVisible) {
+                InspectorPane(
+                    state = state,
+                    viewModel = viewModel,
+                    section = section,
+                    onSectionChange = onSectionChange,
+                    onImportFont = onImportFont,
+                    onSaveMkv = onSaveMkv,
+                    onCollapse = { inspectorVisible = false },
+                    modifier = Modifier.weight(inspectorWeight).fillMaxHeight(),
+                )
+            } else {
+                Surface(
+                    Modifier.width(30.dp).fillMaxHeight().clickable { inspectorVisible = true },
+                    tonalElevation = 1.dp,
+                ) {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text("‹", style = MaterialTheme.typography.titleMedium)
+                    }
+                }
+            }
         }
     }
 }
@@ -454,11 +482,19 @@ private fun InspectorPane(
     onSectionChange: (WorkspaceSection) -> Unit,
     onImportFont: () -> Unit,
     onSaveMkv: () -> Unit,
+    onCollapse: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     Surface(modifier, tonalElevation = 1.dp) {
         Column(Modifier.fillMaxSize()) {
-            WorkspaceTabs(section, onSectionChange)
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                WorkspaceTabs(section, onSectionChange, Modifier.weight(1f))
+                if (onCollapse != null) {
+                    TextButton(onClick = onCollapse, modifier = Modifier.width(30.dp).height(30.dp)) {
+                        Text("›")
+                    }
+                }
+            }
             Divider()
             InspectorBody(
                 state = state,
