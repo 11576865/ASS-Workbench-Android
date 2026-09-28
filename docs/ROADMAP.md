@@ -66,7 +66,7 @@
 - [x] Add persisted System / Light / Dark appearance modes.
 - [x] Cache imported font metadata/font bytes.
 - [x] Debounce and bound expensive glyph diagnostics.
-- [x] Refresh stable Compose/Core/Lifecycle dependencies and compile against the stable Android 16 / API 36 platform.
+- [x] Pin the newest API-36-compatible stable baseline: Compose BOM 2026.04.01 (Compose 1.11), Core 1.17.0, Lifecycle 2.10.0 and Material3 Adaptive 1.2.0.
 - [x] Switch editor composition to Material3 Adaptive window size classes.
 - [x] Preserve common BOM-marked ASS encodings on standalone open/save.
 - [x] Support multi-font import batches with one Fontconfig refresh.
