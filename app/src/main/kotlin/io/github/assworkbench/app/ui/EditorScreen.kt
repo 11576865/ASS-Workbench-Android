@@ -957,64 +957,74 @@ private fun FontStatusRow(state: EditorState, viewModel: EditorViewModel, onImpo
     }
 }
 
-@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 private fun SubtitleRow(
     event: AssEvent,
     checked: Boolean,
     focused: Boolean,
+    viewModel: EditorViewModel,
     onCheck: () -> Unit,
     onFocus: () -> Unit,
-    onLongPress: () -> Unit,
     onJump: () -> Unit,
 ) {
-    Row(
+    Column(
         Modifier.fillMaxWidth()
             .background(
-                if (focused) MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.28f)
+                if (focused) MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.24f)
                 else MaterialTheme.colorScheme.surface,
             )
-            .combinedClickable(onClick = onFocus, onLongClick = onLongPress)
-            .padding(vertical = 3.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Checkbox(checked = checked, onCheckedChange = { onCheck() })
-        Column(Modifier.width(138.dp)) {
-            Text(
-                "#${event.id}  ${event.start.toAss()}–${event.end.toAss()}",
-                style = MaterialTheme.typography.labelSmall,
-                maxLines = 1,
+        Row(
+            Modifier.fillMaxWidth().clickable(onClick = onFocus).padding(vertical = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Checkbox(
+                checked = checked,
+                onCheckedChange = { onCheck() },
+                modifier = Modifier.width(26.dp).height(26.dp),
             )
-            Text(
-                "L${event.layer} · ${event.style}",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-        Column(Modifier.weight(1f)) {
-            Text(
-                text = rememberAssAnnotatedText(event.text),
-                maxLines = if (focused) 3 else 2,
-                overflow = TextOverflow.Ellipsis,
-                style = MaterialTheme.typography.bodyMedium,
-            )
-            if (focused && (event.marginL > 0 || event.marginR > 0 || event.marginV > 0)) {
+            Column(Modifier.width(132.dp)) {
                 Text(
-                    "Event Margin ${event.marginL}/${event.marginR}/${event.marginV}",
+                    "#${event.id}  ${event.start.toAss()}–${event.end.toAss()}",
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.tertiary,
+                    maxLines = 1,
+                )
+                Text(
+                    "L${event.layer} · ${event.style}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
+            Text(
+                text = rememberAssAnnotatedText(event.text),
+                modifier = Modifier.weight(1f),
+                maxLines = if (focused) 3 else 2,
+                overflow = TextOverflow.Ellipsis,
+                style = MaterialTheme.typography.bodySmall,
+            )
+            IconButton(onClick = onJump, modifier = Modifier.width(28.dp).height(28.dp)) {
+                Icon(Icons.Filled.PlayArrow, "跳转")
+            }
         }
-        IconButton(onClick = onJump) { Icon(Icons.Filled.PlayArrow, "跳转") }
+        if (focused) {
+            FocusedEventEditor(
+                event = event,
+                viewModel = viewModel,
+                modifier = Modifier.fillMaxWidth().padding(start = 30.dp, end = 4.dp, bottom = 4.dp),
+            )
+        }
     }
 }
 
 @Composable
-private fun FocusedEventEditor(event: AssEvent, viewModel: EditorViewModel) {
+private fun FocusedEventEditor(
+    event: AssEvent,
+    viewModel: EditorViewModel,
+    modifier: Modifier = Modifier,
+) {
     var startText by remember(event.id, event.start) { mutableStateOf(event.start.toAss()) }
     var endText by remember(event.id, event.end) { mutableStateOf(event.end.toAss()) }
     var marginL by remember(event.id, event.marginL) { mutableStateOf(event.marginL.toString()) }
@@ -1022,50 +1032,19 @@ private fun FocusedEventEditor(event: AssEvent, viewModel: EditorViewModel) {
     var marginV by remember(event.id, event.marginV) { mutableStateOf(event.marginV.toString()) }
     val syntax = remember(event.text) { AssInlineSyntax.analyze(event.text) }
 
-    Column(Modifier.fillMaxWidth().padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text("当前字幕 · Style ${event.style} · Layer ${event.layer}", style = MaterialTheme.typography.titleSmall)
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            OutlinedTextField(
-                value = startText,
-                onValueChange = { startText = it },
-                label = { Text("开始") },
-                singleLine = true,
-                modifier = Modifier.weight(1f),
-            )
-            OutlinedTextField(
-                value = endText,
-                onValueChange = { endText = it },
-                label = { Text("结束") },
-                singleLine = true,
-                modifier = Modifier.weight(1f),
-            )
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+            CompactEventField("Start", startText, { startText = it }, Modifier.weight(1f))
+            CompactEventField("End", endText, { endText = it }, Modifier.weight(1f))
+            TextButton(
+                onClick = { viewModel.updateFocusedTimes(startText, endText) },
+                modifier = Modifier.height(38.dp),
+            ) { Text("应用") }
         }
-        androidx.compose.material3.TextButton(onClick = { viewModel.updateFocusedTimes(startText, endText) }) { Text("应用时间") }
-        Text("事件级 Margin（0 = 继承 Style）", style = MaterialTheme.typography.labelMedium)
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            OutlinedTextField(
-                value = marginL,
-                onValueChange = { marginL = it },
-                label = { Text("L") },
-                singleLine = true,
-                modifier = Modifier.weight(1f),
-            )
-            OutlinedTextField(
-                value = marginR,
-                onValueChange = { marginR = it },
-                label = { Text("R") },
-                singleLine = true,
-                modifier = Modifier.weight(1f),
-            )
-            OutlinedTextField(
-                value = marginV,
-                onValueChange = { marginV = it },
-                label = { Text("V") },
-                singleLine = true,
-                modifier = Modifier.weight(1f),
-            )
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+            CompactEventField("L", marginL, { marginL = it }, Modifier.weight(1f))
+            CompactEventField("R", marginR, { marginR = it }, Modifier.weight(1f))
+            CompactEventField("V", marginV, { marginV = it }, Modifier.weight(1f))
             TextButton(
                 onClick = {
                     viewModel.updateFocusedMargins(
@@ -1074,33 +1053,48 @@ private fun FocusedEventEditor(event: AssEvent, viewModel: EditorViewModel) {
                         marginV.toIntOrNull() ?: event.marginV,
                     )
                 },
-            ) { Text("应用 Margin") }
+                modifier = Modifier.height(38.dp),
+            ) { Text("Margin") }
             TextButton(
                 onClick = {
                     marginL = "0"; marginR = "0"; marginV = "0"
                     viewModel.clearFocusedMargins()
                 },
-            ) { Text("全部继承 Style") }
+                modifier = Modifier.height(38.dp),
+            ) { Text("继承") }
         }
         Text(
-            "ASS Event Text · " + syntax.tags.size + " tags" +
-                if (syntax.hasErrors) " · " + syntax.issues.size + " syntax issue(s)" else "",
-            style = MaterialTheme.typography.labelMedium,
+            "Event Text · " + syntax.tags.size + " tags" +
+                if (syntax.hasErrors) " · " + syntax.issues.size + " issue" else "",
+            style = MaterialTheme.typography.labelSmall,
             color = if (syntax.hasErrors) MaterialTheme.colorScheme.error
                 else MaterialTheme.colorScheme.onSurfaceVariant,
         )
         OutlinedTextField(
             value = event.text,
             onValueChange = viewModel::updateFocusedText,
-            label = { Text("Event Text / Override Tags") },
             visualTransformation = rememberAssSyntaxTransformation(),
             isError = syntax.hasErrors,
-            supportingText = if (syntax.hasErrors) {
-                { Text(syntax.issues.first().message) }
-            } else null,
-            modifier = Modifier.fillMaxWidth().heightIn(min = 96.dp, max = 220.dp),
+            textStyle = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.fillMaxWidth().heightIn(min = 68.dp, max = 132.dp),
         )
     }
 }
 
+@Composable
+private fun CompactEventField(
+    label: String,
+    value: String,
+    onValue: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValue,
+        label = { Text(label, style = MaterialTheme.typography.labelSmall) },
+        singleLine = true,
+        textStyle = MaterialTheme.typography.bodySmall,
+        modifier = modifier.height(44.dp),
+    )
+}
 
