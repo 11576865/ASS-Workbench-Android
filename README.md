@@ -2,11 +2,11 @@
 
 A focused Android ASS subtitle workbench for phones and tablets.
 
-**Current version: 0.5.0**
+**Current version: 0.8.0**
 
 The app edits **ASS subtitles** while a local video is used only as reference media. It does **not** encode hard-subbed video and does **not** mux subtitles into containers.
 
-## 0.5 status
+## Current status
 
 - independent reference-video and ASS file selection;
 - tablet preview-left / subtitle-list-right split with draggable divider;
@@ -42,3 +42,8 @@ See `docs/PRODUCT_SPEC_1_0.md`, `docs/ROADMAP.md`, and `THIRD_PARTY_NOTICES.md`.
 The focused ASS Style now has a dedicated typesetting panel for size, emphasis, spacing, outline, shadow, colors, nine-grid alignment and margins. A preview guide can show the safe area and the two central bilingual boundaries. The 60/40 bilingual geometry is generalized from the HSR layout workbench: 3% horizontal safe margins, 5% vertical safe margins, a protected central gap, 60% of the remaining safe height for the source region above and 40% for the target region below.
 
 Blur, fade and transform-based soft entry are not represented as fake Style properties; they remain planned Event override work.
+
+
+## 0.8 Event overrides
+
+The focused event has a non-destructive managed override panel for position, blur, fade and a restrained soft-entry transform. Existing unrelated leading ASS override tags are preserved. Position nudging converts alignment/margin placement to explicit `\\pos` only when the user asks for event-level movement. Raw Event Text remains available behind an explicit disclosure control.

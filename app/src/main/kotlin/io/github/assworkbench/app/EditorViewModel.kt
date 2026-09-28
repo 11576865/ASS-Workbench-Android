@@ -8,6 +8,7 @@ import io.github.assworkbench.container.MatroskaReader
 import io.github.assworkbench.container.MatroskaScanResult
 import io.github.assworkbench.domain.AssCodec
 import io.github.assworkbench.domain.AssDocument
+import io.github.assworkbench.domain.EventOverrideEditor
 import io.github.assworkbench.domain.SubTime
 import io.github.assworkbench.domain.TypesettingMath
 import io.github.assworkbench.domain.UndoHistory
@@ -345,6 +346,78 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         editDocument("已修改字幕 #" + id + "。") { doc ->
             doc.copy(events = doc.events.map { if (it.id == id) it.copy(text = text) else it })
         }
+    }
+
+    fun applyEventOverrides(
+        id: Long,
+        x: Double?,
+        y: Double?,
+        blur: Double?,
+        fadeInMs: Int?,
+        fadeOutMs: Int?,
+        softEntry: Boolean,
+    ) {
+        editDocument("已更新字幕 #" + id + " 的事件级效果。") { doc ->
+            doc.copy(events = doc.events.map { event ->
+                if (event.id != id) {
+                    event
+                } else {
+                    event.copy(
+                        text = EventOverrideEditor.update(
+                            text = event.text,
+                            x = x,
+                            y = y,
+                            blurRadius = blur,
+                            fadeInMs = fadeInMs,
+                            fadeOutMs = fadeOutMs,
+                            enableSoftEntry = softEntry,
+                        )
+                    )
+                }
+            })
+        }
+    }
+
+    fun nudgeEventPosition(id: Long, dx: Double, dy: Double) {
+        val state = _state.value
+        val event = state.document.events.firstOrNull { it.id == id } ?: return
+        val snapshot = EventOverrideEditor.inspect(event.text)
+        val style = state.document.styles.firstOrNull { it.name == event.style }
+        val base = eventAnchor(event, style, state.document.playResX, state.document.playResY)
+        val x = (snapshot.x ?: base.first) + dx
+        val y = (snapshot.y ?: base.second) + dy
+        applyEventOverrides(
+            id = id,
+            x = x.coerceIn(0.0, state.document.playResX.toDouble()),
+            y = y.coerceIn(0.0, state.document.playResY.toDouble()),
+            blur = snapshot.blur,
+            fadeInMs = snapshot.fadeInMs,
+            fadeOutMs = snapshot.fadeOutMs,
+            softEntry = snapshot.softEntry,
+        )
+    }
+
+    private fun eventAnchor(
+        event: io.github.assworkbench.domain.AssEvent,
+        style: io.github.assworkbench.domain.AssStyle?,
+        playResX: Int,
+        playResY: Int,
+    ): Pair<Double, Double> {
+        val alignment = style?.alignment ?: 2
+        val marginL = if (event.marginL > 0) event.marginL else style?.marginL ?: 10
+        val marginR = if (event.marginR > 0) event.marginR else style?.marginR ?: 10
+        val marginV = if (event.marginV > 0) event.marginV else style?.marginV ?: 10
+        val x = when (alignment) {
+            1, 4, 7 -> marginL.toDouble()
+            3, 6, 9 -> (playResX - marginR).toDouble()
+            else -> playResX / 2.0
+        }
+        val y = when (alignment) {
+            7, 8, 9 -> marginV.toDouble()
+            4, 5, 6 -> playResY / 2.0
+            else -> (playResY - marginV).toDouble()
+        }
+        return x to y
     }
 
     fun focusEvent(id: Long, seek: Boolean = true) {

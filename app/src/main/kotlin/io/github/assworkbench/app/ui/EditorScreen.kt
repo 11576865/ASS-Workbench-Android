@@ -133,6 +133,7 @@ private fun SubtitleWorkbench(
     val focusedStyle = focused?.let { event -> state.document.styles.firstOrNull { it.name == event.style } }
     var typesettingOpen by remember { mutableStateOf(false) }
     var reviewOpen by remember { mutableStateOf(false) }
+    var effectsOpen by remember { mutableStateOf(false) }
     Column(modifier.padding(8.dp)) {
         OutlinedTextField(
             value = state.query,
@@ -148,6 +149,7 @@ private fun SubtitleWorkbench(
             androidx.compose.material3.TextButton(
                 onClick = {
                     reviewOpen = false
+                    effectsOpen = false
                     typesettingOpen = !typesettingOpen
                 },
                 enabled = focusedStyle != null,
@@ -155,10 +157,19 @@ private fun SubtitleWorkbench(
             androidx.compose.material3.TextButton(
                 onClick = {
                     typesettingOpen = false
+                    effectsOpen = false
                     reviewOpen = !reviewOpen
                 },
                 enabled = state.document.styles.size >= 2,
             ) { Text(if (reviewOpen) "收起校对" else "双语/校对") }
+            androidx.compose.material3.TextButton(
+                onClick = {
+                    typesettingOpen = false
+                    reviewOpen = false
+                    effectsOpen = !effectsOpen
+                },
+                enabled = focused != null,
+            ) { Text(if (effectsOpen) "收起效果" else "效果/位置") }
         }
         if (typesettingOpen && focusedStyle != null) {
             TypesettingPanel(state, viewModel, focusedStyle)
@@ -166,6 +177,9 @@ private fun SubtitleWorkbench(
         if (reviewOpen) {
             ReviewWorkspace(state, viewModel, Modifier.weight(1f))
             return@Column
+        }
+        if (effectsOpen && focused != null) {
+            EventOverridePanel(focused, viewModel)
         }
         val visibleIds = state.filteredEvents.map { it.id }
         val visibleSelected = visibleIds.count { it in state.selectedEventIds }
