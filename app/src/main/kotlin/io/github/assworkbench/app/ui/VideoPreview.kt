@@ -19,6 +19,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -36,7 +37,9 @@ import io.github.assworkbench.app.BuildConfig
 import io.github.assworkbench.domain.AssCodec
 import io.github.assworkbench.domain.AssDocument
 import io.github.assworkbench.domain.TypesettingMath
+import io.github.yuroyami.libmpvkt.Mpv
 import io.github.yuroyami.libmpvkt.MpvCommands
+import io.github.yuroyami.libmpvkt.MpvResult
 import io.github.yuroyami.libmpvkt.MpvPlaybackState
 import io.github.yuroyami.libmpvkt.MpvProperties
 import io.github.yuroyami.libmpvkt.compose.MpvSurface
@@ -61,28 +64,18 @@ fun VideoPreview(
     showLayoutGuides: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    var rendererArmed by remember { mutableStateOf(!BuildConfig.ASSWB_RENDERER_EXPERIMENTAL) }
+    var normalPreview by remember { mutableStateOf(!BuildConfig.ASSWB_RENDERER_EXPERIMENTAL) }
 
-    if (BuildConfig.ASSWB_RENDERER_EXPERIMENTAL && !rendererArmed) {
-        Box(
-            modifier.background(Color.Black),
-            contentAlignment = Alignment.Center,
-        ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Text("Fontconfig renderer 尚未启动", color = Color.White)
-                Text(
-                    "先确认应用本体可稳定打开；点击后才创建 mpv/libass/Fontconfig。",
-                    color = Color.White.copy(alpha = 0.75f),
-                    style = MaterialTheme.typography.labelSmall,
-                )
-                Button(onClick = { rendererArmed = true }) {
-                    Text("启动 Fontconfig renderer")
-                }
-            }
-        }
+    if (BuildConfig.ASSWB_RENDERER_EXPERIMENTAL && !normalPreview) {
+        ExperimentalRendererStartupProbe(
+            configDir = configDir,
+            fontsDir = fontsDir,
+            onEnterPreview = {
+                writeStartupProbe(configDir, "7_preview_core", "starting", "handoff to rememberMpv")
+                normalPreview = true
+            },
+            modifier = modifier,
+        )
         return
     }
 
@@ -100,6 +93,256 @@ fun VideoPreview(
             showLayoutGuides = showLayoutGuides,
             modifier = modifier,
         )
+    }
+}
+
+@Composable
+private fun ExperimentalRendererStartupProbe(
+    configDir: File,
+    fontsDir: File,
+    onEnterPreview: () -> Unit,
+    modifier: Modifier,
+) {
+    val context = LocalContext.current.applicationContext
+    val probeFile = remember(configDir) { File(configDir, "renderer-startup-probe.txt") }
+    val rendererLogFile = remember(configDir) { File(configDir, "renderer-font.log") }
+    var core by remember { mutableStateOf<Mpv?>(null) }
+    var step by remember { mutableStateOf(1) }
+    var status by remember { mutableStateOf("应用 UI 已启动；native renderer 尚未加载。") }
+    var breadcrumb by remember(probeFile) {
+        mutableStateOf(
+            runCatching { if (probeFile.isFile) probeFile.readText() else "无历史探针记录" }
+                .getOrDefault("无法读取历史探针记录"),
+        )
+    }
+
+    val activeCore = core
+    DisposableEffect(activeCore) {
+        onDispose {
+            if (activeCore != null && !activeCore.isClosed) {
+                runCatching { activeCore.close() }
+            }
+        }
+    }
+
+    fun mark(stage: String, state: String, detail: String = "") {
+        writeStartupProbe(configDir, stage, state, detail)
+        breadcrumb = runCatching { probeFile.readText() }.getOrDefault("$stage / $state")
+    }
+
+    fun fail(stage: String, t: Throwable) {
+        val detail = "${t::class.java.simpleName}: ${t.message ?: "无消息"}"
+        status = "失败：$detail"
+        mark(stage, "failure", detail)
+    }
+
+    val buttonLabel = when (step) {
+        1 -> "1  加载 native 库"
+        2 -> "2  创建 mpv core"
+        3 -> "3  应用最小 Fontconfig options"
+        4 -> "4  mpv_initialize（最小）"
+        5 -> "5  创建完整配置 core"
+        6 -> "6  mpv_initialize（完整）"
+        7 -> "7  进入正常 Compose 预览"
+        else -> "探针完成"
+    }
+
+    Box(
+        modifier.background(Color.Black),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(
+            Modifier.fillMaxWidth().padding(12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text("Fontconfig 分阶段启动探针", color = Color.White, style = MaterialTheme.typography.titleSmall)
+            Text(
+                "每一步执行前都会持久化 starting；若 native 直接杀进程，下次打开即可看到上次停在哪一步。",
+                color = Color.White.copy(alpha = 0.75f),
+                style = MaterialTheme.typography.labelSmall,
+            )
+            Text(status, color = Color.White, style = MaterialTheme.typography.labelMedium)
+            Text(
+                "上次记录：\n$breadcrumb",
+                color = Color.White.copy(alpha = 0.7f),
+                style = MaterialTheme.typography.labelSmall,
+                maxLines = 6,
+            )
+
+            Button(
+                enabled = step in 1..7,
+                onClick = {
+                    when (step) {
+                        1 -> {
+                            mark("1_native_load", "starting")
+                            runCatching { Mpv.apiVersion }
+                                .onSuccess { version ->
+                                    status = "native 加载成功；mpv client API=$version"
+                                    mark("1_native_load", "success", "clientApi=$version")
+                                    step = 2
+                                }
+                                .onFailure { fail("1_native_load", it) }
+                        }
+                        2 -> {
+                            mark("2_mpv_create", "starting")
+                            runCatching { Mpv.create(context) }
+                                .onSuccess { created ->
+                                    core = created
+                                    status = "mpv core 创建成功：${created.clientName}"
+                                    mark("2_mpv_create", "success", "client=${created.clientName}")
+                                    step = 3
+                                }
+                                .onFailure { fail("2_mpv_create", it) }
+                        }
+                        3 -> {
+                            val current = core
+                            if (current == null) {
+                                status = "内部状态错误：没有 mpv core"
+                            } else {
+                                mark("3_minimal_fontconfig_options", "starting")
+                                runCatching {
+                                    rendererLogFile.parentFile?.mkdirs()
+                                    if (rendererLogFile.exists()) rendererLogFile.delete()
+                                    val critical = listOf(
+                                        "config" to "yes",
+                                        "config-dir" to configDir.absolutePath,
+                                        "vo" to "null",
+                                        "force-window" to "no",
+                                        "idle" to "yes",
+                                        "sub-auto" to "no",
+                                        "embeddedfonts" to "yes",
+                                        "sub-fonts-dir" to fontsDir.absolutePath,
+                                        "sub-font-provider" to BuildConfig.ASSWB_RENDERER_FONT_PROVIDER,
+                                        "log-file" to rendererLogFile.absolutePath,
+                                        "msg-level" to "all=v",
+                                    )
+                                    for ((name, value) in critical) {
+                                        when (val result = current.setOption(name, value)) {
+                                            is MpvResult.Ok -> Unit
+                                            is MpvResult.Fail -> error("$name: ${result.error} ${result.detail.orEmpty()}")
+                                        }
+                                    }
+                                }.onSuccess {
+                                    status = "最小 Fontconfig options 全部被 mpv 接受"
+                                    mark("3_minimal_fontconfig_options", "success")
+                                    step = 4
+                                }.onFailure { fail("3_minimal_fontconfig_options", it) }
+                            }
+                        }
+                        4 -> {
+                            val current = core
+                            if (current == null) {
+                                status = "内部状态错误：没有 mpv core"
+                            } else {
+                                mark("4_minimal_initialize", "starting")
+                                runCatching { current.initialize() }
+                                    .onSuccess { result ->
+                                        when (result) {
+                                            is MpvResult.Ok -> {
+                                                status = "最小 Fontconfig mpv_initialize 成功"
+                                                mark("4_minimal_initialize", "success")
+                                                step = 5
+                                            }
+                                            is MpvResult.Fail -> {
+                                                val detail = "${result.error} ${result.detail.orEmpty()}"
+                                                status = "mpv_initialize 返回失败：$detail"
+                                                mark("4_minimal_initialize", "failure", detail)
+                                            }
+                                        }
+                                    }
+                                    .onFailure { fail("4_minimal_initialize", it) }
+                            }
+                        }
+                        5 -> {
+                            mark("5_full_core_and_options", "starting")
+                            runCatching {
+                                core?.let { if (!it.isClosed) it.close() }
+                                core = null
+                                rendererLogFile.parentFile?.mkdirs()
+                                if (rendererLogFile.exists()) rendererLogFile.delete()
+                                val created = Mpv.create(context)
+                                val options = MpvOptions(
+                                    configDir = configDir,
+                                    cacheDir = File(context.cacheDir, "mpv-cache").apply { mkdirs() },
+                                    extra = mapOf(
+                                        "sub-auto" to "no",
+                                        "sub-ass-override" to "no",
+                                        "embeddedfonts" to "yes",
+                                        "sub-fonts-dir" to fontsDir.absolutePath,
+                                        "sub-font-provider" to BuildConfig.ASSWB_RENDERER_FONT_PROVIDER,
+                                        "log-file" to rendererLogFile.absolutePath,
+                                        "msg-level" to "all=v",
+                                    ),
+                                )
+                                options.applyTo(created)
+                                when (val provider = created.setOption("sub-font-provider", BuildConfig.ASSWB_RENDERER_FONT_PROVIDER)) {
+                                    is MpvResult.Ok -> Unit
+                                    is MpvResult.Fail -> error("sub-font-provider: ${provider.error} ${provider.detail.orEmpty()}")
+                                }
+                                created
+                            }.onSuccess { created ->
+                                core = created
+                                status = "完整配置 core 已创建，尚未 initialize"
+                                mark("5_full_core_and_options", "success")
+                                step = 6
+                            }.onFailure { fail("5_full_core_and_options", it) }
+                        }
+                        6 -> {
+                            val current = core
+                            if (current == null) {
+                                status = "内部状态错误：没有完整配置 core"
+                            } else {
+                                mark("6_full_initialize", "starting")
+                                runCatching { current.initialize() }
+                                    .onSuccess { result ->
+                                        when (result) {
+                                            is MpvResult.Ok -> {
+                                                status = "完整配置 mpv_initialize 成功"
+                                                mark("6_full_initialize", "success")
+                                                step = 7
+                                            }
+                                            is MpvResult.Fail -> {
+                                                val detail = "${result.error} ${result.detail.orEmpty()}"
+                                                status = "完整配置 initialize 返回失败：$detail"
+                                                mark("6_full_initialize", "failure", detail)
+                                            }
+                                        }
+                                    }
+                                    .onFailure { fail("6_full_initialize", it) }
+                            }
+                        }
+                        7 -> {
+                            mark("7_preview_core", "starting", "handoff to rememberMpv")
+                            runCatching {
+                                core?.let { if (!it.isClosed) it.close() }
+                                core = null
+                            }.onFailure {
+                                fail("7_preview_core", it)
+                                return@Button
+                            }
+                            status = "切换到正常 Compose 预览"
+                            onEnterPreview()
+                        }
+                    }
+                },
+            ) {
+                Text(buttonLabel)
+            }
+
+            Button(
+                onClick = {
+                    core?.let { if (!it.isClosed) runCatching { it.close() } }
+                    core = null
+                    step = 1
+                    status = "探针已重置；native renderer 尚未加载。"
+                    runCatching { probeFile.delete() }
+                    breadcrumb = "无历史探针记录"
+                },
+            ) {
+                Text("重置探针")
+            }
+        }
     }
 }
 
@@ -143,8 +386,15 @@ private fun AuthoritativeMpvPreview(
     val previewFile = remember(mpv) { File(context.cacheDir, "ass-preview/current.ass").apply { parentFile?.mkdirs() } }
 
     LaunchedEffect(mpv) {
+        if (BuildConfig.ASSWB_RENDERER_EXPERIMENTAL) {
+            writeStartupProbe(configDir, "7_preview_core", "success", "rememberMpv returned")
+            writeStartupProbe(configDir, "8_content_protocol", "starting")
+        }
         mpv.addStreamProtocol("content", ContentResolverStreamProvider(context))
         protocolReady = true
+        if (BuildConfig.ASSWB_RENDERER_EXPERIMENTAL) {
+            writeStartupProbe(configDir, "8_content_protocol", "success")
+        }
     }
 
     LaunchedEffect(mpv, videoUri, protocolReady) {
@@ -280,6 +530,25 @@ private fun LayoutGuideOverlay(document: AssDocument, modifier: Modifier = Modif
     }
 }
 
+
+
+private fun writeStartupProbe(configDir: File, stage: String, status: String, detail: String = "") {
+    runCatching {
+        configDir.mkdirs()
+        val body = buildString {
+            appendLine("stage=$stage")
+            appendLine("status=$status")
+            appendLine("provider=${BuildConfig.ASSWB_RENDERER_FONT_PROVIDER}")
+            appendLine("renderer=${BuildConfig.ASSWB_RENDERER_VERSION}")
+            if (detail.isNotBlank()) appendLine("detail=$detail")
+        }
+        val target = File(configDir, "renderer-startup-probe.txt")
+        val tmp = File(configDir, "renderer-startup-probe.txt.tmp")
+        tmp.writeText(body, Charsets.UTF_8)
+        if (target.exists()) target.delete()
+        tmp.renameTo(target)
+    }
+}
 
 private fun readRendererFontDiagnostics(file: File): List<String> {
     if (!file.isFile || file.length() <= 0L) return emptyList()
