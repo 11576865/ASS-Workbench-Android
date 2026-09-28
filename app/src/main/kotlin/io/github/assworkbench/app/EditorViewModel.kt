@@ -796,6 +796,17 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    fun assignFocusedStyle(styleName: String) {
+        val state = _state.value
+        val id = state.focusedEventId ?: return
+        if (state.document.styles.none { it.name == styleName }) return
+        editDocument("当前字幕已指定为 Style " + styleName + "。") { doc ->
+            doc.copy(events = doc.events.map { event ->
+                if (event.id == id) event.copy(style = styleName) else event
+            })
+        }
+    }
+
     fun assignSelectedStyle(styleName: String) {
         val state = _state.value
         if (state.selectedEventIds.isEmpty() || state.document.styles.none { it.name == styleName }) return
