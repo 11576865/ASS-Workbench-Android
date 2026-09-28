@@ -2,6 +2,8 @@ name: Fontconfig renderer native probe
 
 on:
   workflow_dispatch:
+  push:
+    branches: [ main ]
   pull_request:
     branches: [ main ]
     paths:
@@ -14,7 +16,7 @@ on:
       - 'app/src/main/kotlin/io/github/assworkbench/app/**'
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   arm64-fontconfig-native:
@@ -155,31 +157,55 @@ jobs:
           test -f fontconfig-maven/io/github/yuroyami/libmpvkt-native/0.3.0-asswb-fontconfig/libmpvkt-native-0.3.0-asswb-fontconfig.pom
           find fontconfig-maven/io/github/yuroyami -maxdepth 4 -type f | sort | sed -n '1,120p'
 
-      - name: Build ASS Workbench experimental Fontconfig APK
+      - name: Build ASS Workbench production Fontconfig APK
         run: |
           gradle :app:assembleDebug \
             -Passwb.rendererRepo="$GITHUB_WORKSPACE/fontconfig-maven" \
             -Passwb.rendererVersion=0.3.0-asswb-fontconfig \
             -Passwb.rendererProvider=fontconfig \
+            -Passwb.rendererExperimental=false \
             --stacktrace
 
-      - name: Collect experimental APK and renderer manifest
+      - name: Collect production APK and renderer manifest
         run: |
           VERSION="$(sed -nE 's/^val baseVersionName = "([^"]+)"/\1/p' app/build.gradle.kts | head -1)"
           test -n "$VERSION"
-          mkdir -p fontconfig-experimental-apk
+          mkdir -p fontconfig-production-apk
           cp app/build/outputs/apk/debug/app-debug.apk \
-            "fontconfig-experimental-apk/ASS-Workbench-Android-$VERSION-fontconfig-arm64-debug.apk"
-          cp fontconfig-native-probe/depinfo.sh fontconfig-experimental-apk/
-          cp fontconfig-native-probe/fontconfig.pc fontconfig-experimental-apk/
-          cp fontconfig-native-probe/libass.pc fontconfig-experimental-apk/
-          cp fontconfig-native-probe/renderer-manifest.txt fontconfig-experimental-apk/
-          cp fontconfig-native-probe/libmpv-needed.txt fontconfig-experimental-apk/
+            "fontconfig-production-apk/ASS-Workbench-Android-$VERSION-debug.apk"
+          cp fontconfig-native-probe/depinfo.sh fontconfig-production-apk/
+          cp fontconfig-native-probe/fontconfig.pc fontconfig-production-apk/
+          cp fontconfig-native-probe/libass.pc fontconfig-production-apk/
+          cp fontconfig-native-probe/renderer-manifest.txt fontconfig-production-apk/
+          cp fontconfig-native-probe/libmpv-needed.txt fontconfig-production-apk/
 
-      - name: Upload experimental Fontconfig APK
+      - name: Upload production Fontconfig APK
         uses: actions/upload-artifact@v4
         with:
-          name: asswb-fontconfig-experimental-apk
-          path: fontconfig-experimental-apk/
+          name: asswb-fontconfig-production-apk
+          path: fontconfig-production-apk/
           if-no-files-found: error
           retention-days: 7
+
+      - name: Publish canonical GitHub prerelease
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          VERSION="$(sed -nE 's/^val baseVersionName = "([^"]+)"/\1/p' app/build.gradle.kts | head -1)"
+          TAG="v$VERSION"
+          APK="fontconfig-production-apk/ASS-Workbench-Android-$VERSION-debug.apk"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$APK" --clobber
+            gh release edit "$TAG" \
+              --title "ASS Workbench Android $VERSION" \
+              --prerelease \
+              --notes "Arm64 Fontconfig/libass renderer build from main. This is the canonical device-test APK."
+          else
+            gh release create "$TAG" "$APK" \
+              --target "$GITHUB_SHA" \
+              --title "ASS Workbench Android $VERSION" \
+              --prerelease \
+              --notes "Arm64 Fontconfig/libass renderer build from main. This is the canonical device-test APK."
+          fi
