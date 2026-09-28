@@ -50,6 +50,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     }
     private var recoveryJob: Job? = null
     private var reviewPersistJob: Job? = null
+    private var fontDiagnosticJob: Job? = null
     private var containerScan: MatroskaScanResult? = null
     private val _state = MutableStateFlow(
         EditorState(
@@ -909,7 +910,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 status = status,
             )
         }
-        refreshFontDiagnostics()
+        scheduleFontDiagnostics()
     }
 
     private fun scheduleRecovery(document: AssDocument) {
@@ -940,15 +941,30 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         refreshFontDiagnostics()
     }
 
+    private fun scheduleFontDiagnostics(delayMs: Long = 280L) {
+        fontDiagnosticJob?.cancel()
+        fontDiagnosticJob = viewModelScope.launch {
+            delay(delayMs)
+            refreshFontDiagnostics()
+        }
+    }
+
     private fun refreshFontDiagnostics() {
         _state.update { state ->
             val byStyle = state.document.events.groupBy { it.style }
             val glyphs = linkedMapOf<String, io.github.assworkbench.fonts.FontGlyphDiagnostic>()
             state.document.styles.forEach { style ->
-                val sampleText = byStyle[style.name].orEmpty()
-                    .asSequence()
-                    .map { it.text.replace(Regex("\\{[^}]*\\}"), "").replace("\\N", " ") }
-                    .joinToString(" ")
+                val sampleText = buildString {
+                    for (event in byStyle[style.name].orEmpty()) {
+                        if (length >= 4096) break
+                        val clean = event.text
+                            .replace(Regex("\\{[^}]*\\}"), "")
+                            .replace("\\N", " ")
+                            .replace("\\n", " ")
+                        append(clean.take((4096 - length).coerceAtLeast(0)))
+                        append(' ')
+                    }
+                }
                 fontStore.glyphDiagnostic(style.fontName, sampleText)?.let { glyphs[style.name] = it }
             }
             state.copy(
