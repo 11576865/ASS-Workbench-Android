@@ -70,6 +70,12 @@ class FontStore(private val context: Context) {
         return FontAsset(target.name, sha, metadata)
     }
 
+    fun rebuildFontconfigCache(): FontconfigPrepared {
+        fontconfigCacheRoot.deleteRecursively()
+        fontconfigCacheRoot.mkdirs()
+        return refreshFontconfig(pruneOldCaches = true)
+    }
+
     fun refreshFontconfig(pruneOldCaches: Boolean): FontconfigPrepared {
         val prepared = AndroidFontconfigPolicy.prepare(
             configDir = mpvConfigDir,
