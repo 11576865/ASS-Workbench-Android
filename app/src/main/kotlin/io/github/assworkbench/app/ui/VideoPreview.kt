@@ -51,6 +51,7 @@ fun VideoPreview(
     seekRequestMs: Long?,
     seekRequestNonce: Long,
     onPosition: (Long) -> Unit,
+    onRendererDiagnostics: (List<String>) -> Unit,
     configDir: File,
     fontsDir: File,
     fontRevision: Long,
@@ -65,6 +66,7 @@ fun VideoPreview(
             seekRequestMs = seekRequestMs,
             seekRequestNonce = seekRequestNonce,
             onPosition = onPosition,
+            onRendererDiagnostics = onRendererDiagnostics,
             configDir = configDir,
             fontsDir = fontsDir,
             initialPositionMs = initialPositionMs,
@@ -81,6 +83,7 @@ private fun AuthoritativeMpvPreview(
     seekRequestMs: Long?,
     seekRequestNonce: Long,
     onPosition: (Long) -> Unit,
+    onRendererDiagnostics: (List<String>) -> Unit,
     configDir: File,
     fontsDir: File,
     initialPositionMs: Long,
@@ -88,7 +91,10 @@ private fun AuthoritativeMpvPreview(
     modifier: Modifier,
 ) {
     val context = LocalContext.current
-    val options = remember(configDir, fontsDir) {
+    val rendererLogFile = remember(configDir) { File(configDir, "renderer-font.log") }
+    val options = remember(configDir, fontsDir, rendererLogFile) {
+        rendererLogFile.parentFile?.mkdirs()
+        if (rendererLogFile.exists()) rendererLogFile.delete()
         MpvOptions(
             configDir = configDir,
             cacheDir = File(context.cacheDir, "mpv-cache").apply { mkdirs() },
@@ -98,6 +104,8 @@ private fun AuthoritativeMpvPreview(
                 "embeddedfonts" to "yes",
                 "sub-fonts-dir" to fontsDir.absolutePath,
                 "sub-font-provider" to "none",
+                "log-file" to rendererLogFile.absolutePath,
+                "msg-level" to "all=v",
             ),
         )
     }
@@ -139,6 +147,8 @@ private fun AuthoritativeMpvPreview(
         } else {
             mpv.command(MpvCommands.subReload())
         }
+        delay(300)
+        onRendererDiagnostics(readRendererFontDiagnostics(rendererLogFile))
     }
 
     LaunchedEffect(seekRequestNonce, mpv) {
@@ -241,4 +251,32 @@ private fun LayoutGuideOverlay(document: AssDocument, modifier: Modifier = Modif
             strokeWidth = 1.5.dp.toPx(),
         )
     }
+}
+
+
+private fun readRendererFontDiagnostics(file: File): List<String> {
+    if (!file.isFile || file.length() <= 0L) return emptyList()
+    return runCatching {
+        val maxBytes = 256L * 1024L
+        val bytes = java.io.RandomAccessFile(file, "r").use { input ->
+            val length = input.length()
+            val start = (length - maxBytes).coerceAtLeast(0L)
+            input.seek(start)
+            ByteArray((length - start).toInt()).also(input::readFully)
+        }
+        String(bytes, Charsets.UTF_8)
+            .lineSequence()
+            .map { it.trim() }
+            .filter { line ->
+                val lower = line.lowercase()
+                lower.contains("fontselect") ||
+                    lower.contains("[sub/ass]") ||
+                    lower.contains("libass") ||
+                    lower.contains("font provider") ||
+                    lower.contains("fontconfig")
+            }
+            .filter(String::isNotBlank)
+            .toList()
+            .takeLast(12)
+    }.getOrDefault(emptyList())
 }
