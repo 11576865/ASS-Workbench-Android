@@ -5,7 +5,6 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -43,6 +42,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TriStateCheckbox
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.adaptive.currentWindowAdaptiveInfoV2
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -61,6 +61,8 @@ import io.github.assworkbench.app.EditorViewModel
 import io.github.assworkbench.domain.AssEvent
 import io.github.assworkbench.domain.AssInlineSyntax
 import io.github.assworkbench.fonts.FontMatchStatus
+import androidx.window.core.layout.WindowSizeClass.Companion.WIDTH_DP_EXPANDED_LOWER_BOUND
+import androidx.window.core.layout.WindowSizeClass.Companion.WIDTH_DP_MEDIUM_LOWER_BOUND
 
 private enum class WorkspaceSection(val label: String) {
     SUBTITLES("字幕"),
@@ -206,24 +208,27 @@ private fun EditorWorkspace(
     onSaveMkv: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    BoxWithConstraints(modifier) {
+    val windowSizeClass = currentWindowAdaptiveInfoV2().windowSizeClass
+    Box(modifier) {
         when {
-            maxWidth >= 1100.dp -> ExpandedEditorWorkspace(
-                state,
-                viewModel,
-                section,
-                onSectionChange,
-                onImportFont,
-                onSaveMkv,
-            )
-            maxWidth >= 720.dp -> TabletEditorWorkspace(
-                state,
-                viewModel,
-                section,
-                onSectionChange,
-                onImportFont,
-                onSaveMkv,
-            )
+            windowSizeClass.isWidthAtLeastBreakpoint(WIDTH_DP_EXPANDED_LOWER_BOUND) ->
+                ExpandedEditorWorkspace(
+                    state,
+                    viewModel,
+                    section,
+                    onSectionChange,
+                    onImportFont,
+                    onSaveMkv,
+                )
+            windowSizeClass.isWidthAtLeastBreakpoint(WIDTH_DP_MEDIUM_LOWER_BOUND) ->
+                TabletEditorWorkspace(
+                    state,
+                    viewModel,
+                    section,
+                    onSectionChange,
+                    onImportFont,
+                    onSaveMkv,
+                )
             else -> CompactEditorWorkspace(
                 state,
                 viewModel,
