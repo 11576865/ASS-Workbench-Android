@@ -20,10 +20,17 @@ data class FontMetadata(
     val rendererAliases: Set<String> = emptySet(),
 )
 
+enum class FontOrigin {
+    MANUAL,
+    MKV_ATTACHMENT,
+    UNKNOWN,
+}
+
 data class FontAsset(
     val fileName: String,
     val sha256: String,
     val metadata: FontMetadata,
+    val origin: FontOrigin = FontOrigin.UNKNOWN,
 )
 
 enum class FontMatchStatus {
