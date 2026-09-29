@@ -1280,32 +1280,47 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     private fun refreshFontDiagnostics() {
-        _state.update { state ->
-            val byStyle = state.document.events.groupBy { it.style }
-            val glyphs = linkedMapOf<String, io.github.assworkbench.fonts.FontGlyphDiagnostic>()
-            state.document.styles.forEach { style ->
-                val sampleText = buildString {
-                    for (event in byStyle[style.name].orEmpty()) {
-                        if (length >= 4096) break
-                        val clean = event.text
-                            .replace(Regex("\\{[^}]*\\}"), "")
-                            .replace("\\N", " ")
-                            .replace("\\n", " ")
-                        append(clean.take((4096 - length).coerceAtLeast(0)))
-                        append(' ')
+        val snapshot = _state.value
+        viewModelScope.launch {
+            val result = withContext(Dispatchers.Default) {
+                val byStyle = snapshot.document.events.groupBy { it.style }
+                val glyphs = linkedMapOf<String, io.github.assworkbench.fonts.FontGlyphDiagnostic>()
+                snapshot.document.styles.forEach { style ->
+                    val sampleText = buildString {
+                        for (event in byStyle[style.name].orEmpty()) {
+                            if (length >= 4096) break
+                            val clean = io.github.assworkbench.domain.AssInlineSyntax.visibleText(event.text)
+                                .replace("\\N", " ")
+                                .replace("\\n", " ")
+                            append(clean.take((4096 - length).coerceAtLeast(0)))
+                            append(' ')
+                        }
                     }
+                    fontStore.glyphDiagnostic(style.fontName, sampleText)?.let { glyphs[style.name] = it }
                 }
-                fontStore.glyphDiagnostic(style.fontName, sampleText)?.let { glyphs[style.name] = it }
+                val diagnostics = FontDiagnostics.diagnose(
+                    requestedFamilies = snapshot.document.styles.map { it.fontName } +
+                        FontBindingRewriter.explicitFamilies(snapshot.document),
+                    imported = snapshot.importedFonts,
+                    fallbackFamily = snapshot.fallbackFontFamily,
+                )
+                diagnostics to glyphs
             }
-            state.copy(
-                fontDiagnostics = FontDiagnostics.diagnose(
-                    requestedFamilies = state.document.styles.map { it.fontName } +
-                        FontBindingRewriter.explicitFamilies(state.document),
-                    imported = state.importedFonts,
-                    fallbackFamily = state.fallbackFontFamily,
-                ),
-                fontGlyphDiagnostics = glyphs,
-            )
+
+            _state.update { current ->
+                if (
+                    current.document != snapshot.document ||
+                    current.importedFonts != snapshot.importedFonts ||
+                    current.fallbackFontFamily != snapshot.fallbackFontFamily
+                ) {
+                    current
+                } else {
+                    current.copy(
+                        fontDiagnostics = result.first,
+                        fontGlyphDiagnostics = result.second,
+                    )
+                }
+            }
         }
     }
 
