@@ -56,7 +56,7 @@ fun ContainerBridgePanel(
                         )
                         TextButton(
                             onClick = { menuOpen = true },
-                            enabled = state.tracks.isNotEmpty(),
+                            enabled = state.tracks.isNotEmpty() && !state.writeBackBusy,
                         ) { Text("轨道") }
                         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                             state.tracks.forEach { track ->

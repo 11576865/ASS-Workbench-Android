@@ -176,14 +176,24 @@ Status values: **AUTO** = current automated coverage exists; **ADD** = add autom
 | P1 | Compose | fast playback-position updates with long Event list | unrelated rows/tools avoid high-frequency recomposition | DEVICE/profile |
 | P2 | Renderer | long moving line / heavy transform fixture | no renderer recreation per gesture; editor remains responsive enough to recover | DEVICE/profile |
 | L1 | Lifecycle | rotate portrait↔landscape during active edit | canonical document, focus, selection and draft semantics survive | DEVICE |
-| L2 | Lifecycle | process death/recovery after unsaved edit | recovery restores expected snapshot without overwriting source | DEVICE |
-| S1 | Save | start MKV save, then edit current document | completed output is save-start snapshot; current dirty state remains | current code + DEVICE |
+| L2 | Lifecycle | process death/recovery after unsaved edit | recovery restores expected snapshot without inheriting stale MKV/container state | code-hardened + DEVICE |
+| S1 | Save | start MKV save, then edit/switch workspace | completed output is save-start snapshot; stale callback cannot mutate the later workspace | code-hardened + DEVICE |
 | B1 | Build | APK identity inspection | versionCode/version/commit/run are visible and match artifact name | AUTO + DEVICE |
 | B2 | Release | rolling 0.26 prerelease asset | APK filename/diagnostics identify exact source commit | AUTO |
 
 ## Freeze priorities
 
 ### P0 — before any 0.27 version bump
+
+Current race-hardening state:
+
+- MKV scans now have a workspace epoch and cancellable Job; stale completion/failure callbacks cannot overwrite a later workspace.
+- MKV attachment-font imports are session-gated inside `FontStore`, so an old scan cannot repopulate `project-fonts` after a project switch.
+- selecting another ASS track is blocked while MKV write-back is active.
+- MKV write-back uses a unique per-operation cache directory instead of a shared destructive workspace.
+- success/failure callbacks are bound to the exact workspace epoch + container URI + track; reopening the same URI later does not let an old save mutate the new session.
+- recovery read/write/clear operations are serialized, and recovery restore explicitly drops current container/MKV-font state instead of inheriting an unrelated container.
+- recovered ASS remains editable/saveable; container write-back must be re-established explicitly after recovery.
 
 - native renderer crash/OOM exposure from hostile/extreme Raw ASS;
 - MKV write-back preservation and font-package collision semantics;

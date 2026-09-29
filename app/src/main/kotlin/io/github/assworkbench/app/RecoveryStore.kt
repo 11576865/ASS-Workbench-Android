@@ -19,10 +19,13 @@ class RecoveryStore(context: Context) {
     private val assFile = File(dir, "latest.ass")
     private val metaFile = File(dir, "latest.meta")
 
+    @Synchronized
     fun exists(): Boolean = assFile.isFile && metaFile.isFile
 
+    @Synchronized
     fun label(): String = readMeta().getOrNull(0).orEmpty().ifBlank { "未保存字幕工程" }
 
+    @Synchronized
     fun write(project: SubtitleProject, document: AssDocument, textEncoding: AssTextEncoding) {
         val tmpAss = File(dir, "latest.ass.tmp")
         val tmpMeta = File(dir, "latest.meta.tmp")
@@ -41,6 +44,7 @@ class RecoveryStore(context: Context) {
         tmpMeta.renameTo(metaFile)
     }
 
+    @Synchronized
     fun read(): RecoverySnapshot? {
         if (!exists()) return null
         return runCatching {
@@ -59,6 +63,7 @@ class RecoveryStore(context: Context) {
         }.getOrNull()
     }
 
+    @Synchronized
     fun clear() {
         assFile.delete()
         metaFile.delete()

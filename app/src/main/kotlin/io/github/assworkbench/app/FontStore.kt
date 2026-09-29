@@ -35,8 +35,13 @@ class FontStore(private val context: Context) {
     @Volatile
     private var importedCache: List<FontAsset>? = null
     private val fontBytesCache = ConcurrentHashMap<String, ByteArray>()
+    private val projectFontLock = Any()
+    @Volatile
+    private var projectFontSessionId: Long = 0L
 
     init {
+        // MKV attachment fonts are project-scoped, never process-persistent state.
+        synchronized(projectFontLock) { clearProjectFontsLocked() }
         refreshFontconfig(pruneOldCaches = false)
     }
 
@@ -110,19 +115,29 @@ class FontStore(private val context: Context) {
         return FontAsset(target.name, sha, metadata, FontOrigin.MANUAL)
     }
 
-    fun importEmbeddedFont(fileName: String, bytes: ByteArray): FontAsset? {
-        val ext = fileName.substringAfterLast('.', "").lowercase()
-        if (ext !in setOf("ttf", "otf")) return null
-        val metadata = OpenTypeNameReader.read(bytes)
-        val sha = OpenTypeNameReader.sha256(bytes)
-        val safeStem = safeFileStem(metadata.family)
-        val target = File(projectFontDir, "${safeStem}-${sha.take(10)}.$ext")
-        if (!target.exists()) atomicWrite(target, bytes)
-        fontBytesCache[target.absolutePath] = bytes
-        invalidateImportedCache()
-        // Keep the fallback file immutable during an active renderer session.
-        return FontAsset(target.name, sha, metadata, FontOrigin.MKV_ATTACHMENT)
+    fun beginProjectFontSession(sessionId: Long, refresh: Boolean = true) {
+        synchronized(projectFontLock) {
+            projectFontSessionId = sessionId
+            clearProjectFontsLocked()
+        }
+        if (refresh) refreshFontconfig(pruneOldCaches = true)
     }
+
+    fun importEmbeddedFont(sessionId: Long, fileName: String, bytes: ByteArray): FontAsset? =
+        synchronized(projectFontLock) {
+            if (sessionId != projectFontSessionId) return@synchronized null
+            val ext = fileName.substringAfterLast('.', "").lowercase()
+            if (ext !in setOf("ttf", "otf")) return@synchronized null
+            val metadata = OpenTypeNameReader.read(bytes)
+            val sha = OpenTypeNameReader.sha256(bytes)
+            val safeStem = safeFileStem(metadata.family)
+            val target = File(projectFontDir, "${safeStem}-${sha.take(10)}.$ext")
+            if (!target.exists()) atomicWrite(target, bytes)
+            fontBytesCache[target.absolutePath] = bytes
+            invalidateImportedCache()
+            // Keep the fallback file immutable during an active renderer session.
+            FontAsset(target.name, sha, metadata, FontOrigin.MKV_ATTACHMENT)
+        }
 
     fun fileFor(asset: FontAsset): File? {
         val candidates = when (asset.origin) {
@@ -188,10 +203,14 @@ class FontStore(private val context: Context) {
     }
 
     fun clearProjectFonts(refresh: Boolean = true) {
+        synchronized(projectFontLock) { clearProjectFontsLocked() }
+        if (refresh) refreshFontconfig(pruneOldCaches = true)
+    }
+
+    private fun clearProjectFontsLocked() {
         projectFontDir.listFiles().orEmpty().forEach { runCatching { it.delete() } }
         fontBytesCache.keys.removeAll { it.startsWith(projectFontDir.absolutePath) }
         invalidateImportedCache()
-        if (refresh) refreshFontconfig(pruneOldCaches = true)
     }
 
     fun activeRendererFontsDir(): File =

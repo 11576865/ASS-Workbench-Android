@@ -35,6 +35,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.util.concurrent.atomic.AtomicLong
 
 class EditorViewModel(application: Application) : AndroidViewModel(application) {
     private val app get() = getApplication<Application>()
@@ -53,9 +54,12 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     private var recoveryJob: Job? = null
     private var fontDiagnosticJob: Job? = null
     private var waveformJob: Job? = null
+    private var containerScanJob: Job? = null
     private var waveformSourceUri: String? = null
     private var containerScan: MatroskaScanResult? = null
     private var eventFormatClipboard: EventFormatClipboard? = null
+    private val workspaceEpoch = AtomicLong(1L)
+    private val writeBackSerial = AtomicLong(0L)
     private val _state = MutableStateFlow(
         EditorState(
             project = io.github.assworkbench.domain.SubtitleProject(),
@@ -70,6 +74,25 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         recoveryJob = null
         if (clearStored) recoveryStore.clear()
     }
+
+    private fun beginWorkspaceBoundary(resetProjectFonts: Boolean = true): Long {
+        containerScanJob?.cancel()
+        containerScanJob = null
+        containerScan = null
+        val epoch = workspaceEpoch.incrementAndGet()
+        if (resetProjectFonts) fontStore.beginProjectFontSession(epoch, refresh = false)
+        return epoch
+    }
+
+    private fun sameMkvWorkspace(
+        state: EditorState,
+        epoch: Long,
+        containerUri: String?,
+        trackNumber: Long?,
+    ): Boolean =
+        workspaceEpoch.get() == epoch &&
+            state.container.uri == containerUri &&
+            state.container.selectedTrackNumber == trackNumber
 
     private fun cancelWaveformAnalysis() {
         waveformJob?.cancel()
@@ -130,8 +153,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
 
     fun newSubtitleProject() {
         clearPendingRecovery()
-        containerScan = null
-        fontStore.clearProjectFonts(refresh = false)
+        beginWorkspaceBoundary()
         val document = AssDocument()
         history.reset(document)
         _state.update {
@@ -164,8 +186,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         // after the user actually chose a file, so cancelling the picker preserves
         // the current workspace.
         clearPendingRecovery()
-        fontStore.clearProjectFonts(refresh = false)
-        containerScan = null
+        val scanEpoch = beginWorkspaceBoundary()
         val blank = AssDocument()
         history.reset(blank)
         _state.update {
@@ -198,7 +219,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 status = "正在扫描 MKV 字幕轨与字体附件……",
             )
         }
-        viewModelScope.launch {
+        containerScanJob = viewModelScope.launch {
             var imported = 0
             var skipped = 0
             runCatching {
@@ -213,7 +234,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                                     skipped++
                                 } else {
                                     val asset = runCatching {
-                                        fontStore.importEmbeddedFont(attachment.fileName, attachment.data)
+                                        fontStore.importEmbeddedFont(scanEpoch, attachment.fileName, attachment.data)
                                     }.getOrNull()
                                     if (asset != null) imported++ else skipped++
                                 }
@@ -226,7 +247,10 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                     scan
                 }
             }.onSuccess { scan ->
-                if (_state.value.container.uri != uri.toString()) return@onSuccess
+                if (
+                    workspaceEpoch.get() != scanEpoch ||
+                    _state.value.container.uri != uri.toString()
+                ) return@onSuccess
                 containerScan = scan
                 val tracks = scan.subtitleTracks.map {
                     ContainerTrackUi(it.number, it.displayName, it.language, it.packets.size)
@@ -250,7 +274,11 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 }
                 if (tracks.size == 1) selectContainerTrack(tracks.single().number)
             }.onFailure { error ->
-                if (_state.value.container.uri != uri.toString()) return@onFailure
+                if (error is kotlinx.coroutines.CancellationException) return@onFailure
+                if (
+                    workspaceEpoch.get() != scanEpoch ||
+                    _state.value.container.uri != uri.toString()
+                ) return@onFailure
                 _state.update {
                     it.copy(
                         container = it.container.copy(loading = false, error = error.message ?: "MKV 扫描失败"),
@@ -265,8 +293,14 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun selectContainerTrack(trackNumber: Long) {
+        val current = _state.value
+        if (current.container.writeBackBusy) {
+            _state.update { it.copy(status = "MKV 写回进行中；完成后才能切换字幕轨。") }
+            return
+        }
         val scan = containerScan ?: return
         val track = scan.subtitleTracks.firstOrNull { it.number == trackNumber } ?: return
+        workspaceEpoch.incrementAndGet()
         clearPendingRecovery()
         val document = AssCodec.parse(track.toAss())
         history.reset(document)
@@ -292,6 +326,12 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
 
     fun saveMkvTo(outputUri: Uri) {
         val snapshot = _state.value
+        if (snapshot.container.writeBackBusy) {
+            _state.update { it.copy(status = "已有 MKV 写回任务正在进行。") }
+            return
+        }
+        val saveEpoch = workspaceEpoch.get()
+        val operationId = writeBackSerial.incrementAndGet()
         val sourceUri = snapshot.container.uri?.let(Uri::parse) ?: run {
             reportError("MKV 写回失败", IllegalStateException("没有已打开的 MKV 工程"))
             return
@@ -329,40 +369,48 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch {
             runCatching {
                 withContext(Dispatchers.IO) {
-                    val work = File(app.cacheDir, "container-writeback").apply {
+                    val work = File(app.cacheDir, "container-writeback-" + operationId).apply {
                         deleteRecursively()
                         mkdirs()
                     }
-                    val source = File(work, "source.mkv")
-                    app.contentResolver.openInputStream(sourceUri)?.use { input ->
-                        source.outputStream().buffered().use { output -> input.copyTo(output, 1024 * 1024) }
-                    } ?: error("无法重新读取源 MKV")
+                    try {
+                        val source = File(work, "source.mkv")
+                        app.contentResolver.openInputStream(sourceUri)?.use { input ->
+                            source.outputStream().buffered().use { output -> input.copyTo(output, 1024 * 1024) }
+                        } ?: error("无法重新读取源 MKV")
 
-                    val editedAss = File(work, "edited.ass")
-                    editedAss.writeText(AssCodec.write(snapshot.document), Charsets.UTF_8)
-                    val result = File(work, "updated.mkv")
+                        val editedAss = File(work, "edited.ass")
+                        editedAss.writeText(AssCodec.write(snapshot.document), Charsets.UTF_8)
+                        val result = File(work, "updated.mkv")
 
-                    val packageFiles = packageAssets.map { asset ->
-                        fontStore.fileFor(asset)
-                            ?: error("找不到待封入字体文件：" + asset.fileName)
+                        val packageFiles = packageAssets.map { asset ->
+                            fontStore.fileFor(asset)
+                                ?: error("找不到待封入字体文件：" + asset.fileName)
+                        }
+                        mkvGoTool.replaceAss(
+                            source = source,
+                            trackNumber = trackNumber,
+                            editedAss = editedAss,
+                            output = result,
+                            fonts = packageFiles,
+                        )
+
+                        app.contentResolver.openOutputStream(outputUri, "w")?.use { output ->
+                            result.inputStream().buffered().use { input -> input.copyTo(output, 1024 * 1024) }
+                        } ?: error("无法写入目标 MKV")
+                        result.length()
+                    } finally {
+                        work.deleteRecursively()
                     }
-                    mkvGoTool.replaceAss(
-                        source = source,
-                        trackNumber = trackNumber,
-                        editedAss = editedAss,
-                        output = result,
-                        fonts = packageFiles,
-                    )
-
-                    app.contentResolver.openOutputStream(outputUri, "w")?.use { output ->
-                        result.inputStream().buffered().use { input -> input.copyTo(output, 1024 * 1024) }
-                    } ?: error("无法写入目标 MKV")
-                    result.length()
                 }
             }.onSuccess { bytes ->
                 val current = _state.value
-                val sameProject = current.container.uri == snapshot.container.uri &&
-                    current.container.selectedTrackNumber == snapshot.container.selectedTrackNumber
+                val sameProject = sameMkvWorkspace(
+                    current,
+                    saveEpoch,
+                    snapshot.container.uri,
+                    snapshot.container.selectedTrackNumber,
+                )
                 if (!sameProject) return@onSuccess
                 val unchangedSinceSaveStarted = current.document == snapshot.document
                 if (unchangedSinceSaveStarted) clearPendingRecovery()
@@ -379,11 +427,23 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                     )
                 }
             }.onFailure { error ->
-                _state.update {
-                    it.copy(
-                        container = it.container.copy(writeBackBusy = false),
-                        status = "MKV 写回失败：" + (error.message ?: error::class.java.simpleName),
-                    )
+                if (error is kotlinx.coroutines.CancellationException) return@onFailure
+                _state.update { state ->
+                    if (
+                        !sameMkvWorkspace(
+                            state,
+                            saveEpoch,
+                            snapshot.container.uri,
+                            snapshot.container.selectedTrackNumber,
+                        )
+                    ) {
+                        state
+                    } else {
+                        state.copy(
+                            container = state.container.copy(writeBackBusy = false),
+                            status = "MKV 写回失败：" + (error.message ?: error::class.java.simpleName),
+                        )
+                    }
                 }
             }
         }
@@ -422,8 +482,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
 
     fun openSubtitle(uri: Uri) {
         clearPendingRecovery()
-        containerScan = null
-        fontStore.clearProjectFonts(refresh = false)
+        beginWorkspaceBoundary()
         val bytes = app.contentResolver.openInputStream(uri)?.use { it.readBytes() }
             ?: error("无法读取字幕")
         val decoded = AssTextDecoder.decode(bytes)
@@ -1927,12 +1986,18 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             _state.update { it.copy(recoveryAvailable = false, recoveryLabel = "") }
             return
         }
+        cancelWaveformAnalysis()
+        beginWorkspaceBoundary()
+        clearPendingRecovery()
         history.reset(snapshot.document)
         _state.update {
             it.copy(
                 project = snapshot.project,
                 document = snapshot.document,
                 previewDocument = null,
+                waveform = snapshot.project.videoUri?.let { uri ->
+                    WaveformLiteState(sourceUri = uri, status = WaveformLiteStatus.IDLE)
+                } ?: WaveformLiteState(),
                 subtitleLoaded = true,
                 subtitleTextEncoding = snapshot.textEncoding,
                 selectedEventIds = emptySet(),
@@ -1941,9 +2006,12 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 dirty = true,
                 canUndo = false,
                 canRedo = false,
+                importedFonts = it.importedFonts.filter { font -> font.origin != FontOrigin.MKV_ATTACHMENT },
+                fontPackagingSelection = emptySet(),
                 recoveryAvailable = false,
                 recoveryLabel = "",
-                status = "已恢复上次未保存编辑。",
+                container = ContainerBridgeState(),
+                status = "已恢复上次未保存编辑；MKV 容器写回上下文不会从恢复日志继承。",
             )
         }
         refreshFontDiagnostics()
