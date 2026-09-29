@@ -1222,7 +1222,6 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
 
         history.commit(next)
         publishDocument(next, status, dirty = true)
-        scheduleRecovery(next)
     }
 
     private fun publishDocument(document: AssDocument, status: String, dirty: Boolean = true) {
@@ -1236,6 +1235,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             )
         }
         scheduleFontDiagnostics()
+        if (dirty) scheduleRecovery(document)
     }
 
     private fun scheduleRecovery(document: AssDocument) {
