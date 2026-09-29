@@ -31,7 +31,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
-import io.github.assworkbench.app.ui.EditorScreen
+import io.github.assworkbench.app.ui.ModernEditorScreen
 
 class MainActivity : ComponentActivity() {
     private val viewModel: EditorViewModel by viewModels()
@@ -144,7 +144,7 @@ class MainActivity : ComponentActivity() {
                 } else {
                     val state by viewModel.state.collectAsState()
                     StartupProbe.mark(this@MainActivity, "editor_compose", "success")
-                    EditorScreen(
+                    ModernEditorScreen(
                         state = state,
                         viewModel = viewModel,
                         onOpenVideo = {
