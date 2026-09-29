@@ -109,7 +109,7 @@ fun ModernEditorScreen(
         }
 
         BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
-            val compact = maxWidth < 700.dp
+            val compact = maxWidth < WorkbenchDimens.CompactWidth
             if (compact) {
                 EventWorkspace(
                     state, viewModel, issuesByEvent, expandedEventId,
@@ -124,7 +124,7 @@ fun ModernEditorScreen(
                         SupportingWorkbench(
                             state, viewModel, tool, issues, { openTool(it) }, { returnTool() },
                             onImportFont, onSaveMkv,
-                            Modifier.fillMaxWidth().heightIn(min = 220.dp, max = 640.dp),
+                            Modifier.fillMaxWidth().heightIn(min = 224.dp, max = 640.dp),
                         )
                     }
                 }
@@ -180,7 +180,7 @@ private fun ModernAppBar(
     var moreMenuOpen by remember { mutableStateOf(false) }
     Surface(tonalElevation = 2.dp) {
         Row(
-            Modifier.fillMaxWidth().height(46.dp).padding(horizontal = 6.dp),
+            Modifier.fillMaxWidth().height(WorkbenchDimens.AppBarHeight).padding(horizontal = WorkbenchDimens.Small),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(2.dp),
         ) {
@@ -240,7 +240,7 @@ private fun ModernAppBar(
 @Composable
 private fun SearchStrip(query: String, onQuery: (String) -> Unit, onClose: () -> Unit) {
     Surface(tonalElevation = 1.dp) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = WorkbenchDimens.Small, vertical = WorkbenchDimens.Micro), verticalAlignment = Alignment.CenterVertically) {
             OutlinedTextField(query, onQuery, placeholder = { Text("搜索正文 / Actor / Style") }, singleLine = true, modifier = Modifier.weight(1f))
             IconButton(onClick = onClose) { Icon(Icons.Filled.Close, "关闭") }
         }
@@ -260,7 +260,7 @@ private fun EventWorkspace(
 ) {
     val selectionMode = state.selectedEventIds.isNotEmpty()
     Column(modifier.background(MaterialTheme.colorScheme.surface)) {
-        Row(Modifier.fillMaxWidth().height(34.dp).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().height(WorkbenchDimens.PaneHeaderHeight).padding(horizontal = WorkbenchDimens.Small), verticalAlignment = Alignment.CenterVertically) {
             Text(if (selectionMode) "选择模式" else "字幕", style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
             Text(if (state.query.isBlank()) "${state.document.events.size}" else "${state.filteredEvents.size}/${state.document.events.size}", style = MaterialTheme.typography.labelSmall)
         }
@@ -319,10 +319,14 @@ private fun ModernEventRow(
             )
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .animateContentSize()
-            .padding(horizontal = 6.dp, vertical = if (expanded) 6.dp else 4.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
+            .heightIn(min = WorkbenchDimens.ListRowMinHeight)
+            .padding(
+                horizontal = WorkbenchDimens.Small,
+                vertical = if (expanded) WorkbenchDimens.Small else WorkbenchDimens.Micro,
+            ),
+        verticalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small)) {
             Box(Modifier.width(30.dp), contentAlignment = Alignment.Center) {
                 if (selectionMode) Checkbox(checked = selected, onCheckedChange = { onClick() })
                 else Text("#${event.id}", style = MaterialTheme.typography.labelSmall)
@@ -408,7 +412,7 @@ private fun InlineEventEditor(
         if (body != next) body = next
     }
 
-    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+    Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro)) {
         OutlinedTextField(startText, { startText = it }, label = { Text("Start") }, singleLine = true, modifier = Modifier.weight(1f))
         OutlinedTextField(endText, { endText = it }, label = { Text("End") }, singleLine = true, modifier = Modifier.weight(1f))
         Button(
@@ -438,7 +442,7 @@ private fun InlineEventEditor(
         modifier = Modifier.fillMaxWidth().heightIn(min = 72.dp, max = 126.dp),
     )
 
-    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small)) {
         AssistChip(onClick = { onTool(WorkbenchTool.STYLE) }, label = { Text(styleName) })
         AssistChip(onClick = { onTool(WorkbenchTool.POSITION) }, label = { Text("an$alignment · V$marginV" + if (pos != "alignment anchor") " · pos" else "") })
         AssistChip(onClick = { onTool(WorkbenchTool.FONTS) }, label = { Text("$font · $size") })
@@ -461,8 +465,8 @@ private fun InlineEventEditor(
             shape = MaterialTheme.shapes.small,
             modifier = Modifier.fillMaxWidth(),
         ) {
-            Column(Modifier.padding(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.padding(WorkbenchDimens.Small), verticalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro), verticalAlignment = Alignment.CenterVertically) {
                     OutlinedTextField(
                         layerText,
                         { layerText = it },
@@ -505,7 +509,7 @@ private fun InlineEventEditor(
 
     Surface(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f), shape = MaterialTheme.shapes.small, modifier = Modifier.fillMaxWidth()) {
         if (rawOpen) {
-            Column(Modifier.padding(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Column(Modifier.padding(WorkbenchDimens.Small), verticalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro)) {
                 OutlinedTextField(
                     raw, { raw = it }, label = { Text("Raw ASS Event Text") },
                     textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
@@ -553,15 +557,15 @@ private fun SupportingWorkbench(
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     Column(modifier.background(MaterialTheme.colorScheme.surface)) {
-        Row(Modifier.fillMaxWidth().height(38.dp).padding(horizontal = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().height(WorkbenchDimens.PaneHeaderHeight).padding(horizontal = WorkbenchDimens.Small), verticalAlignment = Alignment.CenterVertically) {
             if (tool != WorkbenchTool.TIMELINE) {
-                IconButton(onClick = onBackTool, modifier = Modifier.size(34.dp)) {
+                IconButton(onClick = onBackTool) {
                     Icon(Icons.Filled.ArrowBack, "返回上一工具")
                 }
             }
             Text(tool.title, style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
             if (state.focusedEventId != null && tool != WorkbenchTool.TIMELINE) {
-                IconButton(onClick = { onTool(WorkbenchTool.TIMELINE) }, modifier = Modifier.size(34.dp)) {
+                IconButton(onClick = { onTool(WorkbenchTool.TIMELINE) }) {
                     Icon(Icons.Filled.Timeline, "时间轴")
                 }
             }
@@ -620,7 +624,7 @@ private fun ModernTimelinePane(state: EditorState, viewModel: EditorViewModel, m
         }.distinct()
     }
 
-    Column(modifier.padding(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Column(modifier.padding(WorkbenchDimens.Small), verticalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(formatMs(centerMs), style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
             TextButton(onClick = { settingsOpen = true }) { Text("${windowSeconds}s · " + if (snapEnabled) "Snap ${snapGridMs}ms" else "Snap off") }
@@ -664,7 +668,7 @@ private fun ModernTimelinePane(state: EditorState, viewModel: EditorViewModel, m
         if (focusedEvent != null) {
             Row(
                 Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small),
             ) {
                 OutlinedButton(
                     onClick = viewModel::setFocusedStartToPlayback,
@@ -719,7 +723,7 @@ private fun ModernTimelineEventRow(
     Row(
         Modifier.fillMaxWidth().height(40.dp).combinedClickable(onClick = onFocus, onLongClick = onFocus),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small),
     ) {
         Column(Modifier.width(86.dp)) {
             Text("#${event.id}", style = MaterialTheme.typography.labelSmall)
@@ -828,24 +832,24 @@ private fun PositionPane(state: EditorState, viewModel: EditorViewModel, modifie
     val effective = remember(state.document, event) { AssEffectiveInspector.inspect(state.document, event).associateBy { it.name } }
     var x by remember(event.id, event.text) { mutableStateOf(override.x?.toString().orEmpty()) }
     var y by remember(event.id, event.text) { mutableStateOf(override.y?.toString().orEmpty()) }
-    Column(modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(modifier.padding(WorkbenchDimens.Small), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("九宫格对齐", style = MaterialTheme.typography.titleSmall)
         listOf(listOf(7,8,9), listOf(4,5,6), listOf(1,2,3)).forEach { row ->
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small)) {
                 row.forEach { a -> OutlinedButton({ viewModel.setFocusedAlignment(a) }, Modifier.weight(1f)) { Text(a.toString()) } }
             }
         }
         Text("Effective: an${effective["Alignment"]?.effectiveValue} · V${effective["Margin V"]?.effectiveValue} · ${effective["Position"]?.effectiveValue}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Divider()
         Text("任意位置", style = MaterialTheme.typography.titleSmall)
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small)) {
             OutlinedTextField(x, { x = it }, label = { Text("X") }, singleLine = true, modifier = Modifier.weight(1f))
             OutlinedTextField(y, { y = it }, label = { Text("Y") }, singleLine = true, modifier = Modifier.weight(1f))
             Button({
                 viewModel.applyEventOverrides(event.id, x.toDoubleOrNull(), y.toDoubleOrNull(), override.blur, override.fadeInMs, override.fadeOutMs, override.softEntry)
             }, Modifier.align(Alignment.CenterVertically)) { Text("应用") }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro)) {
             listOf("←" to (-5.0 to 0.0), "→" to (5.0 to 0.0), "↑" to (0.0 to -5.0), "↓" to (0.0 to 5.0)).forEach { (label, delta) ->
                 OutlinedButton({ viewModel.nudgeEventPosition(event.id, delta.first, delta.second) }, Modifier.weight(1f)) { Text(label) }
             }
@@ -865,7 +869,7 @@ private fun EffectsPane(state: EditorState, viewModel: EditorViewModel, modifier
 private fun FontManagerPane(state: EditorState, viewModel: EditorViewModel, onImportFont: () -> Unit, modifier: Modifier = Modifier) {
     val focused = state.document.events.firstOrNull { it.id == state.focusedEventId }
     val style = focused?.let { e -> state.document.styles.firstOrNull { it.name == e.style } }
-    Column(modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    Column(modifier.padding(WorkbenchDimens.Small), verticalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text("字体管理", style = MaterialTheme.typography.titleSmall)
@@ -876,7 +880,7 @@ private fun FontManagerPane(state: EditorState, viewModel: EditorViewModel, onIm
         Divider()
         LazyColumn(Modifier.weight(1f)) {
             items(state.importedFonts, key = { it.sha256 }) { font ->
-                Row(Modifier.fillMaxWidth().padding(vertical = 5.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(Modifier.fillMaxWidth().padding(vertical = WorkbenchDimens.Micro), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small)) {
                     Column(Modifier.weight(1f)) {
                         Text(font.metadata.family, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Text(
@@ -900,7 +904,7 @@ private fun FontManagerPane(state: EditorState, viewModel: EditorViewModel, onIm
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun QcPane(state: EditorState, viewModel: EditorViewModel, issues: List<AssQcIssue>, modifier: Modifier = Modifier) {
-    Column(modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    Column(modifier.padding(WorkbenchDimens.Small), verticalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small)) {
         val errors = issues.count { it.severity == AssQcSeverity.ERROR }
         val warnings = issues.count { it.severity == AssQcSeverity.WARNING }
         Text("质量检查 · ${issues.size}", style = MaterialTheme.typography.titleSmall)
@@ -909,7 +913,7 @@ private fun QcPane(state: EditorState, viewModel: EditorViewModel, issues: List<
         LazyColumn(Modifier.fillMaxSize()) {
             items(issues) { issue ->
                 Row(
-                    Modifier.fillMaxWidth().combinedClickable(onClick = { viewModel.focusEvent(issue.eventId, true) }, onLongClick = { viewModel.focusEvent(issue.eventId, true) }).padding(vertical = 6.dp),
+                    Modifier.fillMaxWidth().combinedClickable(onClick = { viewModel.focusEvent(issue.eventId, true) }, onLongClick = { viewModel.focusEvent(issue.eventId, true) }).padding(vertical = WorkbenchDimens.Small),
                     verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Text(
@@ -929,21 +933,21 @@ private fun QcPane(state: EditorState, viewModel: EditorViewModel, issues: List<
 
 @Composable
 private fun BatchPane(state: EditorState, viewModel: EditorViewModel, modifier: Modifier = Modifier) {
-    Column(modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(modifier.padding(WorkbenchDimens.Small), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("已选 ${state.selectedEventIds.size} 条", style = MaterialTheme.typography.titleSmall)
         if (state.selectedEventIds.isEmpty()) { Text("长按字幕进入多选。"); return }
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small)) {
             OutlinedButton({ viewModel.shiftSelected(-100) }, Modifier.weight(1f)) { Text("−100 ms") }
             OutlinedButton({ viewModel.shiftSelected(100) }, Modifier.weight(1f)) { Text("+100 ms") }
         }
         Button(viewModel::alignSelectedStartToPlayback, Modifier.fillMaxWidth()) { Text("第一条对齐播放头") }
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small)) {
             OutlinedButton({ viewModel.setSelectedComment(false) }, Modifier.weight(1f)) { Text("Dialogue") }
             OutlinedButton({ viewModel.setSelectedComment(true) }, Modifier.weight(1f)) { Text("Comment") }
         }
         OutlinedButton(viewModel::clearSelectedStyleOverrides, Modifier.fillMaxWidth()) { Text("清除 Style / 位置覆盖") }
         OutlinedButton(viewModel::copyFocusedFormatToClipboard, Modifier.fillMaxWidth(), enabled = state.focusedEventId != null) { Text("复制当前字幕格式") }
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small)) {
             OutlinedButton({ viewModel.pasteFormatClipboardToSelected(EventFormatPasteMode.STYLE) }, Modifier.weight(1f)) { Text("粘贴 Style") }
             OutlinedButton({ viewModel.pasteFormatClipboardToSelected(EventFormatPasteMode.ALL) }, Modifier.weight(1f)) { Text("粘贴全部格式") }
         }
@@ -953,7 +957,7 @@ private fun BatchPane(state: EditorState, viewModel: EditorViewModel, modifier: 
 
 @Composable
 private fun ProjectPane(state: EditorState, viewModel: EditorViewModel, onSaveMkv: () -> Unit, modifier: Modifier = Modifier) {
-    Column(modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(modifier.padding(WorkbenchDimens.Small), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(if (state.container.uri != null) "MKV 工程" else "独立 ASS 工程", style = MaterialTheme.typography.titleSmall)
         Text(state.project.title)
         Text("PlayRes ${state.document.playResX}×${state.document.playResY} · ${state.document.styles.size} Style · ${state.document.events.size} Event", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -966,7 +970,7 @@ private fun ProjectPane(state: EditorState, viewModel: EditorViewModel, onSaveMk
 private fun DiagnosticsPane(state: EditorState, viewModel: EditorViewModel, modifier: Modifier = Modifier) {
     val event = state.document.events.firstOrNull { it.id == state.focusedEventId }
     val effective = event?.let { AssEffectiveInspector.inspect(state.document, it) }.orEmpty()
-    LazyColumn(modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    LazyColumn(modifier.padding(WorkbenchDimens.Small), verticalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small)) {
         item {
             Text("渲染几何指纹", style = MaterialTheme.typography.titleSmall)
             Text("PlayRes ${state.document.playResX}×${state.document.playResY}")
