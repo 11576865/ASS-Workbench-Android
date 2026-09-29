@@ -418,8 +418,9 @@ private fun AuthoritativeMpvPreview(
                 "embeddedfonts" to "yes",
                 "sub-fonts-dir" to fontsDir.absolutePath,
                 "sub-font-provider" to BuildConfig.ASSWB_RENDERER_FONT_PROVIDER,
+                "hwdec" to "auto-safe",
                 "log-file" to rendererLogFile.absolutePath,
-                "msg-level" to "all=v",
+                "msg-level" to if (BuildConfig.ASSWB_RENDERER_EXPERIMENTAL) "all=v" else "all=warn",
             ),
         )
     }
