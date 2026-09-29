@@ -51,7 +51,6 @@ fun ModernEditorScreen(
     onOpenSubtitle: () -> Unit,
     onImportFont: () -> Unit,
     onSave: () -> Unit,
-    onSaveAs: () -> Unit,
     onSaveMkv: () -> Unit,
 ) {
     var toolName by rememberSaveable { mutableStateOf(WorkbenchTool.TIMELINE.name) }
@@ -97,7 +96,7 @@ fun ModernEditorScreen(
                 if (state.project.subtitleUri == null) onSaveAs()
                 else saveConfirmOpen = true
             },
-            onSaveAs, onSaveMkv,
+            onSaveMkv,
             { openTool(it) },
         )
 
@@ -511,28 +510,29 @@ private fun InlineEventEditor(
 ) {
     var startText by remember(event.id, event.start) { mutableStateOf(event.start.toAss()) }
     var endText by remember(event.id, event.end) { mutableStateOf(event.end.toAss()) }
-    var body by remember(event.id, event.text) { mutableStateOf(AssInlineSyntax.visibleText(event.text)) }
-    var rawOpen by remember(event.id) { mutableStateOf(false) }
+    var raw by remember(event.id, event.text) { mutableStateOf(event.text) }
     var metadataOpen by remember(event.id) { mutableStateOf(false) }
     var effectsOpen by remember(event.id) { mutableStateOf(false) }
     var layerText by remember(event.id, event.layer) { mutableStateOf(event.layer.toString()) }
     var actorText by remember(event.id, event.name) { mutableStateOf(event.name) }
     var comment by remember(event.id, event.comment) { mutableStateOf(event.comment) }
-    var raw by remember(event.id, event.text) { mutableStateOf(event.text) }
-    val effective = remember(state.document, event) { AssEffectiveInspector.inspect(state.document, event).associateBy { it.name } }
+
+    val effective = remember(state.document, event) {
+        AssEffectiveInspector.inspect(state.document, event).associateBy { it.name }
+    }
     val font = effective["Font"]?.effectiveValue ?: "?"
     val size = effective["Size"]?.effectiveValue ?: "?"
+    val bold = effective["Bold"]?.effectiveValue ?: "?"
+    val italic = effective["Italic"]?.effectiveValue ?: "?"
+    val primary = effective["Primary"]?.effectiveValue ?: effective["Primary Color"]?.effectiveValue ?: "?"
+    val outlineColor = effective["Outline Color"]?.effectiveValue ?: "?"
+    val border = effective["Border"]?.effectiveValue ?: "?"
     val alignment = effective["Alignment"]?.effectiveValue ?: "?"
     val marginV = effective["Margin V"]?.effectiveValue ?: "?"
     val pos = effective["Position"]?.effectiveValue ?: "alignment anchor"
-    val prefixLength = remember(event.text) { leadingOverridePrefixLength(event.text) }
-    val tail = remember(event.text, prefixLength) { event.text.substring(prefixLength) }
-    val simpleBody = remember(tail) { '{' !in tail && '}' !in tail }
 
     LaunchedEffect(event.text) {
-        if (!rawOpen) raw = event.text
-        val next = AssInlineSyntax.visibleText(event.text)
-        if (body != next) body = next
+        if (raw != event.text) raw = event.text
     }
 
     Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro)) {
@@ -540,35 +540,45 @@ private fun InlineEventEditor(
         OutlinedTextField(endText, { endText = it }, label = { Text("End") }, singleLine = true, modifier = Modifier.weight(1f))
         Button(
             onClick = {
-                val a = runCatching { SubTime.fromEditable(startText) }.getOrNull()
-                val b = runCatching { SubTime.fromEditable(endText) }.getOrNull()
-                if (a != null && b != null && b >= a) viewModel.setEventTiming(event.id, a.millis, b.millis)
+                val start = runCatching { SubTime.fromEditable(startText) }.getOrNull()
+                val end = runCatching { SubTime.fromEditable(endText) }.getOrNull()
+                if (start != null && end != null && end >= start) {
+                    viewModel.setEventTiming(event.id, start.millis, end.millis)
+                }
             },
             modifier = Modifier.align(Alignment.CenterVertically),
         ) { Text("应用") }
     }
 
     OutlinedTextField(
-        body,
-        { next ->
-            if (simpleBody) {
-                body = next
-                val prefix = event.text.substring(0, prefixLength)
-                viewModel.updateEventText(event.id, prefix + next.replace("\\n", "\\\\N"))
-            }
-        },
-        readOnly = !simpleBody,
-        label = { Text(if (simpleBody) "字幕正文" else "字幕正文 · 含内联 ASS") },
-        supportingText = if (simpleBody) null else {
-            { Text("正文中穿插了 ASS override；为避免破坏标签顺序，请直接编辑下方 Raw ASS。") }
-        },
-        modifier = Modifier.fillMaxWidth().heightIn(min = 72.dp, max = 126.dp),
+        value = raw,
+        onValueChange = { raw = it },
+        label = { Text("字幕正文 · ASS Event Text") },
+        textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
+        visualTransformation = rememberAssSyntaxTransformation(),
+        modifier = Modifier.fillMaxWidth().heightIn(min = 104.dp, max = 220.dp),
     )
+    if (raw != event.text) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            TextButton(onClick = { raw = event.text }) { Text("还原") }
+            Button(onClick = { viewModel.updateEventText(event.id, raw) }) { Text("应用正文") }
+        }
+    }
 
-    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small)) {
-        AssistChip(onClick = { onTool(WorkbenchTool.STYLE) }, label = { Text(styleName) })
-        AssistChip(onClick = { onTool(WorkbenchTool.POSITION) }, label = { Text("an$alignment · V$marginV" + if (pos != "alignment anchor") " · pos" else "") })
-        AssistChip(onClick = { onTool(WorkbenchTool.FONTS) }, label = { Text("$font · $size") })
+    Row(
+        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small),
+    ) {
+        AssistChip(onClick = { onTool(WorkbenchTool.FONTS) }, label = { Text("fn $font") })
+        AssistChip(onClick = { onTool(WorkbenchTool.STYLE) }, label = { Text("fs $size") })
+        AssistChip(onClick = { onTool(WorkbenchTool.STYLE) }, label = { Text("b $bold · i $italic") })
+        AssistChip(onClick = { onTool(WorkbenchTool.STYLE) }, label = { Text("c $primary") })
+        AssistChip(onClick = { onTool(WorkbenchTool.STYLE) }, label = { Text("3c $outlineColor · bord $border") })
+        AssistChip(
+            onClick = { onTool(WorkbenchTool.POSITION) },
+            label = { Text("an $alignment · V $marginV" + if (pos != "alignment anchor") " · pos" else "") },
+        )
+        AssistChip(onClick = { onTool(WorkbenchTool.STYLE) }, label = { Text("Style $styleName") })
         AssistChip(
             onClick = { effectsOpen = !effectsOpen },
             label = { Text(if (effectsOpen) "收起效果" else "效果") },
@@ -585,9 +595,7 @@ private fun InlineEventEditor(
         )
     }
 
-    if (effectsOpen) {
-        InlineEffectsEditor(event, viewModel)
-    }
+    if (effectsOpen) InlineEffectsEditor(event, viewModel)
 
     if (metadataOpen) {
         Surface(
@@ -597,25 +605,9 @@ private fun InlineEventEditor(
         ) {
             Column(Modifier.padding(WorkbenchDimens.Small), verticalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro), verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedTextField(
-                        layerText,
-                        { layerText = it },
-                        label = { Text("Layer") },
-                        singleLine = true,
-                        modifier = Modifier.width(88.dp),
-                    )
-                    OutlinedTextField(
-                        actorText,
-                        { actorText = it },
-                        label = { Text("Actor") },
-                        singleLine = true,
-                        modifier = Modifier.weight(1f),
-                    )
-                    FilterChip(
-                        selected = comment,
-                        onClick = { comment = !comment },
-                        label = { Text(if (comment) "Comment" else "Dialogue") },
-                    )
+                    OutlinedTextField(layerText, { layerText = it }, label = { Text("Layer") }, singleLine = true, modifier = Modifier.width(88.dp))
+                    OutlinedTextField(actorText, { actorText = it }, label = { Text("Actor") }, singleLine = true, modifier = Modifier.weight(1f))
+                    FilterChip(selected = comment, onClick = { comment = !comment }, label = { Text(if (comment) "Comment" else "Dialogue") })
                 }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                     TextButton(onClick = {
@@ -634,31 +626,6 @@ private fun InlineEventEditor(
                     }) { Text("应用") }
                 }
             }
-        }
-    }
-
-    Surface(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f), shape = MaterialTheme.shapes.small, modifier = Modifier.fillMaxWidth()) {
-        if (rawOpen) {
-            Column(Modifier.padding(WorkbenchDimens.Small), verticalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro)) {
-                OutlinedTextField(
-                    raw, { raw = it }, label = { Text("Raw ASS Event Text") },
-                    textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
-                    visualTransformation = rememberAssSyntaxTransformation(),
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 96.dp, max = 220.dp),
-                )
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                    TextButton(onClick = { raw = event.text; rawOpen = false }) { Text("取消") }
-                    Button(onClick = { viewModel.updateEventText(event.id, raw); rawOpen = false }) { Text("完成") }
-                }
-            }
-        } else {
-            Text(
-                rememberAssAnnotatedText(event.text),
-                modifier = Modifier.fillMaxWidth().combinedClickable(onClick = { rawOpen = true }, onLongClick = { rawOpen = true }).padding(horizontal = 8.dp, vertical = 6.dp),
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace),
-            )
         }
     }
 }
@@ -727,39 +694,21 @@ private fun SupportingWorkbench(
     viewModel: EditorViewModel,
     tool: WorkbenchTool,
     issues: List<AssQcIssue>,
-    onTool: (WorkbenchTool) -> Unit,
-    onBackTool: () -> Unit,
     onClose: () -> Unit,
     onImportFont: () -> Unit,
     onSaveMkv: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    var menuOpen by remember { mutableStateOf(false) }
     Column(modifier.background(MaterialTheme.colorScheme.surface)) {
-        Row(Modifier.fillMaxWidth().height(WorkbenchDimens.PaneHeaderHeight).padding(horizontal = WorkbenchDimens.Small), verticalAlignment = Alignment.CenterVertically) {
-            if (tool != WorkbenchTool.TIMELINE) {
-                IconButton(onClick = onBackTool) {
-                    Icon(Icons.Filled.ArrowBack, "返回上一工具")
-                }
-            }
+        Row(
+            Modifier.fillMaxWidth()
+                .height(WorkbenchDimens.PaneHeaderHeight)
+                .padding(horizontal = WorkbenchDimens.Small),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             Text(tool.title, style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
-            if (state.focusedEventId != null && tool != WorkbenchTool.TIMELINE) {
-                IconButton(onClick = { onTool(WorkbenchTool.TIMELINE) }) {
-                    Icon(Icons.Filled.Timeline, "时间轴")
-                }
-            }
-            IconButton(onClick = onClose) {
-                Icon(Icons.Filled.Close, "关闭工具")
-            }
-            Box {
-                IconButton(onClick = { menuOpen = true }) { Icon(Icons.Filled.MoreVert, "切换工具") }
-                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                    WorkbenchTool.entries.forEach { item ->
-                        if (item != WorkbenchTool.BATCH || state.selectedEventIds.isNotEmpty()) {
-                            DropdownMenuItem(text = { Text(item.title) }, onClick = { menuOpen = false; onTool(item) })
-                        }
-                    }
-                }
+            TooltipIconButton("关闭 " + tool.title, onClose) {
+                Icon(Icons.Filled.Close, null)
             }
         }
         Divider()
