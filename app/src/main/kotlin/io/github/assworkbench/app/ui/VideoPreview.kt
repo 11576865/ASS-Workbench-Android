@@ -801,10 +801,12 @@ private fun TimelineProgressStrip(
             .pointerInput(durationSeconds) {
                 detectTapGestures(
                     onTap = { offset ->
-                        if (durationSeconds <= 0.0) {
+                        val timelineHotspot = 30.dp.toPx()
+                        if (durationSeconds <= 0.0 || offset.x >= size.width - timelineHotspot) {
                             onOpenTimeline()
                         } else {
-                            val fraction = (offset.x / size.width.coerceAtLeast(1)).coerceIn(0f, 1f)
+                            val usableWidth = (size.width - timelineHotspot).coerceAtLeast(1f)
+                            val fraction = (offset.x / usableWidth).coerceIn(0f, 1f)
                             onScrub(durationSeconds * fraction)
                             onScrubFinished()
                         }
