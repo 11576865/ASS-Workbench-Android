@@ -43,6 +43,8 @@ data class EditorState(
     val fallbackFontFamily: String? = null,
     val fontRevision: Long = 0L,
     val fontImportBusy: Boolean = false,
+    /** Manually imported font SHA-256 values selected for the next MKV write-back. */
+    val fontPackagingSelection: Set<String> = emptySet(),
     val container: ContainerBridgeState = ContainerBridgeState(),
     val recoveryAvailable: Boolean = false,
     val recoveryLabel: String = "",
