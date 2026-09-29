@@ -283,6 +283,8 @@ private fun WorkbenchPreview(
         onSetEventPosition = viewModel::setFocusedPosition,
         onPreviewEventMove = viewModel::previewFocusedMove,
         onSetEventMove = viewModel::setFocusedMove,
+        onPreviewEventOrigin = viewModel::previewFocusedOrigin,
+        onSetEventOrigin = viewModel::setFocusedOrigin,
         onCancelEventPositionPreview = viewModel::clearTransientPreview,
         onFocusEvent = { viewModel.focusEvent(it, seek = false) },
         onSetEventTiming = viewModel::setEventTiming,
@@ -1180,6 +1182,8 @@ private fun PositionPane(state: EditorState, viewModel: EditorViewModel, modifie
     var moveStartY by remember(event.id, event.text) { mutableStateOf(geometry.move?.start?.y?.toString().orEmpty()) }
     var moveEndX by remember(event.id, event.text) { mutableStateOf(geometry.move?.end?.x?.toString().orEmpty()) }
     var moveEndY by remember(event.id, event.text) { mutableStateOf(geometry.move?.end?.y?.toString().orEmpty()) }
+    var originX by remember(event.id, event.text) { mutableStateOf(geometry.origin?.x?.toString().orEmpty()) }
+    var originY by remember(event.id, event.text) { mutableStateOf(geometry.origin?.y?.toString().orEmpty()) }
     var styleAlignment by remember(style?.name, style?.alignment) { mutableIntStateOf(style?.alignment ?: 2) }
     var styleMarginL by remember(style?.name, style?.marginL) { mutableStateOf((style?.marginL ?: 0).toString()) }
     var styleMarginR by remember(style?.name, style?.marginR) { mutableStateOf((style?.marginR ?: 0).toString()) }
@@ -1252,6 +1256,41 @@ private fun PositionPane(state: EditorState, viewModel: EditorViewModel, modifie
             }
         }
 
+        item { Divider() }
+        item {
+            Text("变换原点 · \\org", style = MaterialTheme.typography.titleSmall)
+            if (geometry.origin != null) {
+                Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small)) {
+                    OutlinedTextField(originX, { originX = it }, label = { Text("Origin X") }, singleLine = true, modifier = Modifier.weight(1f))
+                    OutlinedTextField(originY, { originY = it }, label = { Text("Origin Y") }, singleLine = true, modifier = Modifier.weight(1f))
+                }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    TextButton(onClick = viewModel::clearFocusedOrigin) { Text("移除 \\org") }
+                    Button(onClick = {
+                        val ox = originX.toDoubleOrNull()
+                        val oy = originY.toDoubleOrNull()
+                        if (ox != null && oy != null) viewModel.setFocusedOrigin(ox, oy)
+                    }) { Text("应用原点") }
+                }
+                Text(
+                    "预览上的圆环叉标记是显式变换原点；可直接拖动。精确值允许超出画布范围。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                Text(
+                    "当前没有显式 \\org。ASS 将使用默认变换原点；工作台不会伪造一个可拖动标记。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Button(onClick = {
+                    viewModel.setFocusedOrigin(
+                        state.document.playResX / 2.0,
+                        state.document.playResY / 2.0,
+                    )
+                }) { Text("在画布中心添加 \\org") }
+            }
+        }
         item {
             Text("任意位置")
             Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small)) {

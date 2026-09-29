@@ -627,6 +627,41 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         })
     }
 
+    fun previewFocusedOrigin(x: Double, y: Double) {
+        val state = _state.value
+        val id = state.focusedEventId ?: return
+        val preview = withEventOrigin(state.document, id, x, y)
+        _state.update { current ->
+            current.copy(previewDocument = if (preview == state.document) null else preview)
+        }
+    }
+
+    fun setFocusedOrigin(x: Double, y: Double) {
+        val id = _state.value.focusedEventId ?: return
+        editDocument("已更新当前字幕的 \\org 变换原点。") { doc ->
+            withEventOrigin(doc, id, x, y)
+        }
+    }
+
+    fun clearFocusedOrigin() {
+        val id = _state.value.focusedEventId ?: return
+        editDocument("已移除当前字幕的 \\org 变换原点。") { doc ->
+            doc.copy(events = doc.events.map { event ->
+                if (event.id != id) event
+                else event.copy(text = AssGeometrySemantic.removeOrigin(event.text))
+            })
+        }
+    }
+
+    private fun withEventOrigin(document: AssDocument, id: Long, x: Double, y: Double): AssDocument {
+        val event = document.events.firstOrNull { it.id == id } ?: return document
+        val patched = AssGeometrySemantic.patchOrigin(event.text, x, y)
+        if (patched == event.text) return document
+        return document.copy(events = document.events.map { candidate ->
+            if (candidate.id == id) candidate.copy(text = patched) else candidate
+        })
+    }
+
 
     fun setFocusedAlignment(alignment: Int) {
         val id = _state.value.focusedEventId ?: return

@@ -56,6 +56,20 @@ class AssGeometrySemanticTest {
         assertEquals("{\\bord3\\move(100,200,700,800,125,875)\\x-custom(foo)}Text", output)
     }
     @Test
+    fun originPatchPreservesUnknownTagsAndNestedTransform() {
+        val source = "{\\t(0,400,\\org(1,2))\\bord3\\org(100,200)\\x-custom(foo)}Text"
+        val output = AssGeometrySemantic.patchOrigin(source, 960.0, 540.0)
+        assertEquals("{\\t(0,400,\\org(1,2))\\bord3\\org(960,540)\\x-custom(foo)}Text", output)
+    }
+
+    @Test
+    fun removingOriginRemovesAllTopLevelCopiesWithoutTouchingNestedTransform() {
+        val source = "{\\org(10,20)\\t(0,400,\\org(1,2))}{\\org(30,40)}Text"
+        val output = AssGeometrySemantic.removeOrigin(source)
+        assertEquals("{\\t(0,400,\\org(1,2))}Text", output)
+        assertNull(AssGeometrySemantic.inspect(output).origin)
+    }
+    @Test
     fun preservesFrAliasWhenPatchingRotation() {
         val source = "{\\fr15\\bord2}Text"
         assertEquals("{\\fr27.5\\bord2}Text", AssGeometrySemantic.patchRotationZ(source, 27.5))

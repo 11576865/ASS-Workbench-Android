@@ -143,6 +143,11 @@ object AssGeometrySemantic {
         names = setOf("org"),
         replacement = "\\org(${formatNumber(x)},${formatNumber(y)})",
     )
+    fun removeOrigin(text: String): String = removeTags(
+        text = text,
+        scan = scanLeading(text),
+        names = setOf("org"),
+    )
 
     fun patchRotationZ(text: String, value: Double): String {
         val scan = scanLeading(text)
@@ -202,6 +207,34 @@ object AssGeometrySemantic {
         }
     }
 
+    private fun removeTags(
+        text: String,
+        scan: LeadingScan,
+        names: Set<String>,
+    ): String {
+        val targets = scan.tags.filter { tag -> names.any { it.equals(tag.name, true) } }
+        if (targets.isEmpty()) return text
+        var result = text
+        targets.sortedByDescending { it.start }.forEach { target ->
+            result = result.removeRange(target.start, target.endExclusive)
+        }
+        return removeEmptyLeadingBlocks(result)
+    }
+
+    private fun removeEmptyLeadingBlocks(text: String): String {
+        if (text.isEmpty() || text[0] != '{') return text
+        val kept = StringBuilder()
+        var cursor = 0
+        while (cursor < text.length && text[cursor] == '{') {
+            val close = text.indexOf('}', cursor + 1)
+            if (close < 0) return text
+            val content = text.substring(cursor + 1, close)
+            if (content.isNotBlank()) kept.append(text, cursor, close + 1)
+            cursor = close + 1
+        }
+        kept.append(text.substring(cursor))
+        return kept.toString()
+    }
     private fun scanLeading(text: String): LeadingScan {
         if (text.isEmpty() || text[0] != '{') return LeadingScan(emptyList(), emptyList(), false)
 

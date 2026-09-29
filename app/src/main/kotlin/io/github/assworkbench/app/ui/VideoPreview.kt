@@ -92,6 +92,8 @@ fun VideoPreview(
     onSetEventPosition: (Double, Double) -> Unit,
     onPreviewEventMove: (Double, Double, Double, Double) -> Unit,
     onSetEventMove: (Double, Double, Double, Double) -> Unit,
+    onPreviewEventOrigin: (Double, Double) -> Unit,
+    onSetEventOrigin: (Double, Double) -> Unit,
     onCancelEventPositionPreview: () -> Unit,
     onFocusEvent: (Long) -> Unit,
     onSetEventTiming: (Long, Long, Long) -> Unit,
@@ -142,6 +144,8 @@ fun VideoPreview(
             onSetEventPosition = onSetEventPosition,
             onPreviewEventMove = onPreviewEventMove,
             onSetEventMove = onSetEventMove,
+            onPreviewEventOrigin = onPreviewEventOrigin,
+            onSetEventOrigin = onSetEventOrigin,
             onCancelEventPositionPreview = onCancelEventPositionPreview,
             onFocusEvent = onFocusEvent,
             onSetEventTiming = onSetEventTiming,
@@ -424,6 +428,8 @@ private fun AuthoritativeMpvPreview(
     onSetEventPosition: (Double, Double) -> Unit,
     onPreviewEventMove: (Double, Double, Double, Double) -> Unit,
     onSetEventMove: (Double, Double, Double, Double) -> Unit,
+    onPreviewEventOrigin: (Double, Double) -> Unit,
+    onSetEventOrigin: (Double, Double) -> Unit,
     onCancelEventPositionPreview: () -> Unit,
     onFocusEvent: (Long) -> Unit,
     onSetEventTiming: (Long, Long, Long) -> Unit,
@@ -598,6 +604,8 @@ private fun AuthoritativeMpvPreview(
                         onCommit = onSetEventPosition,
                         onPreviewMove = onPreviewEventMove,
                         onCommitMove = onSetEventMove,
+                        onPreviewOrigin = onPreviewEventOrigin,
+                        onCommitOrigin = onSetEventOrigin,
                         onCancel = onCancelEventPositionPreview,
                         modifier = Modifier.fillMaxSize(),
                     )
@@ -633,6 +641,8 @@ private fun PositionDragOverlay(
     onCommit: (Double, Double) -> Unit,
     onPreviewMove: (Double, Double, Double, Double) -> Unit,
     onCommitMove: (Double, Double, Double, Double) -> Unit,
+    onPreviewOrigin: (Double, Double) -> Unit,
+    onCommitOrigin: (Double, Double) -> Unit,
     onCancel: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -659,13 +669,50 @@ private fun PositionDragOverlay(
     }
     var x by remember(event.id, event.text) { mutableStateOf(geometry.position?.x ?: baseX) }
     var y by remember(event.id, event.text) { mutableStateOf(geometry.position?.y ?: baseY) }
+    var originX by remember(event.id, event.text) { mutableStateOf(geometry.origin?.x) }
+    var originY by remember(event.id, event.text) { mutableStateOf(geometry.origin?.y) }
     val guideColor = MaterialTheme.colorScheme.tertiary
 
     if (geometry.positionMode == AssPositionMode.CONFLICT) {
         val move = geometry.move
-        BoxWithConstraints(modifier) {
-            if (move != null) {
-                Canvas(Modifier.fillMaxSize()) {
+        DisposableEffect(event.id) { onDispose { onCancel() } }
+        BoxWithConstraints(
+            if (originX != null && originY != null) {
+                modifier.pointerInput(event.id, event.text, document.playResX, document.playResY) {
+                    var draggingOrigin = false
+                    var lastPreviewAt = 0L
+                    detectDragGestures(
+                        onDragStart = { touch ->
+                            val ox = (originX!! / document.playResX.coerceAtLeast(1)) * size.width
+                            val oy = (originY!! / document.playResY.coerceAtLeast(1)) * size.height
+                            val dx = touch.x - ox.toFloat()
+                            val dy = touch.y - oy.toFloat()
+                            draggingOrigin = kotlin.math.sqrt((dx * dx + dy * dy).toDouble()) <= 36.dp.toPx().toDouble()
+                        },
+                        onDrag = { change, _ ->
+                            if (!draggingOrigin) return@detectDragGestures
+                            change.consume()
+                            val px = change.position.x.coerceIn(0f, size.width.toFloat())
+                            val py = change.position.y.coerceIn(0f, size.height.toFloat())
+                            originX = (px / size.width.coerceAtLeast(1) * document.playResX).toDouble()
+                            originY = (py / size.height.coerceAtLeast(1) * document.playResY).toDouble()
+                            val now = android.os.SystemClock.uptimeMillis()
+                            if (now - lastPreviewAt >= 80L) {
+                                lastPreviewAt = now
+                                onPreviewOrigin(originX!!, originY!!)
+                            }
+                        },
+                        onDragEnd = {
+                            if (draggingOrigin) onCommitOrigin(originX!!, originY!!)
+                            draggingOrigin = false
+                        },
+                        onDragCancel = { onCancel(); draggingOrigin = false },
+                    )
+                }
+            } else modifier
+        ) {
+            Canvas(Modifier.fillMaxSize()) {
+                if (move != null) {
                     val sx = (move.start.x / document.playResX.coerceAtLeast(1)) * size.width
                     val sy = (move.start.y / document.playResY.coerceAtLeast(1)) * size.height
                     val ex = (move.end.x / document.playResX.coerceAtLeast(1)) * size.width
@@ -674,9 +721,17 @@ private fun PositionDragOverlay(
                     drawCircle(guideColor, 7.dp.toPx(), androidx.compose.ui.geometry.Offset(sx.toFloat(), sy.toFloat()), style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2.dp.toPx()))
                     drawCircle(guideColor, 7.dp.toPx(), androidx.compose.ui.geometry.Offset(ex.toFloat(), ey.toFloat()))
                 }
+                if (originX != null && originY != null) {
+                    val ox = (originX!! / document.playResX.coerceAtLeast(1)) * size.width
+                    val oy = (originY!! / document.playResY.coerceAtLeast(1)) * size.height
+                    val center = androidx.compose.ui.geometry.Offset(ox.toFloat(), oy.toFloat())
+                    drawCircle(guideColor, 10.dp.toPx(), center, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2.dp.toPx()))
+                    drawLine(guideColor, center + androidx.compose.ui.geometry.Offset(-8.dp.toPx(), -8.dp.toPx()), center + androidx.compose.ui.geometry.Offset(8.dp.toPx(), 8.dp.toPx()), 2.dp.toPx())
+                    drawLine(guideColor, center + androidx.compose.ui.geometry.Offset(-8.dp.toPx(), 8.dp.toPx()), center + androidx.compose.ui.geometry.Offset(8.dp.toPx(), -8.dp.toPx()), 2.dp.toPx())
+                }
             }
             Text(
-                "pos + move 冲突 · 已暂停直接位置编辑",
+                if (originX != null) "pos + move 冲突 · 位置只读 · org 可拖动" else "pos + move 冲突 · 已暂停直接位置编辑",
                 modifier = Modifier.align(Alignment.TopStart).background(Color.Black.copy(alpha = 0.62f)).padding(horizontal = 6.dp, vertical = 3.dp),
                 color = Color.White,
                 style = MaterialTheme.typography.labelSmall,
@@ -697,7 +752,7 @@ private fun PositionDragOverlay(
 
         BoxWithConstraints(
             modifier.pointerInput(event.id, event.text, document.playResX, document.playResY) {
-                var activeHandle = 0 // 1=start, 2=end
+                var activeHandle = 0 // 1=start, 2=end, 3=origin
                 var lastPreviewAt = 0L
                 fun distanceTo(px: Double, py: Double, touchX: Float, touchY: Float): Double {
                     val hx = (px / document.playResX.coerceAtLeast(1)) * size.width
@@ -710,8 +765,10 @@ private fun PositionDragOverlay(
                     onDragStart = { touch ->
                         val startDistance = distanceTo(startX, startY, touch.x, touch.y)
                         val endDistance = distanceTo(endX, endY, touch.x, touch.y)
+                        val originDistance = if (originX != null && originY != null) distanceTo(originX!!, originY!!, touch.x, touch.y) else Double.POSITIVE_INFINITY
                         val threshold = 36.dp.toPx().toDouble()
                         activeHandle = when {
+                            originDistance <= threshold && originDistance <= startDistance && originDistance <= endDistance -> 3
                             startDistance <= threshold && startDistance <= endDistance -> 1
                             endDistance <= threshold -> 2
                             else -> 0
@@ -737,18 +794,25 @@ private fun PositionDragOverlay(
                         if (activeHandle == 1) {
                             startX = nx.toDouble()
                             startY = ny.toDouble()
-                        } else {
+                        } else if (activeHandle == 2) {
                             endX = nx.toDouble()
                             endY = ny.toDouble()
+                        } else {
+                            originX = nx.toDouble()
+                            originY = ny.toDouble()
                         }
                         val now = android.os.SystemClock.uptimeMillis()
                         if (now - lastPreviewAt >= 80L) {
                             lastPreviewAt = now
-                            onPreviewMove(startX, startY, endX, endY)
+                            if (activeHandle == 3) onPreviewOrigin(originX!!, originY!!)
+                            else onPreviewMove(startX, startY, endX, endY)
                         }
                     },
                     onDragEnd = {
-                        if (activeHandle != 0) onCommitMove(startX, startY, endX, endY)
+                        when (activeHandle) {
+                            1, 2 -> onCommitMove(startX, startY, endX, endY)
+                            3 -> onCommitOrigin(originX!!, originY!!)
+                        }
                         activeHandle = 0
                     },
                     onDragCancel = {
@@ -780,9 +844,17 @@ private fun PositionDragOverlay(
                     radius = 9.dp.toPx(),
                     center = androidx.compose.ui.geometry.Offset(ex.toFloat(), ey.toFloat()),
                 )
+                if (originX != null && originY != null) {
+                    val ox = (originX!! / document.playResX.coerceAtLeast(1)) * size.width
+                    val oy = (originY!! / document.playResY.coerceAtLeast(1)) * size.height
+                    val center = androidx.compose.ui.geometry.Offset(ox.toFloat(), oy.toFloat())
+                    drawCircle(guideColor, 10.dp.toPx(), center, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2.dp.toPx()))
+                    drawLine(guideColor, center + androidx.compose.ui.geometry.Offset(-8.dp.toPx(), -8.dp.toPx()), center + androidx.compose.ui.geometry.Offset(8.dp.toPx(), 8.dp.toPx()), 2.dp.toPx())
+                    drawLine(guideColor, center + androidx.compose.ui.geometry.Offset(-8.dp.toPx(), 8.dp.toPx()), center + androidx.compose.ui.geometry.Offset(8.dp.toPx(), -8.dp.toPx()), 2.dp.toPx())
+                }
             }
             Text(
-                "move S ${startX.toInt()},${startY.toInt()} → E ${endX.toInt()},${endY.toInt()} · 拖端点",
+                "move S ${startX.toInt()},${startY.toInt()} → E ${endX.toInt()},${endY.toInt()}" + (if (originX != null) " · org ${originX!!.toInt()},${originY!!.toInt()}" else "") + " · 拖控制点",
                 modifier = Modifier.align(Alignment.TopStart).background(Color.Black.copy(alpha = 0.62f)).padding(horizontal = 6.dp, vertical = 3.dp),
                 color = Color.White,
                 style = MaterialTheme.typography.labelSmall,
@@ -797,18 +869,28 @@ private fun PositionDragOverlay(
 
     BoxWithConstraints(
         modifier.pointerInput(event.id, document.playResX, document.playResY) {
-            var armed = false
+            var activeHandle = 0 // 1=position, 2=origin
             var lastPreviewAt = 0L
             detectDragGestures(
                 onDragStart = { start ->
-                    val currentPx = (x / document.playResX.coerceAtLeast(1)) * size.width
-                    val currentPy = (y / document.playResY.coerceAtLeast(1)) * size.height
-                    val dx = start.x - currentPx.toFloat()
-                    val dy = start.y - currentPy.toFloat()
-                    armed = kotlin.math.sqrt(dx * dx + dy * dy) <= 36.dp.toPx()
+                    fun distanceTo(px: Double, py: Double): Double {
+                        val hx = (px / document.playResX.coerceAtLeast(1)) * size.width
+                        val hy = (py / document.playResY.coerceAtLeast(1)) * size.height
+                        val dx = start.x - hx.toFloat()
+                        val dy = start.y - hy.toFloat()
+                        return kotlin.math.sqrt((dx * dx + dy * dy).toDouble())
+                    }
+                    val positionDistance = distanceTo(x, y)
+                    val originDistance = if (originX != null && originY != null) distanceTo(originX!!, originY!!) else Double.POSITIVE_INFINITY
+                    val threshold = 36.dp.toPx().toDouble()
+                    activeHandle = when {
+                        originDistance <= threshold && originDistance <= positionDistance -> 2
+                        positionDistance <= threshold -> 1
+                        else -> 0
+                    }
                 },
                 onDrag = { change, _ ->
-                    if (armed) {
+                    if (activeHandle != 0) {
                         change.consume()
                         val px = change.position.x.coerceIn(0f, size.width.toFloat())
                         val py = change.position.y.coerceIn(0f, size.height.toFloat())
@@ -832,22 +914,30 @@ private fun PositionDragOverlay(
                         yTargets.minByOrNull { kotlin.math.abs(ny - it) }?.let { target ->
                             if (kotlin.math.abs(ny - target) < yThreshold) ny = target.toFloat()
                         }
-                        x = nx.toDouble()
-                        y = ny.toDouble()
+                        if (activeHandle == 1) {
+                            x = nx.toDouble()
+                            y = ny.toDouble()
+                        } else {
+                            originX = nx.toDouble()
+                            originY = ny.toDouble()
+                        }
                         val now = android.os.SystemClock.uptimeMillis()
                         if (now - lastPreviewAt >= 80L) {
                             lastPreviewAt = now
-                            onPreview(x, y)
+                            if (activeHandle == 1) onPreview(x, y) else onPreviewOrigin(originX!!, originY!!)
                         }
                     }
                 },
                 onDragEnd = {
-                    if (armed) onCommit(x, y)
-                    armed = false
+                    when (activeHandle) {
+                        1 -> onCommit(x, y)
+                        2 -> onCommitOrigin(originX!!, originY!!)
+                    }
+                    activeHandle = 0
                 },
                 onDragCancel = {
                     onCancel()
-                    armed = false
+                    activeHandle = 0
                 },
             )
         }
@@ -873,9 +963,18 @@ private fun PositionDragOverlay(
                 end = androidx.compose.ui.geometry.Offset(px.toFloat(), py.toFloat() + 12.dp.toPx()),
                 strokeWidth = 1.dp.toPx(),
             )
+            if (originX != null && originY != null) {
+                val ox = (originX!! / document.playResX.coerceAtLeast(1)) * size.width
+                val oy = (originY!! / document.playResY.coerceAtLeast(1)) * size.height
+                val center = androidx.compose.ui.geometry.Offset(ox.toFloat(), oy.toFloat())
+                drawLine(guideColor.copy(alpha = 0.35f), androidx.compose.ui.geometry.Offset(px.toFloat(), py.toFloat()), center, 1.dp.toPx())
+                drawCircle(guideColor, 10.dp.toPx(), center, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2.dp.toPx()))
+                drawLine(guideColor, center + androidx.compose.ui.geometry.Offset(-8.dp.toPx(), -8.dp.toPx()), center + androidx.compose.ui.geometry.Offset(8.dp.toPx(), 8.dp.toPx()), 2.dp.toPx())
+                drawLine(guideColor, center + androidx.compose.ui.geometry.Offset(-8.dp.toPx(), 8.dp.toPx()), center + androidx.compose.ui.geometry.Offset(8.dp.toPx(), -8.dp.toPx()), 2.dp.toPx())
+            }
         }
         Text(
-            "pos ${x.toInt()},${y.toInt()} · 拖十字定位",
+            "pos ${x.toInt()},${y.toInt()}" + (if (originX != null) " · org ${originX!!.toInt()},${originY!!.toInt()}" else "") + " · 拖控制点",
             modifier = Modifier
                 .align(Alignment.TopStart)
                 .background(Color.Black.copy(alpha = 0.55f))
