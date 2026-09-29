@@ -113,6 +113,17 @@ class AssDocumentEditingTest {
     }
 
     @Test
+    fun mergeRejectsNonContiguousSelection() {
+        val source = doc().copy(events = listOf(
+            doc().events[0].copy(id = 1),
+            doc().events[0].copy(id = 2, text = "middle"),
+            doc().events[1].copy(id = 3),
+        ))
+        val error = runCatching { AssDocumentEditing.mergeEvents(source, setOf(1, 3), "\\N") }.exceptionOrNull()
+        assertTrue(error is IllegalArgumentException)
+        assertTrue(error?.message?.contains("连续") == true)
+    }
+    @Test
     fun mergeKeepsFirstEventFormattingAndJoinsTexts() {
         val result = AssDocumentEditing.mergeEvents(doc(), setOf(1, 2), "\\N")
         val merged = result.document.events.single()

@@ -1980,6 +1980,7 @@ private fun QcPane(state: EditorState, viewModel: EditorViewModel, issues: List<
 @Composable
 private fun BatchPane(state: EditorState, viewModel: EditorViewModel, modifier: Modifier = Modifier) {
     var styleMenuOpen by remember { mutableStateOf(false) }
+    var pasteMenuOpen by remember { mutableStateOf(false) }
     Column(modifier.padding(WorkbenchDimens.Small), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("已选 ${state.selectedEventIds.size} 条", style = MaterialTheme.typography.titleSmall)
         if (state.selectedEventIds.isEmpty()) { Text("长按字幕进入多选。"); return }
@@ -2008,12 +2009,51 @@ private fun BatchPane(state: EditorState, viewModel: EditorViewModel, modifier: 
             OutlinedButton({ viewModel.setSelectedComment(false) }, Modifier.weight(1f)) { Text("Dialogue") }
             OutlinedButton({ viewModel.setSelectedComment(true) }, Modifier.weight(1f)) { Text("Comment") }
         }
-        OutlinedButton(viewModel::clearSelectedStyleOverrides, Modifier.fillMaxWidth()) { Text("清除 Style / 位置覆盖") }
-        OutlinedButton(viewModel::copyFocusedFormatToClipboard, Modifier.fillMaxWidth(), enabled = state.focusedEventId != null) { Text("复制当前字幕格式") }
-        Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small)) {
-            OutlinedButton({ viewModel.pasteFormatClipboardToSelected(EventFormatPasteMode.STYLE) }, Modifier.weight(1f)) { Text("粘贴 Style") }
-            OutlinedButton({ viewModel.pasteFormatClipboardToSelected(EventFormatPasteMode.ALL) }, Modifier.weight(1f)) { Text("粘贴全部格式") }
+        if (state.selectedEventIds.size >= 2) {
+            Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small)) {
+                OutlinedButton({ viewModel.mergeSelected(useLineBreak = true) }, Modifier.weight(1f)) { Text("合并 · \\N") }
+                OutlinedButton({ viewModel.mergeSelected(useLineBreak = false) }, Modifier.weight(1f)) { Text("合并 · 空格") }
+            }
+            Text(
+                "合并只接受 Event 列表中连续的选择；非连续选择会保持原样并提示错误。",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
+        OutlinedButton(viewModel::clearSelectedStyleOverrides, Modifier.fillMaxWidth()) { Text("清除 Style / 位置覆盖") }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small)) {
+            OutlinedButton(
+                viewModel::copyFocusedFormatToClipboard,
+                Modifier.weight(1f),
+                enabled = state.focusedEventId != null,
+            ) { Text("复制焦点格式" + (state.focusedEventId?.let { " · #$it" } ?: "")) }
+            Box(Modifier.weight(1f)) {
+                OutlinedButton(onClick = { pasteMenuOpen = true }, modifier = Modifier.fillMaxWidth()) { Text("粘贴格式…") }
+                DropdownMenu(expanded = pasteMenuOpen, onDismissRequest = { pasteMenuOpen = false }) {
+                    listOf(
+                        EventFormatPasteMode.STYLE to "Style",
+                        EventFormatPasteMode.MARGINS to "Margins",
+                        EventFormatPasteMode.POSITION to "Position · pos/move",
+                        EventFormatPasteMode.EFFECTS to "Effects · fad/fade/blur/t",
+                        EventFormatPasteMode.OVERRIDES to "全部 leading overrides",
+                        EventFormatPasteMode.ALL to "全部格式",
+                    ).forEach { (mode, label) ->
+                        DropdownMenuItem(
+                            text = { Text(label) },
+                            onClick = {
+                                pasteMenuOpen = false
+                                viewModel.pasteFormatClipboardToSelected(mode)
+                            },
+                        )
+                    }
+                }
+            }
+        }
+        Text(
+            "格式剪贴板只复制结构化格式，不复制正文、时间或 {comment}。Position / Effects 只替换顶层对应 tag，不会误改 \\t(...) 内部的嵌套 tag。",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
         Button(viewModel::deleteSelectedOrFocused, Modifier.fillMaxWidth()) { Icon(Icons.Filled.Delete, null); Spacer(Modifier.width(4.dp)); Text("删除已选字幕") }
     }
 }

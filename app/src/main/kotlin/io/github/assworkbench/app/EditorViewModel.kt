@@ -1025,7 +1025,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             _state.update {
                 it.copy(
                     focusedEventId = result.focusedEventId,
-                    selectedEventIds = result.selectedEventIds,
+                    selectedEventIds = emptySet(),
                     selectionAnchorId = null,
                 )
             }
@@ -1109,6 +1109,14 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             snapshot.focusedEventId?.let(::setOf).orEmpty()
         }
         if (ids.isEmpty()) return
+        if ((mode == EventFormatPasteMode.STYLE || mode == EventFormatPasteMode.ALL) &&
+            snapshot.document.styles.none { it.name == clipboard.style }
+        ) {
+            _state.update {
+                it.copy(status = "无法粘贴 Style ${clipboard.style}：当前工程不存在该 Style；可改用 Margins / Position / Effects / Overrides。")
+            }
+            return
+        }
         editDocument("已粘贴格式到 " + ids.size + " 条字幕。") { doc ->
             doc.copy(events = doc.events.map { event ->
                 if (event.id in ids) EventFormatClipboardOps.apply(event, clipboard, mode) else event
@@ -1116,15 +1124,6 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    fun copyFocusedFormattingToSelected() {
-        val snapshot = _state.value
-        val sourceId = snapshot.focusedEventId ?: return
-        val targets = snapshot.selectedEventIds - sourceId
-        if (targets.isEmpty()) return
-        editDocument("已把当前字幕格式应用到 " + targets.size + " 条字幕。") { doc ->
-            AssDocumentEditing.copyEventFormatting(doc, sourceId, targets)
-        }
-    }
 
     fun replaceAll(find: String, replacement: String, inActor: Boolean) {
         if (find.isEmpty()) return

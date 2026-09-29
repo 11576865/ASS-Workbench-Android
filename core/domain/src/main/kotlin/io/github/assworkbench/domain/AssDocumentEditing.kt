@@ -148,8 +148,12 @@ object AssDocumentEditing {
         separator: String,
     ): AssStructuralEditResult {
         require(eventIds.size >= 2) { "至少选择两条字幕才能合并。" }
-        val selected = document.events.filter { it.id in eventIds }
-        require(selected.size >= 2) { "选择中可合并的字幕不足两条。" }
+        val selectedIndices = document.events.indices.filter { document.events[it].id in eventIds }
+        require(selectedIndices.size >= 2) { "选择中可合并的字幕不足两条。" }
+        require(selectedIndices.zipWithNext().all { (a, b) -> b == a + 1 }) {
+            "只能合并在 Event 列表中连续的字幕。"
+        }
+        val selected = selectedIndices.map { document.events[it] }
 
         val first = selected.first()
         val merged = first.copy(
