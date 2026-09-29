@@ -17,10 +17,15 @@ func TestReplaceASSPreservesTrackIdentityAndContainerMetadata(t *testing.T) {
 	src := filepath.Join(dir, "source.mkv")
 	dst := filepath.Join(dir, "updated.mkv")
 	assPath := filepath.Join(dir, "edited.ass")
+	newFontPath := filepath.Join(dir, "AddedFont.otf")
 
 	oldHeader := "[Script Info]\nScriptType: v4.00+\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Default,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&H64000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text"
 	newASS := oldHeader + "\nDialogue: 0,0:00:00.50,0:00:02.00,Default,,0,0,0,,Edited"
 	if err := os.WriteFile(assPath, []byte(newASS), 0644); err != nil {
+		t.Fatal(err)
+	}
+	newFont := append([]byte("OTTO"), bytes.Repeat([]byte{0x42}, 256)...)
+	if err := os.WriteFile(newFontPath, newFont, 0644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -76,7 +81,7 @@ func TestReplaceASSPreservesTrackIdentityAndContainerMetadata(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := ReplaceASS(context.Background(), src, 2, assPath, dst); err != nil {
+	if err := ReplaceASSWithFonts(context.Background(), src, 2, assPath, dst, []string{newFontPath, newFontPath}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -97,8 +102,18 @@ func TestReplaceASSPreservesTrackIdentityAndContainerMetadata(t *testing.T) {
 	if !s.IsDefault || !s.IsForced || !s.Commentary {
 		t.Fatalf("subtitle flags changed: %+v", s)
 	}
-	if len(got.Attachments) != 1 || got.Attachments[0].Name != "Fixture.ttf" || !bytes.Equal(got.Attachments[0].Data, font) {
-		t.Fatalf("attachment not preserved: %+v", got.Attachments)
+	if len(got.Attachments) != 2 {
+		t.Fatalf("attachment count = %d, want 2: %+v", len(got.Attachments), got.Attachments)
+	}
+	if got.Attachments[0].Name != "Fixture.ttf" || !bytes.Equal(got.Attachments[0].Data, font) {
+		t.Fatalf("source attachment not preserved: %+v", got.Attachments)
+	}
+	if got.Attachments[1].Name != "AddedFont.otf" || got.Attachments[1].MIMEType != "font/otf" ||
+		!bytes.Equal(got.Attachments[1].Data, newFont) {
+		t.Fatalf("selected font not attached once: %+v", got.Attachments)
+	}
+	if got.Attachments[1].ID == got.Attachments[0].ID {
+		t.Fatalf("new attachment reused source UID: %+v", got.Attachments)
 	}
 	if len(got.Chapters) != 1 || got.Chapters[0].ID != 7 || got.Chapters[0].Title != "Intro" {
 		t.Fatalf("chapter not preserved: %+v", got.Chapters)
