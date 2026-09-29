@@ -662,6 +662,41 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         })
     }
 
+    fun previewFocusedRotationZ(angle: Double) {
+        val state = _state.value
+        val id = state.focusedEventId ?: return
+        val preview = withEventRotationZ(state.document, id, angle)
+        _state.update { current ->
+            current.copy(previewDocument = if (preview == state.document) null else preview)
+        }
+    }
+
+    fun setFocusedRotationZ(angle: Double) {
+        val id = _state.value.focusedEventId ?: return
+        editDocument("已更新当前字幕的 Z 轴旋转。") { doc ->
+            withEventRotationZ(doc, id, angle)
+        }
+    }
+
+    fun clearFocusedRotationZ() {
+        val id = _state.value.focusedEventId ?: return
+        editDocument("已恢复当前字幕的 Style 旋转。") { doc ->
+            doc.copy(events = doc.events.map { event ->
+                if (event.id != id) event
+                else event.copy(text = AssGeometrySemantic.removeRotationZ(event.text))
+            })
+        }
+    }
+
+    private fun withEventRotationZ(document: AssDocument, id: Long, angle: Double): AssDocument {
+        val event = document.events.firstOrNull { it.id == id } ?: return document
+        val patched = AssGeometrySemantic.patchRotationZ(event.text, angle.coerceIn(-3600.0, 3600.0))
+        if (patched == event.text) return document
+        return document.copy(events = document.events.map { candidate ->
+            if (candidate.id == id) candidate.copy(text = patched) else candidate
+        })
+    }
+
 
     fun setFocusedAlignment(alignment: Int) {
         val id = _state.value.focusedEventId ?: return

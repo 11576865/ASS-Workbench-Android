@@ -70,6 +70,20 @@ class AssGeometrySemanticTest {
         assertNull(AssGeometrySemantic.inspect(output).origin)
     }
     @Test
+    fun removingRotationPreservesNestedTransformAndUnknownTags() {
+        val source = "{\\fr10\\t(0,500,\\frz30)\\x-custom(foo)\\frz20}Text"
+        val output = AssGeometrySemantic.removeRotationZ(source)
+        assertEquals("{\\t(0,500,\\frz30)\\x-custom(foo)}Text", output)
+        assertNull(AssGeometrySemantic.inspect(output).rotationZ)
+    }
+
+    @Test
+    fun addingRotationUsesFrzWithoutNormalizingNeighbors() {
+        val source = "{\\bord2\\x-custom(foo)}Text"
+        val output = AssGeometrySemantic.patchRotationZ(source, -32.5)
+        assertEquals("{\\bord2\\x-custom(foo)\\frz-32.5}Text", output)
+    }
+    @Test
     fun preservesFrAliasWhenPatchingRotation() {
         val source = "{\\fr15\\bord2}Text"
         assertEquals("{\\fr27.5\\bord2}Text", AssGeometrySemantic.patchRotationZ(source, 27.5))

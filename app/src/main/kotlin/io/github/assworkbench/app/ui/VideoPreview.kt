@@ -94,6 +94,8 @@ fun VideoPreview(
     onSetEventMove: (Double, Double, Double, Double) -> Unit,
     onPreviewEventOrigin: (Double, Double) -> Unit,
     onSetEventOrigin: (Double, Double) -> Unit,
+    onPreviewEventRotation: (Double) -> Unit,
+    onSetEventRotation: (Double) -> Unit,
     onCancelEventPositionPreview: () -> Unit,
     onFocusEvent: (Long) -> Unit,
     onSetEventTiming: (Long, Long, Long) -> Unit,
@@ -146,6 +148,8 @@ fun VideoPreview(
             onSetEventMove = onSetEventMove,
             onPreviewEventOrigin = onPreviewEventOrigin,
             onSetEventOrigin = onSetEventOrigin,
+            onPreviewEventRotation = onPreviewEventRotation,
+            onSetEventRotation = onSetEventRotation,
             onCancelEventPositionPreview = onCancelEventPositionPreview,
             onFocusEvent = onFocusEvent,
             onSetEventTiming = onSetEventTiming,
@@ -430,6 +434,8 @@ private fun AuthoritativeMpvPreview(
     onSetEventMove: (Double, Double, Double, Double) -> Unit,
     onPreviewEventOrigin: (Double, Double) -> Unit,
     onSetEventOrigin: (Double, Double) -> Unit,
+    onPreviewEventRotation: (Double) -> Unit,
+    onSetEventRotation: (Double) -> Unit,
     onCancelEventPositionPreview: () -> Unit,
     onFocusEvent: (Long) -> Unit,
     onSetEventTiming: (Long, Long, Long) -> Unit,
@@ -596,16 +602,22 @@ private fun AuthoritativeMpvPreview(
                 val positionEvent = positionEditEventId?.let { id ->
                     document.events.firstOrNull { it.id == id }
                 }
+                val renderPositionEvent = positionEditEventId?.let { id ->
+                    renderDocument.events.firstOrNull { it.id == id }
+                }
                 if (positionEvent != null) {
                     PositionDragOverlay(
                         document = document,
                         event = positionEvent,
+                        renderEvent = renderPositionEvent,
                         onPreview = onPreviewEventPosition,
                         onCommit = onSetEventPosition,
                         onPreviewMove = onPreviewEventMove,
                         onCommitMove = onSetEventMove,
                         onPreviewOrigin = onPreviewEventOrigin,
                         onCommitOrigin = onSetEventOrigin,
+                        onPreviewRotation = onPreviewEventRotation,
+                        onCommitRotation = onSetEventRotation,
                         onCancel = onCancelEventPositionPreview,
                         modifier = Modifier.fillMaxSize(),
                     )
@@ -637,16 +649,22 @@ private fun AuthoritativeMpvPreview(
 private fun PositionDragOverlay(
     document: AssDocument,
     event: AssEvent,
+    renderEvent: AssEvent?,
     onPreview: (Double, Double) -> Unit,
     onCommit: (Double, Double) -> Unit,
     onPreviewMove: (Double, Double, Double, Double) -> Unit,
     onCommitMove: (Double, Double, Double, Double) -> Unit,
     onPreviewOrigin: (Double, Double) -> Unit,
     onCommitOrigin: (Double, Double) -> Unit,
+    onPreviewRotation: (Double) -> Unit,
+    onCommitRotation: (Double) -> Unit,
     onCancel: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val geometry = remember(event.text) { AssGeometrySemantic.inspect(event.text) }
+    val renderGeometry = remember(renderEvent?.text, event.text) {
+        AssGeometrySemantic.inspect(renderEvent?.text ?: event.text)
+    }
     val style = document.styles.firstOrNull { it.name == event.style }
     val marginL = if (event.marginL > 0) event.marginL else style?.marginL ?: 10
     val marginR = if (event.marginR > 0) event.marginR else style?.marginR ?: 10
@@ -671,6 +689,8 @@ private fun PositionDragOverlay(
     var y by remember(event.id, event.text) { mutableStateOf(geometry.position?.y ?: baseY) }
     var originX by remember(event.id, event.text) { mutableStateOf(geometry.origin?.x) }
     var originY by remember(event.id, event.text) { mutableStateOf(geometry.origin?.y) }
+    var directRotation by remember(event.id, event.text) { mutableStateOf<Double?>(null) }
+    val displayRotation = directRotation ?: renderGeometry.rotationZ ?: style?.angle ?: 0.0
     val guideColor = MaterialTheme.colorScheme.tertiary
 
     if (geometry.positionMode == AssPositionMode.CONFLICT) {
@@ -679,34 +699,58 @@ private fun PositionDragOverlay(
         BoxWithConstraints(
             if (originX != null && originY != null) {
                 modifier.pointerInput(event.id, event.text, document.playResX, document.playResY) {
-                    var draggingOrigin = false
+                    var activeHandle = 0 // 1=origin, 2=rotation
                     var lastPreviewAt = 0L
                     detectDragGestures(
                         onDragStart = { touch ->
                             val ox = (originX!! / document.playResX.coerceAtLeast(1)) * size.width
                             val oy = (originY!! / document.playResY.coerceAtLeast(1)) * size.height
-                            val dx = touch.x - ox.toFloat()
-                            val dy = touch.y - oy.toFloat()
-                            draggingOrigin = kotlin.math.sqrt((dx * dx + dy * dy).toDouble()) <= 36.dp.toPx().toDouble()
+                            val originDx = touch.x - ox.toFloat()
+                            val originDy = touch.y - oy.toFloat()
+                            val originDistance = kotlin.math.sqrt((originDx * originDx + originDy * originDy).toDouble())
+                            val theta = Math.toRadians(displayRotation - 90.0)
+                            val radius = 56.dp.toPx()
+                            val hx = ox + kotlin.math.cos(theta) * radius
+                            val hy = oy + kotlin.math.sin(theta) * radius
+                            val handleDx = touch.x - hx.toFloat()
+                            val handleDy = touch.y - hy.toFloat()
+                            val rotationDistance = kotlin.math.sqrt((handleDx * handleDx + handleDy * handleDy).toDouble())
+                            val threshold = 32.dp.toPx().toDouble()
+                            activeHandle = when {
+                                rotationDistance <= threshold -> 2
+                                originDistance <= threshold -> 1
+                                else -> 0
+                            }
                         },
                         onDrag = { change, _ ->
-                            if (!draggingOrigin) return@detectDragGestures
+                            if (activeHandle == 0) return@detectDragGestures
                             change.consume()
-                            val px = change.position.x.coerceIn(0f, size.width.toFloat())
-                            val py = change.position.y.coerceIn(0f, size.height.toFloat())
-                            originX = (px / size.width.coerceAtLeast(1) * document.playResX).toDouble()
-                            originY = (py / size.height.coerceAtLeast(1) * document.playResY).toDouble()
+                            if (activeHandle == 1) {
+                                val px = change.position.x.coerceIn(0f, size.width.toFloat())
+                                val py = change.position.y.coerceIn(0f, size.height.toFloat())
+                                originX = (px / size.width.coerceAtLeast(1) * document.playResX).toDouble()
+                                originY = (py / size.height.coerceAtLeast(1) * document.playResY).toDouble()
+                            } else {
+                                val ox = (originX!! / document.playResX.coerceAtLeast(1)) * size.width
+                                val oy = (originY!! / document.playResY.coerceAtLeast(1)) * size.height
+                                val rawAngle = Math.toDegrees(kotlin.math.atan2((change.position.y - oy).toDouble(), (change.position.x - ox).toDouble())) + 90.0
+                                directRotation = ((rawAngle + 180.0) % 360.0 + 360.0) % 360.0 - 180.0
+                            }
                             val now = android.os.SystemClock.uptimeMillis()
                             if (now - lastPreviewAt >= 80L) {
                                 lastPreviewAt = now
-                                onPreviewOrigin(originX!!, originY!!)
+                                if (activeHandle == 1) onPreviewOrigin(originX!!, originY!!) else onPreviewRotation(directRotation!!)
                             }
                         },
                         onDragEnd = {
-                            if (draggingOrigin) onCommitOrigin(originX!!, originY!!)
-                            draggingOrigin = false
+                            when (activeHandle) {
+                                1 -> onCommitOrigin(originX!!, originY!!)
+                                2 -> directRotation?.let(onCommitRotation)
+                            }
+                            directRotation = null
+                            activeHandle = 0
                         },
-                        onDragCancel = { onCancel(); draggingOrigin = false },
+                        onDragCancel = { onCancel(); directRotation = null; activeHandle = 0 },
                     )
                 }
             } else modifier
@@ -728,6 +772,13 @@ private fun PositionDragOverlay(
                     drawCircle(guideColor, 10.dp.toPx(), center, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2.dp.toPx()))
                     drawLine(guideColor, center + androidx.compose.ui.geometry.Offset(-8.dp.toPx(), -8.dp.toPx()), center + androidx.compose.ui.geometry.Offset(8.dp.toPx(), 8.dp.toPx()), 2.dp.toPx())
                     drawLine(guideColor, center + androidx.compose.ui.geometry.Offset(-8.dp.toPx(), 8.dp.toPx()), center + androidx.compose.ui.geometry.Offset(8.dp.toPx(), -8.dp.toPx()), 2.dp.toPx())
+                    val theta = Math.toRadians(displayRotation - 90.0)
+                    val rotationHandle = center + androidx.compose.ui.geometry.Offset(
+                        (kotlin.math.cos(theta) * 56.dp.toPx()).toFloat(),
+                        (kotlin.math.sin(theta) * 56.dp.toPx()).toFloat(),
+                    )
+                    drawLine(guideColor.copy(alpha = 0.55f), center, rotationHandle, 1.5.dp.toPx())
+                    drawCircle(guideColor, 7.dp.toPx(), rotationHandle, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2.dp.toPx()))
                 }
             }
             Text(
@@ -752,7 +803,7 @@ private fun PositionDragOverlay(
 
         BoxWithConstraints(
             modifier.pointerInput(event.id, event.text, document.playResX, document.playResY) {
-                var activeHandle = 0 // 1=start, 2=end, 3=origin
+                var activeHandle = 0 // 1=start, 2=end, 3=origin, 4=rotation
                 var lastPreviewAt = 0L
                 fun distanceTo(px: Double, py: Double, touchX: Float, touchY: Float): Double {
                     val hx = (px / document.playResX.coerceAtLeast(1)) * size.width
@@ -766,8 +817,19 @@ private fun PositionDragOverlay(
                         val startDistance = distanceTo(startX, startY, touch.x, touch.y)
                         val endDistance = distanceTo(endX, endY, touch.x, touch.y)
                         val originDistance = if (originX != null && originY != null) distanceTo(originX!!, originY!!, touch.x, touch.y) else Double.POSITIVE_INFINITY
+                        val rotationDistance = if (originX != null && originY != null) {
+                            val ox = (originX!! / document.playResX.coerceAtLeast(1)) * size.width
+                            val oy = (originY!! / document.playResY.coerceAtLeast(1)) * size.height
+                            val theta = Math.toRadians(displayRotation - 90.0)
+                            val hx = ox + kotlin.math.cos(theta) * 56.dp.toPx()
+                            val hy = oy + kotlin.math.sin(theta) * 56.dp.toPx()
+                            val dx = touch.x - hx.toFloat()
+                            val dy = touch.y - hy.toFloat()
+                            kotlin.math.sqrt((dx * dx + dy * dy).toDouble())
+                        } else Double.POSITIVE_INFINITY
                         val threshold = 36.dp.toPx().toDouble()
                         activeHandle = when {
+                            rotationDistance <= threshold -> 4
                             originDistance <= threshold && originDistance <= startDistance && originDistance <= endDistance -> 3
                             startDistance <= threshold && startDistance <= endDistance -> 1
                             endDistance <= threshold -> 2
@@ -797,26 +859,37 @@ private fun PositionDragOverlay(
                         } else if (activeHandle == 2) {
                             endX = nx.toDouble()
                             endY = ny.toDouble()
-                        } else {
+                        } else if (activeHandle == 3) {
                             originX = nx.toDouble()
                             originY = ny.toDouble()
+                        } else {
+                            val ox = (originX!! / document.playResX.coerceAtLeast(1)) * size.width
+                            val oy = (originY!! / document.playResY.coerceAtLeast(1)) * size.height
+                            val rawAngle = Math.toDegrees(kotlin.math.atan2((change.position.y - oy).toDouble(), (change.position.x - ox).toDouble())) + 90.0
+                            directRotation = ((rawAngle + 180.0) % 360.0 + 360.0) % 360.0 - 180.0
                         }
                         val now = android.os.SystemClock.uptimeMillis()
                         if (now - lastPreviewAt >= 80L) {
                             lastPreviewAt = now
-                            if (activeHandle == 3) onPreviewOrigin(originX!!, originY!!)
-                            else onPreviewMove(startX, startY, endX, endY)
+                            when (activeHandle) {
+                                3 -> onPreviewOrigin(originX!!, originY!!)
+                                4 -> onPreviewRotation(directRotation!!)
+                                else -> onPreviewMove(startX, startY, endX, endY)
+                            }
                         }
                     },
                     onDragEnd = {
                         when (activeHandle) {
                             1, 2 -> onCommitMove(startX, startY, endX, endY)
                             3 -> onCommitOrigin(originX!!, originY!!)
+                            4 -> directRotation?.let(onCommitRotation)
                         }
+                        directRotation = null
                         activeHandle = 0
                     },
                     onDragCancel = {
                         onCancel()
+                        directRotation = null
                         activeHandle = 0
                     },
                 )
@@ -851,10 +924,17 @@ private fun PositionDragOverlay(
                     drawCircle(guideColor, 10.dp.toPx(), center, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2.dp.toPx()))
                     drawLine(guideColor, center + androidx.compose.ui.geometry.Offset(-8.dp.toPx(), -8.dp.toPx()), center + androidx.compose.ui.geometry.Offset(8.dp.toPx(), 8.dp.toPx()), 2.dp.toPx())
                     drawLine(guideColor, center + androidx.compose.ui.geometry.Offset(-8.dp.toPx(), 8.dp.toPx()), center + androidx.compose.ui.geometry.Offset(8.dp.toPx(), -8.dp.toPx()), 2.dp.toPx())
+                    val theta = Math.toRadians(displayRotation - 90.0)
+                    val rotationHandle = center + androidx.compose.ui.geometry.Offset(
+                        (kotlin.math.cos(theta) * 56.dp.toPx()).toFloat(),
+                        (kotlin.math.sin(theta) * 56.dp.toPx()).toFloat(),
+                    )
+                    drawLine(guideColor.copy(alpha = 0.55f), center, rotationHandle, 1.5.dp.toPx())
+                    drawCircle(guideColor, 7.dp.toPx(), rotationHandle, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2.dp.toPx()))
                 }
             }
             Text(
-                "move S ${startX.toInt()},${startY.toInt()} → E ${endX.toInt()},${endY.toInt()}" + (if (originX != null) " · org ${originX!!.toInt()},${originY!!.toInt()}" else "") + " · 拖控制点",
+                "move S ${startX.toInt()},${startY.toInt()} → E ${endX.toInt()},${endY.toInt()}" + (if (originX != null) " · org ${originX!!.toInt()},${originY!!.toInt()} · rot ${displayRotation.toInt()}°" else "") + " · 拖控制点",
                 modifier = Modifier.align(Alignment.TopStart).background(Color.Black.copy(alpha = 0.62f)).padding(horizontal = 6.dp, vertical = 3.dp),
                 color = Color.White,
                 style = MaterialTheme.typography.labelSmall,
@@ -869,7 +949,7 @@ private fun PositionDragOverlay(
 
     BoxWithConstraints(
         modifier.pointerInput(event.id, document.playResX, document.playResY) {
-            var activeHandle = 0 // 1=position, 2=origin
+            var activeHandle = 0 // 1=position, 2=origin, 3=rotation
             var lastPreviewAt = 0L
             detectDragGestures(
                 onDragStart = { start ->
@@ -882,8 +962,19 @@ private fun PositionDragOverlay(
                     }
                     val positionDistance = distanceTo(x, y)
                     val originDistance = if (originX != null && originY != null) distanceTo(originX!!, originY!!) else Double.POSITIVE_INFINITY
+                    val pivotX = originX ?: x
+                    val pivotY = originY ?: y
+                    val pivotPx = (pivotX / document.playResX.coerceAtLeast(1)) * size.width
+                    val pivotPy = (pivotY / document.playResY.coerceAtLeast(1)) * size.height
+                    val theta = Math.toRadians(displayRotation - 90.0)
+                    val handleX = pivotPx + kotlin.math.cos(theta) * 56.dp.toPx()
+                    val handleY = pivotPy + kotlin.math.sin(theta) * 56.dp.toPx()
+                    val handleDx = start.x - handleX.toFloat()
+                    val handleDy = start.y - handleY.toFloat()
+                    val rotationDistance = kotlin.math.sqrt((handleDx * handleDx + handleDy * handleDy).toDouble())
                     val threshold = 36.dp.toPx().toDouble()
                     activeHandle = when {
+                        rotationDistance <= threshold -> 3
                         originDistance <= threshold && originDistance <= positionDistance -> 2
                         positionDistance <= threshold -> 1
                         else -> 0
@@ -917,14 +1008,25 @@ private fun PositionDragOverlay(
                         if (activeHandle == 1) {
                             x = nx.toDouble()
                             y = ny.toDouble()
-                        } else {
+                        } else if (activeHandle == 2) {
                             originX = nx.toDouble()
                             originY = ny.toDouble()
+                        } else {
+                            val pivotX = originX ?: x
+                            val pivotY = originY ?: y
+                            val pivotPx = (pivotX / document.playResX.coerceAtLeast(1)) * size.width
+                            val pivotPy = (pivotY / document.playResY.coerceAtLeast(1)) * size.height
+                            val rawAngle = Math.toDegrees(kotlin.math.atan2((change.position.y - pivotPy).toDouble(), (change.position.x - pivotPx).toDouble())) + 90.0
+                            directRotation = ((rawAngle + 180.0) % 360.0 + 360.0) % 360.0 - 180.0
                         }
                         val now = android.os.SystemClock.uptimeMillis()
                         if (now - lastPreviewAt >= 80L) {
                             lastPreviewAt = now
-                            if (activeHandle == 1) onPreview(x, y) else onPreviewOrigin(originX!!, originY!!)
+                            when (activeHandle) {
+                                1 -> onPreview(x, y)
+                                2 -> onPreviewOrigin(originX!!, originY!!)
+                                3 -> onPreviewRotation(directRotation!!)
+                            }
                         }
                     }
                 },
@@ -932,11 +1034,14 @@ private fun PositionDragOverlay(
                     when (activeHandle) {
                         1 -> onCommit(x, y)
                         2 -> onCommitOrigin(originX!!, originY!!)
+                        3 -> directRotation?.let(onCommitRotation)
                     }
+                    directRotation = null
                     activeHandle = 0
                 },
                 onDragCancel = {
                     onCancel()
+                    directRotation = null
                     activeHandle = 0
                 },
             )
@@ -972,9 +1077,21 @@ private fun PositionDragOverlay(
                 drawLine(guideColor, center + androidx.compose.ui.geometry.Offset(-8.dp.toPx(), -8.dp.toPx()), center + androidx.compose.ui.geometry.Offset(8.dp.toPx(), 8.dp.toPx()), 2.dp.toPx())
                 drawLine(guideColor, center + androidx.compose.ui.geometry.Offset(-8.dp.toPx(), 8.dp.toPx()), center + androidx.compose.ui.geometry.Offset(8.dp.toPx(), -8.dp.toPx()), 2.dp.toPx())
             }
+            val pivotX = originX ?: x
+            val pivotY = originY ?: y
+            val pivotPx = (pivotX / document.playResX.coerceAtLeast(1)) * size.width
+            val pivotPy = (pivotY / document.playResY.coerceAtLeast(1)) * size.height
+            val pivot = androidx.compose.ui.geometry.Offset(pivotPx.toFloat(), pivotPy.toFloat())
+            val theta = Math.toRadians(displayRotation - 90.0)
+            val rotationHandle = pivot + androidx.compose.ui.geometry.Offset(
+                (kotlin.math.cos(theta) * 56.dp.toPx()).toFloat(),
+                (kotlin.math.sin(theta) * 56.dp.toPx()).toFloat(),
+            )
+            drawLine(guideColor.copy(alpha = 0.55f), pivot, rotationHandle, 1.5.dp.toPx())
+            drawCircle(guideColor, 7.dp.toPx(), rotationHandle, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2.dp.toPx()))
         }
         Text(
-            "pos ${x.toInt()},${y.toInt()}" + (if (originX != null) " · org ${originX!!.toInt()},${originY!!.toInt()}" else "") + " · 拖控制点",
+            "pos ${x.toInt()},${y.toInt()}" + (if (originX != null) " · org ${originX!!.toInt()},${originY!!.toInt()}" else "") + " · rot ${displayRotation.toInt()}° · 拖控制点",
             modifier = Modifier
                 .align(Alignment.TopStart)
                 .background(Color.Black.copy(alpha = 0.55f))

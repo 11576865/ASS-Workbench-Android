@@ -285,6 +285,8 @@ private fun WorkbenchPreview(
         onSetEventMove = viewModel::setFocusedMove,
         onPreviewEventOrigin = viewModel::previewFocusedOrigin,
         onSetEventOrigin = viewModel::setFocusedOrigin,
+        onPreviewEventRotation = viewModel::previewFocusedRotationZ,
+        onSetEventRotation = viewModel::setFocusedRotationZ,
         onCancelEventPositionPreview = viewModel::clearTransientPreview,
         onFocusEvent = { viewModel.focusEvent(it, seek = false) },
         onSetEventTiming = viewModel::setEventTiming,
@@ -1184,10 +1186,28 @@ private fun PositionPane(state: EditorState, viewModel: EditorViewModel, modifie
     var moveEndY by remember(event.id, event.text) { mutableStateOf(geometry.move?.end?.y?.toString().orEmpty()) }
     var originX by remember(event.id, event.text) { mutableStateOf(geometry.origin?.x?.toString().orEmpty()) }
     var originY by remember(event.id, event.text) { mutableStateOf(geometry.origin?.y?.toString().orEmpty()) }
+    var rotationText by remember(event.id, event.text, style?.angle) {
+        mutableStateOf((geometry.rotationZ ?: style?.angle ?: 0.0).toString())
+    }
+    var rotationGestureActive by remember(event.id) { mutableStateOf(false) }
+    var rotationDraftChanged by remember(event.id) { mutableStateOf(false) }
     var styleAlignment by remember(style?.name, style?.alignment) { mutableIntStateOf(style?.alignment ?: 2) }
     var styleMarginL by remember(style?.name, style?.marginL) { mutableStateOf((style?.marginL ?: 0).toString()) }
     var styleMarginR by remember(style?.name, style?.marginR) { mutableStateOf((style?.marginR ?: 0).toString()) }
     var styleMarginV by remember(style?.name, style?.marginV) { mutableStateOf((style?.marginV ?: 0).toString()) }
+
+    LaunchedEffect(event.id, rotationText, rotationGestureActive, rotationDraftChanged) {
+        if (!rotationDraftChanged || rotationGestureActive) return@LaunchedEffect
+        val value = rotationText.toDoubleOrNull() ?: return@LaunchedEffect
+        viewModel.previewFocusedRotationZ(value)
+        kotlinx.coroutines.delay(320)
+        viewModel.setFocusedRotationZ(value)
+        rotationDraftChanged = false
+    }
+
+    DisposableEffect(event.id) {
+        onDispose { viewModel.clearTransientPreview() }
+    }
 
     LazyColumn(
         modifier.padding(WorkbenchDimens.Small),
@@ -1290,6 +1310,52 @@ private fun PositionPane(state: EditorState, viewModel: EditorViewModel, modifie
                     )
                 }) { Text("在画布中心添加 \\org") }
             }
+        }
+        item { Divider() }
+        item {
+            Text("旋转 · \\frz", style = MaterialTheme.typography.titleSmall)
+            ContinuousParameterControl(
+                label = "Rotation Z",
+                valueText = rotationText,
+                onValueTextChange = {
+                    rotationText = it
+                    rotationDraftChanged = true
+                },
+                range = -180f..180f,
+                step = 1.0,
+                suffix = "°",
+                supportingText = if (geometry.rotationZ != null) {
+                    "Event override：${geometry.rotationZ}° · 画布旋转手柄和数值控制共享同一语义。"
+                } else {
+                    "继承 Style：${style?.angle ?: 0.0}° · 首次编辑会创建 \\frz。"
+                },
+                resetLabel = if (geometry.rotationZ != null) "继承 Style" else null,
+                onReset = if (geometry.rotationZ != null) ({
+                    rotationDraftChanged = false
+                    rotationGestureActive = false
+                    rotationText = (style?.angle ?: 0.0).toString()
+                    viewModel.clearFocusedRotationZ()
+                }) else null,
+                onPreview = { value ->
+                    viewModel.previewFocusedRotationZ(value)
+                },
+                onGestureActive = { active ->
+                    rotationGestureActive = active
+                    if (!active) {
+                        rotationText.toDoubleOrNull()?.let(viewModel::setFocusedRotationZ)
+                        rotationDraftChanged = false
+                    }
+                },
+            )
+            Text(
+                if (geometry.positionMode == AssPositionMode.MOVE && geometry.origin == null) {
+                    "当前是 \\move 且没有显式 \\org：数值/Slider 可用，但画布旋转手柄暂不显示，因为默认旋转中心随运动位置变化。"
+                } else {
+                    "画布上的旋转手柄围绕显式 \\org；没有 \\org 时，静态字幕围绕当前定位锚点。"
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
         item {
             Text("任意位置")

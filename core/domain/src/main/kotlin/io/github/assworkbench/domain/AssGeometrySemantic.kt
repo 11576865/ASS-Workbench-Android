@@ -162,6 +162,11 @@ object AssGeometrySemantic {
             replacement = "\\$spelling${formatNumber(value)}",
         )
     }
+    fun removeRotationZ(text: String): String = removeTags(
+        text = text,
+        scan = scanLeading(text),
+        names = setOf("frz", "fr"),
+    )
 
     fun patchScaleX(text: String, value: Double): String = patchScalar(
         text = text,
