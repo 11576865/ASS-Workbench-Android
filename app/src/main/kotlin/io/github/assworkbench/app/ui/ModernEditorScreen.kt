@@ -34,7 +34,7 @@ import io.github.assworkbench.fonts.FontOrigin
 import kotlin.math.abs
 
 private enum class WorkbenchTool(val title: String) {
-    TIMELINE("时间轴"), STYLE("Style"), POSITION("位置"), EFFECTS("效果"),
+    TIMELINE("时间轴"), STYLE("Style"), POSITION("位置"),
     FONTS("字体"), QC("质量检查"), BATCH("批量"), PROJECT("项目"), DIAGNOSTICS("诊断"),
 }
 
@@ -77,7 +77,12 @@ fun ModernEditorScreen(
     val issues = remember(state.document) { AssQualityCheck.inspect(state.document) }
     val issuesByEvent = remember(issues) { issues.groupBy { it.eventId } }
 
-    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = MaterialTheme.colorScheme.background,
+        contentColor = MaterialTheme.colorScheme.onBackground,
+    ) {
+        Column(Modifier.fillMaxSize()) {
         ModernAppBar(
             state, viewModel, state.selectedEventIds.isNotEmpty(), searchOpen,
             { searchOpen = !searchOpen }, { openMenu = true }, openMenu, { openMenu = false },
@@ -123,23 +128,28 @@ fun ModernEditorScreen(
                     ) {
                         SupportingWorkbench(
                             state, viewModel, tool, issues, { openTool(it) }, { returnTool() },
-                            onImportFont, onSaveMkv,
+                            { supportingOpen = false }, onImportFont, onSaveMkv,
                             Modifier.fillMaxWidth().heightIn(min = 224.dp, max = 640.dp),
                         )
                     }
                 }
             } else {
-                ResizableSplitPane(
-                    ratio = state.project.splitRatio,
-                    horizontal = true,
-                    onRatioChange = viewModel::setSplitRatio,
-                    first = { pane ->
-                        EventWorkspace(
-                            state, viewModel, issuesByEvent, expandedEventId,
-                            { expandedEventId = it }, { openTool(it) }, pane
-                        )
-                    },
-                    second = { pane ->
+                EventWorkspace(
+                    state, viewModel, issuesByEvent, expandedEventId,
+                    { expandedEventId = it }, { openTool(it) }, Modifier.fillMaxSize()
+                )
+                if (supportingOpen) {
+                    val overlayWidth = (maxWidth * 0.48f).coerceIn(320.dp, 480.dp)
+                    Surface(
+                        modifier = Modifier
+                            .align(Alignment.CenterEnd)
+                            .fillMaxHeight()
+                            .width(overlayWidth),
+                        tonalElevation = 6.dp,
+                        shadowElevation = 10.dp,
+                        color = MaterialTheme.colorScheme.surface,
+                        contentColor = MaterialTheme.colorScheme.onSurface,
+                    ) {
                         SupportingWorkbench(
                             state,
                             viewModel,
@@ -147,13 +157,15 @@ fun ModernEditorScreen(
                             issues,
                             { openTool(it) },
                             { returnTool() },
+                            { supportingOpen = false },
                             onImportFont,
                             onSaveMkv,
-                            pane,
+                            Modifier.fillMaxSize(),
                         )
-                    },
-                )
+                    }
+                }
             }
+        }
         }
     }
 }
@@ -392,6 +404,7 @@ private fun InlineEventEditor(
     var body by remember(event.id, event.text) { mutableStateOf(AssInlineSyntax.visibleText(event.text)) }
     var rawOpen by remember(event.id) { mutableStateOf(false) }
     var metadataOpen by remember(event.id) { mutableStateOf(false) }
+    var effectsOpen by remember(event.id) { mutableStateOf(false) }
     var layerText by remember(event.id, event.layer) { mutableStateOf(event.layer.toString()) }
     var actorText by remember(event.id, event.name) { mutableStateOf(event.name) }
     var comment by remember(event.id, event.comment) { mutableStateOf(event.comment) }
@@ -446,7 +459,10 @@ private fun InlineEventEditor(
         AssistChip(onClick = { onTool(WorkbenchTool.STYLE) }, label = { Text(styleName) })
         AssistChip(onClick = { onTool(WorkbenchTool.POSITION) }, label = { Text("an$alignment · V$marginV" + if (pos != "alignment anchor") " · pos" else "") })
         AssistChip(onClick = { onTool(WorkbenchTool.FONTS) }, label = { Text("$font · $size") })
-        AssistChip(onClick = { onTool(WorkbenchTool.EFFECTS) }, label = { Text("效果") })
+        AssistChip(
+            onClick = { effectsOpen = !effectsOpen },
+            label = { Text(if (effectsOpen) "收起效果" else "效果") },
+        )
         AssistChip(
             onClick = { metadataOpen = !metadataOpen },
             label = {
@@ -457,6 +473,10 @@ private fun InlineEventEditor(
                 )
             },
         )
+    }
+
+    if (effectsOpen) {
+        InlineEffectsEditor(event, viewModel)
     }
 
     if (metadataOpen) {
@@ -513,6 +533,7 @@ private fun InlineEventEditor(
                 OutlinedTextField(
                     raw, { raw = it }, label = { Text("Raw ASS Event Text") },
                     textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                    visualTransformation = rememberAssSyntaxTransformation(),
                     modifier = Modifier.fillMaxWidth().heightIn(min = 96.dp, max = 220.dp),
                 )
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
@@ -522,13 +543,60 @@ private fun InlineEventEditor(
             }
         } else {
             Text(
-                event.text,
+                rememberAssAnnotatedText(event.text),
                 modifier = Modifier.fillMaxWidth().combinedClickable(onClick = { rawOpen = true }, onLongClick = { rawOpen = true }).padding(horizontal = 8.dp, vertical = 6.dp),
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
                 style = MaterialTheme.typography.labelSmall.copy(fontFamily = FontFamily.Monospace),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+        }
+    }
+}
+
+@Composable
+private fun InlineEffectsEditor(
+    event: AssEvent,
+    viewModel: EditorViewModel,
+) {
+    val snapshot = remember(event.id, event.text) { EventOverrideEditor.inspect(event.text) }
+    var blur by remember(event.id, event.text) { mutableStateOf(snapshot.blur?.toString().orEmpty()) }
+    var fadeIn by remember(event.id, event.text) { mutableStateOf(snapshot.fadeInMs?.toString().orEmpty()) }
+    var fadeOut by remember(event.id, event.text) { mutableStateOf(snapshot.fadeOutMs?.toString().orEmpty()) }
+    var softEntry by remember(event.id, event.text) { mutableStateOf(snapshot.softEntry) }
+
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.38f),
+        shape = MaterialTheme.shapes.small,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(
+            Modifier.padding(WorkbenchDimens.Small),
+            verticalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro),
+        ) {
+            Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro)) {
+                OutlinedTextField(blur, { blur = it }, label = { Text("Blur") }, singleLine = true, modifier = Modifier.weight(1f))
+                OutlinedTextField(fadeIn, { fadeIn = it }, label = { Text("Fade In ms") }, singleLine = true, modifier = Modifier.weight(1f))
+                OutlinedTextField(fadeOut, { fadeOut = it }, label = { Text("Fade Out ms") }, singleLine = true, modifier = Modifier.weight(1f))
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                FilterChip(
+                    selected = softEntry,
+                    onClick = { softEntry = !softEntry },
+                    label = { Text("Soft Entry · 160ms") },
+                )
+                Spacer(Modifier.weight(1f))
+                Button(onClick = {
+                    viewModel.applyEventOverrides(
+                        id = event.id,
+                        x = snapshot.x,
+                        y = snapshot.y,
+                        blur = blur.toDoubleOrNull(),
+                        fadeInMs = fadeIn.toIntOrNull(),
+                        fadeOutMs = fadeOut.toIntOrNull(),
+                        softEntry = softEntry,
+                    )
+                }) { Text("应用") }
+            }
         }
     }
 }
@@ -551,6 +619,7 @@ private fun SupportingWorkbench(
     issues: List<AssQcIssue>,
     onTool: (WorkbenchTool) -> Unit,
     onBackTool: () -> Unit,
+    onClose: () -> Unit,
     onImportFont: () -> Unit,
     onSaveMkv: () -> Unit,
     modifier: Modifier = Modifier,
@@ -568,6 +637,9 @@ private fun SupportingWorkbench(
                 IconButton(onClick = { onTool(WorkbenchTool.TIMELINE) }) {
                     Icon(Icons.Filled.Timeline, "时间轴")
                 }
+            }
+            IconButton(onClick = onClose) {
+                Icon(Icons.Filled.Close, "关闭工具")
             }
             Box {
                 IconButton(onClick = { menuOpen = true }) { Icon(Icons.Filled.MoreVert, "切换工具") }
@@ -591,7 +663,6 @@ private fun SupportingWorkbench(
                 WorkbenchTool.TIMELINE -> ModernTimelinePane(state, viewModel, Modifier.fillMaxSize())
                 WorkbenchTool.STYLE -> StylePane(state, viewModel, Modifier.fillMaxSize())
                 WorkbenchTool.POSITION -> PositionPane(state, viewModel, Modifier.fillMaxSize())
-                WorkbenchTool.EFFECTS -> EffectsPane(state, viewModel, Modifier.fillMaxSize())
                 WorkbenchTool.FONTS -> FontManagerPane(state, viewModel, onImportFont, Modifier.fillMaxSize())
                 WorkbenchTool.QC -> QcPane(state, viewModel, issues, Modifier.fillMaxSize())
                 WorkbenchTool.BATCH -> BatchPane(state, viewModel, Modifier.fillMaxSize())
@@ -856,13 +927,6 @@ private fun PositionPane(state: EditorState, viewModel: EditorViewModel, modifie
         }
         Text("此工具打开时，可以直接在 16:9 预览上拖动字幕锚点。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
-}
-
-@Composable
-private fun EffectsPane(state: EditorState, viewModel: EditorViewModel, modifier: Modifier = Modifier) {
-    val event = state.document.events.firstOrNull { it.id == state.focusedEventId }
-    if (event == null) Box(modifier, contentAlignment = Alignment.Center) { Text("先选择一条字幕") }
-    else EventOverridePanel(event, viewModel, modifier)
 }
 
 @Composable
