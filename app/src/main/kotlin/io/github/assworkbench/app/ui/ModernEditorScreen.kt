@@ -54,6 +54,11 @@ private enum class WorkbenchTool(val title: String) {
     FONTS("字体"), QC("质量检查"), BATCH("批量"), PROJECT("项目"), DIAGNOSTICS("诊断"),
 }
 
+private enum class DestructiveWorkspaceAction {
+    OPEN_ASS,
+    NEW_ASS,
+}
+
 private enum class PreviewPriority(val landscapeFraction: Float) {
     LOW(0.50f),
     NORMAL(0.56f),
@@ -87,6 +92,7 @@ fun ModernEditorScreen(
     onOpenReferenceVideo: () -> Unit,
     onOpenMkvProject: () -> Unit,
     onOpenSubtitle: () -> Unit,
+    onNewSubtitle: () -> Unit,
     onImportFont: () -> Unit,
     onSave: () -> Unit,
     onSaveAs: () -> Unit,
@@ -99,6 +105,7 @@ fun ModernEditorScreen(
     var openMenu by remember { mutableStateOf(false) }
     var saveConfirmOpen by remember { mutableStateOf(false) }
     var mkvConfirmOpen by remember { mutableStateOf(false) }
+    var destructiveWorkspaceAction by remember { mutableStateOf<DestructiveWorkspaceAction?>(null) }
 
     val tool = WorkbenchTool.entries.firstOrNull { it.name == toolName } ?: WorkbenchTool.TIMELINE
     val issues by produceState<List<AssQcIssue>>(initialValue = emptyList(), state.document) {
@@ -143,7 +150,20 @@ fun ModernEditorScreen(
                         state.container.uri != null || state.dirty
                     if (hasWorkspace) mkvConfirmOpen = true else onOpenMkvProject()
                 },
-                onOpenSubtitle = onOpenSubtitle,
+                onOpenSubtitle = {
+                    if (state.dirty) {
+                        destructiveWorkspaceAction = DestructiveWorkspaceAction.OPEN_ASS
+                    } else {
+                        onOpenSubtitle()
+                    }
+                },
+                onNewSubtitle = {
+                    if (state.dirty) {
+                        destructiveWorkspaceAction = DestructiveWorkspaceAction.NEW_ASS
+                    } else {
+                        viewModel.newSubtitleProject()
+                    }
+                },
                 onImportFont = onImportFont,
                 onSave = {
                     if (state.project.subtitleUri == null) onSaveAs()
@@ -187,17 +207,50 @@ fun ModernEditorScreen(
                     title = { Text("切换到 MKV 工程？") },
                     text = {
                         Text(
-                            "MKV 是独立工作流。选择新的 MKV 后，当前工作台中的字幕、参考视频、选择状态和项目字体会被清空。未保存修改请先保存。"
+                            if (state.dirty) {
+                                "当前字幕有未保存修改。继续选择新的 MKV 会明确放弃这些修改，并清空当前字幕、参考视频、选择状态和项目字体。"
+                            } else {
+                                "MKV 是独立工作流。选择新的 MKV 后，当前工作台中的字幕、参考视频、选择状态和项目字体会被清空。"
+                            }
                         )
                     },
                     confirmButton = {
                         Button(onClick = {
                             mkvConfirmOpen = false
                             onOpenMkvProject()
-                        }) { Text("选择 MKV") }
+                        }) { Text(if (state.dirty) "放弃修改并选择 MKV" else "选择 MKV") }
                     },
                     dismissButton = {
                         TextButton(onClick = { mkvConfirmOpen = false }) { Text("取消") }
+                    },
+                )
+            }
+
+            destructiveWorkspaceAction?.let { action ->
+                AlertDialog(
+                    onDismissRequest = { destructiveWorkspaceAction = null },
+                    title = { Text("放弃未保存修改？") },
+                    text = {
+                        Text(
+                            when (action) {
+                                DestructiveWorkspaceAction.OPEN_ASS ->
+                                    "当前字幕有未保存修改。继续打开另一份 ASS 会丢弃当前未保存内容与对应恢复日志。"
+                                DestructiveWorkspaceAction.NEW_ASS ->
+                                    "当前字幕有未保存修改。继续新建空白 ASS 会丢弃当前未保存内容与对应恢复日志。"
+                            }
+                        )
+                    },
+                    confirmButton = {
+                        Button(onClick = {
+                            destructiveWorkspaceAction = null
+                            when (action) {
+                                DestructiveWorkspaceAction.OPEN_ASS -> onOpenSubtitle()
+                                DestructiveWorkspaceAction.NEW_ASS -> viewModel.newSubtitleProject()
+                            }
+                        }) { Text("放弃修改并继续") }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { destructiveWorkspaceAction = null }) { Text("取消") }
                     },
                 )
             }
@@ -508,7 +561,7 @@ private fun ModernAppBar(
                         DropdownMenuItem(text = { Text("打开 / 更换参考视频") }, leadingIcon = { Icon(Icons.Filled.Movie, null) }, onClick = { onDismissMenu(); onOpenVideo() })
                         DropdownMenuItem(text = { Text("打开 MKV 工程") }, leadingIcon = { Icon(Icons.Filled.VideoFile, null) }, onClick = { onDismissMenu(); onOpenMkvProject() })
                         Divider()
-                        DropdownMenuItem(text = { Text("新建空白 ASS") }, leadingIcon = { Icon(Icons.Filled.Add, null) }, onClick = { onDismissMenu(); viewModel.newSubtitleProject() })
+                        DropdownMenuItem(text = { Text("新建空白 ASS") }, leadingIcon = { Icon(Icons.Filled.Add, null) }, onClick = { onDismissMenu(); onNewSubtitle() })
                         DropdownMenuItem(text = { Text("导入字体") }, leadingIcon = { Icon(Icons.Filled.FontDownload, null) }, onClick = { onDismissMenu(); onImportFont() })
                     }
                 }
@@ -3419,7 +3472,10 @@ private fun ProjectPane(state: EditorState, viewModel: EditorViewModel, onSaveMk
         Text(if (state.container.uri != null) "MKV 工程" else "独立 ASS 工程", style = MaterialTheme.typography.titleSmall)
         Text(state.project.title)
         Text("PlayRes ${state.document.playResX}×${state.document.playResY} · ${state.document.styles.size} Style · ${state.document.events.size} Event", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        if (state.container.uri != null) { Divider(); ContainerBridgePanel(state.container, viewModel, onSaveMkv) }
+        if (state.container.uri != null) {
+            Divider()
+            ContainerBridgePanel(state.container, viewModel, onSaveMkv, dirty = state.dirty)
+        }
         else Text(if (state.project.videoUri == null) "未附加参考视频" else "已附加参考视频", color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }

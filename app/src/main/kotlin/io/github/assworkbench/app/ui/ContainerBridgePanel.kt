@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Text
@@ -25,10 +26,12 @@ fun ContainerBridgePanel(
     state: ContainerBridgeState,
     viewModel: EditorViewModel,
     onSaveMkv: () -> Unit,
+    dirty: Boolean,
     modifier: Modifier = Modifier,
 ) {
     if (state.uri == null) return
     var menuOpen by remember { mutableStateOf(false) }
+    var pendingTrackNumber by remember { mutableStateOf<Long?>(null) }
     Column(
         modifier.fillMaxWidth().padding(vertical = WorkbenchDimens.Micro),
         verticalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro),
@@ -69,7 +72,12 @@ fun ContainerBridgePanel(
                                     },
                                     onClick = {
                                         menuOpen = false
-                                        viewModel.selectContainerTrack(track.number)
+                                        if (track.number == state.selectedTrackNumber) return@DropdownMenuItem
+                                        if (dirty) {
+                                            pendingTrackNumber = track.number
+                                        } else {
+                                            viewModel.selectContainerTrack(track.number)
+                                        }
                                     },
                                 )
                             }
@@ -95,6 +103,29 @@ fun ContainerBridgePanel(
                     }
                     Text("写回会替换所选 ASS 轨并保留视频、音频及附件；源 MKV 不会被原地修改。")
                 }
+            }
+
+            pendingTrackNumber?.let { trackNumber ->
+                val target = state.tracks.firstOrNull { it.number == trackNumber }
+                AlertDialog(
+                    onDismissRequest = { pendingTrackNumber = null },
+                    title = { Text("放弃当前轨的未保存修改？") },
+                    text = {
+                        Text(
+                            "切换到 " + (target?.name ?: "Track #$trackNumber") +
+                                " 会丢弃当前 ASS 轨尚未保存的修改与对应恢复日志。"
+                        )
+                    },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            pendingTrackNumber = null
+                            viewModel.selectContainerTrack(trackNumber, discardUnsaved = true)
+                        }) { Text("放弃修改并切换") }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { pendingTrackNumber = null }) { Text("取消") }
+                    },
+                )
             }
         }
 }

@@ -292,8 +292,21 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    fun selectContainerTrack(trackNumber: Long) {
+    fun selectContainerTrack(trackNumber: Long, discardUnsaved: Boolean = false) {
         val current = _state.value
+        if (
+            current.container.selectedTrackNumber == trackNumber &&
+            current.subtitleLoaded
+        ) {
+            _state.update { it.copy(status = "当前已经是所选 ASS 轨。") }
+            return
+        }
+        if (current.dirty && !discardUnsaved) {
+            _state.update {
+                it.copy(status = "当前 ASS 轨有未保存修改；需明确放弃后才能切换轨道。")
+            }
+            return
+        }
         if (current.container.writeBackBusy) {
             _state.update { it.copy(status = "MKV 写回进行中；完成后才能切换字幕轨。") }
             return

@@ -147,7 +147,7 @@ Status values: **AUTO** = current automated coverage exists; **ADD** = add autom
 | R1 | Raw ASS | unknown section + one Event edit + save/reopen | opaque section remains | AUTO |
 | R2 | Raw ASS | custom Style/Event Format columns + edit | columns and values remain | AUTO |
 | R3 | Encoding | UTF-8 BOM / UTF-16LE standalone ASS save | original detected encoding retained | AUTO |
-| R4 | Raw draft | unsaved Event text while another canonical edit occurs | draft not silently overwritten; conflict visible | ADD |
+| R4 | Raw draft | unsaved Event/project state while opening/replacing workspace | replacement requires explicit discard; Event-level draft conflict remains separately testable | UI guarded + ADD |
 | R5 | Raw/native | extreme rotation/shear/position/scale literals | project remains editable; preview policy is safe and explicit | AUTO + DEVICE |
 | R6 | Drawing/native | extreme `\\p` / vector-clip coordinates | no silent rewrite; native failure does not destroy project data | AUTO + DEVICE |
 | R7 | Drawing/native | very large Drawing / vector-clip token stream | bounded preview behaviour; project state survives | AUTO + DEVICE |
@@ -194,6 +194,8 @@ Current race-hardening state:
 - success/failure callbacks are bound to the exact workspace epoch + container URI + track; reopening the same URI later does not let an old save mutate the new session.
 - recovery read/write/clear operations are serialized, and recovery restore explicitly drops current container/MKV-font state instead of inheriting an unrelated container.
 - recovered ASS remains editable/saveable; container write-back must be re-established explicitly after recovery.
+- destructive workspace replacement is now explicit in the UI: dirty ASS → open another ASS, dirty ASS → new project, and dirty MKV track → another track all require a discard confirmation.
+- the ViewModel also refuses an unconfirmed dirty MKV track switch, so UI mistakes cannot silently reset the canonical document.
 
 - native renderer crash/OOM exposure from hostile/extreme Raw ASS;
 - MKV write-back preservation and font-package collision semantics;
