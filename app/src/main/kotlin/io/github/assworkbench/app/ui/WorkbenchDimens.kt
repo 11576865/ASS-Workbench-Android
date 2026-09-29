@@ -24,4 +24,7 @@ internal object WorkbenchDimens {
 
     val CompactWidth = 600.dp
     val ExpandedWidth = 840.dp
+
+    val PreviewMaxWidth = 568.dp
+    val PrecisionEditorMinWidth = 288.dp
 }

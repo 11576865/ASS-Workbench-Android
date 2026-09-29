@@ -49,6 +49,31 @@ private enum class WorkbenchTool(val title: String) {
     FONTS("字体"), QC("质量检查"), BATCH("批量"), PROJECT("项目"), DIAGNOSTICS("诊断"),
 }
 
+private enum class PreviewPriority(val landscapeFraction: Float) {
+    LOW(0.50f),
+    NORMAL(0.56f),
+    HIGH(0.62f),
+}
+
+private fun previewPriorityFor(tool: WorkbenchTool, supportingOpen: Boolean): PreviewPriority {
+    if (!supportingOpen) return PreviewPriority.NORMAL
+    return when (tool) {
+        WorkbenchTool.STYLE,
+        WorkbenchTool.POSITION,
+        WorkbenchTool.FONTS,
+        -> PreviewPriority.HIGH
+
+        WorkbenchTool.TIMELINE,
+        WorkbenchTool.QC,
+        -> PreviewPriority.NORMAL
+
+        WorkbenchTool.BATCH,
+        WorkbenchTool.PROJECT,
+        WorkbenchTool.DIAGNOSTICS,
+        -> PreviewPriority.LOW
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ModernEditorScreen(
@@ -174,14 +199,25 @@ fun ModernEditorScreen(
 
             BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
                 val landscape = maxWidth > maxHeight && maxWidth >= WorkbenchDimens.CompactWidth
+                val previewPriority = previewPriorityFor(tool, supportingOpen)
+                val boundedPreviewWidth = minOf(maxWidth, WorkbenchDimens.PreviewMaxWidth)
 
                 if (landscape) {
+                    val maxPreviewByEditor = (maxWidth - WorkbenchDimens.PrecisionEditorMinWidth)
+                        .coerceAtLeast(0.dp)
+                    val previewWidth = minOf(
+                        maxWidth * previewPriority.landscapeFraction,
+                        WorkbenchDimens.PreviewMaxWidth,
+                        maxPreviewByEditor,
+                    )
+
                     Row(Modifier.fillMaxSize()) {
-                        Column(
+                        Box(
                             Modifier
-                                .weight(0.58f)
+                                .width(previewWidth)
                                 .fillMaxHeight()
                                 .background(Color.Black),
+                            contentAlignment = Alignment.TopCenter,
                         ) {
                             WorkbenchPreview(
                                 state = state,
@@ -189,11 +225,11 @@ fun ModernEditorScreen(
                                 positionEditing = supportingOpen && tool == WorkbenchTool.POSITION,
                                 onOpenVideo = onOpenReferenceVideo,
                                 onOpenTimeline = { toggleTool(WorkbenchTool.TIMELINE) },
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier = Modifier.width(previewWidth),
                             )
                         }
                         VerticalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                        Column(Modifier.weight(0.42f).fillMaxHeight()) {
+                        Column(Modifier.weight(1f).fillMaxHeight()) {
                             if (searchOpen) {
                                 SearchStrip(state.query, viewModel::setQuery) {
                                     viewModel.setQuery("")
@@ -220,14 +256,19 @@ fun ModernEditorScreen(
                     }
                 } else {
                     Column(Modifier.fillMaxSize()) {
-                        WorkbenchPreview(
-                            state = state,
-                            viewModel = viewModel,
-                            positionEditing = supportingOpen && tool == WorkbenchTool.POSITION,
-                            onOpenVideo = onOpenReferenceVideo,
-                            onOpenTimeline = { toggleTool(WorkbenchTool.TIMELINE) },
-                            modifier = Modifier.fillMaxWidth(),
-                        )
+                        Box(
+                            Modifier.fillMaxWidth().background(Color.Black),
+                            contentAlignment = Alignment.TopCenter,
+                        ) {
+                            WorkbenchPreview(
+                                state = state,
+                                viewModel = viewModel,
+                                positionEditing = supportingOpen && tool == WorkbenchTool.POSITION,
+                                onOpenVideo = onOpenReferenceVideo,
+                                onOpenTimeline = { toggleTool(WorkbenchTool.TIMELINE) },
+                                modifier = Modifier.width(boundedPreviewWidth),
+                            )
+                        }
 
                         if (searchOpen) {
                             SearchStrip(state.query, viewModel::setQuery) {

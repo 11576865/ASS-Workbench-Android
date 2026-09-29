@@ -159,6 +159,17 @@ Owns rules and diagnostics, not editing surfaces.
 
 A QC finding may deep-link into the relevant owner.
 
+## Responsive preview policy
+
+0.26 treats portrait as the primary workflow layout and landscape as the precision visual layout; both expose the same capabilities.
+
+- portrait keeps the 16:9 preview full-width on phones, but caps permanent preview width at 568dp on larger windows (~320dp video height);
+- landscape keeps Preview and the current owner side-by-side;
+- landscape Preview share is contextual rather than fixed: low-priority tools target 50%, normal tools 56%, and visual tools such as Style / Position / Fonts 62%;
+- the editor side keeps at least 288dp where the window allows it;
+- permanent Preview growth stops around the ~320dp video-height boundary; finer inspection should use a temporary precision/fullscreen zoom rather than permanently consuming editor space;
+- capability ownership does not change with orientation.
+
 ## Capability phases
 
 ### Phase A — Visual control foundation
