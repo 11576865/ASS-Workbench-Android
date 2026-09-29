@@ -133,6 +133,26 @@ class AssDocumentEditingTest {
         assertEquals(62, target.marginV)
         assertEquals("{\\fs56}{\\bord6}第二句", target.text)
     }
+    @Test
+    fun copyFormattingPreservesTargetCommentsAndDoesNotCopySourceComments() {
+        val source = doc().copy(events = listOf(
+            doc().events[0].copy(id = 1, text = "{source note}{\\fs56}Hello"),
+            doc().events[1].copy(id = 2, text = "{target note}{\\bord2}Second"),
+        ))
+        val result = AssDocumentEditing.copyEventFormatting(source, 1, setOf(2))
+        assertEquals("{\\fs56}{target note}Second", result.events.first { it.id == 2L }.text)
+    }
+
+    @Test
+    fun splitCarriesLeadingOverridesButNotLeadingCommentsToSecondEvent() {
+        val source = doc().copy(events = listOf(
+            doc().events[0].copy(id = 1, text = "{source note}{\\fs56}HelloWorld"),
+        ))
+        val splitIndex = source.events.single().text.indexOf("World")
+        val result = AssDocumentEditing.splitEvent(source, 1, 2_500, splitIndex)
+        assertEquals("{source note}{\\fs56}Hello", result.document.events[0].text)
+        assertEquals("{\\fs56}World", result.document.events[1].text)
+    }
 
     @Test
     fun renameStyleUpdatesAllEventReferences() {

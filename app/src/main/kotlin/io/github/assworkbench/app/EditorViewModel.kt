@@ -59,6 +59,12 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     )
     val state: StateFlow<EditorState> = _state.asStateFlow()
 
+    private fun clearPendingRecovery(clearStored: Boolean = true) {
+        recoveryJob?.cancel()
+        recoveryJob = null
+        if (clearStored) recoveryStore.clear()
+    }
+
     init {
         StartupProbe.stage(application, "viewmodel_initial_refresh") {
             refreshFonts(initial = true)
@@ -67,6 +73,8 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun newSubtitleProject() {
+        clearPendingRecovery()
+        containerScan = null
         fontStore.clearProjectFonts(refresh = false)
         val document = AssDocument()
         history.reset(document)
@@ -97,8 +105,8 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         // MKV is a separate project workflow. The picker callback reaches here only
         // after the user actually chose a file, so cancelling the picker preserves
         // the current workspace.
+        clearPendingRecovery()
         fontStore.clearProjectFonts(refresh = false)
-        recoveryStore.clear()
         containerScan = null
         val blank = AssDocument()
         history.reset(blank)
@@ -189,6 +197,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     fun selectContainerTrack(trackNumber: Long) {
         val scan = containerScan ?: return
         val track = scan.subtitleTracks.firstOrNull { it.number == trackNumber } ?: return
+        clearPendingRecovery()
         val document = AssCodec.parse(track.toAss())
         history.reset(document)
         _state.update {
@@ -199,6 +208,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 subtitleLoaded = true,
                 subtitleTextEncoding = AssTextEncoding.UTF8,
                 selectedEventIds = emptySet(),
+                selectionAnchorId = null,
                 focusedEventId = document.events.firstOrNull()?.id,
                 dirty = false,
                 canUndo = false,
@@ -245,7 +255,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                     } ?: error("无法重新读取源 MKV")
 
                     val editedAss = File(work, "edited.ass")
-                    editedAss.writeText(AssCodec.write(_state.value.document), Charsets.UTF_8)
+                    editedAss.writeText(AssCodec.write(snapshot.document), Charsets.UTF_8)
                     val result = File(work, "updated.mkv")
 
                     mkvGoTool.replaceAss(
@@ -261,11 +271,21 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                     result.length()
                 }
             }.onSuccess { bytes ->
-                _state.update {
-                    it.copy(
-                        dirty = false,
-                        container = it.container.copy(writeBackBusy = false),
-                        status = "新 MKV 已保存；视频/音频未重新编码，原 ASS 轨身份与顺序保持，输出 " + (bytes / (1024 * 1024)) + " MiB。",
+                val current = _state.value
+                val sameProject = current.container.uri == snapshot.container.uri &&
+                    current.container.selectedTrackNumber == snapshot.container.selectedTrackNumber
+                if (!sameProject) return@onSuccess
+                val unchangedSinceSaveStarted = current.document == snapshot.document
+                if (unchangedSinceSaveStarted) clearPendingRecovery()
+                _state.update { state ->
+                    state.copy(
+                        dirty = if (unchangedSinceSaveStarted) false else state.dirty,
+                        container = state.container.copy(writeBackBusy = false),
+                        recoveryAvailable = if (unchangedSinceSaveStarted) false else state.recoveryAvailable,
+                        recoveryLabel = if (unchangedSinceSaveStarted) "" else state.recoveryLabel,
+                        status = "新 MKV 已保存；视频/音频未重新编码，原 ASS 轨身份与顺序保持，输出 " +
+                            (bytes / (1024 * 1024)) + " MiB。" +
+                            if (unchangedSinceSaveStarted) "" else " · 保存期间出现新编辑，当前工程仍未保存。",
                     )
                 }
             }.onFailure { error ->
@@ -307,6 +327,8 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun openSubtitle(uri: Uri) {
+        clearPendingRecovery()
+        containerScan = null
         fontStore.clearProjectFonts(refresh = false)
         val bytes = app.contentResolver.openInputStream(uri)?.use { it.readBytes() }
             ?: error("无法读取字幕")
@@ -321,6 +343,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 subtitleLoaded = true,
                 subtitleTextEncoding = decoded.encoding,
                 selectedEventIds = emptySet(),
+                selectionAnchorId = null,
                 focusedEventId = document.events.firstOrNull()?.id,
                 dirty = false,
                 canUndo = false,
@@ -393,7 +416,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         val bytes = snapshot.subtitleTextEncoding.encode(text)
         app.contentResolver.openOutputStream(uri, "wt")?.use { it.write(bytes) }
             ?: error("无法写入字幕")
-        recoveryStore.clear()
+        clearPendingRecovery()
         _state.update {
             it.copy(
                 project = it.project.copy(subtitleUri = uri.toString()),
@@ -1165,17 +1188,20 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun shiftSelected(deltaMs: Long) {
-        val ids = _state.value.selectedEventIds
+        val snapshot = _state.value
+        val ids = snapshot.selectedEventIds
         if (ids.isEmpty() || deltaMs == 0L) return
-        editDocument("已将 " + ids.size + " 条字幕平移 " + deltaMs + " ms。") { doc ->
+        val earliest = snapshot.document.events.asSequence()
+            .filter { it.id in ids }
+            .minOfOrNull { it.start.millis } ?: return
+        val effectiveDelta = deltaMs.coerceAtLeast(-earliest)
+        if (effectiveDelta == 0L) return
+        editDocument("已将 " + ids.size + " 条字幕平移 " + effectiveDelta + " ms。") { doc ->
             doc.copy(events = doc.events.map { event ->
-                if (event.id !in ids) {
-                    event
-                } else {
-                    val duration = event.end.millis - event.start.millis
-                    val newStart = (event.start.millis + deltaMs).coerceAtLeast(0L)
-                    event.copy(start = SubTime(newStart), end = SubTime(newStart + duration))
-                }
+                if (event.id !in ids) event else event.copy(
+                    start = SubTime(event.start.millis + effectiveDelta),
+                    end = SubTime(event.end.millis + effectiveDelta),
+                )
             })
         }
     }
@@ -1707,7 +1733,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun discardRecovery() {
-        recoveryStore.clear()
+        clearPendingRecovery()
         _state.update { it.copy(recoveryAvailable = false, recoveryLabel = "", status = "已丢弃恢复日志。") }
     }
 
@@ -1754,10 +1780,21 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     private fun publishDocument(document: AssDocument, status: String, dirty: Boolean = true) {
-        _state.update {
-            it.copy(
+        _state.update { state ->
+            val validIds = document.events.mapTo(hashSetOf()) { event -> event.id }
+            val selected = state.selectedEventIds.filterTo(linkedSetOf()) { id -> id in validIds }
+            val focused = when {
+                state.focusedEventId == null -> null
+                state.focusedEventId in validIds -> state.focusedEventId
+                selected.isNotEmpty() -> selected.first()
+                else -> document.events.firstOrNull()?.id
+            }
+            state.copy(
                 document = document,
                 previewDocument = null,
+                selectedEventIds = selected,
+                selectionAnchorId = state.selectionAnchorId?.takeIf { it in validIds },
+                focusedEventId = focused,
                 dirty = dirty,
                 canUndo = history.canUndo,
                 canRedo = history.canRedo,
@@ -1770,15 +1807,17 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
 
     private fun scheduleRecovery(document: AssDocument) {
         recoveryJob?.cancel()
+        val snapshot = _state.value
+        val project = snapshot.project
+        val textEncoding = snapshot.subtitleTextEncoding
         recoveryJob = viewModelScope.launch {
             delay(450)
-            val project = _state.value.project
-            val textEncoding = _state.value.subtitleTextEncoding
             withContext(Dispatchers.IO) {
                 recoveryStore.write(project, document, textEncoding)
             }
-            _state.update {
-                it.copy(recoveryAvailable = true, recoveryLabel = project.title)
+            _state.update { state ->
+                if (state.project != project || state.document != document) state
+                else state.copy(recoveryAvailable = true, recoveryLabel = project.title)
             }
         }
     }

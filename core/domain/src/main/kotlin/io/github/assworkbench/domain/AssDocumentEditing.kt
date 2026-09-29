@@ -273,7 +273,8 @@ object AssDocumentEditing {
         while (cursor < text.length && text[cursor] == '{') {
             val close = text.indexOf('}', cursor + 1)
             if (close < 0) break
-            out.append(text, cursor, close + 1)
+            val block = text.substring(cursor, close + 1)
+            if (block.indexOf('\\') >= 0) out.append(block)
             cursor = close + 1
         }
         return out.toString()
@@ -281,11 +282,14 @@ object AssDocumentEditing {
 
     private fun stripLeadingOverridePrefix(text: String): String {
         var cursor = 0
+        val preservedComments = StringBuilder()
         while (cursor < text.length && text[cursor] == '{') {
             val close = text.indexOf('}', cursor + 1)
             if (close < 0) break
+            val block = text.substring(cursor, close + 1)
+            if (block.indexOf('\\') < 0) preservedComments.append(block)
             cursor = close + 1
         }
-        return text.substring(cursor)
+        return preservedComments.append(text.substring(cursor)).toString()
     }
 }
