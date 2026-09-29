@@ -70,6 +70,24 @@ class AssGeometrySemanticTest {
         assertNull(AssGeometrySemantic.inspect(output).origin)
     }
     @Test
+    fun scalePatchPreservesUnknownNeighborsAndNestedTransform() {
+        val source = "{\\fscx80\\t(0,500,\\fscx140\\fscy60)\\x-custom(foo)\\fscy90}Text"
+        val output = AssGeometrySemantic.patchScale(source, 125.0, 75.0)
+        assertEquals("{\\fscx125\\t(0,500,\\fscx140\\fscy60)\\x-custom(foo)\\fscy75}Text", output)
+        val snapshot = AssGeometrySemantic.inspect(output)
+        assertEquals(125.0, snapshot.scaleX)
+        assertEquals(75.0, snapshot.scaleY)
+    }
+
+    @Test
+    fun removingScaleKeepsTransformPayloadAndOtherTopLevelTags() {
+        val source = "{\\bord2\\fscx120\\t(0,500,\\fscx150)\\fscy80\\x-custom(foo)}Text"
+        val output = AssGeometrySemantic.removeScale(source)
+        assertEquals("{\\bord2\\t(0,500,\\fscx150)\\x-custom(foo)}Text", output)
+        assertNull(AssGeometrySemantic.inspect(output).scaleX)
+        assertNull(AssGeometrySemantic.inspect(output).scaleY)
+    }
+    @Test
     fun removingRotationPreservesNestedTransformAndUnknownTags() {
         val source = "{\\fr10\\t(0,500,\\frz30)\\x-custom(foo)\\frz20}Text"
         val output = AssGeometrySemantic.removeRotationZ(source)

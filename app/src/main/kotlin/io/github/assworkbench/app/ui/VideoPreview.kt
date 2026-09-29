@@ -96,6 +96,9 @@ fun VideoPreview(
     onSetEventOrigin: (Double, Double) -> Unit,
     onPreviewEventRotation: (Double) -> Unit,
     onSetEventRotation: (Double) -> Unit,
+    scaleLocked: Boolean,
+    onPreviewEventScale: (Double, Double) -> Unit,
+    onSetEventScale: (Double, Double) -> Unit,
     onCancelEventPositionPreview: () -> Unit,
     onFocusEvent: (Long) -> Unit,
     onSetEventTiming: (Long, Long, Long) -> Unit,
@@ -150,6 +153,9 @@ fun VideoPreview(
             onSetEventOrigin = onSetEventOrigin,
             onPreviewEventRotation = onPreviewEventRotation,
             onSetEventRotation = onSetEventRotation,
+            scaleLocked = scaleLocked,
+            onPreviewEventScale = onPreviewEventScale,
+            onSetEventScale = onSetEventScale,
             onCancelEventPositionPreview = onCancelEventPositionPreview,
             onFocusEvent = onFocusEvent,
             onSetEventTiming = onSetEventTiming,
@@ -436,6 +442,9 @@ private fun AuthoritativeMpvPreview(
     onSetEventOrigin: (Double, Double) -> Unit,
     onPreviewEventRotation: (Double) -> Unit,
     onSetEventRotation: (Double) -> Unit,
+    scaleLocked: Boolean,
+    onPreviewEventScale: (Double, Double) -> Unit,
+    onSetEventScale: (Double, Double) -> Unit,
     onCancelEventPositionPreview: () -> Unit,
     onFocusEvent: (Long) -> Unit,
     onSetEventTiming: (Long, Long, Long) -> Unit,
@@ -618,6 +627,9 @@ private fun AuthoritativeMpvPreview(
                         onCommitOrigin = onSetEventOrigin,
                         onPreviewRotation = onPreviewEventRotation,
                         onCommitRotation = onSetEventRotation,
+                        scaleLocked = scaleLocked,
+                        onPreviewScale = onPreviewEventScale,
+                        onCommitScale = onSetEventScale,
                         onCancel = onCancelEventPositionPreview,
                         modifier = Modifier.fillMaxSize(),
                     )
@@ -658,6 +670,9 @@ private fun PositionDragOverlay(
     onCommitOrigin: (Double, Double) -> Unit,
     onPreviewRotation: (Double) -> Unit,
     onCommitRotation: (Double) -> Unit,
+    scaleLocked: Boolean,
+    onPreviewScale: (Double, Double) -> Unit,
+    onCommitScale: (Double, Double) -> Unit,
     onCancel: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -691,6 +706,10 @@ private fun PositionDragOverlay(
     var originY by remember(event.id, event.text) { mutableStateOf(geometry.origin?.y) }
     var directRotation by remember(event.id, event.text) { mutableStateOf<Double?>(null) }
     val displayRotation = directRotation ?: renderGeometry.rotationZ ?: style?.angle ?: 0.0
+    var directScaleX by remember(event.id, event.text) { mutableStateOf<Double?>(null) }
+    var directScaleY by remember(event.id, event.text) { mutableStateOf<Double?>(null) }
+    val displayScaleX = directScaleX ?: renderGeometry.scaleX ?: style?.scaleX ?: 100.0
+    val displayScaleY = directScaleY ?: renderGeometry.scaleY ?: style?.scaleY ?: 100.0
     val guideColor = MaterialTheme.colorScheme.tertiary
 
     if (geometry.positionMode == AssPositionMode.CONFLICT) {
@@ -948,9 +967,11 @@ private fun PositionDragOverlay(
     }
 
     BoxWithConstraints(
-        modifier.pointerInput(event.id, document.playResX, document.playResY) {
-            var activeHandle = 0 // 1=position, 2=origin, 3=rotation
+        modifier.pointerInput(event.id, document.playResX, document.playResY, scaleLocked) {
+            var activeHandle = 0 // 1=position, 2=origin, 3=rotation, 4=scale
             var lastPreviewAt = 0L
+            var scaleStartX = displayScaleX
+            var scaleStartY = displayScaleY
             detectDragGestures(
                 onDragStart = { start ->
                     fun distanceTo(px: Double, py: Double): Double {
@@ -972,12 +993,31 @@ private fun PositionDragOverlay(
                     val handleDx = start.x - handleX.toFloat()
                     val handleDy = start.y - handleY.toFloat()
                     val rotationDistance = kotlin.math.sqrt((handleDx * handleDx + handleDy * handleDy).toDouble())
+                    val rotationRadians = Math.toRadians(displayRotation)
+                    val sourceDx = x - (originX ?: x)
+                    val sourceDy = y - (originY ?: y)
+                    val scaleAnchorAssX = if (originX != null) originX!! + kotlin.math.cos(rotationRadians) * sourceDx - kotlin.math.sin(rotationRadians) * sourceDy else x
+                    val scaleAnchorAssY = if (originY != null) originY!! + kotlin.math.sin(rotationRadians) * sourceDx + kotlin.math.cos(rotationRadians) * sourceDy else y
+                    val scaleAnchorPx = (scaleAnchorAssX / document.playResX.coerceAtLeast(1)) * size.width
+                    val scaleAnchorPy = (scaleAnchorAssY / document.playResY.coerceAtLeast(1)) * size.height
+                    val localScaleX = 70.dp.toPx() * (displayScaleX / 100.0)
+                    val localScaleY = -40.dp.toPx() * (displayScaleY / 100.0)
+                    val scaleHandleX = scaleAnchorPx + kotlin.math.cos(rotationRadians) * localScaleX - kotlin.math.sin(rotationRadians) * localScaleY
+                    val scaleHandleY = scaleAnchorPy + kotlin.math.sin(rotationRadians) * localScaleX + kotlin.math.cos(rotationRadians) * localScaleY
+                    val scaleDx = start.x - scaleHandleX.toFloat()
+                    val scaleDy = start.y - scaleHandleY.toFloat()
+                    val scaleDistance = kotlin.math.sqrt((scaleDx * scaleDx + scaleDy * scaleDy).toDouble())
                     val threshold = 36.dp.toPx().toDouble()
                     activeHandle = when {
+                        scaleDistance <= threshold -> 4
                         rotationDistance <= threshold -> 3
                         originDistance <= threshold && originDistance <= positionDistance -> 2
                         positionDistance <= threshold -> 1
                         else -> 0
+                    }
+                    if (activeHandle == 4) {
+                        scaleStartX = displayScaleX.coerceAtLeast(1.0)
+                        scaleStartY = displayScaleY.coerceAtLeast(1.0)
                     }
                 },
                 onDrag = { change, _ ->
@@ -1011,13 +1051,37 @@ private fun PositionDragOverlay(
                         } else if (activeHandle == 2) {
                             originX = nx.toDouble()
                             originY = ny.toDouble()
-                        } else {
+                        } else if (activeHandle == 3) {
                             val pivotX = originX ?: x
                             val pivotY = originY ?: y
                             val pivotPx = (pivotX / document.playResX.coerceAtLeast(1)) * size.width
                             val pivotPy = (pivotY / document.playResY.coerceAtLeast(1)) * size.height
                             val rawAngle = Math.toDegrees(kotlin.math.atan2((change.position.y - pivotPy).toDouble(), (change.position.x - pivotPx).toDouble())) + 90.0
                             directRotation = ((rawAngle + 180.0) % 360.0 + 360.0) % 360.0 - 180.0
+                        } else {
+                            val rotationRadians = Math.toRadians(displayRotation)
+                            val sourceDx = x - (originX ?: x)
+                            val sourceDy = y - (originY ?: y)
+                            val scaleAnchorAssX = if (originX != null) originX!! + kotlin.math.cos(rotationRadians) * sourceDx - kotlin.math.sin(rotationRadians) * sourceDy else x
+                            val scaleAnchorAssY = if (originY != null) originY!! + kotlin.math.sin(rotationRadians) * sourceDx + kotlin.math.cos(rotationRadians) * sourceDy else y
+                            val anchorPx = (scaleAnchorAssX / document.playResX.coerceAtLeast(1)) * size.width
+                            val anchorPy = (scaleAnchorAssY / document.playResY.coerceAtLeast(1)) * size.height
+                            val worldDx = change.position.x - anchorPx.toFloat()
+                            val worldDy = change.position.y - anchorPy.toFloat()
+                            val localX = kotlin.math.cos(rotationRadians) * worldDx + kotlin.math.sin(rotationRadians) * worldDy
+                            val localY = -kotlin.math.sin(rotationRadians) * worldDx + kotlin.math.cos(rotationRadians) * worldDy
+                            val rawScaleX = (kotlin.math.abs(localX) / 70.dp.toPx() * 100.0).coerceIn(1.0, 1000.0)
+                            val rawScaleY = (kotlin.math.abs(localY) / 40.dp.toPx() * 100.0).coerceIn(1.0, 1000.0)
+                            if (scaleLocked) {
+                                val factorX = rawScaleX / scaleStartX.coerceAtLeast(1.0)
+                                val factorY = rawScaleY / scaleStartY.coerceAtLeast(1.0)
+                                val factor = ((factorX + factorY) / 2.0).coerceIn(0.01, 10.0)
+                                directScaleX = (scaleStartX * factor).coerceIn(1.0, 1000.0)
+                                directScaleY = (scaleStartY * factor).coerceIn(1.0, 1000.0)
+                            } else {
+                                directScaleX = rawScaleX
+                                directScaleY = rawScaleY
+                            }
                         }
                         val now = android.os.SystemClock.uptimeMillis()
                         if (now - lastPreviewAt >= 80L) {
@@ -1026,6 +1090,7 @@ private fun PositionDragOverlay(
                                 1 -> onPreview(x, y)
                                 2 -> onPreviewOrigin(originX!!, originY!!)
                                 3 -> onPreviewRotation(directRotation!!)
+                                4 -> onPreviewScale(directScaleX!!, directScaleY!!)
                             }
                         }
                     }
@@ -1035,13 +1100,18 @@ private fun PositionDragOverlay(
                         1 -> onCommit(x, y)
                         2 -> onCommitOrigin(originX!!, originY!!)
                         3 -> directRotation?.let(onCommitRotation)
+                        4 -> if (directScaleX != null && directScaleY != null) onCommitScale(directScaleX!!, directScaleY!!)
                     }
                     directRotation = null
+                    directScaleX = null
+                    directScaleY = null
                     activeHandle = 0
                 },
                 onDragCancel = {
                     onCancel()
                     directRotation = null
+                    directScaleX = null
+                    directScaleY = null
                     activeHandle = 0
                 },
             )
@@ -1089,9 +1159,33 @@ private fun PositionDragOverlay(
             )
             drawLine(guideColor.copy(alpha = 0.55f), pivot, rotationHandle, 1.5.dp.toPx())
             drawCircle(guideColor, 7.dp.toPx(), rotationHandle, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2.dp.toPx()))
+            val scaleRotation = Math.toRadians(displayRotation)
+            val sourceDx = x - (originX ?: x)
+            val sourceDy = y - (originY ?: y)
+            val scaleAnchorAssX = if (originX != null) originX!! + kotlin.math.cos(scaleRotation) * sourceDx - kotlin.math.sin(scaleRotation) * sourceDy else x
+            val scaleAnchorAssY = if (originY != null) originY!! + kotlin.math.sin(scaleRotation) * sourceDx + kotlin.math.cos(scaleRotation) * sourceDy else y
+            val scaleAnchor = androidx.compose.ui.geometry.Offset(
+                ((scaleAnchorAssX / document.playResX.coerceAtLeast(1)) * size.width).toFloat(),
+                ((scaleAnchorAssY / document.playResY.coerceAtLeast(1)) * size.height).toFloat(),
+            )
+            fun rotatedLocal(lx: Double, ly: Double): androidx.compose.ui.geometry.Offset =
+                scaleAnchor + androidx.compose.ui.geometry.Offset(
+                    (kotlin.math.cos(scaleRotation) * lx - kotlin.math.sin(scaleRotation) * ly).toFloat(),
+                    (kotlin.math.sin(scaleRotation) * lx + kotlin.math.cos(scaleRotation) * ly).toFloat(),
+                )
+            val scaleXLength = 70.dp.toPx() * (displayScaleX / 100.0)
+            val scaleYLength = -40.dp.toPx() * (displayScaleY / 100.0)
+            val scaleXPoint = rotatedLocal(scaleXLength, 0.0)
+            val scaleYPoint = rotatedLocal(0.0, scaleYLength)
+            val scaleCorner = rotatedLocal(scaleXLength, scaleYLength)
+            drawLine(guideColor.copy(alpha = 0.32f), scaleAnchor, scaleXPoint, 1.dp.toPx())
+            drawLine(guideColor.copy(alpha = 0.32f), scaleAnchor, scaleYPoint, 1.dp.toPx())
+            drawLine(guideColor.copy(alpha = 0.45f), scaleXPoint, scaleCorner, 1.dp.toPx())
+            drawLine(guideColor.copy(alpha = 0.45f), scaleYPoint, scaleCorner, 1.dp.toPx())
+            drawCircle(guideColor, 6.dp.toPx(), scaleCorner)
         }
         Text(
-            "pos ${x.toInt()},${y.toInt()}" + (if (originX != null) " · org ${originX!!.toInt()},${originY!!.toInt()}" else "") + " · rot ${displayRotation.toInt()}° · 拖控制点",
+            "pos ${x.toInt()},${y.toInt()}" + (if (originX != null) " · org ${originX!!.toInt()},${originY!!.toInt()}" else "") + " · rot ${displayRotation.toInt()}° · scale ${displayScaleX.toInt()}×${displayScaleY.toInt()}% · 拖控制点",
             modifier = Modifier
                 .align(Alignment.TopStart)
                 .background(Color.Black.copy(alpha = 0.55f))

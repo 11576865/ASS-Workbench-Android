@@ -179,6 +179,17 @@ object AssGeometrySemantic {
         name = "fscy",
         value = value,
     )
+    fun patchScale(text: String, scaleX: Double, scaleY: Double): String =
+        patchScaleY(
+            text = patchScaleX(text, scaleX),
+            value = scaleY,
+        )
+
+    fun removeScale(text: String): String = removeTags(
+        text = text,
+        scan = scanLeading(text),
+        names = setOf("fscx", "fscy"),
+    )
 
     private fun patchScalar(text: String, name: String, value: Double): String {
         val scan = scanLeading(text)

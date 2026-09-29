@@ -287,6 +287,9 @@ private fun WorkbenchPreview(
         onSetEventOrigin = viewModel::setFocusedOrigin,
         onPreviewEventRotation = viewModel::previewFocusedRotationZ,
         onSetEventRotation = viewModel::setFocusedRotationZ,
+        scaleLocked = state.geometryScaleLocked,
+        onPreviewEventScale = viewModel::previewFocusedScale,
+        onSetEventScale = viewModel::setFocusedScale,
         onCancelEventPositionPreview = viewModel::clearTransientPreview,
         onFocusEvent = { viewModel.focusEvent(it, seek = false) },
         onSetEventTiming = viewModel::setEventTiming,
@@ -1191,6 +1194,24 @@ private fun PositionPane(state: EditorState, viewModel: EditorViewModel, modifie
     }
     var rotationGestureActive by remember(event.id) { mutableStateOf(false) }
     var rotationDraftChanged by remember(event.id) { mutableStateOf(false) }
+    var rotationPreviewValue by remember(event.id, event.text, style?.angle) {
+        mutableStateOf(geometry.rotationZ ?: style?.angle ?: 0.0)
+    }
+    val effectiveScaleX = geometry.scaleX ?: style?.scaleX ?: 100.0
+    val effectiveScaleY = geometry.scaleY ?: style?.scaleY ?: 100.0
+    var scaleXText by remember(event.id, event.text, style?.scaleX) { mutableStateOf(effectiveScaleX.toString()) }
+    var scaleYText by remember(event.id, event.text, style?.scaleY) { mutableStateOf(effectiveScaleY.toString()) }
+    var scaleGestureActive by remember(event.id) { mutableStateOf(false) }
+    var scaleDraftChanged by remember(event.id) { mutableStateOf(false) }
+    var scalePreviewX by remember(event.id, event.text, style?.scaleX) { mutableStateOf(effectiveScaleX) }
+    var scalePreviewY by remember(event.id, event.text, style?.scaleY) { mutableStateOf(effectiveScaleY) }
+    val scaleRatioYPerX = remember(event.id, event.text, style?.scaleX, style?.scaleY) {
+        if (effectiveScaleX != 0.0) effectiveScaleY / effectiveScaleX else 1.0
+    }
+    fun formatScale(value: Double): String {
+        val rounded = kotlin.math.round(value * 100.0) / 100.0
+        return if (rounded % 1.0 == 0.0) rounded.toInt().toString() else rounded.toString()
+    }
     var styleAlignment by remember(style?.name, style?.alignment) { mutableIntStateOf(style?.alignment ?: 2) }
     var styleMarginL by remember(style?.name, style?.marginL) { mutableStateOf((style?.marginL ?: 0).toString()) }
     var styleMarginR by remember(style?.name, style?.marginR) { mutableStateOf((style?.marginR ?: 0).toString()) }
@@ -1203,6 +1224,17 @@ private fun PositionPane(state: EditorState, viewModel: EditorViewModel, modifie
         kotlinx.coroutines.delay(320)
         viewModel.setFocusedRotationZ(value)
         rotationDraftChanged = false
+    }
+    LaunchedEffect(event.id, scaleXText, scaleYText, scaleGestureActive, scaleDraftChanged) {
+        if (!scaleDraftChanged || scaleGestureActive) return@LaunchedEffect
+        val sx = scaleXText.toDoubleOrNull() ?: return@LaunchedEffect
+        val sy = scaleYText.toDoubleOrNull() ?: return@LaunchedEffect
+        scalePreviewX = sx
+        scalePreviewY = sy
+        viewModel.previewFocusedScale(sx, sy)
+        kotlinx.coroutines.delay(320)
+        viewModel.setFocusedScale(sx, sy)
+        scaleDraftChanged = false
     }
 
     DisposableEffect(event.id) {
@@ -1337,12 +1369,13 @@ private fun PositionPane(state: EditorState, viewModel: EditorViewModel, modifie
                     viewModel.clearFocusedRotationZ()
                 }) else null,
                 onPreview = { value ->
+                    rotationPreviewValue = value
                     viewModel.previewFocusedRotationZ(value)
                 },
                 onGestureActive = { active ->
                     rotationGestureActive = active
                     if (!active) {
-                        rotationText.toDoubleOrNull()?.let(viewModel::setFocusedRotationZ)
+                        viewModel.setFocusedRotationZ(rotationPreviewValue)
                         rotationDraftChanged = false
                     }
                 },
@@ -1352,6 +1385,102 @@ private fun PositionPane(state: EditorState, viewModel: EditorViewModel, modifie
                     "当前是 \\move 且没有显式 \\org：数值/Slider 可用，但画布旋转手柄暂不显示，因为默认旋转中心随运动位置变化。"
                 } else {
                     "画布上的旋转手柄围绕显式 \\org；没有 \\org 时，静态字幕围绕当前定位锚点。"
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        item { Divider() }
+        item {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("缩放 · \\fscx / \\fscy", style = MaterialTheme.typography.titleSmall)
+                    Text(
+                        "\\fs 是字号；\\fscx / \\fscy 是排版后的百分比缩放。100% 表示不额外缩放。",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                FilterChip(
+                    selected = state.geometryScaleLocked,
+                    onClick = { viewModel.setGeometryScaleLocked(!state.geometryScaleLocked) },
+                    label = { Text(if (state.geometryScaleLocked) "比例锁定" else "独立 X/Y") },
+                )
+            }
+            ContinuousParameterControl(
+                label = "Scale X",
+                valueText = scaleXText,
+                onValueTextChange = { raw ->
+                    scaleXText = raw
+                    raw.toDoubleOrNull()?.let { sx ->
+                        if (state.geometryScaleLocked) scaleYText = formatScale(sx * scaleRatioYPerX)
+                    }
+                    scaleDraftChanged = true
+                },
+                range = 10f..400f,
+                step = 1.0,
+                suffix = "%",
+                supportingText = if (geometry.scaleX != null) "Event override：${geometry.scaleX}%" else "继承 Style：${style?.scaleX ?: 100.0}%",
+                onPreview = { sx ->
+                    val sy = if (state.geometryScaleLocked) sx * scaleRatioYPerX else scaleYText.toDoubleOrNull() ?: effectiveScaleY
+                    if (state.geometryScaleLocked) scaleYText = formatScale(sy)
+                    scalePreviewX = sx
+                    scalePreviewY = sy
+                    viewModel.previewFocusedScale(sx, sy)
+                },
+                onGestureActive = { active ->
+                    scaleGestureActive = active
+                    if (!active) {
+                        viewModel.setFocusedScale(scalePreviewX, scalePreviewY)
+                        scaleDraftChanged = false
+                    }
+                },
+            )
+            ContinuousParameterControl(
+                label = "Scale Y",
+                valueText = scaleYText,
+                onValueTextChange = { raw ->
+                    scaleYText = raw
+                    raw.toDoubleOrNull()?.let { sy ->
+                        if (state.geometryScaleLocked && scaleRatioYPerX != 0.0) scaleXText = formatScale(sy / scaleRatioYPerX)
+                    }
+                    scaleDraftChanged = true
+                },
+                range = 10f..400f,
+                step = 1.0,
+                suffix = "%",
+                supportingText = if (geometry.scaleY != null) "Event override：${geometry.scaleY}%" else "继承 Style：${style?.scaleY ?: 100.0}%",
+                onPreview = { sy ->
+                    val sx = if (state.geometryScaleLocked && scaleRatioYPerX != 0.0) sy / scaleRatioYPerX else scaleXText.toDoubleOrNull() ?: effectiveScaleX
+                    if (state.geometryScaleLocked) scaleXText = formatScale(sx)
+                    scalePreviewX = sx
+                    scalePreviewY = sy
+                    viewModel.previewFocusedScale(sx, sy)
+                },
+                onGestureActive = { active ->
+                    scaleGestureActive = active
+                    if (!active) {
+                        viewModel.setFocusedScale(scalePreviewX, scalePreviewY)
+                        scaleDraftChanged = false
+                    }
+                },
+            )
+            if (geometry.scaleX != null || geometry.scaleY != null) {
+                TextButton(onClick = {
+                    scaleDraftChanged = false
+                    scaleGestureActive = false
+                    scaleXText = (style?.scaleX ?: 100.0).toString()
+                    scaleYText = (style?.scaleY ?: 100.0).toString()
+                    scalePreviewX = style?.scaleX ?: 100.0
+                    scalePreviewY = style?.scaleY ?: 100.0
+                    viewModel.clearFocusedScale()
+                }) { Text("继承 Style Scale") }
+            }
+            Text(
+                if (geometry.positionMode == AssPositionMode.MOVE || geometry.positionMode == AssPositionMode.CONFLICT) {
+                    "运动/冲突位置下仍可用数值与 Slider；画布 Scale gizmo 暂只用于静态位置，避免伪造随时间移动的锚点。"
+                } else {
+                    "画布上的 Scale gizmo 是参数控制框，不冒充 libass 的真实文字边界；拖右上角控制点可同时调 X/Y。"
                 },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,

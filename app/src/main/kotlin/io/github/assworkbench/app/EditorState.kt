@@ -12,6 +12,7 @@ data class EditorState(
     val project: SubtitleProject = SubtitleProject(),
     val document: AssDocument = AssDocument(),
     val previewDocument: AssDocument? = null,
+    val geometryScaleLocked: Boolean = true,
     val subtitleLoaded: Boolean = false,
     val subtitleTextEncoding: AssTextEncoding = AssTextEncoding.UTF8,
     val selectedEventIds: Set<Long> = emptySet(),

@@ -697,6 +697,52 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         })
     }
 
+    fun setGeometryScaleLocked(locked: Boolean) {
+        _state.update { it.copy(geometryScaleLocked = locked) }
+    }
+
+    fun previewFocusedScale(scaleX: Double, scaleY: Double) {
+        val state = _state.value
+        val id = state.focusedEventId ?: return
+        val preview = withEventScale(state.document, id, scaleX, scaleY)
+        _state.update { current ->
+            current.copy(previewDocument = if (preview == state.document) null else preview)
+        }
+    }
+
+    fun setFocusedScale(scaleX: Double, scaleY: Double) {
+        val id = _state.value.focusedEventId ?: return
+        editDocument("已更新当前字幕的 X / Y 缩放。") { doc ->
+            withEventScale(doc, id, scaleX, scaleY)
+        }
+    }
+
+    fun clearFocusedScale() {
+        val id = _state.value.focusedEventId ?: return
+        editDocument("已恢复当前字幕的 Style 缩放。") { doc ->
+            doc.copy(events = doc.events.map { event ->
+                if (event.id != id) event
+                else event.copy(text = AssGeometrySemantic.removeScale(event.text))
+            })
+        }
+    }
+
+    private fun withEventScale(
+        document: AssDocument,
+        id: Long,
+        scaleX: Double,
+        scaleY: Double,
+    ): AssDocument {
+        val event = document.events.firstOrNull { it.id == id } ?: return document
+        val sx = scaleX.coerceIn(1.0, 1000.0)
+        val sy = scaleY.coerceIn(1.0, 1000.0)
+        val patched = AssGeometrySemantic.patchScale(event.text, sx, sy)
+        if (patched == event.text) return document
+        return document.copy(events = document.events.map { candidate ->
+            if (candidate.id == id) candidate.copy(text = patched) else candidate
+        })
+    }
+
 
     fun setFocusedAlignment(alignment: Int) {
         val id = _state.value.focusedEventId ?: return
