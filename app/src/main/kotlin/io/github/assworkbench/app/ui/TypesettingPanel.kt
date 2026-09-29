@@ -68,7 +68,6 @@ fun TypesettingPanel(
     var angle by remember(style) { mutableStateOf(style.angle.toString()) }
     var borderStyle by remember(style) { mutableStateOf(style.borderStyle.toString()) }
     var encoding by remember(style) { mutableStateOf(style.encoding.toString()) }
-    var advancedOpen by remember { mutableStateOf(false) }
     var styleMenuOpen by remember { mutableStateOf(false) }
     var styleManageMode by remember { mutableStateOf<StyleManageMode?>(null) }
     var styleNameDraft by remember(style.name) { mutableStateOf(style.name) }
@@ -400,30 +399,26 @@ fun TypesettingPanel(
                 }
             }
             item {
-                TextButton(
-                    onClick = { advancedOpen = !advancedOpen },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(if (advancedOpen) "收起高级 Style 参数" else "高级 Style 参数")
-                }
-                if (advancedOpen) {
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            SmallField("Scale X %", scaleX, { scaleX = it }, Modifier.weight(1f))
-                            SmallField("Scale Y %", scaleY, { scaleY = it }, Modifier.weight(1f))
-                            SmallField("旋转 Z°", angle, { angle = it }, Modifier.weight(1f))
-                        }
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            SmallField("BorderStyle", borderStyle, { borderStyle = it }, Modifier.weight(1f))
-                            SmallField("Encoding", encoding, { encoding = it }, Modifier.weight(1f))
-                        }
-                        Text(
-                            "ASS 原生 Style 字段",
-                            style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
-                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                Text(
+                    "ASS Style 字段",
+                    style = androidx.compose.material3.MaterialTheme.typography.titleSmall,
+                )
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        SmallField("Scale X %", scaleX, { scaleX = it }, Modifier.weight(1f))
+                        SmallField("Scale Y %", scaleY, { scaleY = it }, Modifier.weight(1f))
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        SmallField("旋转 Z°", angle, { angle = it }, Modifier.weight(1f))
+                        SmallField("BorderStyle", borderStyle, { borderStyle = it }, Modifier.weight(1f))
+                        SmallField("Encoding", encoding, { encoding = it }, Modifier.weight(1f))
                     }
                 }
+                Text(
+                    "这些字段始终可见；是否使用取决于你对 ASS 的理解程度。",
+                    style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
+                    color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
             item {
                 Text("有效值来源", style = androidx.compose.material3.MaterialTheme.typography.titleSmall)
