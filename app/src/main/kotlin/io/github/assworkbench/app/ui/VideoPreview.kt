@@ -489,6 +489,12 @@ private fun AuthoritativeMpvPreview(
     }
     val mpv = rememberMpv(options)
     val playback by mpv.playback.collectAsState()
+    val estimatedFrameNumber by remember(mpv) {
+        mpv.observe(MpvProperties.EstimatedFrameNumber)
+    }.collectAsState(initial = null)
+    val estimatedVideoFps by remember(mpv) {
+        mpv.observe(MpvProperties.EstimatedVfFps)
+    }.collectAsState(initial = null)
     var protocolReady by remember(mpv) { mutableStateOf(false) }
     var subtitleAttached by remember(mpv, videoUri) { mutableStateOf(false) }
     var osdWidth by remember(mpv, videoUri) { mutableIntStateOf(0) }
@@ -661,6 +667,8 @@ private fun AuthoritativeMpvPreview(
         if (!videoUri.isNullOrBlank()) {
             PlaybackBar(
                 playback = playback,
+                estimatedFrameNumber = estimatedFrameNumber,
+                estimatedVideoFps = estimatedVideoFps,
                 document = document,
                 focusedEventId = focusedEventId,
                 onFocusEvent = onFocusEvent,
@@ -1397,6 +1405,8 @@ private fun RectClipOverlay(
 @Composable
 private fun PlaybackBar(
     playback: MpvPlaybackState,
+    estimatedFrameNumber: Long?,
+    estimatedVideoFps: Double?,
     document: AssDocument,
     focusedEventId: Long?,
     onFocusEvent: (Long) -> Unit,
@@ -1429,7 +1439,7 @@ private fun PlaybackBar(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(0.dp),
         ) {
-            TransportTooltipButton("后退 1 帧", {
+            TransportTooltipButton("后退 1 帧 · mpv frame-back-step", {
                 onFrameBack()
                 actionHint = "后退 1 帧"
             }) {
@@ -1448,13 +1458,27 @@ private fun PlaybackBar(
                     playback.status == MpvPlaybackState.Status.Buffering
                 Icon(if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow, null)
             }
-            TransportTooltipButton("前进 1 帧", {
+            TransportTooltipButton("前进 1 帧 · mpv frame-step", {
                 onFrameForward()
                 actionHint = "前进 1 帧"
             }) {
                 Text("+1帧", style = MaterialTheme.typography.labelSmall)
             }
             Text(formatClock(displayPosition), style = MaterialTheme.typography.labelSmall)
+            estimatedFrameNumber?.takeIf { it >= 0L }?.let { frameNumber ->
+                Text(
+                    "F$frameNumber",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            estimatedVideoFps?.takeIf { it.isFinite() && it > 0.0 }?.let { fps ->
+                Text(
+                    "%.3f".format(java.util.Locale.US, fps) + "fps",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             actionHint?.let {
                 Text(
                     it,

@@ -228,7 +228,7 @@ Keep these contextual; do not create a permanent toolbar for all operations.
 
 ### Phase D — Timeline professionalisation
 
-Implementation has started. The timeline viewport is no longer hard-wired to playback: it now has 5/10/30/60/120-second horizontal zoom levels, direct touch panning on a dedicated ruler, an explicit follow-playhead mode, and a return-to-playhead action. The playhead is drawn only when it is actually inside the viewport instead of being falsely clamped to an edge. Existing focused-Event trim/body-drag and snapping remain the first editing layer. The second slice adds chronological ordering and explicit Gap/Overlap annotations. Shared `AssTimelineRelations` frontier analysis drives both timeline indicators and QC, so long Events containing several shorter Events no longer hide later overlaps behind the immediately previous short Event.
+Implementation has started. The timeline viewport is no longer hard-wired to playback: it now has 5/10/30/60/120-second horizontal zoom levels, direct touch panning on a dedicated ruler, an explicit follow-playhead mode, and a return-to-playhead action. The playhead is drawn only when it is actually inside the viewport instead of being falsely clamped to an edge. Existing focused-Event trim/body-drag and snapping remain the first editing layer. The second slice adds chronological ordering and explicit Gap/Overlap annotations. Shared `AssTimelineRelations` frontier analysis drives both timeline indicators and QC, so long Events containing several shorter Events no longer hide later overlaps behind the immediately previous short Event. Existing `-1 frame` / `+1 frame` transport controls already use mpv `frame-back-step` / `frame-step`; Phase D therefore strengthens that owner instead of creating another frame UI. The transport now surfaces mpv estimated frame number and video FPS beside the existing clock. Setting Event Start/End from the playhead after a frame step continues to reuse the existing Timeline controls. Exact VFR frame-boundary snapping remains a separate enhancement and must not be approximated by fixed-millisecond arithmetic.
 
 Add:
 - horizontal zoom;
@@ -239,7 +239,7 @@ Add:
 - whole-Event drag;
 - snap strength / targets;
 - overlap and gap indications;
-- frame-aware stepping;
+- frame-aware timing / frame metadata integration;
 - waveform data model and renderer.
 
 Waveform UI appears only after the waveform implementation exists.
