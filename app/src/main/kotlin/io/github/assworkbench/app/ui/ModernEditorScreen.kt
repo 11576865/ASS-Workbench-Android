@@ -693,8 +693,7 @@ private fun InlineEventEditor(
     var startText by remember(event.id, event.start) { mutableStateOf(event.start.toAss()) }
     var endText by remember(event.id, event.end) { mutableStateOf(event.end.toAss()) }
     var raw by remember(event.id, event.text) { mutableStateOf(event.text) }
-    var metadataOpen by remember(event.id) { mutableStateOf(false) }
-    var effectsOpen by remember(event.id) { mutableStateOf(false) }
+    var inlinePanel by remember(event.id) { mutableStateOf<String?>(null) }
     var layerText by remember(event.id, event.layer) { mutableStateOf(event.layer.toString()) }
     var actorText by remember(event.id, event.name) { mutableStateOf(event.name) }
     var comment by remember(event.id, event.comment) { mutableStateOf(event.comment) }
@@ -764,11 +763,11 @@ private fun InlineEventEditor(
             label = { Text("位置 · an$alignment · V$marginV" + if (pos != "alignment anchor") " · pos" else "") },
         )
         AssistChip(
-            onClick = { effectsOpen = !effectsOpen },
-            label = { Text(if (effectsOpen) "收起效果" else "效果") },
+            onClick = { inlinePanel = if (inlinePanel == "effects") null else "effects" },
+            label = { Text(if (inlinePanel == "effects") "收起效果" else "效果") },
         )
         AssistChip(
-            onClick = { metadataOpen = !metadataOpen },
+            onClick = { inlinePanel = if (inlinePanel == "event") null else "event" },
             label = {
                 Text(
                     "Event · L${event.layer}" +
@@ -779,9 +778,9 @@ private fun InlineEventEditor(
         )
     }
 
-    if (effectsOpen) InlineEffectsEditor(event, viewModel)
+    if (inlinePanel == "effects") InlineEffectsEditor(event, viewModel)
 
-    if (metadataOpen) {
+    if (inlinePanel == "event") {
         Surface(
             color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.38f),
             shape = MaterialTheme.shapes.small,
@@ -798,7 +797,7 @@ private fun InlineEventEditor(
                         layerText = event.layer.toString()
                         actorText = event.name
                         comment = event.comment
-                        metadataOpen = false
+                        inlinePanel = null
                     }) { Text("取消") }
                     Button(onClick = {
                         viewModel.updateFocusedMetadata(
@@ -806,7 +805,7 @@ private fun InlineEventEditor(
                             actor = actorText,
                             comment = comment,
                         )
-                        metadataOpen = false
+                        inlinePanel = null
                     }) { Text("应用") }
                 }
             }
