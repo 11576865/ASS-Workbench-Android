@@ -1,8 +1,24 @@
 # ASS Workbench Android 0.26 — Professional Capability Expansion
 
-0.26 is the first capability-expansion release after the 0.25 workbench rearchitecture.
+0.26 is an internal construction milestone after the 0.25 workbench rearchitecture, not the user-facing handoff target.
+
+The first testable product handoff after this construction cycle is **0.27.0**. 0.26 remains the working version while the remaining bounded features, hardening, performance work, architecture cleanup, compatibility research, and failure-case fixes are completed. The app version must not be bumped to 0.27 merely because feature work is mostly present; the 0.27 bump is the final packaging step after the hardening gate is passed.
 
 The goal is not to add more permanent UI. The goal is to make existing contextual surfaces substantially more capable, visual, and precise while keeping Raw ASS lossless and observable.
+
+## Release semantics and final sequence
+
+The closing sequence is:
+
+1. finish only a small, bounded set of high-value 0.26 capabilities;
+2. freeze feature expansion;
+3. research current upstream / community failure cases and performance experience relevant to Android media decoding, libass/fontconfig, Matroska workflows, Compose performance, and ASS round-trip editing;
+4. convert those findings into targeted performance fixes, lifecycle hardening, semantic-integrity tests, structure cleanup, and UI direction adjustments;
+5. run destructive / combination testing across Raw ASS, structured editing, Undo/Redo, preview, MKV, fonts, waveform, orientation, recovery, and save/reopen;
+6. fix blockers and release-candidate regressions only;
+7. bump the finished handoff build to **0.27.0** and deliver that build for real-device user testing.
+
+Karaoke and full Drawing are not required for this handoff. They remain later expansion domains unless a small prerequisite is needed to protect current data integrity.
 
 
 ## Implementation status — Phase A first end-to-end slice
@@ -282,7 +298,7 @@ Finish:
 
 ### Phase G — Karaoke and drawing
 
-Professional ASS cannot permanently omit these, but they may land late in 0.26 or move to 0.27 if stability work dominates.
+Professional ASS cannot permanently omit these, but they are deferred beyond the first 0.27 test handoff unless a small prerequisite is needed for lossless preservation or compatibility. The current closing cycle prioritizes bounded completion and hardening over opening another large semantic/UI domain.
 
 Karaoke:
 - k / K / kf / ko / kt;
