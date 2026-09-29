@@ -71,9 +71,9 @@ class FontStore(private val context: Context) {
     }
 
     fun import(uri: Uri): FontAsset {
-        val asset = importOne(uri)
-        refreshFontconfig(pruneOldCaches = true)
-        return asset
+        // Live imports are consumed through mpv/libass sub-fonts-dir.
+        // Avoid rebuilding native Fontconfig caches during an active editing session.
+        return importOne(uri)
     }
 
     fun importAll(uris: List<Uri>): FontImportBatchResult {
@@ -88,7 +88,8 @@ class FontStore(private val context: Context) {
                         "：" + (error.message ?: error::class.java.simpleName)
                 }
         }
-        if (assets.isNotEmpty()) refreshFontconfig(pruneOldCaches = true)
+        // Renderer reload is handled by the preview through sub-fonts-dir + sub-reload.
+        // Native Fontconfig cache rebuild remains an explicit diagnostics action.
         return FontImportBatchResult(assets, failures)
     }
 
