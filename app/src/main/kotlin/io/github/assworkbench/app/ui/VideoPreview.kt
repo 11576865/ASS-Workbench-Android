@@ -552,6 +552,10 @@ private fun AuthoritativeMpvPreview(
     LaunchedEffect(mpv, videoUri, renderDocument, protocolReady, fontRevision, blockingRendererRisks) {
         if (!protocolReady || videoUri.isNullOrBlank()) return@LaunchedEffect
         if (blockingRendererRisks.isNotEmpty()) {
+            if (subtitleAttached) {
+                mpv.command("sub-remove")
+                subtitleAttached = false
+            }
             onRendererDiagnostics(
                 listOf(
                     "Preview safety：已暂停 ASS native 预览；Raw ASS 仍保持可编辑/可保存。",

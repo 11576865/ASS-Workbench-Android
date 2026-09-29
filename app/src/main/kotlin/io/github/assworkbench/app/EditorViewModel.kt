@@ -711,11 +711,15 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    private fun withEventPosition(document: AssDocument, id: Long, x: Double, y: Double): AssDocument =
-        document.copy(events = document.events.map { event ->
+    private fun withEventPosition(document: AssDocument, id: Long, x: Double, y: Double): AssDocument {
+        if (!x.isFinite() || !y.isFinite()) return document
+        val nx = x.coerceIn(0.0, document.playResX.toDouble())
+        val ny = y.coerceIn(0.0, document.playResY.toDouble())
+        return document.copy(events = document.events.map { event ->
             if (event.id != id) event
-            else event.copy(text = AssGeometrySemantic.patchPosition(event.text, x, y))
+            else event.copy(text = AssGeometrySemantic.patchPosition(event.text, nx, ny))
         })
+    }
 
     fun previewFocusedMove(startX: Double, startY: Double, endX: Double, endY: Double) {
         val state = _state.value
@@ -755,6 +759,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         endX: Double,
         endY: Double,
     ): AssDocument {
+        if (listOf(startX, startY, endX, endY).any { !it.isFinite() }) return document
         val event = document.events.firstOrNull { it.id == id } ?: return document
         val move = AssGeometrySemantic.inspect(event.text).move ?: return document
         val sx = startX.coerceIn(0.0, document.playResX.toDouble())
@@ -801,8 +806,14 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     private fun withEventOrigin(document: AssDocument, id: Long, x: Double, y: Double): AssDocument {
+        if (!x.isFinite() || !y.isFinite()) return document
+        val safeLimit = 100_000.0
         val event = document.events.firstOrNull { it.id == id } ?: return document
-        val patched = AssGeometrySemantic.patchOrigin(event.text, x, y)
+        val patched = AssGeometrySemantic.patchOrigin(
+            event.text,
+            x.coerceIn(-safeLimit, safeLimit),
+            y.coerceIn(-safeLimit, safeLimit),
+        )
         if (patched == event.text) return document
         return document.copy(events = document.events.map { candidate ->
             if (candidate.id == id) candidate.copy(text = patched) else candidate
@@ -836,6 +847,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     private fun withEventRotationZ(document: AssDocument, id: Long, angle: Double): AssDocument {
+        if (!angle.isFinite()) return document
         val event = document.events.firstOrNull { it.id == id } ?: return document
         val patched = AssGeometrySemantic.patchRotationZ(event.text, angle.coerceIn(-3600.0, 3600.0))
         if (patched == event.text) return document
@@ -880,6 +892,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         scaleX: Double,
         scaleY: Double,
     ): AssDocument {
+        if (!scaleX.isFinite() || !scaleY.isFinite()) return document
         val event = document.events.firstOrNull { it.id == id } ?: return document
         val sx = scaleX.coerceIn(1.0, 1000.0)
         val sy = scaleY.coerceIn(1.0, 1000.0)
@@ -922,6 +935,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         shearX: Double,
         shearY: Double,
     ): AssDocument {
+        if (!shearX.isFinite() || !shearY.isFinite()) return document
         val event = document.events.firstOrNull { it.id == id } ?: return document
         val fx = shearX.coerceIn(-10.0, 10.0)
         val fy = shearY.coerceIn(-10.0, 10.0)
@@ -981,10 +995,16 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     ): AssDocument {
         val values = listOf(left, top, right, bottom)
         if (values.any { !it.isFinite() }) return document
+        val safeLimit = 100_000.0
         val event = document.events.firstOrNull { it.id == id } ?: return document
         val patched = AssGeometrySemantic.patchRectClip(
             event.text,
-            AssClipRect(left, top, right, bottom),
+            AssClipRect(
+                left.coerceIn(-safeLimit, safeLimit),
+                top.coerceIn(-safeLimit, safeLimit),
+                right.coerceIn(-safeLimit, safeLimit),
+                bottom.coerceIn(-safeLimit, safeLimit),
+            ),
             inverted,
         )
         if (patched == event.text) return document

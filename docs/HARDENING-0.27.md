@@ -41,12 +41,22 @@ Implemented hardening:
 - `AssRendererRiskAnalyzer` now detects extreme geometry values before they are handed to native preview;
 - QC exposes these as `RENDERER_RISK` errors;
 - authoritative preview fails closed for a risky render document while the canonical Raw ASS remains unchanged and saveable;
-- the preview surface explains that rendering is suspended and automatically resumes when the risky input is corrected.
+- an already-attached external subtitle is removed when the document becomes risky, preventing stale “safe” subtitle frames from masquerading as the current text;
+- the preview surface explains that rendering is suspended and automatically re-attaches the subtitle when the risky input is corrected.
+
+Implemented structured-input bounds:
+
+- Position/Move reject non-finite values and stay inside the Script Resolution canvas;
+- Rotation rejects non-finite values and is bounded to ±3600°;
+- Scale rejects non-finite values and is bounded to 1–1000%;
+- Shear rejects non-finite values and is bounded to ±10;
+- structured Origin and rectangular Clip reject non-finite values and use a ±100000 coordinate ceiling;
+- these bounds apply only to structured edits. Existing Raw ASS is never silently rewritten to match them.
 
 Still required:
 
-- verify structured exact-value commit ranges systematically, not only slider ranges;
-- exercise the guard and recovery path on the physical Android target;
+- exercise the preview guard and recovery path on the physical Android target;
+- review whether the structured Origin/Clip ceiling is too restrictive for legitimate corpus cases;
 - never “fix” Raw ASS by silently clamping stored text.
 
 ### H2 — Pathological Drawing input is a native crash / memory-risk domain even though Drawing editing is deferred
