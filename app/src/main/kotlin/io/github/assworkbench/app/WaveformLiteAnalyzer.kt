@@ -145,6 +145,7 @@ internal object WaveformLiteAnalyzer {
                 val lows = ShortArray(count)
                 val highs = ShortArray(count)
                 repeat(count) { i -> lows[i] = input.readShort(); highs[i] = input.readShort() }
+                file.setLastModified(System.currentTimeMillis())
                 WaveformEnvelope(bucketMs, durationMs, lows, highs)
             }
         }.getOrNull()
@@ -167,6 +168,12 @@ internal object WaveformLiteAnalyzer {
             val dst = File(dir, "$key.awf")
             if (dst.exists()) dst.delete()
             if (!tmp.renameTo(dst)) { tmp.copyTo(dst, overwrite = true); tmp.delete() }
+            dst.setLastModified(System.currentTimeMillis())
+            dir.listFiles()
+                ?.filter { it.extension == "awf" }
+                ?.sortedByDescending { it.lastModified() }
+                ?.drop(6)
+                ?.forEach(File::delete)
         }
     }
 

@@ -176,7 +176,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 document = blank,
                 waveform = WaveformLiteState(
                     sourceUri = uri.toString(),
-                    status = WaveformLiteStatus.ANALYZING,
+                    status = WaveformLiteStatus.IDLE,
                 ),
                 subtitleLoaded = false,
                 subtitleTextEncoding = AssTextEncoding.UTF8,
@@ -196,7 +196,6 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 status = "正在扫描 MKV 字幕轨与字体附件……",
             )
         }
-        launchWaveformAnalysis(uri)
         viewModelScope.launch {
             var imported = 0
             var skipped = 0
@@ -225,6 +224,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                     scan
                 }
             }.onSuccess { scan ->
+                if (_state.value.container.uri != uri.toString()) return@onSuccess
                 containerScan = scan
                 val tracks = scan.subtitleTracks.map {
                     ContainerTrackUi(it.number, it.displayName, it.language, it.packets.size)
@@ -243,13 +243,20 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                     )
                 }
                 refreshFonts(initial = false)
+                if (_state.value.project.videoUri == uri.toString()) {
+                    launchWaveformAnalysis(uri)
+                }
                 if (tracks.size == 1) selectContainerTrack(tracks.single().number)
             }.onFailure { error ->
+                if (_state.value.container.uri != uri.toString()) return@onFailure
                 _state.update {
                     it.copy(
                         container = it.container.copy(loading = false, error = error.message ?: "MKV 扫描失败"),
                         status = "MKV 扫描失败：" + (error.message ?: error::class.java.simpleName),
                     )
+                }
+                if (_state.value.project.videoUri == uri.toString()) {
+                    launchWaveformAnalysis(uri)
                 }
             }
         }

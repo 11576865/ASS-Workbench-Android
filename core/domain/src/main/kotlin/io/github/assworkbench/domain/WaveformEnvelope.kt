@@ -31,14 +31,31 @@ object WaveformViewportSampler {
 
         val result = ArrayList<WaveformBucket>(columns)
         val span = (endMs - startMs).coerceAtLeast(1L)
+        val dataEndMs = minOf(
+            envelope.durationMs,
+            envelope.bucketCount.toLong() * envelope.bucketDurationMs,
+        )
         repeat(columns) { column ->
             val columnStartMs = startMs + span * column / columns
             val columnEndMs = startMs + span * (column + 1L) / columns
-            val first = (columnStartMs / envelope.bucketDurationMs)
+
+            if (columnEndMs <= 0L || columnStartMs >= dataEndMs) {
+                result += WaveformBucket(0, 0)
+                return@repeat
+            }
+
+            val sampleStartMs = maxOf(0L, columnStartMs)
+            val sampleEndMs = minOf(dataEndMs, columnEndMs)
+            if (sampleEndMs <= sampleStartMs) {
+                result += WaveformBucket(0, 0)
+                return@repeat
+            }
+
+            val first = (sampleStartMs / envelope.bucketDurationMs)
                 .toInt()
                 .coerceIn(0, envelope.bucketCount - 1)
             val lastExclusive = (
-                (columnEndMs + envelope.bucketDurationMs - 1L) / envelope.bucketDurationMs
+                (sampleEndMs + envelope.bucketDurationMs - 1L) / envelope.bucketDurationMs
             ).toInt().coerceIn(first + 1, envelope.bucketCount)
 
             var minimum = Short.MAX_VALUE

@@ -2215,7 +2215,7 @@ private fun TimelineWaveformLite(
             val envelope = waveform.envelope ?: return
             val waveformColor = MaterialTheme.colorScheme.onSurfaceVariant
             val playheadColor = MaterialTheme.colorScheme.primary
-            Box(
+            BoxWithConstraints(
                 Modifier
                     .fillMaxWidth()
                     .height(58.dp)
@@ -2230,14 +2230,17 @@ private fun TimelineWaveformLite(
                         }
                     },
             ) {
-                Canvas(Modifier.fillMaxSize()) {
-                    val columns = size.width.toInt().coerceIn(1, 1200)
-                    val samples = WaveformViewportSampler.sample(
+                val density = androidx.compose.ui.platform.LocalDensity.current
+                val columns = with(density) { maxWidth.roundToPx() }.coerceIn(1, 1200)
+                val samples = remember(envelope, windowStartMs, windowEndMs, columns) {
+                    WaveformViewportSampler.sample(
                         envelope = envelope,
                         startMs = windowStartMs,
                         endMs = windowEndMs,
                         columns = columns,
                     )
+                }
+                Canvas(Modifier.fillMaxSize()) {
                     if (samples.isNotEmpty()) {
                         val centerY = size.height / 2f
                         val amplitude = centerY * 0.88f
