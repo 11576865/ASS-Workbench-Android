@@ -12,6 +12,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -502,30 +503,59 @@ private fun EventWorkspace(
         }
         Divider()
         val listState = rememberLazyListState()
+        val rangeScrollScope = rememberCoroutineScope()
         LazyColumn(
             state = listState,
             modifier = Modifier
                 .fillMaxSize()
                 .pointerInput(state.filteredEvents) {
+                    var lastPreviewId: Long? = null
+                    var lastAutoScrollAt = 0L
                     detectDragGesturesAfterLongPress(
                         onDragStart = { offset ->
                             val item = listState.layoutInfo.visibleItemsInfo.firstOrNull {
                                 offset.y.toInt() in it.offset..(it.offset + it.size)
                             }
                             val eventId = item?.index?.let { index -> state.filteredEvents.getOrNull(index)?.id }
-                            if (eventId != null) viewModel.beginRangeSelection(eventId)
+                            if (eventId != null) {
+                                lastPreviewId = eventId
+                                viewModel.beginRangeSelection(eventId)
+                            }
                         },
                         onDrag = { change, _ ->
                             change.consume()
-                            val y = change.position.y.toInt()
+                            val y = change.position.y
                             val item = listState.layoutInfo.visibleItemsInfo.firstOrNull {
-                                y in it.offset..(it.offset + it.size)
+                                y.toInt() in it.offset..(it.offset + it.size)
                             }
                             val eventId = item?.index?.let { index -> state.filteredEvents.getOrNull(index)?.id }
-                            if (eventId != null) viewModel.previewRangeSelection(eventId)
+                            if (eventId != null && eventId != lastPreviewId) {
+                                lastPreviewId = eventId
+                                viewModel.previewRangeSelection(eventId)
+                            }
+
+                            val edge = 64.dp.toPx()
+                            val now = android.os.SystemClock.uptimeMillis()
+                            if (now - lastAutoScrollAt >= 60L) {
+                                val delta = when {
+                                    y < edge -> -28.dp.toPx()
+                                    y > size.height - edge -> 28.dp.toPx()
+                                    else -> 0f
+                                }
+                                if (delta != 0f) {
+                                    lastAutoScrollAt = now
+                                    rangeScrollScope.launch { listState.scrollBy(delta) }
+                                }
+                            }
                         },
-                        onDragEnd = viewModel::finishRangeSelection,
-                        onDragCancel = viewModel::finishRangeSelection,
+                        onDragEnd = {
+                            lastPreviewId = null
+                            viewModel.finishRangeSelection()
+                        },
+                        onDragCancel = {
+                            lastPreviewId = null
+                            viewModel.finishRangeSelection()
+                        },
                     )
                 },
         ) {
