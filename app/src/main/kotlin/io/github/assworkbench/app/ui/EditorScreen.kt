@@ -470,6 +470,8 @@ private fun PreviewPane(
         showLayoutGuides = state.showLayoutGuides,
         focusedEventId = if (directManipulationEnabled) state.focusedEventId else null,
         onSetEventPosition = viewModel::setFocusedPosition,
+        onFocusEvent = { viewModel.focusEvent(it, seek = false) },
+        onSetEventTiming = viewModel::setEventTiming,
         onOpenVideo = onOpenVideo,
         modifier = modifier,
     )
