@@ -36,7 +36,9 @@ import io.github.assworkbench.app.EditorState
 import io.github.assworkbench.app.EditorViewModel
 import io.github.assworkbench.domain.*
 import io.github.assworkbench.fonts.FontOrigin
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlin.math.abs
 
 private enum class WorkbenchTool(val title: String) {
@@ -66,7 +68,11 @@ fun ModernEditorScreen(
     var mkvConfirmOpen by remember { mutableStateOf(false) }
 
     val tool = WorkbenchTool.entries.firstOrNull { it.name == toolName } ?: WorkbenchTool.TIMELINE
-    val issues = remember(state.document) { AssQualityCheck.inspect(state.document) }
+    val issues by produceState<List<AssQcIssue>>(initialValue = emptyList(), state.document) {
+        value = withContext(Dispatchers.Default) {
+            AssQualityCheck.inspect(state.document)
+        }
+    }
     val issuesByEvent = remember(issues) { issues.groupBy { it.eventId } }
 
     fun openTool(next: WorkbenchTool) {
