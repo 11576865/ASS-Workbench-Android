@@ -51,6 +51,8 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     }
     private var recoveryJob: Job? = null
     private var fontDiagnosticJob: Job? = null
+    private var waveformJob: Job? = null
+    private var waveformSourceUri: String? = null
     private var containerScan: MatroskaScanResult? = null
     private var eventFormatClipboard: EventFormatClipboard? = null
     private val _state = MutableStateFlow(
@@ -66,6 +68,56 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         recoveryJob?.cancel()
         recoveryJob = null
         if (clearStored) recoveryStore.clear()
+    }
+
+    private fun cancelWaveformAnalysis() {
+        waveformJob?.cancel()
+        waveformJob = null
+        waveformSourceUri = null
+    }
+
+    private fun launchWaveformAnalysis(uri: Uri) {
+        val source = uri.toString()
+        waveformJob?.cancel()
+        waveformSourceUri = source
+        _state.update {
+            it.copy(
+                waveform = WaveformLiteState(
+                    sourceUri = source,
+                    status = WaveformLiteStatus.ANALYZING,
+                )
+            )
+        }
+        waveformJob = viewModelScope.launch {
+            val result = runCatching {
+                withContext(Dispatchers.IO) {
+                    WaveformLiteAnalyzer.loadOrAnalyze(app, uri)
+                }
+            }
+            if (waveformSourceUri != source || _state.value.project.videoUri != source) return@launch
+            result.onSuccess { envelope ->
+                _state.update {
+                    it.copy(
+                        waveform = WaveformLiteState(
+                            sourceUri = source,
+                            status = WaveformLiteStatus.READY,
+                            envelope = envelope,
+                        )
+                    )
+                }
+            }.onFailure { error ->
+                if (error is kotlinx.coroutines.CancellationException) return@onFailure
+                _state.update {
+                    it.copy(
+                        waveform = WaveformLiteState(
+                            sourceUri = source,
+                            status = WaveformLiteStatus.UNAVAILABLE,
+                            error = error.message ?: error::class.java.simpleName,
+                        )
+                    )
+                }
+            }
+        }
     }
 
     init {
@@ -105,6 +157,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun openMkvProject(uri: Uri) {
+        cancelWaveformAnalysis()
         // MKV is a separate project workflow. The picker callback reaches here only
         // after the user actually chose a file, so cancelling the picker preserves
         // the current workspace.
@@ -121,6 +174,10 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                     subtitleUri = null,
                 ),
                 document = blank,
+                waveform = WaveformLiteState(
+                    sourceUri = uri.toString(),
+                    status = WaveformLiteStatus.ANALYZING,
+                ),
                 subtitleLoaded = false,
                 subtitleTextEncoding = AssTextEncoding.UTF8,
                 importedFonts = it.importedFonts.filter { font ->
@@ -139,6 +196,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 status = "正在扫描 MKV 字幕轨与字体附件……",
             )
         }
+        launchWaveformAnalysis(uri)
         viewModelScope.launch {
             var imported = 0
             var skipped = 0
@@ -311,6 +369,9 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                     status = "当前 MKV 工程已经是参考视频，无需重复载入。",
                 )
             }
+            if (current.waveform.status != WaveformLiteStatus.READY) {
+                launchWaveformAnalysis(uri)
+            }
             return
         }
         attachVideo(uri)
@@ -327,6 +388,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 },
             )
         }
+        launchWaveformAnalysis(uri)
     }
 
     fun openSubtitle(uri: Uri) {
@@ -1774,6 +1836,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             )
         }
         refreshFontDiagnostics()
+        snapshot.project.videoUri?.let { launchWaveformAnalysis(Uri.parse(it)) }
     }
 
     fun discardRecovery() {

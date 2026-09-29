@@ -12,6 +12,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.horizontalScroll
@@ -37,6 +38,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.github.assworkbench.app.EditorState
 import io.github.assworkbench.app.EditorViewModel
+import io.github.assworkbench.app.WaveformLiteState
+import io.github.assworkbench.app.WaveformLiteStatus
 import io.github.assworkbench.domain.*
 import io.github.assworkbench.fonts.FontOrigin
 import kotlinx.coroutines.Dispatchers
@@ -2100,6 +2103,14 @@ private fun ModernTimelinePane(state: EditorState, viewModel: EditorViewModel, m
             )
         }
 
+        TimelineWaveformLite(
+            waveform = state.waveform,
+            windowStartMs = windowStart,
+            windowEndMs = windowEnd,
+            playheadMs = playheadMs,
+            onSeek = viewModel::seekPreviewTo,
+        )
+
         Text(
             "拖上方时间标尺平移视窗；关闭“跟随播放头”后，播放继续也不会把视窗拉回。Event：拖左右边缘调整 Start / End，拖主体整体平移。",
             style = MaterialTheme.typography.labelSmall,
@@ -2161,6 +2172,115 @@ private fun ModernTimelinePane(state: EditorState, viewModel: EditorViewModel, m
         }
     }
 }
+@Composable
+private fun TimelineWaveformLite(
+    waveform: WaveformLiteState,
+    windowStartMs: Long,
+    windowEndMs: Long,
+    playheadMs: Long,
+    onSeek: (Long) -> Unit,
+) {
+    when (waveform.status) {
+        WaveformLiteStatus.IDLE -> Unit
+        WaveformLiteStatus.ANALYZING -> {
+            Surface(
+                modifier = Modifier.fillMaxWidth().height(52.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.26f),
+            ) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text(
+                        "Waveform Lite · 后台分析音轨…",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+        WaveformLiteStatus.UNAVAILABLE -> {
+            Surface(
+                modifier = Modifier.fillMaxWidth().heightIn(min = 40.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.20f),
+            ) {
+                Text(
+                    "Waveform unavailable" + waveform.error?.let { " · " + it }.orEmpty(),
+                    modifier = Modifier.padding(WorkbenchDimens.Small),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+        WaveformLiteStatus.READY -> {
+            val envelope = waveform.envelope ?: return
+            val waveformColor = MaterialTheme.colorScheme.onSurfaceVariant
+            val playheadColor = MaterialTheme.colorScheme.primary
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(58.dp)
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.24f))
+                    .pointerInput(windowStartMs, windowEndMs) {
+                        detectTapGestures { offset ->
+                            val width = size.width.coerceAtLeast(1)
+                            val fraction = (offset.x / width).coerceIn(0f, 1f)
+                            val target = windowStartMs +
+                                ((windowEndMs - windowStartMs) * fraction).toLong()
+                            onSeek(target.coerceAtLeast(0L))
+                        }
+                    },
+            ) {
+                Canvas(Modifier.fillMaxSize()) {
+                    val columns = size.width.toInt().coerceIn(1, 1200)
+                    val samples = WaveformViewportSampler.sample(
+                        envelope = envelope,
+                        startMs = windowStartMs,
+                        endMs = windowEndMs,
+                        columns = columns,
+                    )
+                    if (samples.isNotEmpty()) {
+                        val centerY = size.height / 2f
+                        val amplitude = centerY * 0.88f
+                        val xStep = size.width / samples.size
+                        samples.forEachIndexed { index, bucket ->
+                            val x = (index + 0.5f) * xStep
+                            val high = bucket.maximum.toFloat() / Short.MAX_VALUE.toFloat()
+                            val lowMagnitude = -bucket.minimum.toFloat() / -Short.MIN_VALUE.toFloat()
+                            val top = centerY - high * amplitude
+                            val bottom = centerY + lowMagnitude * amplitude
+                            drawLine(
+                                color = waveformColor.copy(alpha = 0.72f),
+                                start = androidx.compose.ui.geometry.Offset(x, top),
+                                end = androidx.compose.ui.geometry.Offset(x, bottom),
+                                strokeWidth = maxOf(1f, xStep.coerceAtMost(2f)),
+                            )
+                        }
+                    }
+                }
+                Canvas(Modifier.fillMaxSize()) {
+                    if (playheadMs in windowStartMs..windowEndMs) {
+                        val span = (windowEndMs - windowStartMs).coerceAtLeast(1L)
+                        val fraction = (playheadMs - windowStartMs).toFloat() / span
+                        val x = size.width * fraction
+                        drawLine(
+                            color = playheadColor,
+                            start = androidx.compose.ui.geometry.Offset(x, 0f),
+                            end = androidx.compose.ui.geometry.Offset(x, size.height),
+                            strokeWidth = 2.dp.toPx(),
+                        )
+                    }
+                }
+                Text(
+                    "Waveform Lite · 点击定位",
+                    modifier = Modifier.align(Alignment.TopStart).padding(4.dp),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.82f),
+                )
+            }
+        }
+    }
+}
+
 private enum class TimelineSnapStrength(val label: String, val factor: Double) {
     LIGHT("轻", 0.5),
     NORMAL("标准", 1.0),

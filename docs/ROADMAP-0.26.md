@@ -253,7 +253,7 @@ Add:
 - frame-aware timing / frame metadata integration;
 - waveform data model and renderer.
 
-Waveform UI appears only after the waveform implementation exists.
+Waveform Lite is implemented as a deliberately limited 0.26 timing aid. Android MediaExtractor/MediaCodec decode the first supported audio track in a cancellable background job into cached 20ms min/max peak buckets. Timeline rendering samples only the current viewport, the waveform and playhead are separate layers, and tapping the waveform seeks without changing Event timing. Unsupported codecs/containers fail closed as an optional unavailable layer and never block video, ASS, or MKV editing. No spectrogram, independent waveform viewport, karaoke lane, automatic speech detection, waveform-driven Event trimming, or continuous waveform scrubbing is introduced in 0.26.
 
 ### Phase E — Animation
 

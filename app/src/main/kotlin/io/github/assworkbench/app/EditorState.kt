@@ -4,14 +4,25 @@ import io.github.assworkbench.domain.AssDocument
 import io.github.assworkbench.domain.AssInlineSyntax
 import io.github.assworkbench.domain.AssTextEncoding
 import io.github.assworkbench.domain.SubtitleProject
+import io.github.assworkbench.domain.WaveformEnvelope
 import io.github.assworkbench.fonts.FontAsset
 import io.github.assworkbench.fonts.FontDiagnostic
 import io.github.assworkbench.fonts.FontGlyphDiagnostic
+
+enum class WaveformLiteStatus { IDLE, ANALYZING, READY, UNAVAILABLE }
+
+data class WaveformLiteState(
+    val sourceUri: String? = null,
+    val status: WaveformLiteStatus = WaveformLiteStatus.IDLE,
+    val envelope: WaveformEnvelope? = null,
+    val error: String? = null,
+)
 
 data class EditorState(
     val project: SubtitleProject = SubtitleProject(),
     val document: AssDocument = AssDocument(),
     val previewDocument: AssDocument? = null,
+    val waveform: WaveformLiteState = WaveformLiteState(),
     val geometryScaleLocked: Boolean = true,
     val subtitleLoaded: Boolean = false,
     val subtitleTextEncoding: AssTextEncoding = AssTextEncoding.UTF8,
