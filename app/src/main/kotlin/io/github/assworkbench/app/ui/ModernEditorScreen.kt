@@ -141,6 +141,7 @@ fun ModernEditorScreen(
             focusedEventId = if (tool == WorkbenchTool.POSITION) state.focusedEventId else state.focusedEventId,
             onSetEventPosition = viewModel::setFocusedPosition,
             onFocusEvent = { viewModel.focusEvent(it, seek = false) },
+            onSetEventTiming = viewModel::setEventTiming,
             onOpenVideo = onOpenVideo,
             onOpenTimeline = { openTool(WorkbenchTool.TIMELINE) },
             modifier = Modifier.fillMaxWidth(),
