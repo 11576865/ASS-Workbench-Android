@@ -1278,7 +1278,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     private fun refreshFontDiagnostics() {
         val snapshot = _state.value
         viewModelScope.launch {
-            val result = withContext(Dispatchers.Default) {
+            val result = withContext(Dispatchers.IO) {
                 val byStyle = snapshot.document.events.groupBy { it.style }
                 val glyphs = linkedMapOf<String, io.github.assworkbench.fonts.FontGlyphDiagnostic>()
                 snapshot.document.styles.forEach { style ->
