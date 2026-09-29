@@ -55,26 +55,23 @@ fun ModernEditorScreen(
     onSaveMkv: () -> Unit,
 ) {
     var toolName by rememberSaveable { mutableStateOf(WorkbenchTool.TIMELINE.name) }
-    var previousToolName by rememberSaveable { mutableStateOf<String?>(null) }
     var supportingOpen by rememberSaveable { mutableStateOf(false) }
     var expandedEventId by rememberSaveable { mutableStateOf<Long?>(null) }
     var searchOpen by rememberSaveable { mutableStateOf(false) }
     var openMenu by remember { mutableStateOf(false) }
     var saveConfirmOpen by remember { mutableStateOf(false) }
+    var mkvConfirmOpen by remember { mutableStateOf(false) }
     val tool = WorkbenchTool.entries.firstOrNull { it.name == toolName } ?: WorkbenchTool.TIMELINE
     fun openTool(next: WorkbenchTool) {
-        if (next.name != toolName) previousToolName = toolName
         toolName = next.name
         supportingOpen = true
     }
-    fun returnTool() {
-        val previous = previousToolName?.let { name -> WorkbenchTool.entries.firstOrNull { it.name == name } }
-        if (previous != null && previous != tool) {
-            toolName = previous.name
-            previousToolName = null
+    fun toggleTool(next: WorkbenchTool) {
+        if (supportingOpen && tool == next) {
+            supportingOpen = false
         } else {
-            toolName = WorkbenchTool.TIMELINE.name
-            previousToolName = null
+            toolName = next.name
+            supportingOpen = true
         }
     }
     val issues = remember(state.document) { AssQualityCheck.inspect(state.document) }
@@ -89,7 +86,13 @@ fun ModernEditorScreen(
         ModernAppBar(
             state, viewModel, state.selectedEventIds.isNotEmpty(), searchOpen,
             { searchOpen = !searchOpen }, { openMenu = true }, openMenu, { openMenu = false },
-            onOpenReferenceVideo, onOpenMkvProject, onOpenSubtitle, onImportFont,
+            onOpenReferenceVideo,
+            {
+                val hasWorkspace = state.subtitleLoaded || state.project.videoUri != null ||
+                    state.container.uri != null || state.dirty
+                if (hasWorkspace) mkvConfirmOpen = true else onOpenMkvProject()
+            },
+            onOpenSubtitle, onImportFont,
             {
                 if (state.project.subtitleUri == null) onSaveAs()
                 else saveConfirmOpen = true
@@ -126,6 +129,27 @@ fun ModernEditorScreen(
             )
         }
 
+        if (mkvConfirmOpen) {
+            AlertDialog(
+                onDismissRequest = { mkvConfirmOpen = false },
+                title = { Text("切换到 MKV 工程？") },
+                text = {
+                    Text(
+                        "MKV 是独立工作流。选择新的 MKV 后，当前工作台中的字幕、参考视频、选择状态和项目字体会被清空。未保存修改请先保存。"
+                    )
+                },
+                confirmButton = {
+                    Button(onClick = {
+                        mkvConfirmOpen = false
+                        onOpenMkvProject()
+                    }) { Text("选择 MKV") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { mkvConfirmOpen = false }) { Text("取消") }
+                },
+            )
+        }
+
         VideoPreview(
             videoUri = state.project.videoUri,
             document = state.document,
@@ -143,7 +167,7 @@ fun ModernEditorScreen(
             onFocusEvent = { viewModel.focusEvent(it, seek = false) },
             onSetEventTiming = viewModel::setEventTiming,
             onOpenVideo = onOpenVideo,
-            onOpenTimeline = { openTool(WorkbenchTool.TIMELINE) },
+            onOpenTimeline = { toggleTool(WorkbenchTool.TIMELINE) },
             modifier = Modifier.fillMaxWidth(),
         )
 
@@ -156,7 +180,7 @@ fun ModernEditorScreen(
             if (compact) {
                 EventWorkspace(
                     state, viewModel, issuesByEvent, expandedEventId,
-                    { expandedEventId = it }, { openTool(it) }, Modifier.fillMaxSize()
+                    { expandedEventId = it }, { toggleTool(it) }, Modifier.fillMaxSize()
                 )
                 if (supportingOpen) {
                     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
@@ -165,7 +189,7 @@ fun ModernEditorScreen(
                         sheetState = sheetState,
                     ) {
                         SupportingWorkbench(
-                            state, viewModel, tool, issues, { openTool(it) }, { returnTool() },
+                            state, viewModel, tool, issues,
                             { supportingOpen = false }, onImportFont, onSaveMkv,
                             Modifier.fillMaxWidth().heightIn(min = 224.dp, max = 640.dp),
                         )
@@ -174,7 +198,7 @@ fun ModernEditorScreen(
             } else {
                 EventWorkspace(
                     state, viewModel, issuesByEvent, expandedEventId,
-                    { expandedEventId = it }, { openTool(it) }, Modifier.fillMaxSize()
+                    { expandedEventId = it }, { toggleTool(it) }, Modifier.fillMaxSize()
                 )
                 if (supportingOpen) {
                     val overlayWidth = (maxWidth * 0.48f).coerceIn(320.dp, 480.dp)
@@ -193,8 +217,6 @@ fun ModernEditorScreen(
                             viewModel,
                             tool,
                             issues,
-                            { openTool(it) },
-                            { returnTool() },
                             { supportingOpen = false },
                             onImportFont,
                             onSaveMkv,
@@ -270,6 +292,7 @@ private fun ModernAppBar(
                         DropdownMenuItem(text = { Text("打开 MKV 工程") }, leadingIcon = { Icon(Icons.Filled.VideoFile, null) }, onClick = { onDismissMenu(); onOpenMkvProject() })
                         Divider()
                         DropdownMenuItem(text = { Text("新建空白 ASS") }, leadingIcon = { Icon(Icons.Filled.Add, null) }, onClick = { onDismissMenu(); viewModel.newSubtitleProject() })
+                        DropdownMenuItem(text = { Text("导入字体") }, leadingIcon = { Icon(Icons.Filled.FontDownload, null) }, onClick = { onDismissMenu(); onImportFont() })
                     }
                 }
                 Box {
@@ -280,9 +303,7 @@ private fun ModernAppBar(
                         DropdownMenuItem(text = { Text("项目") }, leadingIcon = { Icon(Icons.Filled.Info, null) }, onClick = { moreMenuOpen = false; onTool(WorkbenchTool.PROJECT) })
                         DropdownMenuItem(text = { Text("诊断") }, leadingIcon = { Icon(Icons.Filled.Tune, null) }, onClick = { moreMenuOpen = false; onTool(WorkbenchTool.DIAGNOSTICS) })
                         Divider()
-                        DropdownMenuItem(text = { Text("另存 ASS") }, onClick = { moreMenuOpen = false; onSaveAs() })
                         if (state.container.uri != null) DropdownMenuItem(text = { Text("保存为新 MKV") }, onClick = { moreMenuOpen = false; onSaveMkv() })
-                        DropdownMenuItem(text = { Text("导入字体") }, onClick = { moreMenuOpen = false; onImportFont() })
                     }
                 }
             }
