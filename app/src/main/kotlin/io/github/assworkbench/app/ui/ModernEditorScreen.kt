@@ -1507,8 +1507,9 @@ private fun TransformVisualPropertyEditor(
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                 Button(
                     enabled = draft.toDoubleOrNull()?.let { value ->
+                        val minimum = selected.minimum
                         value.isFinite() &&
-                            (selected.minimum == null || value >= selected.minimum)
+                            (minimum == null || value >= minimum)
                     } == true,
                     onClick = {
                         val value = draft.toDoubleOrNull() ?: return@Button
