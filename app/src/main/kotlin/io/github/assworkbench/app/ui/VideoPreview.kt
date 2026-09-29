@@ -759,22 +759,7 @@ private fun PositionDragOverlay(
             color = Color.White,
             style = MaterialTheme.typography.labelSmall,
         )
-        val visible = remember(event.text) { io.github.assworkbench.domain.AssInlineSyntax.visibleText(event.text) }
-        if (visible.isNotBlank()) {
-            Text(
-                visible,
-                modifier = Modifier
-                    .offset(
-                        x = maxWidth * (x / document.playResX.coerceAtLeast(1)).toFloat(),
-                        y = maxHeight * (y / document.playResY.coerceAtLeast(1)).toFloat(),
-                    )
-                    .background(Color.Black.copy(alpha = 0.45f))
-                    .padding(horizontal = 3.dp, vertical = 1.dp),
-                color = Color.White.copy(alpha = 0.75f),
-                maxLines = 1,
-                style = MaterialTheme.typography.labelSmall,
-            )
-        }
+
     }
 }
 
