@@ -174,9 +174,10 @@ jobs:
         run: |
           VERSION="$(sed -nE 's/^val baseVersionName = "([^"]+)"/\1/p' app/build.gradle.kts | head -1)"
           test -n "$VERSION"
+          SHORT_SHA="$(printf '%s' "$GITHUB_SHA" | cut -c1-12)"
           mkdir -p fontconfig-production-apk
           cp app/build/outputs/apk/debug/app-debug.apk \
-            "fontconfig-production-apk/ASS-Workbench-Android-$VERSION-debug.apk"
+            "fontconfig-production-apk/ASS-Workbench-Android-$VERSION-$SHORT_SHA-debug.apk"
           cp fontconfig-native-probe/depinfo.sh fontconfig-production-apk/
           cp fontconfig-native-probe/fontconfig.pc fontconfig-production-apk/
           cp fontconfig-native-probe/libass.pc fontconfig-production-apk/
@@ -198,18 +199,25 @@ jobs:
         shell: bash
         run: |
           VERSION="$(sed -nE 's/^val baseVersionName = "([^"]+)"/\1/p' app/build.gradle.kts | head -1)"
+          SHORT_SHA="$(printf '%s' "$GITHUB_SHA" | cut -c1-12)"
           TAG="v$VERSION"
-          APK="fontconfig-production-apk/ASS-Workbench-Android-$VERSION-debug.apk"
+          APK="fontconfig-production-apk/ASS-Workbench-Android-$VERSION-$SHORT_SHA-debug.apk"
+          NOTES="Rolling $VERSION construction prerelease. Canonical device-test APK built from commit $GITHUB_SHA (Actions run #$GITHUB_RUN_NUMBER). The version tag marks the construction milestone and may predate the rolling APK asset; use the in-app Diagnostics build identity or the SHA-bearing filename for exact provenance."
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" "$APK" --clobber
+            gh release view "$TAG" --json assets --jq '.assets[].name' | \
+              grep -E "^ASS-Workbench-Android-$VERSION-[0-9a-f]{12}-debug\\.apk$" | \
+              while IFS= read -r asset; do
+                gh release delete-asset "$TAG" "$asset" -y
+              done
+            gh release upload "$TAG" "$APK"
             gh release edit "$TAG" \
               --title "ASS Workbench Android $VERSION" \
               --prerelease \
-              --notes "Arm64 Fontconfig/libass renderer build from main. This is the canonical device-test APK."
+              --notes "$NOTES"
           else
             gh release create "$TAG" "$APK" \
               --target "$GITHUB_SHA" \
               --title "ASS Workbench Android $VERSION" \
               --prerelease \
-              --notes "Arm64 Fontconfig/libass renderer build from main. This is the canonical device-test APK."
+              --notes "$NOTES"
           fi
