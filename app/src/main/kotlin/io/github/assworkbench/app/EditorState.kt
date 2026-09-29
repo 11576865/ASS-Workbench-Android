@@ -29,6 +29,8 @@ data class EditorState(
     val rendererDiagnostics: List<String> = emptyList(),
     val fallbackFontFamily: String? = null,
     val fontRevision: Long = 0L,
+    val fontImportBusy: Boolean = false,
+    val fontReloadPending: Boolean = false,
     val showLayoutGuides: Boolean = false,
     val reviewSourceStyle: String = "",
     val reviewTargetStyle: String = "",
