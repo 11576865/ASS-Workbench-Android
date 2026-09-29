@@ -65,7 +65,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun newSubtitleProject() {
-        fontStore.clearProjectFonts(refresh = true)
+        fontStore.clearProjectFonts(refresh = false)
         val document = AssDocument()
         history.reset(document)
         _state.update {
@@ -91,9 +91,31 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun openMkvProject(uri: Uri) {
+        // MKV is a separate project workflow. The picker callback reaches here only
+        // after the user actually chose a file, so cancelling the picker preserves
+        // the current workspace.
         fontStore.clearProjectFonts(refresh = false)
+        recoveryStore.clear()
+        containerScan = null
+        val blank = AssDocument()
+        history.reset(blank)
         _state.update {
-            it.copy(
+            EditorState(
+                project = io.github.assworkbench.domain.SubtitleProject(
+                    title = displayName(uri) ?: "Matroska project",
+                    videoUri = uri.toString(),
+                    subtitleUri = null,
+                ),
+                document = blank,
+                subtitleLoaded = false,
+                subtitleTextEncoding = AssTextEncoding.UTF8,
+                importedFonts = it.importedFonts.filter { font ->
+                    font.origin != io.github.assworkbench.fonts.FontOrigin.MKV_ATTACHMENT
+                },
+                fallbackFontFamily = it.fallbackFontFamily,
+                fontRevision = it.fontRevision,
+                recoveryAvailable = false,
+                recoveryLabel = "",
                 container = ContainerBridgeState(
                     uri = uri.toString(),
                     name = displayName(uri) ?: "Matroska project",
@@ -281,7 +303,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun openSubtitle(uri: Uri) {
-        fontStore.clearProjectFonts(refresh = true)
+        fontStore.clearProjectFonts(refresh = false)
         val bytes = app.contentResolver.openInputStream(uri)?.use { it.readBytes() }
             ?: error("无法读取字幕")
         val decoded = AssTextDecoder.decode(bytes)
