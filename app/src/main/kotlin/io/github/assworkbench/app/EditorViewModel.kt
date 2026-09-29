@@ -14,6 +14,8 @@ import io.github.assworkbench.domain.AssTextEncoding
 import io.github.assworkbench.domain.EventOverrideEditor
 import io.github.assworkbench.domain.AssGeometrySemantic
 import io.github.assworkbench.domain.AssClipRect
+import io.github.assworkbench.domain.AssAnimationSemantic
+import io.github.assworkbench.domain.AssComplexFade
 import io.github.assworkbench.domain.EventFormatClipboard
 import io.github.assworkbench.domain.EventFormatClipboardOps
 import io.github.assworkbench.domain.EventFormatPasteMode
