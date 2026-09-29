@@ -521,8 +521,8 @@ private fun InlineEventEditor(
     }
     val font = effective["Font"]?.effectiveValue ?: "?"
     val size = effective["Size"]?.effectiveValue ?: "?"
-    val bold = effective["Bold"]?.effectiveValue ?: "?"
-    val italic = effective["Italic"]?.effectiveValue ?: "?"
+    val bold = effective["Bold"]?.effectiveValue?.let { if (it == "true") "1" else if (it == "false") "0" else it } ?: "?"
+    val italic = effective["Italic"]?.effectiveValue?.let { if (it == "true") "1" else if (it == "false") "0" else it } ?: "?"
     val primary = effective["Primary"]?.effectiveValue ?: effective["Primary Color"]?.effectiveValue ?: "?"
     val outlineColor = effective["Outline Color"]?.effectiveValue ?: "?"
     val border = effective["Border"]?.effectiveValue ?: "?"
@@ -568,14 +568,14 @@ private fun InlineEventEditor(
         Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
         horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small),
     ) {
-        AssistChip(onClick = { onTool(WorkbenchTool.FONTS) }, label = { Text("fn $font") })
-        AssistChip(onClick = { onTool(WorkbenchTool.STYLE) }, label = { Text("fs $size") })
-        AssistChip(onClick = { onTool(WorkbenchTool.STYLE) }, label = { Text("b $bold · i $italic") })
-        AssistChip(onClick = { onTool(WorkbenchTool.STYLE) }, label = { Text("c $primary") })
-        AssistChip(onClick = { onTool(WorkbenchTool.STYLE) }, label = { Text("3c $outlineColor · bord $border") })
+        AssistChip(onClick = { onTool(WorkbenchTool.FONTS) }, label = { Text("fn$font") })
+        AssistChip(onClick = { onTool(WorkbenchTool.STYLE) }, label = { Text("fs$size") })
+        AssistChip(onClick = { onTool(WorkbenchTool.STYLE) }, label = { Text("b$bold · i$italic") })
+        AssistChip(onClick = { onTool(WorkbenchTool.STYLE) }, label = { Text("c$primary") })
+        AssistChip(onClick = { onTool(WorkbenchTool.STYLE) }, label = { Text("3c$outlineColor · bord$border") })
         AssistChip(
             onClick = { onTool(WorkbenchTool.POSITION) },
-            label = { Text("an $alignment · V $marginV" + if (pos != "alignment anchor") " · pos" else "") },
+            label = { Text("an$alignment · V$marginV" + if (pos != "alignment anchor") " · pos" else "") },
         )
         AssistChip(onClick = { onTool(WorkbenchTool.STYLE) }, label = { Text("Style $styleName") })
         AssistChip(
@@ -675,16 +675,6 @@ private fun InlineEffectsEditor(
             }
         }
     }
-}
-
-private fun leadingOverridePrefixLength(text: String): Int {
-    var cursor = 0
-    while (cursor < text.length && text[cursor] == '{') {
-        val close = text.indexOf('}', cursor + 1)
-        if (close < 0) break
-        cursor = close + 1
-    }
-    return cursor
 }
 
 @Composable
