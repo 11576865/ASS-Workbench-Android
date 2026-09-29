@@ -105,8 +105,8 @@ class FontStore(private val context: Context) {
         fontBytesCache[target.absolutePath] = bytes
         invalidateImportedCache()
 
-        // Keep provider=none fallback deterministic: the last imported font becomes subfont.ttf.
-        File(mpvConfigDir, "subfont.ttf").writeBytes(bytes)
+        // Do not replace the live fallback file while libass is active.
+        // Imported fonts are discovered through the stable fonts directory.
         return FontAsset(target.name, sha, metadata, FontOrigin.MANUAL)
     }
 
@@ -120,9 +120,7 @@ class FontStore(private val context: Context) {
         if (!target.exists()) target.writeBytes(bytes)
         fontBytesCache[target.absolutePath] = bytes
         invalidateImportedCache()
-        // Embedded MKV fonts must feed the same provider=none fallback path as manually imported fonts.
-        // This removes the old "standalone import vs MKV attachment" renderer asymmetry.
-        File(mpvConfigDir, "subfont.ttf").writeBytes(bytes)
+        // Keep the fallback file immutable during an active renderer session.
         return FontAsset(target.name, sha, metadata, FontOrigin.MKV_ATTACHMENT)
     }
 
