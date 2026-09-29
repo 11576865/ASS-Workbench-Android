@@ -30,6 +30,15 @@ object AssEffectiveInspector {
         val scaleY = geometry.scaleY
         val shearX = geometry.shearX
         val shearY = geometry.shearY
+        val clipSummary = when {
+            geometry.clipRect != null -> {
+                val rect = geometry.clipRect
+                val name = if (geometry.clipInverted) "iclip" else "clip"
+                "$name ${format(rect.left)},${format(rect.top)} → ${format(rect.right)},${format(rect.bottom)}"
+            }
+            geometry.clipNonRectangular -> if (geometry.clipInverted) "iclip vector/raw" else "clip vector/raw"
+            else -> null
+        }
         val angle = geometry.rotationZ
         val primaryColor = lastTag("1c", "c")
         val outlineColor = lastTag("3c")
@@ -149,6 +158,12 @@ object AssEffectiveInspector {
                 style.outlineColor,
                 overrideValue = outlineColor,
                 effectiveValue = outlineColor ?: style.outlineColor,
+            ),
+            AssEffectiveValue(
+                "Clip",
+                "none",
+                overrideValue = clipSummary,
+                effectiveValue = clipSummary ?: "none",
             ),
             AssEffectiveValue(
                 "Position",

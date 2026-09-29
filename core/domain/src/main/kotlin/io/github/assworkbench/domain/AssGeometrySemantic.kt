@@ -18,6 +18,19 @@ data class AssMove(
     val startMs: Double? = null,
     val endMs: Double? = null,
 )
+data class AssClipRect(
+    val left: Double,
+    val top: Double,
+    val right: Double,
+    val bottom: Double,
+) {
+    fun normalized(): AssClipRect = AssClipRect(
+        left = minOf(left, right),
+        top = minOf(top, bottom),
+        right = maxOf(left, right),
+        bottom = maxOf(top, bottom),
+    )
+}
 
 data class AssGeometrySnapshot(
     val position: AssPoint? = null,
@@ -28,6 +41,9 @@ data class AssGeometrySnapshot(
     val scaleY: Double? = null,
     val shearX: Double? = null,
     val shearY: Double? = null,
+    val clipRect: AssClipRect? = null,
+    val clipInverted: Boolean = false,
+    val clipNonRectangular: Boolean = false,
     val malformedLeadingBlock: Boolean = false,
 ) {
     val positionMode: AssPositionMode
@@ -84,6 +100,10 @@ object AssGeometrySemantic {
         val scaleY = last("fscy")?.value?.trim()?.toDoubleOrNull()
         val shearX = last("fax")?.value?.trim()?.toDoubleOrNull()
         val shearY = last("fay")?.value?.trim()?.toDoubleOrNull()
+        val clipTag = last("clip", "iclip")
+        val clipRect = clipTag?.value?.let(::parseRectClip)
+        val clipInverted = clipTag?.name?.equals("iclip", ignoreCase = true) == true
+        val clipNonRectangular = clipTag != null && clipRect == null
 
         return AssGeometrySnapshot(
             position = position,
@@ -94,6 +114,9 @@ object AssGeometrySemantic {
             scaleY = scaleY,
             shearX = shearX,
             shearY = shearY,
+            clipRect = clipRect,
+            clipInverted = clipInverted,
+            clipNonRectangular = clipNonRectangular,
             malformedLeadingBlock = scan.malformed,
         )
     }
@@ -218,6 +241,23 @@ object AssGeometrySemantic {
         text = text,
         scan = scanLeading(text),
         names = setOf("fax", "fay"),
+    )
+    fun patchRectClip(text: String, rect: AssClipRect, inverted: Boolean): String {
+        val normalized = rect.normalized()
+        val name = if (inverted) "iclip" else "clip"
+        return patchTag(
+            text = text,
+            scan = scanLeading(text),
+            names = setOf("clip", "iclip"),
+            replacement = "\\$name(${formatNumber(normalized.left)},${formatNumber(normalized.top)}," +
+                "${formatNumber(normalized.right)},${formatNumber(normalized.bottom)})",
+        )
+    }
+
+    fun removeClip(text: String): String = removeTags(
+        text = text,
+        scan = scanLeading(text),
+        names = setOf("clip", "iclip"),
     )
 
     private fun patchScalar(text: String, name: String, value: Double): String {
@@ -364,6 +404,18 @@ object AssGeometrySemantic {
             startMs = numbers.getOrNull(4),
             endMs = numbers.getOrNull(5),
         )
+    }
+    private fun parseRectClip(value: String): AssClipRect? {
+        val parts = parenthesizedParts(value) ?: return null
+        if (parts.size != 4) return null
+        val numbers = parts.map { it.toDoubleOrNull() ?: return null }
+        if (numbers.any { !it.isFinite() }) return null
+        return AssClipRect(
+            left = numbers[0],
+            top = numbers[1],
+            right = numbers[2],
+            bottom = numbers[3],
+        ).normalized()
     }
 
     private fun parenthesizedParts(value: String): List<String>? {

@@ -13,6 +13,7 @@ import io.github.assworkbench.domain.AssTextDecoder
 import io.github.assworkbench.domain.AssTextEncoding
 import io.github.assworkbench.domain.EventOverrideEditor
 import io.github.assworkbench.domain.AssGeometrySemantic
+import io.github.assworkbench.domain.AssClipRect
 import io.github.assworkbench.domain.EventFormatClipboard
 import io.github.assworkbench.domain.EventFormatClipboardOps
 import io.github.assworkbench.domain.EventFormatPasteMode
@@ -779,6 +780,67 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         val fx = shearX.coerceIn(-10.0, 10.0)
         val fy = shearY.coerceIn(-10.0, 10.0)
         val patched = AssGeometrySemantic.patchShear(event.text, fx, fy)
+        if (patched == event.text) return document
+        return document.copy(events = document.events.map { candidate ->
+            if (candidate.id == id) candidate.copy(text = patched) else candidate
+        })
+    }
+
+    fun previewFocusedRectClip(
+        left: Double,
+        top: Double,
+        right: Double,
+        bottom: Double,
+        inverted: Boolean,
+    ) {
+        val state = _state.value
+        val id = state.focusedEventId ?: return
+        val preview = withEventRectClip(state.document, id, left, top, right, bottom, inverted)
+        _state.update { current ->
+            current.copy(previewDocument = if (preview == state.document) null else preview)
+        }
+    }
+
+    fun setFocusedRectClip(
+        left: Double,
+        top: Double,
+        right: Double,
+        bottom: Double,
+        inverted: Boolean,
+    ) {
+        val id = _state.value.focusedEventId ?: return
+        editDocument(if (inverted) "已更新当前字幕的矩形 \\iclip。" else "已更新当前字幕的矩形 \\clip。") { doc ->
+            withEventRectClip(doc, id, left, top, right, bottom, inverted)
+        }
+    }
+
+    fun clearFocusedClip() {
+        val id = _state.value.focusedEventId ?: return
+        editDocument("已移除当前字幕的 clip override。") { doc ->
+            doc.copy(events = doc.events.map { event ->
+                if (event.id != id) event
+                else event.copy(text = AssGeometrySemantic.removeClip(event.text))
+            })
+        }
+    }
+
+    private fun withEventRectClip(
+        document: AssDocument,
+        id: Long,
+        left: Double,
+        top: Double,
+        right: Double,
+        bottom: Double,
+        inverted: Boolean,
+    ): AssDocument {
+        val values = listOf(left, top, right, bottom)
+        if (values.any { !it.isFinite() }) return document
+        val event = document.events.firstOrNull { it.id == id } ?: return document
+        val patched = AssGeometrySemantic.patchRectClip(
+            event.text,
+            AssClipRect(left, top, right, bottom),
+            inverted,
+        )
         if (patched == event.text) return document
         return document.copy(events = document.events.map { candidate ->
             if (candidate.id == id) candidate.copy(text = patched) else candidate

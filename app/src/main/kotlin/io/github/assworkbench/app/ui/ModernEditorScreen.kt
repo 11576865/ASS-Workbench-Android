@@ -292,6 +292,8 @@ private fun WorkbenchPreview(
         onSetEventScale = viewModel::setFocusedScale,
         onPreviewEventShear = viewModel::previewFocusedShear,
         onSetEventShear = viewModel::setFocusedShear,
+        onPreviewEventClip = viewModel::previewFocusedRectClip,
+        onSetEventClip = viewModel::setFocusedRectClip,
         onCancelEventPositionPreview = viewModel::clearTransientPreview,
         onFocusEvent = { viewModel.focusEvent(it, seek = false) },
         onSetEventTiming = viewModel::setEventTiming,
@@ -1213,6 +1215,11 @@ private fun PositionPane(state: EditorState, viewModel: EditorViewModel, modifie
     var shearDraftChanged by remember(event.id) { mutableStateOf(false) }
     var shearPreviewX by remember(event.id, event.text) { mutableStateOf(geometry.shearX ?: 0.0) }
     var shearPreviewY by remember(event.id, event.text) { mutableStateOf(geometry.shearY ?: 0.0) }
+    var clipLeftText by remember(event.id, event.text) { mutableStateOf(geometry.clipRect?.left?.toString().orEmpty()) }
+    var clipTopText by remember(event.id, event.text) { mutableStateOf(geometry.clipRect?.top?.toString().orEmpty()) }
+    var clipRightText by remember(event.id, event.text) { mutableStateOf(geometry.clipRect?.right?.toString().orEmpty()) }
+    var clipBottomText by remember(event.id, event.text) { mutableStateOf(geometry.clipRect?.bottom?.toString().orEmpty()) }
+    var clipDraftChanged by remember(event.id) { mutableStateOf(false) }
     val scaleRatioYPerX = remember(event.id, event.text, style?.scaleX, style?.scaleY) {
         if (effectiveScaleX != 0.0) effectiveScaleY / effectiveScaleX else 1.0
     }
@@ -1254,6 +1261,18 @@ private fun PositionPane(state: EditorState, viewModel: EditorViewModel, modifie
         kotlinx.coroutines.delay(320)
         viewModel.setFocusedShear(fx, fy)
         shearDraftChanged = false
+    }
+    LaunchedEffect(event.id, clipLeftText, clipTopText, clipRightText, clipBottomText, clipDraftChanged) {
+        val rect = geometry.clipRect ?: return@LaunchedEffect
+        if (!clipDraftChanged) return@LaunchedEffect
+        val left = clipLeftText.toDoubleOrNull() ?: return@LaunchedEffect
+        val top = clipTopText.toDoubleOrNull() ?: return@LaunchedEffect
+        val right = clipRightText.toDoubleOrNull() ?: return@LaunchedEffect
+        val bottom = clipBottomText.toDoubleOrNull() ?: return@LaunchedEffect
+        viewModel.previewFocusedRectClip(left, top, right, bottom, geometry.clipInverted)
+        kotlinx.coroutines.delay(320)
+        viewModel.setFocusedRectClip(left, top, right, bottom, geometry.clipInverted)
+        clipDraftChanged = false
     }
 
     DisposableEffect(event.id) {
@@ -1581,6 +1600,109 @@ private fun PositionPane(state: EditorState, viewModel: EditorViewModel, modifie
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+        }
+        item { Divider() }
+        item {
+            Text("矩形裁剪 · \\clip / \\iclip", style = MaterialTheme.typography.titleSmall)
+            Text(
+                "\\clip 只显示矩形内部；\\iclip 相反，会隐藏矩形内部。矩形坐标使用 ASS Script Resolution，不跟随字幕的旋转或移动坐标系。",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            when {
+                geometry.clipNonRectangular -> {
+                    Text(
+                        "当前 Event 使用非矩形 / vector ${if (geometry.clipInverted) "\\iclip" else "\\clip"}。0.26 的矩形编辑器不会自动重写它。",
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small)) {
+                        OutlinedButton(onClick = viewModel::clearFocusedClip) { Text("移除现有 clip") }
+                        Button(onClick = {
+                            viewModel.setFocusedRectClip(
+                                state.document.playResX * 0.1,
+                                state.document.playResY * 0.1,
+                                state.document.playResX * 0.9,
+                                state.document.playResY * 0.9,
+                                geometry.clipInverted,
+                            )
+                        }) { Text("明确替换为矩形") }
+                    }
+                }
+                geometry.clipRect != null -> {
+                    Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small)) {
+                        FilterChip(
+                            selected = !geometry.clipInverted,
+                            onClick = {
+                                val rect = geometry.clipRect
+                                viewModel.setFocusedRectClip(rect.left, rect.top, rect.right, rect.bottom, false)
+                            },
+                            label = { Text("\\clip · 内部显示") },
+                        )
+                        FilterChip(
+                            selected = geometry.clipInverted,
+                            onClick = {
+                                val rect = geometry.clipRect
+                                viewModel.setFocusedRectClip(rect.left, rect.top, rect.right, rect.bottom, true)
+                            },
+                            label = { Text("\\iclip · 内部隐藏") },
+                        )
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small)) {
+                        OutlinedTextField(clipLeftText, { clipLeftText = it; clipDraftChanged = true }, label = { Text("Left") }, singleLine = true, modifier = Modifier.weight(1f))
+                        OutlinedTextField(clipTopText, { clipTopText = it; clipDraftChanged = true }, label = { Text("Top") }, singleLine = true, modifier = Modifier.weight(1f))
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small)) {
+                        OutlinedTextField(clipRightText, { clipRightText = it; clipDraftChanged = true }, label = { Text("Right") }, singleLine = true, modifier = Modifier.weight(1f))
+                        OutlinedTextField(clipBottomText, { clipBottomText = it; clipDraftChanged = true }, label = { Text("Bottom") }, singleLine = true, modifier = Modifier.weight(1f))
+                    }
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                        TextButton(onClick = viewModel::clearFocusedClip) { Text("移除 clip") }
+                        Button(onClick = {
+                            val left = clipLeftText.toDoubleOrNull()
+                            val top = clipTopText.toDoubleOrNull()
+                            val right = clipRightText.toDoubleOrNull()
+                            val bottom = clipBottomText.toDoubleOrNull()
+                            if (left != null && top != null && right != null && bottom != null) {
+                                clipDraftChanged = false
+                                viewModel.setFocusedRectClip(left, top, right, bottom, geometry.clipInverted)
+                            }
+                        }) { Text("应用矩形") }
+                    }
+                    Text(
+                        "预览中四个角均可直接拖动；拖动只改矩形裁剪坐标，不会改字幕本身的位置、旋转或缩放。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                else -> {
+                    Text(
+                        "当前没有裁剪。新增矩形默认使用画布中央 80% 区域，随后可拖四角或输入精确坐标。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small)) {
+                        Button(onClick = {
+                            viewModel.setFocusedRectClip(
+                                state.document.playResX * 0.1,
+                                state.document.playResY * 0.1,
+                                state.document.playResX * 0.9,
+                                state.document.playResY * 0.9,
+                                false,
+                            )
+                        }) { Text("添加 \\clip") }
+                        OutlinedButton(onClick = {
+                            viewModel.setFocusedRectClip(
+                                state.document.playResX * 0.1,
+                                state.document.playResY * 0.1,
+                                state.document.playResX * 0.9,
+                                state.document.playResY * 0.9,
+                                true,
+                            )
+                        }) { Text("添加 \\iclip") }
+                    }
+                }
+            }
         }
         item {
             Text("任意位置")

@@ -70,6 +70,45 @@ class AssGeometrySemanticTest {
         assertNull(AssGeometrySemantic.inspect(output).origin)
     }
     @Test
+    fun readsRectangularClipAndInverseClip() {
+        val clip = AssGeometrySemantic.inspect("{\\clip(10,20,300,400)}Text")
+        assertEquals(10.0, clip.clipRect?.left)
+        assertEquals(400.0, clip.clipRect?.bottom)
+        assertEquals(false, clip.clipInverted)
+        assertEquals(false, clip.clipNonRectangular)
+
+        val inverse = AssGeometrySemantic.inspect("{\\iclip(50,60,70,80)}Text")
+        assertEquals(50.0, inverse.clipRect?.left)
+        assertEquals(true, inverse.clipInverted)
+    }
+
+    @Test
+    fun vectorClipIsDetectedButNotMisparsedAsRectangle() {
+        val snapshot = AssGeometrySemantic.inspect("{\\clip(m 0 0 l 100 0 100 100 0 100)}Text")
+        assertNull(snapshot.clipRect)
+        assertEquals(true, snapshot.clipNonRectangular)
+        assertEquals(false, snapshot.clipInverted)
+    }
+
+    @Test
+    fun rectangularClipPatchPreservesNestedAndUnknownSyntax() {
+        val source = "{\\clip(1,2,3,4)\\t(0,500,\\clip(9,9,20,20))\\x-custom(foo)}Text"
+        val output = AssGeometrySemantic.patchRectClip(
+            source,
+            AssClipRect(100.0, 200.0, 700.0, 800.0),
+            inverted = true,
+        )
+        assertEquals("{\\iclip(100,200,700,800)\\t(0,500,\\clip(9,9,20,20))\\x-custom(foo)}Text", output)
+    }
+
+    @Test
+    fun removingClipKeepsNestedTransformClip() {
+        val source = "{\\bord2\\clip(10,20,30,40)\\t(0,500,\\iclip(1,2,3,4))\\x-custom(foo)}Text"
+        val output = AssGeometrySemantic.removeClip(source)
+        assertEquals("{\\bord2\\t(0,500,\\iclip(1,2,3,4))\\x-custom(foo)}Text", output)
+        assertNull(AssGeometrySemantic.inspect(output).clipRect)
+    }
+    @Test
     fun shearPatchPreservesUnknownNeighborsAndNestedTransform() {
         val source = "{\\fax0.15\\t(0,500,\\fax0.8\\fay-0.4)\\x-custom(foo)\\fay0.25}Text"
         val output = AssGeometrySemantic.patchShear(source, -0.35, 0.6)

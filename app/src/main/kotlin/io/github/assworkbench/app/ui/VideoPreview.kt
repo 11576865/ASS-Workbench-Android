@@ -101,6 +101,8 @@ fun VideoPreview(
     onSetEventScale: (Double, Double) -> Unit,
     onPreviewEventShear: (Double, Double) -> Unit,
     onSetEventShear: (Double, Double) -> Unit,
+    onPreviewEventClip: (Double, Double, Double, Double, Boolean) -> Unit,
+    onSetEventClip: (Double, Double, Double, Double, Boolean) -> Unit,
     onCancelEventPositionPreview: () -> Unit,
     onFocusEvent: (Long) -> Unit,
     onSetEventTiming: (Long, Long, Long) -> Unit,
@@ -160,6 +162,8 @@ fun VideoPreview(
             onSetEventScale = onSetEventScale,
             onPreviewEventShear = onPreviewEventShear,
             onSetEventShear = onSetEventShear,
+            onPreviewEventClip = onPreviewEventClip,
+            onSetEventClip = onSetEventClip,
             onCancelEventPositionPreview = onCancelEventPositionPreview,
             onFocusEvent = onFocusEvent,
             onSetEventTiming = onSetEventTiming,
@@ -451,6 +455,8 @@ private fun AuthoritativeMpvPreview(
     onSetEventScale: (Double, Double) -> Unit,
     onPreviewEventShear: (Double, Double) -> Unit,
     onSetEventShear: (Double, Double) -> Unit,
+    onPreviewEventClip: (Double, Double, Double, Double, Boolean) -> Unit,
+    onSetEventClip: (Double, Double, Double, Double, Boolean) -> Unit,
     onCancelEventPositionPreview: () -> Unit,
     onFocusEvent: (Long) -> Unit,
     onSetEventTiming: (Long, Long, Long) -> Unit,
@@ -638,6 +644,14 @@ private fun AuthoritativeMpvPreview(
                         onCommitScale = onSetEventScale,
                         onPreviewShear = onPreviewEventShear,
                         onCommitShear = onSetEventShear,
+                        onCancel = onCancelEventPositionPreview,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                    RectClipOverlay(
+                        document = document,
+                        event = positionEvent,
+                        onPreview = onPreviewEventClip,
+                        onCommit = onSetEventClip,
                         onCancel = onCancelEventPositionPreview,
                         modifier = Modifier.fillMaxSize(),
                     )
@@ -1260,6 +1274,124 @@ private fun PositionDragOverlay(
     }
 }
 
+@Composable
+private fun RectClipOverlay(
+    document: AssDocument,
+    event: AssEvent,
+    onPreview: (Double, Double, Double, Double, Boolean) -> Unit,
+    onCommit: (Double, Double, Double, Double, Boolean) -> Unit,
+    onCancel: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val geometry = remember(event.text) { AssGeometrySemantic.inspect(event.text) }
+    val initial = geometry.clipRect ?: return
+    var left by remember(event.id, event.text) { mutableStateOf(initial.left) }
+    var top by remember(event.id, event.text) { mutableStateOf(initial.top) }
+    var right by remember(event.id, event.text) { mutableStateOf(initial.right) }
+    var bottom by remember(event.id, event.text) { mutableStateOf(initial.bottom) }
+    val inverted = geometry.clipInverted
+    val guideColor = MaterialTheme.colorScheme.secondary
+
+    BoxWithConstraints(modifier) {
+        val parentWidthPx = constraints.maxWidth.coerceAtLeast(1)
+        val parentHeightPx = constraints.maxHeight.coerceAtLeast(1)
+        val playResX = document.playResX.coerceAtLeast(1)
+        val playResY = document.playResY.coerceAtLeast(1)
+
+        Canvas(Modifier.fillMaxSize()) {
+            val l = (left / playResX) * size.width
+            val t = (top / playResY) * size.height
+            val r = (right / playResX) * size.width
+            val b = (bottom / playResY) * size.height
+            val topLeft = androidx.compose.ui.geometry.Offset(l.toFloat(), t.toFloat())
+            val rectSize = androidx.compose.ui.geometry.Size(
+                (r - l).coerceAtLeast(0.0).toFloat(),
+                (b - t).coerceAtLeast(0.0).toFloat(),
+            )
+            drawRect(
+                color = guideColor.copy(alpha = if (inverted) 0.16f else 0.08f),
+                topLeft = topLeft,
+                size = rectSize,
+            )
+            drawRect(
+                color = guideColor,
+                topLeft = topLeft,
+                size = rectSize,
+                style = Stroke(width = 2.dp.toPx()),
+            )
+            listOf(
+                androidx.compose.ui.geometry.Offset(l.toFloat(), t.toFloat()),
+                androidx.compose.ui.geometry.Offset(r.toFloat(), t.toFloat()),
+                androidx.compose.ui.geometry.Offset(l.toFloat(), b.toFloat()),
+                androidx.compose.ui.geometry.Offset(r.toFloat(), b.toFloat()),
+            ).forEach { point ->
+                drawCircle(guideColor, 6.dp.toPx(), point)
+            }
+        }
+
+        val corners = listOf(
+            0 to (left to top),
+            1 to (right to top),
+            2 to (left to bottom),
+            3 to (right to bottom),
+        )
+        corners.forEach { (corner, point) ->
+            val xDp = maxWidth * (point.first / playResX).toFloat()
+            val yDp = maxHeight * (point.second / playResY).toFloat()
+            Box(
+                Modifier
+                    .offset(x = xDp - 18.dp, y = yDp - 18.dp)
+                    .width(36.dp)
+                    .height(36.dp)
+                    .pointerInput(event.id, event.text, corner) {
+                        var lastPreviewAt = 0L
+                        detectDragGestures(
+                            onDrag = { change, dragAmount ->
+                                change.consume()
+                                val dx = dragAmount.x / parentWidthPx * playResX
+                                val dy = dragAmount.y / parentHeightPx * playResY
+                                when (corner) {
+                                    0 -> {
+                                        left = (left + dx).coerceIn(0.0, (right - 1.0).coerceAtLeast(0.0))
+                                        top = (top + dy).coerceIn(0.0, (bottom - 1.0).coerceAtLeast(0.0))
+                                    }
+                                    1 -> {
+                                        right = (right + dx).coerceIn((left + 1.0).coerceAtMost(playResX.toDouble()), playResX.toDouble())
+                                        top = (top + dy).coerceIn(0.0, (bottom - 1.0).coerceAtLeast(0.0))
+                                    }
+                                    2 -> {
+                                        left = (left + dx).coerceIn(0.0, (right - 1.0).coerceAtLeast(0.0))
+                                        bottom = (bottom + dy).coerceIn((top + 1.0).coerceAtMost(playResY.toDouble()), playResY.toDouble())
+                                    }
+                                    3 -> {
+                                        right = (right + dx).coerceIn((left + 1.0).coerceAtMost(playResX.toDouble()), playResX.toDouble())
+                                        bottom = (bottom + dy).coerceIn((top + 1.0).coerceAtMost(playResY.toDouble()), playResY.toDouble())
+                                    }
+                                }
+                                val now = android.os.SystemClock.uptimeMillis()
+                                if (now - lastPreviewAt >= 80L) {
+                                    lastPreviewAt = now
+                                    onPreview(left, top, right, bottom, inverted)
+                                }
+                            },
+                            onDragEnd = { onCommit(left, top, right, bottom, inverted) },
+                            onDragCancel = onCancel,
+                        )
+                    }
+            )
+        }
+
+        Text(
+            if (inverted) "iclip · 矩形内隐藏" else "clip · 矩形内显示",
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .background(Color.Black.copy(alpha = 0.58f))
+                .padding(horizontal = 6.dp, vertical = 3.dp),
+            color = Color.White,
+            style = MaterialTheme.typography.labelSmall,
+        )
+    }
+}
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun PlaybackBar(
