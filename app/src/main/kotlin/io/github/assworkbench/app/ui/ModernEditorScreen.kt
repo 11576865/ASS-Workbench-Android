@@ -288,6 +288,7 @@ private fun ModernAppBar(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun TooltipIconButton(
     label: String,
