@@ -115,7 +115,7 @@ fun ModernEditorScreen(
                     state, viewModel, issuesByEvent, expandedEventId,
                     { expandedEventId = it }, { openTool(it) }, Modifier.fillMaxSize()
                 )
-                if (supportingOpen || state.selectedEventIds.isNotEmpty()) {
+                if (supportingOpen) {
                     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
                     ModalBottomSheet(
                         onDismissRequest = { supportingOpen = false },
@@ -143,7 +143,7 @@ fun ModernEditorScreen(
                         SupportingWorkbench(
                             state,
                             viewModel,
-                            if (state.selectedEventIds.isNotEmpty() && tool == WorkbenchTool.TIMELINE) WorkbenchTool.BATCH else tool,
+                            tool,
                             issues,
                             { openTool(it) },
                             { returnTool() },
