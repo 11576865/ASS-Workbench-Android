@@ -18,7 +18,7 @@ The first 0.26 runtime slice now establishes the generic render-only transient p
 - Exact-value and non-continuous Style draft edits retain the short auto-commit path.
 - App version is now 0.26.0 / versionCode 28 on this branch.
 
-The existing direct `\\pos` drag still uses its older local preview adapter in `VideoPreview`; migrating it onto the same generic transient pipeline is the next cleanup after this slice is device-tested.
+The existing direct `\\pos` drag now uses the same ViewModel-owned `previewDocument` pipeline. `VideoPreview` keeps the canonical document separate from the render-only document so overlays, effective-value inspection, timeline behavior, and commit semantics do not accidentally bind to transient state. Geometry semantic patching (`\\move`, `\\org`, rotation, scale, clip) is the next layer.
 
 ## Baseline
 

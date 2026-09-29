@@ -267,7 +267,8 @@ private fun WorkbenchPreview(
 ) {
     VideoPreview(
         videoUri = state.project.videoUri,
-        document = state.previewDocument ?: state.document,
+        document = state.document,
+        renderDocument = state.previewDocument ?: state.document,
         seekRequestMs = state.seekRequestMs,
         seekRequestNonce = state.seekRequestNonce,
         onPosition = viewModel::setPlaybackPosition,
@@ -278,7 +279,9 @@ private fun WorkbenchPreview(
         initialPositionMs = state.playbackPositionMs,
         focusedEventId = state.focusedEventId,
         positionEditEventId = if (positionEditing) state.focusedEventId else null,
+        onPreviewEventPosition = viewModel::previewFocusedPosition,
         onSetEventPosition = viewModel::setFocusedPosition,
+        onCancelEventPositionPreview = viewModel::clearTransientPreview,
         onFocusEvent = { viewModel.focusEvent(it, seek = false) },
         onSetEventTiming = viewModel::setEventTiming,
         onOpenVideo = onOpenVideo,

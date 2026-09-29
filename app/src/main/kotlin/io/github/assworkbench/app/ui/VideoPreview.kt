@@ -76,6 +76,7 @@ import java.io.File
 fun VideoPreview(
     videoUri: String?,
     document: AssDocument,
+    renderDocument: AssDocument = document,
     seekRequestMs: Long?,
     seekRequestNonce: Long,
     onPosition: (Long) -> Unit,
@@ -86,7 +87,9 @@ fun VideoPreview(
     initialPositionMs: Long,
     focusedEventId: Long?,
     positionEditEventId: Long?,
+    onPreviewEventPosition: (Double, Double) -> Unit,
     onSetEventPosition: (Double, Double) -> Unit,
+    onCancelEventPositionPreview: () -> Unit,
     onFocusEvent: (Long) -> Unit,
     onSetEventTiming: (Long, Long, Long) -> Unit,
     onOpenVideo: () -> Unit,
@@ -118,6 +121,7 @@ fun VideoPreview(
     AuthoritativeMpvPreview(
             videoUri = videoUri,
             document = document,
+            renderDocument = renderDocument,
             seekRequestMs = seekRequestMs,
             seekRequestNonce = seekRequestNonce,
             onPosition = { positionMs ->
@@ -131,7 +135,9 @@ fun VideoPreview(
             initialPositionMs = resumePositionMs,
             focusedEventId = focusedEventId,
             positionEditEventId = positionEditEventId,
+            onPreviewEventPosition = onPreviewEventPosition,
             onSetEventPosition = onSetEventPosition,
+            onCancelEventPositionPreview = onCancelEventPositionPreview,
             onFocusEvent = onFocusEvent,
             onSetEventTiming = onSetEventTiming,
             onOpenVideo = onOpenVideo,
@@ -398,6 +404,7 @@ private fun ExperimentalRendererStartupProbe(
 private fun AuthoritativeMpvPreview(
     videoUri: String?,
     document: AssDocument,
+    renderDocument: AssDocument,
     seekRequestMs: Long?,
     seekRequestNonce: Long,
     onPosition: (Long) -> Unit,
@@ -408,7 +415,9 @@ private fun AuthoritativeMpvPreview(
     initialPositionMs: Long,
     focusedEventId: Long?,
     positionEditEventId: Long?,
+    onPreviewEventPosition: (Double, Double) -> Unit,
     onSetEventPosition: (Double, Double) -> Unit,
+    onCancelEventPositionPreview: () -> Unit,
     onFocusEvent: (Long) -> Unit,
     onSetEventTiming: (Long, Long, Long) -> Unit,
     onOpenVideo: () -> Unit,
@@ -450,32 +459,6 @@ private fun AuthoritativeMpvPreview(
     var osdMarginRight by remember(mpv, videoUri) { mutableIntStateOf(0) }
     var lastReportedPositionMs by remember(mpv) { mutableLongStateOf(initialPositionMs.coerceAtLeast(0L)) }
     val previewFile = remember(mpv) { File(context.cacheDir, "ass-preview/current.ass").apply { parentFile?.mkdirs() } }
-    var positionPreview by remember(mpv, positionEditEventId) {
-        mutableStateOf<Triple<Long, Double, Double>?>(null)
-    }
-    val renderedDocument = remember(document, positionPreview) {
-        val preview = positionPreview ?: return@remember document
-        document.copy(
-            events = document.events.map { event ->
-                if (event.id != preview.first) event
-                else {
-                    val snapshot = EventOverrideEditor.inspect(event.text)
-                    event.copy(
-                        text = EventOverrideEditor.update(
-                            text = event.text,
-                            x = preview.second,
-                            y = preview.third,
-                            blurRadius = snapshot.blur,
-                            fadeInMs = snapshot.fadeInMs,
-                            fadeOutMs = snapshot.fadeOutMs,
-                            enableSoftEntry = snapshot.softEntry,
-                        )
-                    )
-                }
-            }
-        )
-    }
-
     LaunchedEffect(mpv) {
         if (BuildConfig.ASSWB_RENDERER_EXPERIMENTAL) {
             writeStartupProbe(configDir, "7_preview_core", "success", "rememberMpv returned")
@@ -516,11 +499,12 @@ private fun AuthoritativeMpvPreview(
         }
     }
 
-    LaunchedEffect(mpv, videoUri, renderedDocument, protocolReady, fontRevision) {
+    LaunchedEffect(mpv, videoUri, renderDocument, protocolReady, fontRevision) {
         if (!protocolReady || videoUri.isNullOrBlank()) return@LaunchedEffect
-        if (positionPreview == null) delay(120)
+        val transientRendering = renderDocument != document
+        if (!transientRendering) delay(120)
         val tmp = File(previewFile.parentFile, "current.ass.tmp")
-        tmp.writeText(AssCodec.write(renderedDocument), Charsets.UTF_8)
+        tmp.writeText(AssCodec.write(renderDocument), Charsets.UTF_8)
         if (previewFile.exists()) previewFile.delete()
         tmp.renameTo(previewFile)
         if (!subtitleAttached) {
@@ -530,7 +514,7 @@ private fun AuthoritativeMpvPreview(
         } else {
             mpv.command(MpvCommands.subReload())
         }
-        if (positionPreview != null) return@LaunchedEffect
+        if (transientRendering) return@LaunchedEffect
         delay(300)
         val previewSource = mpv.getString("current-tracks/sub/external-filename")
         val activeSid = mpv.getString("sid") ?: "unknown"
@@ -603,12 +587,9 @@ private fun AuthoritativeMpvPreview(
                     PositionDragOverlay(
                         document = document,
                         event = positionEvent,
-                        onPreview = { x, y -> positionPreview = Triple(positionEvent.id, x, y) },
-                        onCommit = { x, y ->
-                            positionPreview = null
-                            onSetEventPosition(x, y)
-                        },
-                        onCancel = { positionPreview = null },
+                        onPreview = onPreviewEventPosition,
+                        onCommit = onSetEventPosition,
+                        onCancel = onCancelEventPositionPreview,
                         modifier = Modifier.fillMaxSize(),
                     )
                 }
@@ -668,6 +649,10 @@ private fun PositionDragOverlay(
     var x by remember(event.id, event.text) { mutableStateOf(override.x ?: baseX) }
     var y by remember(event.id, event.text) { mutableStateOf(override.y ?: baseY) }
     val guideColor = MaterialTheme.colorScheme.tertiary
+
+    DisposableEffect(event.id) {
+        onDispose { onCancel() }
+    }
 
     BoxWithConstraints(
         modifier.pointerInput(event.id, document.playResX, document.playResY) {

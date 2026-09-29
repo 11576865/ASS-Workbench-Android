@@ -542,6 +542,22 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    fun previewFocusedPosition(x: Double, y: Double) {
+        val state = _state.value
+        val id = state.focusedEventId ?: return
+        val event = state.document.events.firstOrNull { it.id == id } ?: return
+        val current = EventOverrideEditor.inspect(event.text)
+        previewEventOverrides(
+            id = id,
+            x = x.coerceIn(0.0, state.document.playResX.toDouble()),
+            y = y.coerceIn(0.0, state.document.playResY.toDouble()),
+            blur = current.blur,
+            fadeInMs = current.fadeInMs,
+            fadeOutMs = current.fadeOutMs,
+            softEntry = current.softEntry,
+        )
+    }
+
     fun setFocusedPosition(x: Double, y: Double) {
         val state = _state.value
         val id = state.focusedEventId ?: return
