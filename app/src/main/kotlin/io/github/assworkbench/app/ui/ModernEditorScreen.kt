@@ -1,6 +1,11 @@
 package io.github.assworkbench.app.ui
 
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectDragGestures
@@ -285,6 +290,7 @@ private fun ModernEventRow(
                 }
             )
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            .animateContentSize()
             .padding(horizontal = 6.dp, vertical = if (expanded) 6.dp else 4.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
@@ -469,16 +475,23 @@ private fun SupportingWorkbench(
             }
         }
         Divider()
-        when (tool) {
-            WorkbenchTool.TIMELINE -> ModernTimelinePane(state, viewModel, Modifier.fillMaxSize())
-            WorkbenchTool.STYLE -> StylePane(state, viewModel, Modifier.fillMaxSize())
-            WorkbenchTool.POSITION -> PositionPane(state, viewModel, Modifier.fillMaxSize())
-            WorkbenchTool.EFFECTS -> EffectsPane(state, viewModel, Modifier.fillMaxSize())
-            WorkbenchTool.FONTS -> FontManagerPane(state, viewModel, onImportFont, Modifier.fillMaxSize())
-            WorkbenchTool.QC -> QcPane(state, viewModel, issues, Modifier.fillMaxSize())
-            WorkbenchTool.BATCH -> BatchPane(state, viewModel, Modifier.fillMaxSize())
-            WorkbenchTool.PROJECT -> ProjectPane(state, viewModel, onSaveMkv, Modifier.fillMaxSize())
-            WorkbenchTool.DIAGNOSTICS -> DiagnosticsPane(state, viewModel, Modifier.fillMaxSize())
+        AnimatedContent(
+            targetState = tool,
+            transitionSpec = { fadeIn() togetherWith fadeOut() },
+            label = "supporting-tool",
+            modifier = Modifier.weight(1f).fillMaxWidth(),
+        ) { activeTool ->
+            when (activeTool) {
+                WorkbenchTool.TIMELINE -> ModernTimelinePane(state, viewModel, Modifier.fillMaxSize())
+                WorkbenchTool.STYLE -> StylePane(state, viewModel, Modifier.fillMaxSize())
+                WorkbenchTool.POSITION -> PositionPane(state, viewModel, Modifier.fillMaxSize())
+                WorkbenchTool.EFFECTS -> EffectsPane(state, viewModel, Modifier.fillMaxSize())
+                WorkbenchTool.FONTS -> FontManagerPane(state, viewModel, onImportFont, Modifier.fillMaxSize())
+                WorkbenchTool.QC -> QcPane(state, viewModel, issues, Modifier.fillMaxSize())
+                WorkbenchTool.BATCH -> BatchPane(state, viewModel, Modifier.fillMaxSize())
+                WorkbenchTool.PROJECT -> ProjectPane(state, viewModel, onSaveMkv, Modifier.fillMaxSize())
+                WorkbenchTool.DIAGNOSTICS -> DiagnosticsPane(state, viewModel, Modifier.fillMaxSize())
+            }
         }
     }
 }
