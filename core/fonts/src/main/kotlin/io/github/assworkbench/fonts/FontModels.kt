@@ -95,4 +95,40 @@ object FontDiagnostics {
                 }
             }
     }
+
+    /**
+     * Conservative inventory check used for "possibly unused attachment" reporting.
+     * Any renderer or metadata alias match counts as requested; this intentionally
+     * avoids declaring sibling font files unused when libass may resolve through aliases.
+     */
+    fun matchesRequestedFamily(
+        asset: FontAsset,
+        requestedFamilies: Collection<String>,
+    ): Boolean {
+        val requested = requestedFamilies.asSequence()
+            .map { it.trim().lowercase() }
+            .filter { it.isNotEmpty() }
+            .toSet()
+        if (requested.isEmpty()) return false
+
+        val metadata = asset.metadata
+        val names = (
+            metadata.rendererAliases +
+                metadata.aliases +
+                metadata.family +
+                metadata.rendererFamily +
+                listOfNotNull(
+                    metadata.legacyFamily,
+                    metadata.typographicFamily,
+                    metadata.fullName,
+                    metadata.postScriptName,
+                )
+            )
+            .asSequence()
+            .map { it.trim().lowercase() }
+            .filter { it.isNotEmpty() }
+            .toSet()
+
+        return names.any { it in requested }
+    }
 }

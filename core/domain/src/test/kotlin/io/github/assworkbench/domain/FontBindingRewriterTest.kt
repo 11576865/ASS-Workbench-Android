@@ -70,4 +70,51 @@ class FontBindingRewriterTest {
             rewritten.events.single().text,
         )
     }
+    @Test
+    fun requestedFamiliesIgnoreUnusedStylesButIncludeInlineStyleResetsAndFonts() {
+        val document = AssDocument(
+            styles = listOf(
+                AssStyle(name = "Default", fontName = "Base Face"),
+                AssStyle(name = "Signs", fontName = "Sign Face"),
+                AssStyle(name = "Unused", fontName = "Unused Face"),
+            ),
+            events = listOf(
+                AssEvent(
+                    id = 1,
+                    start = SubTime.ZERO,
+                    end = SubTime(1000),
+                    style = "Default",
+                    text = "{\\rSigns}A{\\fnInline Face}B{\\r}C",
+                ),
+            ),
+        )
+
+        assertEquals(setOf("Default", "Signs"), FontBindingRewriter.referencedStyleNames(document))
+        assertEquals(
+            setOf("Base Face", "Sign Face", "Inline Face"),
+            FontBindingRewriter.requestedFamilies(document),
+        )
+    }
+
+    @Test
+    fun styleResetLikeTextOutsideOverrideBlocksDoesNotCreateAReference() {
+        val document = AssDocument(
+            styles = listOf(
+                AssStyle(name = "Default", fontName = "Base Face"),
+                AssStyle(name = "Unused", fontName = "Unused Face"),
+            ),
+            events = listOf(
+                AssEvent(
+                    id = 1,
+                    start = SubTime.ZERO,
+                    end = SubTime(1000),
+                    style = "Default",
+                    text = "literal \\rUnused is dialogue",
+                ),
+            ),
+        )
+
+        assertEquals(setOf("Default"), FontBindingRewriter.referencedStyleNames(document))
+        assertEquals(setOf("Base Face"), FontBindingRewriter.requestedFamilies(document))
+    }
 }

@@ -41,6 +41,7 @@ import io.github.assworkbench.app.EditorViewModel
 import io.github.assworkbench.app.WaveformLiteState
 import io.github.assworkbench.app.WaveformLiteStatus
 import io.github.assworkbench.domain.*
+import io.github.assworkbench.fonts.FontDiagnostics
 import io.github.assworkbench.fonts.FontOrigin
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -3085,34 +3086,146 @@ private fun PositionPane(state: EditorState, viewModel: EditorViewModel, modifie
 }
 
 @Composable
-private fun FontManagerPane(state: EditorState, viewModel: EditorViewModel, onImportFont: () -> Unit, modifier: Modifier = Modifier) {
+private fun FontManagerPane(
+    state: EditorState,
+    viewModel: EditorViewModel,
+    onImportFont: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val focused = state.document.events.firstOrNull { it.id == state.focusedEventId }
-    val style = focused?.let { e -> state.document.styles.firstOrNull { it.name == e.style } }
-    Column(modifier.padding(WorkbenchDimens.Small), verticalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small)) {
+    val style = focused?.let { event ->
+        state.document.styles.firstOrNull { it.name == event.style }
+    }
+    val requestedFamilies = remember(state.document) {
+        FontBindingRewriter.requestedFamilies(state.document)
+            .sortedBy { it.lowercase() }
+    }
+    val explicitlyRequestedFontShas = remember(state.importedFonts, requestedFamilies) {
+        state.importedFonts.asSequence()
+            .filter { font ->
+                FontDiagnostics.matchesRequestedFamily(font, requestedFamilies)
+            }
+            .map { it.sha256 }
+            .toSet()
+    }
+    val mkvAttachmentCount = state.importedFonts.count { it.origin == FontOrigin.MKV_ATTACHMENT }
+    val unreferencedMkvCount = state.importedFonts.count { font ->
+        font.origin == FontOrigin.MKV_ATTACHMENT &&
+            font.sha256 !in explicitlyRequestedFontShas
+    }
+
+    Column(
+        modifier.padding(WorkbenchDimens.Small),
+        verticalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small),
+    ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text("字体管理", style = MaterialTheme.typography.titleSmall)
-                Text("${state.importedFonts.size} 个可用字体" + if (style != null) " · 当前 ${style.fontName}" else "", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    state.importedFonts.size.toString() + " 个可用字体 · 文档请求 " +
+                        requestedFamilies.size +
+                        if (style != null) " · 当前 " + style.fontName else "",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
-            Button(onClick = onImportFont, enabled = !state.fontImportBusy) { Text(if (state.fontImportBusy) "导入中…" else "导入字体") }
+            Button(onClick = onImportFont, enabled = !state.fontImportBusy) {
+                Text(if (state.fontImportBusy) "导入中…" else "导入字体")
+            }
         }
+
+        if (requestedFamilies.isNotEmpty()) {
+            Row(
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro),
+            ) {
+                requestedFamilies.forEach { family ->
+                    AssistChip(
+                        onClick = {},
+                        label = { Text(family) },
+                    )
+                }
+            }
+        } else {
+            Text(
+                "当前 ASS 没有 Event 请求字体；未使用的 Style 定义不会被算作运行时字体需求。",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+
+        if (mkvAttachmentCount > 0) {
+            Text(
+                "MKV 字体附件 " + mkvAttachmentCount +
+                    if (unreferencedMkvCount > 0) {
+                        " · " + unreferencedMkvCount + " 个无显式 ASS 字体请求"
+                    } else {
+                        " · 当前均有显式请求匹配"
+                    },
+                style = MaterialTheme.typography.labelSmall,
+                color = if (unreferencedMkvCount > 0) {
+                    MaterialTheme.colorScheme.tertiary
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
+            )
+            if (unreferencedMkvCount > 0) {
+                Text(
+                    "“无显式请求”只用于诊断，不自动删除附件：libass fallback 或同族字重仍可能使用这些文件。",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+
         Divider()
         LazyColumn(Modifier.weight(1f)) {
-            items(state.importedFonts, key = { it.sha256 }) { font ->
-                Row(Modifier.fillMaxWidth().padding(vertical = WorkbenchDimens.Micro), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small)) {
+            items(
+                state.importedFonts,
+                key = { font -> font.origin.name + ":" + font.sha256 + ":" + font.fileName },
+            ) { font ->
+                val requested = font.sha256 in explicitlyRequestedFontShas
+                Row(
+                    Modifier.fillMaxWidth().padding(vertical = WorkbenchDimens.Micro),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small),
+                ) {
                     Column(Modifier.weight(1f)) {
-                        Text(font.metadata.family, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Text(
-                            "${font.metadata.rendererFamily} · " + when (font.origin) {
-                                FontOrigin.MANUAL -> "手动导入"
-                                FontOrigin.MKV_ATTACHMENT -> "MKV 附件"
-                                FontOrigin.UNKNOWN -> "来源未知"
-                            },
+                            font.metadata.family,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        val originLabel = when (font.origin) {
+                            FontOrigin.MANUAL -> "手动导入"
+                            FontOrigin.MKV_ATTACHMENT -> "MKV 附件"
+                            FontOrigin.UNKNOWN -> "来源未知"
+                        }
+                        Text(
+                            font.metadata.rendererFamily + " · " + originLabel +
+                                if (requested) " · ASS 已请求" else " · 无显式请求",
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            color = if (
+                                font.origin == FontOrigin.MKV_ATTACHMENT && !requested
+                            ) {
+                                MaterialTheme.colorScheme.tertiary
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
                         )
                     }
-                    if (style != null) TextButton({ viewModel.setStyleFont(style.name, font.metadata.rendererFamily) }) { Text("用于 ${style.name}") }
+                    if (style != null) {
+                        TextButton(
+                            onClick = {
+                                viewModel.setStyleFont(
+                                    style.name,
+                                    font.metadata.rendererFamily,
+                                )
+                            },
+                        ) {
+                            Text("用于 " + style.name)
+                        }
+                    }
                 }
                 Divider()
             }

@@ -287,14 +287,10 @@ The structured editor must not delete unknown tags inside or around transforms.
 
 ### Phase F — Font reliability and packaging
 
-Finish:
-- no live native cache mutation;
-- atomic font publication;
-- glyph diagnostics off main thread;
-- font replacement workflow;
-- collect fonts used by document;
-- detect unused embedded fonts;
-- export/attach selected fonts to MKV.
+Implementation is substantially present. Live native cache mutation is avoided, font publication uses atomic file replacement, glyph diagnostics run off the main thread, and Style / selected-Style / force-family replacement workflows already exist. Font request inventory now follows actual Event semantics: base Styles referenced by Events, explicit inline `\\rStyle` resets, and non-empty `\\fn` requests. Unused Style definitions no longer create false required-font diagnostics. The Font manager also marks MKV font attachments with no explicit ASS family/alias request as possible unused attachments, but never deletes them automatically because libass fallback and sibling font faces can still consume them.
+
+Remaining packaging work:
+- export / attach selected fonts to MKV.
 
 ### Phase G — Karaoke and drawing
 

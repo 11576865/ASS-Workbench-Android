@@ -1978,8 +1978,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                     fontStore.glyphDiagnostic(style.fontName, sampleText)?.let { glyphs[style.name] = it }
                 }
                 val diagnostics = FontDiagnostics.diagnose(
-                    requestedFamilies = snapshot.document.styles.map { it.fontName } +
-                        FontBindingRewriter.explicitFamilies(snapshot.document),
+                    requestedFamilies = FontBindingRewriter.requestedFamilies(snapshot.document),
                     imported = snapshot.importedFonts,
                     fallbackFamily = snapshot.fallbackFontFamily,
                 )

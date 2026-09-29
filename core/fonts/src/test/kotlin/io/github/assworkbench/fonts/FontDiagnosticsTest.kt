@@ -33,4 +33,23 @@ class FontDiagnosticsTest {
         assertEquals("Demo Sans", result[1].matchedFamily)
         assertEquals(FontMatchStatus.FALLBACK_ONLY, result[2].status)
     }
+    @Test
+    fun attachmentUsageMatchingAcceptsAliasesButRejectsUnrelatedFamilies() {
+        val asset = FontAsset(
+            fileName = "demo.ttf",
+            sha256 = "x",
+            metadata = FontMetadata(
+                family = "Demo Sans Display",
+                rendererFamily = "Demo Sans",
+                typographicFamily = "Demo Sans Display",
+                aliases = setOf("Demo Sans", "Demo Sans Display"),
+                rendererAliases = setOf("Demo Sans"),
+            ),
+            origin = FontOrigin.MKV_ATTACHMENT,
+        )
+
+        assertEquals(true, FontDiagnostics.matchesRequestedFamily(asset, listOf("Demo Sans")))
+        assertEquals(true, FontDiagnostics.matchesRequestedFamily(asset, listOf("Demo Sans Display")))
+        assertEquals(false, FontDiagnostics.matchesRequestedFamily(asset, listOf("Other Face")))
+    }
 }
