@@ -22,14 +22,18 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.SkipNext
-import androidx.compose.material.icons.filled.SkipPrevious
+import androidx.compose.material.icons.filled.ArrowBackIosNew
+import androidx.compose.material.icons.filled.ArrowForwardIos
 import androidx.compose.material.icons.filled.Timeline
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.PlainTooltip
+import androidx.compose.material3.TooltipBox
+import androidx.compose.material3.TooltipDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -42,6 +46,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -447,6 +452,31 @@ private fun AuthoritativeMpvPreview(
     var osdMarginRight by remember(mpv, videoUri) { mutableIntStateOf(0) }
     var lastReportedPositionMs by remember(mpv) { mutableLongStateOf(initialPositionMs.coerceAtLeast(0L)) }
     val previewFile = remember(mpv) { File(context.cacheDir, "ass-preview/current.ass").apply { parentFile?.mkdirs() } }
+    var positionPreview by remember(mpv, focusedEventId) {
+        mutableStateOf<Triple<Long, Double, Double>?>(null)
+    }
+    val renderedDocument = remember(document, positionPreview) {
+        val preview = positionPreview ?: return@remember document
+        document.copy(
+            events = document.events.map { event ->
+                if (event.id != preview.first) event
+                else {
+                    val snapshot = EventOverrideEditor.inspect(event.text)
+                    event.copy(
+                        text = EventOverrideEditor.update(
+                            text = event.text,
+                            x = preview.second,
+                            y = preview.third,
+                            blurRadius = snapshot.blur,
+                            fadeInMs = snapshot.fadeInMs,
+                            fadeOutMs = snapshot.fadeOutMs,
+                            enableSoftEntry = snapshot.softEntry,
+                        )
+                    )
+                }
+            }
+        )
+    }
 
     LaunchedEffect(mpv) {
         if (BuildConfig.ASSWB_RENDERER_EXPERIMENTAL) {
@@ -488,14 +518,11 @@ private fun AuthoritativeMpvPreview(
         }
     }
 
-    LaunchedEffect(mpv, videoUri, document, protocolReady, fontRevision) {
+    LaunchedEffect(mpv, videoUri, renderedDocument, protocolReady, fontRevision) {
         if (!protocolReady || videoUri.isNullOrBlank()) return@LaunchedEffect
-        if (fontRevision > 0L) {
-            mpv.command("set", "sub-fonts-dir", fontsDir.absolutePath)
-        }
-        delay(120)
+        if (positionPreview == null) delay(120)
         val tmp = File(previewFile.parentFile, "current.ass.tmp")
-        tmp.writeText(AssCodec.write(document), Charsets.UTF_8)
+        tmp.writeText(AssCodec.write(renderedDocument), Charsets.UTF_8)
         if (previewFile.exists()) previewFile.delete()
         tmp.renameTo(previewFile)
         if (!subtitleAttached) {
@@ -505,6 +532,7 @@ private fun AuthoritativeMpvPreview(
         } else {
             mpv.command(MpvCommands.subReload())
         }
+        if (positionPreview != null) return@LaunchedEffect
         delay(300)
         val previewSource = mpv.getString("current-tracks/sub/external-filename")
         val activeSid = mpv.getString("sid") ?: "unknown"
@@ -577,7 +605,12 @@ private fun AuthoritativeMpvPreview(
                     PositionDragOverlay(
                         document = document,
                         event = focusedEvent,
-                        onCommit = onSetEventPosition,
+                        onPreview = { x, y -> positionPreview = Triple(focusedEvent.id, x, y) },
+                        onCommit = { x, y ->
+                            positionPreview = null
+                            onSetEventPosition(x, y)
+                        },
+                        onCancel = { positionPreview = null },
                         modifier = Modifier.fillMaxSize(),
                     )
                 }
@@ -608,7 +641,9 @@ private fun AuthoritativeMpvPreview(
 private fun PositionDragOverlay(
     document: AssDocument,
     event: AssEvent,
+    onPreview: (Double, Double) -> Unit,
     onCommit: (Double, Double) -> Unit,
+    onCancel: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val override = remember(event.text) { EventOverrideEditor.inspect(event.text) }
@@ -639,6 +674,7 @@ private fun PositionDragOverlay(
     BoxWithConstraints(
         modifier.pointerInput(event.id, document.playResX, document.playResY) {
             var armed = false
+            var lastPreviewAt = 0L
             detectDragGestures(
                 onDragStart = { start ->
                     val currentPx = (x / document.playResX.coerceAtLeast(1)) * size.width
@@ -674,13 +710,21 @@ private fun PositionDragOverlay(
                         }
                         x = nx.toDouble()
                         y = ny.toDouble()
+                        val now = android.os.SystemClock.uptimeMillis()
+                        if (now - lastPreviewAt >= 80L) {
+                            lastPreviewAt = now
+                            onPreview(x, y)
+                        }
                     }
                 },
                 onDragEnd = {
                     if (armed) onCommit(x, y)
                     armed = false
                 },
-                onDragCancel = { armed = false },
+                onDragCancel = {
+                    onCancel()
+                    armed = false
+                },
             )
         }
     ) {
@@ -734,6 +778,7 @@ private fun PositionDragOverlay(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun PlaybackBar(
     playback: MpvPlaybackState,
@@ -751,7 +796,14 @@ private fun PlaybackBar(
     val position = (playback.positionSeconds ?: 0.0)
         .coerceIn(0.0, if (duration > 0.0) duration else Double.MAX_VALUE)
     var scrubPosition by remember { mutableStateOf<Double?>(null) }
+    var actionHint by remember { mutableStateOf<String?>(null) }
     val displayPosition = scrubPosition ?: position
+    LaunchedEffect(actionHint) {
+        if (actionHint != null) {
+            delay(850)
+            actionHint = null
+        }
+    }
 
     CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides WorkbenchDimens.MinTouchTarget) {
         Row(
@@ -762,18 +814,40 @@ private fun PlaybackBar(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(0.dp),
         ) {
-            IconButton(onClick = onFrameBack) {
-                Icon(Icons.Filled.SkipPrevious, "上一帧")
+            TransportTooltipButton("上一帧", {
+                onFrameBack()
+                actionHint = "上一帧"
+            }) {
+                Icon(Icons.Filled.ArrowBackIosNew, null)
             }
-            IconButton(onClick = onPlayPause) {
+            TransportTooltipButton(
+                if (playback.status == MpvPlaybackState.Status.Playing ||
+                    playback.status == MpvPlaybackState.Status.Buffering) "暂停" else "播放",
+                {
+                    onPlayPause()
+                    actionHint = if (playback.status == MpvPlaybackState.Status.Playing ||
+                        playback.status == MpvPlaybackState.Status.Buffering) "暂停" else "播放"
+                },
+            ) {
                 val playing = playback.status == MpvPlaybackState.Status.Playing ||
                     playback.status == MpvPlaybackState.Status.Buffering
-                Icon(if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow, if (playing) "暂停" else "播放")
+                Icon(if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow, null)
             }
-            IconButton(onClick = onFrameForward) {
-                Icon(Icons.Filled.SkipNext, "下一帧")
+            TransportTooltipButton("下一帧", {
+                onFrameForward()
+                actionHint = "下一帧"
+            }) {
+                Icon(Icons.Filled.ArrowForwardIos, null)
             }
             Text(formatClock(displayPosition), style = MaterialTheme.typography.labelSmall)
+            actionHint?.let {
+                Text(
+                    it,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(horizontal = WorkbenchDimens.Micro),
+                )
+            }
             TimelineProgressStrip(
                 durationSeconds = duration,
                 positionSeconds = displayPosition,
@@ -792,6 +866,22 @@ private fun PlaybackBar(
             )
             Text(formatClock(duration), style = MaterialTheme.typography.labelSmall)
         }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun TransportTooltipButton(
+    label: String,
+    onClick: () -> Unit,
+    content: @Composable () -> Unit,
+) {
+    TooltipBox(
+        positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+        tooltip = { PlainTooltip { Text(label) } },
+        state = rememberTooltipState(),
+    ) {
+        IconButton(onClick = onClick) { content() }
     }
 }
 
