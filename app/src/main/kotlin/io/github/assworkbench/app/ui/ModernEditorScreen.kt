@@ -1,5 +1,6 @@
 package io.github.assworkbench.app.ui
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.animation.AnimatedContent
@@ -17,6 +18,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -45,12 +47,12 @@ private enum class WorkbenchTool(val title: String) {
 fun ModernEditorScreen(
     state: EditorState,
     viewModel: EditorViewModel,
-    onOpenVideo: () -> Unit,
     onOpenReferenceVideo: () -> Unit,
     onOpenMkvProject: () -> Unit,
     onOpenSubtitle: () -> Unit,
     onImportFont: () -> Unit,
     onSave: () -> Unit,
+    onSaveAs: () -> Unit,
     onSaveMkv: () -> Unit,
 ) {
     var toolName by rememberSaveable { mutableStateOf(WorkbenchTool.TIMELINE.name) }
@@ -60,11 +62,16 @@ fun ModernEditorScreen(
     var openMenu by remember { mutableStateOf(false) }
     var saveConfirmOpen by remember { mutableStateOf(false) }
     var mkvConfirmOpen by remember { mutableStateOf(false) }
+
     val tool = WorkbenchTool.entries.firstOrNull { it.name == toolName } ?: WorkbenchTool.TIMELINE
+    val issues = remember(state.document) { AssQualityCheck.inspect(state.document) }
+    val issuesByEvent = remember(issues) { issues.groupBy { it.eventId } }
+
     fun openTool(next: WorkbenchTool) {
         toolName = next.name
         supportingOpen = true
     }
+
     fun toggleTool(next: WorkbenchTool) {
         if (supportingOpen && tool == next) {
             supportingOpen = false
@@ -73,8 +80,6 @@ fun ModernEditorScreen(
             supportingOpen = true
         }
     }
-    val issues = remember(state.document) { AssQualityCheck.inspect(state.document) }
-    val issuesByEvent = remember(issues) { issues.groupBy { it.eventId } }
 
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -82,150 +87,283 @@ fun ModernEditorScreen(
         contentColor = MaterialTheme.colorScheme.onBackground,
     ) {
         Column(Modifier.fillMaxSize()) {
-        ModernAppBar(
-            state, viewModel, state.selectedEventIds.isNotEmpty(), searchOpen,
-            { searchOpen = !searchOpen }, { openMenu = true }, openMenu, { openMenu = false },
-            onOpenReferenceVideo,
-            {
-                val hasWorkspace = state.subtitleLoaded || state.project.videoUri != null ||
-                    state.container.uri != null || state.dirty
-                if (hasWorkspace) mkvConfirmOpen = true else onOpenMkvProject()
-            },
-            onOpenSubtitle, onImportFont,
-            {
-                if (state.project.subtitleUri == null) onSaveAs()
-                else saveConfirmOpen = true
-            },
-            onSaveMkv,
-            { openTool(it) },
-        )
-
-        if (saveConfirmOpen) {
-            AlertDialog(
-                onDismissRequest = { saveConfirmOpen = false },
-                title = { Text("覆盖保存当前 ASS？") },
-                text = {
-                    Text(
-                        if (state.dirty) "将把当前修改写回原字幕文件。原文件内容会被替换。"
-                        else "当前没有未保存修改；仍可覆盖写回原字幕文件。"
-                    )
+            ModernAppBar(
+                state = state,
+                viewModel = viewModel,
+                selectionMode = state.selectedEventIds.isNotEmpty(),
+                searchOpen = searchOpen,
+                onSearchToggle = { searchOpen = !searchOpen },
+                onOpenMenu = { openMenu = true },
+                openMenu = openMenu,
+                onDismissMenu = { openMenu = false },
+                onOpenVideo = onOpenReferenceVideo,
+                onOpenMkvProject = {
+                    val hasWorkspace = state.subtitleLoaded || state.project.videoUri != null ||
+                        state.container.uri != null || state.dirty
+                    if (hasWorkspace) mkvConfirmOpen = true else onOpenMkvProject()
                 },
-                confirmButton = {
-                    Button(onClick = {
-                        saveConfirmOpen = false
-                        onSave()
-                    }) { Text("覆盖保存") }
+                onOpenSubtitle = onOpenSubtitle,
+                onImportFont = onImportFont,
+                onSave = {
+                    if (state.project.subtitleUri == null) onSaveAs()
+                    else saveConfirmOpen = true
                 },
-                dismissButton = {
-                    Row {
-                        TextButton(onClick = {
-                            saveConfirmOpen = false
-                            onSaveAs()
-                        }) { Text("另存为") }
-                        TextButton(onClick = { saveConfirmOpen = false }) { Text("取消") }
-                    }
-                },
+                onSaveMkv = onSaveMkv,
+                onTool = ::openTool,
             )
-        }
 
-        if (mkvConfirmOpen) {
-            AlertDialog(
-                onDismissRequest = { mkvConfirmOpen = false },
-                title = { Text("切换到 MKV 工程？") },
-                text = {
-                    Text(
-                        "MKV 是独立工作流。选择新的 MKV 后，当前工作台中的字幕、参考视频、选择状态和项目字体会被清空。未保存修改请先保存。"
-                    )
-                },
-                confirmButton = {
-                    Button(onClick = {
-                        mkvConfirmOpen = false
-                        onOpenMkvProject()
-                    }) { Text("选择 MKV") }
-                },
-                dismissButton = {
-                    TextButton(onClick = { mkvConfirmOpen = false }) { Text("取消") }
-                },
-            )
-        }
-
-        VideoPreview(
-            videoUri = state.project.videoUri,
-            document = state.document,
-            seekRequestMs = state.seekRequestMs,
-            seekRequestNonce = state.seekRequestNonce,
-            onPosition = viewModel::setPlaybackPosition,
-            onRendererDiagnostics = viewModel::updateRendererDiagnostics,
-            configDir = viewModel.rendererConfigDir(),
-            fontsDir = viewModel.rendererFontsDir(),
-            fontRevision = state.fontRevision,
-            initialPositionMs = state.playbackPositionMs,
-            showLayoutGuides = false,
-            focusedEventId = state.focusedEventId,
-            positionEditEventId = if (supportingOpen && tool == WorkbenchTool.POSITION) state.focusedEventId else null,
-            onSetEventPosition = viewModel::setFocusedPosition,
-            onFocusEvent = { viewModel.focusEvent(it, seek = false) },
-            onSetEventTiming = viewModel::setEventTiming,
-            onOpenVideo = onOpenVideo,
-            onOpenTimeline = { toggleTool(WorkbenchTool.TIMELINE) },
-            modifier = Modifier.fillMaxWidth(),
-        )
-
-        if (searchOpen) SearchStrip(state.query, viewModel::setQuery) {
-            viewModel.setQuery(""); searchOpen = false
-        }
-
-        BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
-            val compact = maxWidth < WorkbenchDimens.CompactWidth
-            if (compact) {
-                EventWorkspace(
-                    state, viewModel, issuesByEvent, expandedEventId,
-                    { expandedEventId = it }, { toggleTool(it) }, Modifier.fillMaxSize()
-                )
-                if (supportingOpen) {
-                    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
-                    ModalBottomSheet(
-                        onDismissRequest = { supportingOpen = false },
-                        sheetState = sheetState,
-                    ) {
-                        SupportingWorkbench(
-                            state, viewModel, tool, issues,
-                            { supportingOpen = false }, onImportFont, onSaveMkv,
-                            Modifier.fillMaxWidth().heightIn(min = 224.dp, max = 640.dp),
+            if (saveConfirmOpen) {
+                AlertDialog(
+                    onDismissRequest = { saveConfirmOpen = false },
+                    title = { Text("覆盖保存当前 ASS？") },
+                    text = {
+                        Text(
+                            if (state.dirty) "将把当前修改写回原字幕文件。原文件内容会被替换。"
+                            else "当前没有未保存修改；仍可覆盖写回原字幕文件。"
                         )
-                    }
-                }
-            } else {
-                EventWorkspace(
-                    state, viewModel, issuesByEvent, expandedEventId,
-                    { expandedEventId = it }, { toggleTool(it) }, Modifier.fillMaxSize()
+                    },
+                    confirmButton = {
+                        Button(onClick = {
+                            saveConfirmOpen = false
+                            onSave()
+                        }) { Text("覆盖保存") }
+                    },
+                    dismissButton = {
+                        Row {
+                            TextButton(onClick = {
+                                saveConfirmOpen = false
+                                onSaveAs()
+                            }) { Text("另存为") }
+                            TextButton(onClick = { saveConfirmOpen = false }) { Text("取消") }
+                        }
+                    },
                 )
-                if (supportingOpen) {
-                    val overlayWidth = (maxWidth * 0.48f).coerceIn(320.dp, 480.dp)
-                    Surface(
-                        modifier = Modifier
-                            .align(Alignment.CenterEnd)
-                            .fillMaxHeight()
-                            .width(overlayWidth),
-                        tonalElevation = 6.dp,
-                        shadowElevation = 10.dp,
-                        color = MaterialTheme.colorScheme.surface,
-                        contentColor = MaterialTheme.colorScheme.onSurface,
-                    ) {
-                        SupportingWorkbench(
-                            state,
-                            viewModel,
-                            tool,
-                            issues,
-                            { supportingOpen = false },
-                            onImportFont,
-                            onSaveMkv,
-                            Modifier.fillMaxSize(),
+            }
+
+            if (mkvConfirmOpen) {
+                AlertDialog(
+                    onDismissRequest = { mkvConfirmOpen = false },
+                    title = { Text("切换到 MKV 工程？") },
+                    text = {
+                        Text(
+                            "MKV 是独立工作流。选择新的 MKV 后，当前工作台中的字幕、参考视频、选择状态和项目字体会被清空。未保存修改请先保存。"
+                        )
+                    },
+                    confirmButton = {
+                        Button(onClick = {
+                            mkvConfirmOpen = false
+                            onOpenMkvProject()
+                        }) { Text("选择 MKV") }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { mkvConfirmOpen = false }) { Text("取消") }
+                    },
+                )
+            }
+
+            BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
+                val landscape = maxWidth > maxHeight && maxWidth >= WorkbenchDimens.CompactWidth
+
+                if (landscape) {
+                    Row(Modifier.fillMaxSize()) {
+                        Column(
+                            Modifier
+                                .weight(0.58f)
+                                .fillMaxHeight()
+                                .background(Color.Black),
+                        ) {
+                            WorkbenchPreview(
+                                state = state,
+                                viewModel = viewModel,
+                                positionEditing = supportingOpen && tool == WorkbenchTool.POSITION,
+                                onOpenVideo = onOpenReferenceVideo,
+                                onOpenTimeline = { toggleTool(WorkbenchTool.TIMELINE) },
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
+                        VerticalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                        Column(Modifier.weight(0.42f).fillMaxHeight()) {
+                            if (searchOpen) {
+                                SearchStrip(state.query, viewModel::setQuery) {
+                                    viewModel.setQuery("")
+                                    searchOpen = false
+                                }
+                            }
+                            WorkbenchEventArea(
+                                state = state,
+                                viewModel = viewModel,
+                                issues = issues,
+                                issuesByEvent = issuesByEvent,
+                                expandedEventId = expandedEventId,
+                                onExpandedChange = { expandedEventId = it },
+                                onTool = ::toggleTool,
+                                supportingOpen = supportingOpen,
+                                tool = tool,
+                                onCloseSupporting = { supportingOpen = false },
+                                onImportFont = onImportFont,
+                                onSaveMkv = onSaveMkv,
+                                forceOverlay = true,
+                                modifier = Modifier.weight(1f).fillMaxWidth(),
+                            )
+                        }
+                    }
+                } else {
+                    Column(Modifier.fillMaxSize()) {
+                        WorkbenchPreview(
+                            state = state,
+                            viewModel = viewModel,
+                            positionEditing = supportingOpen && tool == WorkbenchTool.POSITION,
+                            onOpenVideo = onOpenReferenceVideo,
+                            onOpenTimeline = { toggleTool(WorkbenchTool.TIMELINE) },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+
+                        if (searchOpen) {
+                            SearchStrip(state.query, viewModel::setQuery) {
+                                viewModel.setQuery("")
+                                searchOpen = false
+                            }
+                        }
+
+                        WorkbenchEventArea(
+                            state = state,
+                            viewModel = viewModel,
+                            issues = issues,
+                            issuesByEvent = issuesByEvent,
+                            expandedEventId = expandedEventId,
+                            onExpandedChange = { expandedEventId = it },
+                            onTool = ::toggleTool,
+                            supportingOpen = supportingOpen,
+                            tool = tool,
+                            onCloseSupporting = { supportingOpen = false },
+                            onImportFont = onImportFont,
+                            onSaveMkv = onSaveMkv,
+                            forceOverlay = false,
+                            modifier = Modifier.weight(1f).fillMaxWidth(),
                         )
                     }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun WorkbenchPreview(
+    state: EditorState,
+    viewModel: EditorViewModel,
+    positionEditing: Boolean,
+    onOpenVideo: () -> Unit,
+    onOpenTimeline: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    VideoPreview(
+        videoUri = state.project.videoUri,
+        document = state.document,
+        seekRequestMs = state.seekRequestMs,
+        seekRequestNonce = state.seekRequestNonce,
+        onPosition = viewModel::setPlaybackPosition,
+        onRendererDiagnostics = viewModel::updateRendererDiagnostics,
+        configDir = viewModel.rendererConfigDir(),
+        fontsDir = viewModel.rendererFontsDir(),
+        fontRevision = state.fontRevision,
+        initialPositionMs = state.playbackPositionMs,
+        showLayoutGuides = false,
+        focusedEventId = state.focusedEventId,
+        positionEditEventId = if (positionEditing) state.focusedEventId else null,
+        onSetEventPosition = viewModel::setFocusedPosition,
+        onFocusEvent = { viewModel.focusEvent(it, seek = false) },
+        onSetEventTiming = viewModel::setEventTiming,
+        onOpenVideo = onOpenVideo,
+        onOpenTimeline = onOpenTimeline,
+        modifier = modifier,
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun WorkbenchEventArea(
+    state: EditorState,
+    viewModel: EditorViewModel,
+    issues: List<AssQcIssue>,
+    issuesByEvent: Map<Long, List<AssQcIssue>>,
+    expandedEventId: Long?,
+    onExpandedChange: (Long?) -> Unit,
+    onTool: (WorkbenchTool) -> Unit,
+    supportingOpen: Boolean,
+    tool: WorkbenchTool,
+    onCloseSupporting: () -> Unit,
+    onImportFont: () -> Unit,
+    onSaveMkv: () -> Unit,
+    forceOverlay: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    BoxWithConstraints(modifier) {
+        val compact = !forceOverlay && maxWidth < WorkbenchDimens.CompactWidth
+
+        EventWorkspace(
+            state = state,
+            viewModel = viewModel,
+            issuesByEvent = issuesByEvent,
+            expandedEventId = expandedEventId,
+            onExpandedChange = onExpandedChange,
+            onTool = onTool,
+            modifier = Modifier.fillMaxSize(),
+        )
+
+        if (supportingOpen) {
+            if (compact) {
+                val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
+                ModalBottomSheet(
+                    onDismissRequest = onCloseSupporting,
+                    sheetState = sheetState,
+                ) {
+                    SupportingWorkbench(
+                        state = state,
+                        viewModel = viewModel,
+                        tool = tool,
+                        issues = issues,
+                        onClose = onCloseSupporting,
+                        onImportFont = onImportFont,
+                        onSaveMkv = onSaveMkv,
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 224.dp, max = 640.dp),
+                    )
+                }
+            } else {
+                val overlayFraction = if (forceOverlay) 0.82f else 0.48f
+                val minOverlay = if (forceOverlay) 280.dp else 320.dp
+                val overlayWidth = (maxWidth * overlayFraction).coerceIn(minOverlay, 480.dp)
+                Surface(
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .padding(vertical = WorkbenchDimens.Micro)
+                        .fillMaxHeight()
+                        .width(overlayWidth),
+                    shape = RoundedCornerShape(
+                        topStart = WorkbenchDimens.Large,
+                        bottomStart = WorkbenchDimens.Large,
+                    ),
+                    border = BorderStroke(
+                        1.dp,
+                        MaterialTheme.colorScheme.outline.copy(alpha = 0.72f),
+                    ),
+                    tonalElevation = 8.dp,
+                    shadowElevation = 18.dp,
+                    color = MaterialTheme.colorScheme.surface,
+                    contentColor = MaterialTheme.colorScheme.onSurface,
+                ) {
+                    SupportingWorkbench(
+                        state = state,
+                        viewModel = viewModel,
+                        tool = tool,
+                        issues = issues,
+                        onClose = onCloseSupporting,
+                        onImportFont = onImportFont,
+                        onSaveMkv = onSaveMkv,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
+            }
         }
     }
 }
