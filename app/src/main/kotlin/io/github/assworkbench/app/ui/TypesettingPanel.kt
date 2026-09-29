@@ -214,8 +214,8 @@ fun TypesettingPanel(
     }
 
     LazyColumn(
-        modifier.fillMaxSize().padding(horizontal = 6.dp, vertical = 4.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
+        modifier.fillMaxSize().padding(horizontal = WorkbenchDimens.Small, vertical = WorkbenchDimens.Micro),
+        verticalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small),
     ) {
             item {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -310,23 +310,23 @@ fun TypesettingPanel(
                     marginL = marginL.toIntOrNull() ?: style.marginL,
                     marginR = marginR.toIntOrNull() ?: style.marginR,
                     marginV = marginV.toIntOrNull() ?: style.marginV,
-                    modifier = Modifier.fillMaxWidth().height(76.dp),
+                    modifier = Modifier.fillMaxWidth().height(80.dp),
                 )
             }
             item {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small)) {
                         SmallField("字号", fontSize, { fontSize = it }, Modifier.weight(1f))
                         SmallField("字距", spacing, { spacing = it }, Modifier.weight(1f))
                     }
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small)) {
                         SmallField("描边", outline, { outline = it }, Modifier.weight(1f))
                         SmallField("阴影", shadow, { shadow = it }, Modifier.weight(1f))
                     }
                 }
             }
             item {
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small), verticalAlignment = Alignment.CenterVertically) {
                     Flag("B", bold) { bold = it }
                     Flag("I", italic) { italic = it }
                     Flag("U", underline) { underline = it }
@@ -335,11 +335,11 @@ fun TypesettingPanel(
             }
             item {
                 Text("九宫格对齐")
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro)) {
                     listOf(listOf(7, 8, 9), listOf(4, 5, 6), listOf(1, 2, 3)).forEach { row ->
                         Row(
                             Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro),
                         ) {
                             row.forEach { value ->
                                 if (alignment == value) {
@@ -353,7 +353,7 @@ fun TypesettingPanel(
                 }
             }
             item {
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small)) {
                     SmallField("Margin L", marginL, { marginL = it }, Modifier.weight(1f))
                     SmallField("Margin R", marginR, { marginR = it }, Modifier.weight(1f))
                     SmallField("Margin V", marginV, { marginV = it }, Modifier.weight(1f))
@@ -361,10 +361,10 @@ fun TypesettingPanel(
             }
             item {
                 Text("颜色")
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small)) {
                     Row(
                         Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small),
                     ) {
                         AssColorControl(
                             label = "文字",
@@ -381,7 +381,7 @@ fun TypesettingPanel(
                     }
                     Row(
                         Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small),
                     ) {
                         AssColorControl(
                             label = "描边",
@@ -403,12 +403,12 @@ fun TypesettingPanel(
                     "ASS Style 字段",
                     style = androidx.compose.material3.MaterialTheme.typography.titleSmall,
                 )
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small)) {
                         SmallField("Scale X %", scaleX, { scaleX = it }, Modifier.weight(1f))
                         SmallField("Scale Y %", scaleY, { scaleY = it }, Modifier.weight(1f))
                     }
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small)) {
                         SmallField("旋转 Z°", angle, { angle = it }, Modifier.weight(1f))
                         SmallField("BorderStyle", borderStyle, { borderStyle = it }, Modifier.weight(1f))
                         SmallField("Encoding", encoding, { encoding = it }, Modifier.weight(1f))
@@ -544,7 +544,7 @@ private fun AssColorControl(
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small),
         ) {
             Box(
                 Modifier.size(18.dp).background(
@@ -597,7 +597,7 @@ private fun AssColorDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Box(
-                    Modifier.fillMaxWidth().heightIn(min = 42.dp).background(
+                    Modifier.fillMaxWidth().heightIn(min = WorkbenchDimens.MinTouchTarget).background(
                         Color(red / 255f, green / 255f, blue / 255f, opacity / 255f)
                     )
                 )
