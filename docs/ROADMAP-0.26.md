@@ -20,6 +20,20 @@ The closing sequence is:
 
 Karaoke and full Drawing are not required for this handoff. They remain later expansion domains unless a small prerequisite is needed to protect current data integrity.
 
+### Feature-freeze entry
+
+The bounded 0.26 capability pass is now closed at functional baseline `46057771aea2f1d7437e6d919d35c9dbfbf5eda7` after Android CI #324 passed, including the native MKV bridge regression test. From this point to the 0.27.0 handoff, changes should be limited to:
+
+- correctness, crash, data-loss and round-trip fixes;
+- performance/lifecycle hardening;
+- compatibility work grounded in current upstream or real-world failure cases;
+- testability, diagnostics and build/release provenance;
+- UI changes required to remove ambiguity or expose a failure safely.
+
+A failing renderer/native probe, destructive-combination test, or real-device check is a blocker to repair inside the freeze; it is not a reason to reopen unrelated feature work. Karaoke, full Drawing, general muxing, ASR/OCR/translation and other expansion remain outside the gate.
+
+The hardening plan and destructive-combination matrix live in [HARDENING-0.27.md](HARDENING-0.27.md).
+
 
 ## Implementation status — Phase A first end-to-end slice
 
@@ -287,10 +301,19 @@ The structured editor must not delete unknown tags inside or around transforms.
 
 ### Phase F — Font reliability and packaging
 
-Implementation is substantially present. Live native cache mutation is avoided, font publication uses atomic file replacement, glyph diagnostics run off the main thread, and Style / selected-Style / force-family replacement workflows already exist. Font request inventory now follows actual Event semantics: base Styles referenced by Events, explicit inline `\\rStyle` resets, and non-empty `\\fn` requests. Unused Style definitions no longer create false required-font diagnostics. The Font manager also marks MKV font attachments with no explicit ASS family/alias request as possible unused attachments, but never deletes them automatically because libass fallback and sibling font faces can still consume them.
+**Feature implementation is present; Phase F is now in hardening.** Live native cache mutation is avoided, font publication uses atomic file replacement, glyph diagnostics run off the main thread, and Style / selected-Style / force-family replacement workflows already exist. Font request inventory follows actual Event semantics: base Styles referenced by Events, explicit inline `\\rStyle` resets, and non-empty `\\fn` requests. Unused Style definitions no longer create false required-font diagnostics. The Font manager also marks MKV font attachments with no explicit ASS family/alias request as possibly unused, but never deletes them automatically because libass fallback and sibling font faces can still consume them.
 
-Remaining packaging work:
-- export / attach selected fonts to MKV.
+The remaining packaging gap is now implemented on the 0.26 mainline:
+
+- in an MKV project, manually imported TTF/OTF assets can be selected individually for packaging;
+- **选择 ASS 请求** derives a conservative selection from the current document's effective font requests;
+- fonts already present as current MKV attachments are excluded from repackaging by SHA-256 at the Android layer;
+- the selected font files are passed to the native bridge and appended in the **same remux pass** that replaces the selected ASS track;
+- existing attachments are preserved; selected input paths are deduplicated; video/audio are not transcoded;
+- the Go bridge regression test verifies preservation of the source font attachment and append-once behavior for a selected OTF supplied twice;
+- Android CI #324 passed on functional baseline `46057771aea2f1d7437e6d919d35c9dbfbf5eda7`.
+
+No further Font feature domain is opened before 0.27. Remaining work is hardening: real-device save/reopen/render checks, filename-collision policy, larger font sets, memory behaviour, and compatibility corpus coverage.
 
 ### Phase G — Karaoke and drawing
 

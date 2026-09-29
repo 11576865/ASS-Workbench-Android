@@ -53,6 +53,9 @@ Required checks:
 | M3 | MKV with many font attachments | scan remains streaming and bounded in memory |
 | M4 | MKV with multiple ASS tracks | selected track keeps its font semantics |
 | M5 | edited ASS write-back | no video/audio transcode; track identity/order retained |
+| M6 | selected manual TTF/OTF packaged during ASS write-back | source attachments remain; each selected font is appended once; output reopens |
+| M7 | source already contains the selected font | Android packaging plan does not add the same SHA-256 again |
+| M8 | attachment filename collision with different payload | no source attachment is overwritten or silently lost; collision policy is explicit |
 
 ## Diagnostics requirements
 
