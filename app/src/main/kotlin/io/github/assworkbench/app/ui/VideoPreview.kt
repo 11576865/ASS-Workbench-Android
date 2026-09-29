@@ -88,6 +88,7 @@ fun VideoPreview(
     initialPositionMs: Long,
     showLayoutGuides: Boolean,
     focusedEventId: Long?,
+    positionEditEventId: Long?,
     onSetEventPosition: (Double, Double) -> Unit,
     onFocusEvent: (Long) -> Unit,
     onSetEventTiming: (Long, Long, Long) -> Unit,
@@ -133,6 +134,7 @@ fun VideoPreview(
             initialPositionMs = resumePositionMs,
             showLayoutGuides = showLayoutGuides,
             focusedEventId = focusedEventId,
+            positionEditEventId = positionEditEventId,
             onSetEventPosition = onSetEventPosition,
             onFocusEvent = onFocusEvent,
             onSetEventTiming = onSetEventTiming,
@@ -410,6 +412,7 @@ private fun AuthoritativeMpvPreview(
     initialPositionMs: Long,
     showLayoutGuides: Boolean,
     focusedEventId: Long?,
+    positionEditEventId: Long?,
     onSetEventPosition: (Double, Double) -> Unit,
     onFocusEvent: (Long) -> Unit,
     onSetEventTiming: (Long, Long, Long) -> Unit,
@@ -452,7 +455,7 @@ private fun AuthoritativeMpvPreview(
     var osdMarginRight by remember(mpv, videoUri) { mutableIntStateOf(0) }
     var lastReportedPositionMs by remember(mpv) { mutableLongStateOf(initialPositionMs.coerceAtLeast(0L)) }
     val previewFile = remember(mpv) { File(context.cacheDir, "ass-preview/current.ass").apply { parentFile?.mkdirs() } }
-    var positionPreview by remember(mpv, focusedEventId) {
+    var positionPreview by remember(mpv, positionEditEventId) {
         mutableStateOf<Triple<Long, Double, Double>?>(null)
     }
     val renderedDocument = remember(document, positionPreview) {
@@ -598,14 +601,14 @@ private fun AuthoritativeMpvPreview(
                 }
             } else {
                 MpvSurface(mpv, Modifier.fillMaxSize())
-                val focusedEvent = focusedEventId?.let { id ->
+                val positionEvent = positionEditEventId?.let { id ->
                     document.events.firstOrNull { it.id == id }
                 }
-                if (focusedEvent != null) {
+                if (positionEvent != null) {
                     PositionDragOverlay(
                         document = document,
-                        event = focusedEvent,
-                        onPreview = { x, y -> positionPreview = Triple(focusedEvent.id, x, y) },
+                        event = positionEvent,
+                        onPreview = { x, y -> positionPreview = Triple(positionEvent.id, x, y) },
                         onCommit = { x, y ->
                             positionPreview = null
                             onSetEventPosition(x, y)
