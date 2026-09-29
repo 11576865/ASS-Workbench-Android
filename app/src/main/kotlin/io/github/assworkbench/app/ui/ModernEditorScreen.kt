@@ -664,7 +664,7 @@ private fun ModernTimelinePane(state: EditorState, viewModel: EditorViewModel, m
     }
 }
 
-private enum class ModernModernTimelineDragMode { START, MOVE, END }
+private enum class ModernTimelineDragMode { START, MOVE, END }
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -683,7 +683,7 @@ private fun ModernTimelineEventRow(
 ) {
     var previewStart by remember(event.id, event.start) { mutableLongStateOf(event.start.millis) }
     var previewEnd by remember(event.id, event.end) { mutableLongStateOf(event.end.millis) }
-    var dragMode by remember { mutableStateOf<ModernModernTimelineDragMode?>(null) }
+    var dragMode by remember { mutableStateOf<ModernTimelineDragMode?>(null) }
     var baseStart by remember { mutableLongStateOf(previewStart) }
     var baseEnd by remember { mutableLongStateOf(previewEnd) }
     var dragPx by remember { mutableFloatStateOf(0f) }
@@ -713,17 +713,24 @@ private fun ModernTimelineEventRow(
                             candidate
                         }
                         val threshold = minOf(120L, maxOf(24L, span / 220L))
-                        val nearest = snapTargets.minByOrNull { abs(it - candidate) }
+                        val nearest = snapTargets
+                            .asSequence()
+                            .filterNot { it == baseStart || it == baseEnd }
+                            .minByOrNull { abs(it - candidate) }
                         return if (nearest != null && abs(nearest - candidate) <= threshold) nearest else gridCandidate
                     }
                     detectDragGestures(
                         onDragStart = { offset ->
                             val sx = xFor(previewStart); val ex = xFor(previewEnd); val hit = 18.dp.toPx()
-                            dragMode = when {
-                                abs(offset.x - sx) <= hit -> ModernModernTimelineDragMode.START
-                                abs(offset.x - ex) <= hit -> ModernModernTimelineDragMode.END
-                                focused && offset.x in sx..ex -> ModernModernTimelineDragMode.MOVE
-                                else -> null
+                            dragMode = if (!focused) {
+                                null
+                            } else {
+                                when {
+                                    abs(offset.x - sx) <= hit -> ModernTimelineDragMode.START
+                                    abs(offset.x - ex) <= hit -> ModernTimelineDragMode.END
+                                    offset.x in sx..ex -> ModernTimelineDragMode.MOVE
+                                    else -> null
+                                }
                             }
                             baseStart = previewStart; baseEnd = previewEnd; dragPx = 0f
                         },
@@ -732,9 +739,9 @@ private fun ModernTimelineEventRow(
                             change.consume(); dragPx += amount.x
                             val delta = (dragPx / size.width.coerceAtLeast(1) * span).toLong()
                             when (mode) {
-                                ModernModernTimelineDragMode.START -> previewStart = snap(baseStart + delta).coerceIn(0L, (previewEnd - 10L).coerceAtLeast(0L))
-                                ModernModernTimelineDragMode.END -> previewEnd = snap(baseEnd + delta).coerceAtLeast(previewStart + 10L)
-                                ModernModernTimelineDragMode.MOVE -> {
+                                ModernTimelineDragMode.START -> previewStart = snap(baseStart + delta).coerceIn(0L, (previewEnd - 10L).coerceAtLeast(0L))
+                                ModernTimelineDragMode.END -> previewEnd = snap(baseEnd + delta).coerceAtLeast(previewStart + 10L)
+                                ModernTimelineDragMode.MOVE -> {
                                     val duration = (baseEnd - baseStart).coerceAtLeast(10L)
                                     val next = snap(baseStart + delta).coerceAtLeast(0L)
                                     previewStart = next; previewEnd = next + duration
