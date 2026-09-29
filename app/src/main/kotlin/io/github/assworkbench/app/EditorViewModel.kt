@@ -743,6 +743,48 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         })
     }
 
+    fun previewFocusedShear(shearX: Double, shearY: Double) {
+        val state = _state.value
+        val id = state.focusedEventId ?: return
+        val preview = withEventShear(state.document, id, shearX, shearY)
+        _state.update { current ->
+            current.copy(previewDocument = if (preview == state.document) null else preview)
+        }
+    }
+
+    fun setFocusedShear(shearX: Double, shearY: Double) {
+        val id = _state.value.focusedEventId ?: return
+        editDocument("已更新当前字幕的 X / Y 错切。") { doc ->
+            withEventShear(doc, id, shearX, shearY)
+        }
+    }
+
+    fun clearFocusedShear() {
+        val id = _state.value.focusedEventId ?: return
+        editDocument("已清除当前字幕的 X / Y 错切。") { doc ->
+            doc.copy(events = doc.events.map { event ->
+                if (event.id != id) event
+                else event.copy(text = AssGeometrySemantic.removeShear(event.text))
+            })
+        }
+    }
+
+    private fun withEventShear(
+        document: AssDocument,
+        id: Long,
+        shearX: Double,
+        shearY: Double,
+    ): AssDocument {
+        val event = document.events.firstOrNull { it.id == id } ?: return document
+        val fx = shearX.coerceIn(-10.0, 10.0)
+        val fy = shearY.coerceIn(-10.0, 10.0)
+        val patched = AssGeometrySemantic.patchShear(event.text, fx, fy)
+        if (patched == event.text) return document
+        return document.copy(events = document.events.map { candidate ->
+            if (candidate.id == id) candidate.copy(text = patched) else candidate
+        })
+    }
+
 
     fun setFocusedAlignment(alignment: Int) {
         val id = _state.value.focusedEventId ?: return

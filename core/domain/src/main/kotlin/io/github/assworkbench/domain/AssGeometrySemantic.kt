@@ -26,6 +26,8 @@ data class AssGeometrySnapshot(
     val rotationZ: Double? = null,
     val scaleX: Double? = null,
     val scaleY: Double? = null,
+    val shearX: Double? = null,
+    val shearY: Double? = null,
     val malformedLeadingBlock: Boolean = false,
 ) {
     val positionMode: AssPositionMode
@@ -80,6 +82,8 @@ object AssGeometrySemantic {
         val rotation = last("frz", "fr")?.value?.trim()?.toDoubleOrNull()
         val scaleX = last("fscx")?.value?.trim()?.toDoubleOrNull()
         val scaleY = last("fscy")?.value?.trim()?.toDoubleOrNull()
+        val shearX = last("fax")?.value?.trim()?.toDoubleOrNull()
+        val shearY = last("fay")?.value?.trim()?.toDoubleOrNull()
 
         return AssGeometrySnapshot(
             position = position,
@@ -88,6 +92,8 @@ object AssGeometrySemantic {
             rotationZ = rotation,
             scaleX = scaleX,
             scaleY = scaleY,
+            shearX = shearX,
+            shearY = shearY,
             malformedLeadingBlock = scan.malformed,
         )
     }
@@ -189,6 +195,29 @@ object AssGeometrySemantic {
         text = text,
         scan = scanLeading(text),
         names = setOf("fscx", "fscy"),
+    )
+    fun patchShearX(text: String, value: Double): String = patchScalar(
+        text = text,
+        name = "fax",
+        value = value,
+    )
+
+    fun patchShearY(text: String, value: Double): String = patchScalar(
+        text = text,
+        name = "fay",
+        value = value,
+    )
+
+    fun patchShear(text: String, shearX: Double, shearY: Double): String =
+        patchShearY(
+            text = patchShearX(text, shearX),
+            value = shearY,
+        )
+
+    fun removeShear(text: String): String = removeTags(
+        text = text,
+        scan = scanLeading(text),
+        names = setOf("fax", "fay"),
     )
 
     private fun patchScalar(text: String, name: String, value: Double): String {

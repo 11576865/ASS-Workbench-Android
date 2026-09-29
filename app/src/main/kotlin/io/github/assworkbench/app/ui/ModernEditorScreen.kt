@@ -290,6 +290,8 @@ private fun WorkbenchPreview(
         scaleLocked = state.geometryScaleLocked,
         onPreviewEventScale = viewModel::previewFocusedScale,
         onSetEventScale = viewModel::setFocusedScale,
+        onPreviewEventShear = viewModel::previewFocusedShear,
+        onSetEventShear = viewModel::setFocusedShear,
         onCancelEventPositionPreview = viewModel::clearTransientPreview,
         onFocusEvent = { viewModel.focusEvent(it, seek = false) },
         onSetEventTiming = viewModel::setEventTiming,
@@ -1205,6 +1207,12 @@ private fun PositionPane(state: EditorState, viewModel: EditorViewModel, modifie
     var scaleDraftChanged by remember(event.id) { mutableStateOf(false) }
     var scalePreviewX by remember(event.id, event.text, style?.scaleX) { mutableStateOf(effectiveScaleX) }
     var scalePreviewY by remember(event.id, event.text, style?.scaleY) { mutableStateOf(effectiveScaleY) }
+    var shearXText by remember(event.id, event.text) { mutableStateOf((geometry.shearX ?: 0.0).toString()) }
+    var shearYText by remember(event.id, event.text) { mutableStateOf((geometry.shearY ?: 0.0).toString()) }
+    var shearGestureActive by remember(event.id) { mutableStateOf(false) }
+    var shearDraftChanged by remember(event.id) { mutableStateOf(false) }
+    var shearPreviewX by remember(event.id, event.text) { mutableStateOf(geometry.shearX ?: 0.0) }
+    var shearPreviewY by remember(event.id, event.text) { mutableStateOf(geometry.shearY ?: 0.0) }
     val scaleRatioYPerX = remember(event.id, event.text, style?.scaleX, style?.scaleY) {
         if (effectiveScaleX != 0.0) effectiveScaleY / effectiveScaleX else 1.0
     }
@@ -1235,6 +1243,17 @@ private fun PositionPane(state: EditorState, viewModel: EditorViewModel, modifie
         kotlinx.coroutines.delay(320)
         viewModel.setFocusedScale(sx, sy)
         scaleDraftChanged = false
+    }
+    LaunchedEffect(event.id, shearXText, shearYText, shearGestureActive, shearDraftChanged) {
+        if (!shearDraftChanged || shearGestureActive) return@LaunchedEffect
+        val fx = shearXText.toDoubleOrNull() ?: return@LaunchedEffect
+        val fy = shearYText.toDoubleOrNull() ?: return@LaunchedEffect
+        shearPreviewX = fx
+        shearPreviewY = fy
+        viewModel.previewFocusedShear(fx, fy)
+        kotlinx.coroutines.delay(320)
+        viewModel.setFocusedShear(fx, fy)
+        shearDraftChanged = false
     }
 
     DisposableEffect(event.id) {
@@ -1481,6 +1500,83 @@ private fun PositionPane(state: EditorState, viewModel: EditorViewModel, modifie
                     "运动/冲突位置下仍可用数值与 Slider；画布 Scale gizmo 暂只用于静态位置，避免伪造随时间移动的锚点。"
                 } else {
                     "画布上的 Scale gizmo 是参数控制框，不冒充 libass 的真实文字边界；拖右上角控制点可同时调 X/Y。"
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        item { Divider() }
+        item {
+            Text("错切 · \\fax / \\fay", style = MaterialTheme.typography.titleSmall)
+            Text(
+                "\\fax / \\fay 是几何错切因子，不是斜体。0 表示无错切；X 改变水平倾斜，Y 改变垂直倾斜。",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            ContinuousParameterControl(
+                label = "Shear X · \\fax",
+                valueText = shearXText,
+                onValueTextChange = {
+                    shearXText = it
+                    shearDraftChanged = true
+                },
+                range = -2f..2f,
+                step = 0.05,
+                supportingText = if (geometry.shearX != null) "Event override：${geometry.shearX}" else "无 override：0",
+                onPreview = { fx ->
+                    val fy = shearYText.toDoubleOrNull() ?: 0.0
+                    shearPreviewX = fx
+                    shearPreviewY = fy
+                    viewModel.previewFocusedShear(fx, fy)
+                },
+                onGestureActive = { active ->
+                    shearGestureActive = active
+                    if (!active) {
+                        viewModel.setFocusedShear(shearPreviewX, shearPreviewY)
+                        shearDraftChanged = false
+                    }
+                },
+            )
+            ContinuousParameterControl(
+                label = "Shear Y · \\fay",
+                valueText = shearYText,
+                onValueTextChange = {
+                    shearYText = it
+                    shearDraftChanged = true
+                },
+                range = -2f..2f,
+                step = 0.05,
+                supportingText = if (geometry.shearY != null) "Event override：${geometry.shearY}" else "无 override：0",
+                onPreview = { fy ->
+                    val fx = shearXText.toDoubleOrNull() ?: 0.0
+                    shearPreviewX = fx
+                    shearPreviewY = fy
+                    viewModel.previewFocusedShear(fx, fy)
+                },
+                onGestureActive = { active ->
+                    shearGestureActive = active
+                    if (!active) {
+                        viewModel.setFocusedShear(shearPreviewX, shearPreviewY)
+                        shearDraftChanged = false
+                    }
+                },
+            )
+            if (geometry.shearX != null || geometry.shearY != null) {
+                TextButton(onClick = {
+                    shearDraftChanged = false
+                    shearGestureActive = false
+                    shearXText = "0"
+                    shearYText = "0"
+                    shearPreviewX = 0.0
+                    shearPreviewY = 0.0
+                    viewModel.clearFocusedShear()
+                }) { Text("清除 Shear override") }
+            }
+            Text(
+                if (geometry.positionMode == AssPositionMode.MOVE || geometry.positionMode == AssPositionMode.CONFLICT) {
+                    "运动/冲突位置下保留精确值和 Slider；画布 Shear gizmo 暂只用于静态位置。"
+                } else {
+                    "静态位置下，参数框的上边控制点编辑 \\fax，右边控制点编辑 \\fay；它仍是参数示意，不是字形真实边界。"
                 },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,

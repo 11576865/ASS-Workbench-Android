@@ -99,6 +99,8 @@ fun VideoPreview(
     scaleLocked: Boolean,
     onPreviewEventScale: (Double, Double) -> Unit,
     onSetEventScale: (Double, Double) -> Unit,
+    onPreviewEventShear: (Double, Double) -> Unit,
+    onSetEventShear: (Double, Double) -> Unit,
     onCancelEventPositionPreview: () -> Unit,
     onFocusEvent: (Long) -> Unit,
     onSetEventTiming: (Long, Long, Long) -> Unit,
@@ -156,6 +158,8 @@ fun VideoPreview(
             scaleLocked = scaleLocked,
             onPreviewEventScale = onPreviewEventScale,
             onSetEventScale = onSetEventScale,
+            onPreviewEventShear = onPreviewEventShear,
+            onSetEventShear = onSetEventShear,
             onCancelEventPositionPreview = onCancelEventPositionPreview,
             onFocusEvent = onFocusEvent,
             onSetEventTiming = onSetEventTiming,
@@ -445,6 +449,8 @@ private fun AuthoritativeMpvPreview(
     scaleLocked: Boolean,
     onPreviewEventScale: (Double, Double) -> Unit,
     onSetEventScale: (Double, Double) -> Unit,
+    onPreviewEventShear: (Double, Double) -> Unit,
+    onSetEventShear: (Double, Double) -> Unit,
     onCancelEventPositionPreview: () -> Unit,
     onFocusEvent: (Long) -> Unit,
     onSetEventTiming: (Long, Long, Long) -> Unit,
@@ -630,6 +636,8 @@ private fun AuthoritativeMpvPreview(
                         scaleLocked = scaleLocked,
                         onPreviewScale = onPreviewEventScale,
                         onCommitScale = onSetEventScale,
+                        onPreviewShear = onPreviewEventShear,
+                        onCommitShear = onSetEventShear,
                         onCancel = onCancelEventPositionPreview,
                         modifier = Modifier.fillMaxSize(),
                     )
@@ -673,6 +681,8 @@ private fun PositionDragOverlay(
     scaleLocked: Boolean,
     onPreviewScale: (Double, Double) -> Unit,
     onCommitScale: (Double, Double) -> Unit,
+    onPreviewShear: (Double, Double) -> Unit,
+    onCommitShear: (Double, Double) -> Unit,
     onCancel: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -710,6 +720,10 @@ private fun PositionDragOverlay(
     var directScaleY by remember(event.id, event.text) { mutableStateOf<Double?>(null) }
     val displayScaleX = directScaleX ?: renderGeometry.scaleX ?: style?.scaleX ?: 100.0
     val displayScaleY = directScaleY ?: renderGeometry.scaleY ?: style?.scaleY ?: 100.0
+    var directShearX by remember(event.id, event.text) { mutableStateOf<Double?>(null) }
+    var directShearY by remember(event.id, event.text) { mutableStateOf<Double?>(null) }
+    val displayShearX = directShearX ?: renderGeometry.shearX ?: 0.0
+    val displayShearY = directShearY ?: renderGeometry.shearY ?: 0.0
     val guideColor = MaterialTheme.colorScheme.tertiary
 
     if (geometry.positionMode == AssPositionMode.CONFLICT) {
@@ -968,7 +982,7 @@ private fun PositionDragOverlay(
 
     BoxWithConstraints(
         modifier.pointerInput(event.id, document.playResX, document.playResY, scaleLocked) {
-            var activeHandle = 0 // 1=position, 2=origin, 3=rotation, 4=scale
+            var activeHandle = 0 // 1=position, 2=origin, 3=rotation, 4=scale, 5=fax, 6=fay
             var lastPreviewAt = 0L
             var scaleStartX = displayScaleX
             var scaleStartY = displayScaleY
@@ -1007,9 +1021,26 @@ private fun PositionDragOverlay(
                     val scaleDx = start.x - scaleHandleX.toFloat()
                     val scaleDy = start.y - scaleHandleY.toFloat()
                     val scaleDistance = kotlin.math.sqrt((scaleDx * scaleDx + scaleDy * scaleDy).toDouble())
+                    fun localToWorld(lx: Double, ly: Double): Pair<Double, Double> =
+                        (scaleAnchorPx + kotlin.math.cos(rotationRadians) * lx - kotlin.math.sin(rotationRadians) * ly) to
+                            (scaleAnchorPy + kotlin.math.sin(rotationRadians) * lx + kotlin.math.cos(rotationRadians) * ly)
+                    val faxLocalX = localScaleX / 2.0 + displayShearX * localScaleY
+                    val faxLocalY = localScaleY
+                    val fayLocalX = localScaleX
+                    val fayLocalY = localScaleY / 2.0 + displayShearY * localScaleX
+                    val faxWorld = localToWorld(faxLocalX, faxLocalY)
+                    val fayWorld = localToWorld(fayLocalX, fayLocalY)
+                    val faxDx = start.x - faxWorld.first.toFloat()
+                    val faxDy = start.y - faxWorld.second.toFloat()
+                    val fayDx = start.x - fayWorld.first.toFloat()
+                    val fayDy = start.y - fayWorld.second.toFloat()
+                    val faxDistance = kotlin.math.sqrt((faxDx * faxDx + faxDy * faxDy).toDouble())
+                    val fayDistance = kotlin.math.sqrt((fayDx * fayDx + fayDy * fayDy).toDouble())
                     val threshold = 36.dp.toPx().toDouble()
                     activeHandle = when {
                         scaleDistance <= threshold -> 4
+                        faxDistance <= threshold -> 5
+                        fayDistance <= threshold -> 6
                         rotationDistance <= threshold -> 3
                         originDistance <= threshold && originDistance <= positionDistance -> 2
                         positionDistance <= threshold -> 1
@@ -1070,17 +1101,31 @@ private fun PositionDragOverlay(
                             val worldDy = change.position.y - anchorPy.toFloat()
                             val localX = kotlin.math.cos(rotationRadians) * worldDx + kotlin.math.sin(rotationRadians) * worldDy
                             val localY = -kotlin.math.sin(rotationRadians) * worldDx + kotlin.math.cos(rotationRadians) * worldDy
-                            val rawScaleX = (kotlin.math.abs(localX) / 70.dp.toPx() * 100.0).coerceIn(1.0, 1000.0)
-                            val rawScaleY = (kotlin.math.abs(localY) / 40.dp.toPx() * 100.0).coerceIn(1.0, 1000.0)
-                            if (scaleLocked) {
-                                val factorX = rawScaleX / scaleStartX.coerceAtLeast(1.0)
-                                val factorY = rawScaleY / scaleStartY.coerceAtLeast(1.0)
-                                val factor = ((factorX + factorY) / 2.0).coerceIn(0.01, 10.0)
-                                directScaleX = (scaleStartX * factor).coerceIn(1.0, 1000.0)
-                                directScaleY = (scaleStartY * factor).coerceIn(1.0, 1000.0)
+                            if (activeHandle == 4) {
+                                val rawScaleX = (kotlin.math.abs(localX) / 70.dp.toPx() * 100.0).coerceIn(1.0, 1000.0)
+                                val rawScaleY = (kotlin.math.abs(localY) / 40.dp.toPx() * 100.0).coerceIn(1.0, 1000.0)
+                                if (scaleLocked) {
+                                    val factorX = rawScaleX / scaleStartX.coerceAtLeast(1.0)
+                                    val factorY = rawScaleY / scaleStartY.coerceAtLeast(1.0)
+                                    val factor = ((factorX + factorY) / 2.0).coerceIn(0.01, 10.0)
+                                    directScaleX = (scaleStartX * factor).coerceIn(1.0, 1000.0)
+                                    directScaleY = (scaleStartY * factor).coerceIn(1.0, 1000.0)
+                                } else {
+                                    directScaleX = rawScaleX
+                                    directScaleY = rawScaleY
+                                }
+                            } else if (activeHandle == 5) {
+                                val width = 70.dp.toPx() * (displayScaleX / 100.0)
+                                val height = -40.dp.toPx() * (displayScaleY / 100.0)
+                                if (kotlin.math.abs(height) > 0.001) {
+                                    directShearX = ((localX - width / 2.0) / height).coerceIn(-10.0, 10.0)
+                                }
                             } else {
-                                directScaleX = rawScaleX
-                                directScaleY = rawScaleY
+                                val width = 70.dp.toPx() * (displayScaleX / 100.0)
+                                val height = -40.dp.toPx() * (displayScaleY / 100.0)
+                                if (kotlin.math.abs(width) > 0.001) {
+                                    directShearY = ((localY - height / 2.0) / width).coerceIn(-10.0, 10.0)
+                                }
                             }
                         }
                         val now = android.os.SystemClock.uptimeMillis()
@@ -1091,6 +1136,8 @@ private fun PositionDragOverlay(
                                 2 -> onPreviewOrigin(originX!!, originY!!)
                                 3 -> onPreviewRotation(directRotation!!)
                                 4 -> onPreviewScale(directScaleX!!, directScaleY!!)
+                                5 -> onPreviewShear(directShearX!!, displayShearY)
+                                6 -> onPreviewShear(displayShearX, directShearY!!)
                             }
                         }
                     }
@@ -1101,10 +1148,14 @@ private fun PositionDragOverlay(
                         2 -> onCommitOrigin(originX!!, originY!!)
                         3 -> directRotation?.let(onCommitRotation)
                         4 -> if (directScaleX != null && directScaleY != null) onCommitScale(directScaleX!!, directScaleY!!)
+                        5 -> directShearX?.let { onCommitShear(it, displayShearY) }
+                        6 -> directShearY?.let { onCommitShear(displayShearX, it) }
                     }
                     directRotation = null
                     directScaleX = null
                     directScaleY = null
+                    directShearX = null
+                    directShearY = null
                     activeHandle = 0
                 },
                 onDragCancel = {
@@ -1112,6 +1163,8 @@ private fun PositionDragOverlay(
                     directRotation = null
                     directScaleX = null
                     directScaleY = null
+                    directShearX = null
+                    directShearY = null
                     activeHandle = 0
                 },
             )
@@ -1175,17 +1228,27 @@ private fun PositionDragOverlay(
                 )
             val scaleXLength = 70.dp.toPx() * (displayScaleX / 100.0)
             val scaleYLength = -40.dp.toPx() * (displayScaleY / 100.0)
-            val scaleXPoint = rotatedLocal(scaleXLength, 0.0)
-            val scaleYPoint = rotatedLocal(0.0, scaleYLength)
-            val scaleCorner = rotatedLocal(scaleXLength, scaleYLength)
-            drawLine(guideColor.copy(alpha = 0.32f), scaleAnchor, scaleXPoint, 1.dp.toPx())
-            drawLine(guideColor.copy(alpha = 0.32f), scaleAnchor, scaleYPoint, 1.dp.toPx())
-            drawLine(guideColor.copy(alpha = 0.45f), scaleXPoint, scaleCorner, 1.dp.toPx())
-            drawLine(guideColor.copy(alpha = 0.45f), scaleYPoint, scaleCorner, 1.dp.toPx())
-            drawCircle(guideColor, 6.dp.toPx(), scaleCorner)
+            fun shearedLocal(lx: Double, ly: Double): androidx.compose.ui.geometry.Offset =
+                rotatedLocal(
+                    lx + displayShearX * ly,
+                    ly + displayShearY * lx,
+                )
+            val frameOrigin = shearedLocal(0.0, 0.0)
+            val frameX = shearedLocal(scaleXLength, 0.0)
+            val frameY = shearedLocal(0.0, scaleYLength)
+            val frameCorner = shearedLocal(scaleXLength, scaleYLength)
+            val faxHandle = shearedLocal(scaleXLength / 2.0, scaleYLength)
+            val fayHandle = shearedLocal(scaleXLength, scaleYLength / 2.0)
+            drawLine(guideColor.copy(alpha = 0.32f), frameOrigin, frameX, 1.dp.toPx())
+            drawLine(guideColor.copy(alpha = 0.32f), frameOrigin, frameY, 1.dp.toPx())
+            drawLine(guideColor.copy(alpha = 0.45f), frameX, frameCorner, 1.dp.toPx())
+            drawLine(guideColor.copy(alpha = 0.45f), frameY, frameCorner, 1.dp.toPx())
+            drawCircle(guideColor, 6.dp.toPx(), frameCorner)
+            drawCircle(guideColor.copy(alpha = 0.9f), 5.dp.toPx(), faxHandle, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2.dp.toPx()))
+            drawCircle(guideColor.copy(alpha = 0.9f), 5.dp.toPx(), fayHandle, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2.dp.toPx()))
         }
         Text(
-            "pos ${x.toInt()},${y.toInt()}" + (if (originX != null) " · org ${originX!!.toInt()},${originY!!.toInt()}" else "") + " · rot ${displayRotation.toInt()}° · scale ${displayScaleX.toInt()}×${displayScaleY.toInt()}% · 拖控制点",
+            "pos ${x.toInt()},${y.toInt()}" + (if (originX != null) " · org ${originX!!.toInt()},${originY!!.toInt()}" else "") + " · rot ${displayRotation.toInt()}° · scale ${displayScaleX.toInt()}×${displayScaleY.toInt()}% · shear ${"%.2f".format(java.util.Locale.US, displayShearX)},${"%.2f".format(java.util.Locale.US, displayShearY)} · 拖控制点",
             modifier = Modifier
                 .align(Alignment.TopStart)
                 .background(Color.Black.copy(alpha = 0.55f))

@@ -70,6 +70,24 @@ class AssGeometrySemanticTest {
         assertNull(AssGeometrySemantic.inspect(output).origin)
     }
     @Test
+    fun shearPatchPreservesUnknownNeighborsAndNestedTransform() {
+        val source = "{\\fax0.15\\t(0,500,\\fax0.8\\fay-0.4)\\x-custom(foo)\\fay0.25}Text"
+        val output = AssGeometrySemantic.patchShear(source, -0.35, 0.6)
+        assertEquals("{\\fax-0.35\\t(0,500,\\fax0.8\\fay-0.4)\\x-custom(foo)\\fay0.6}Text", output)
+        val snapshot = AssGeometrySemantic.inspect(output)
+        assertEquals(-0.35, snapshot.shearX)
+        assertEquals(0.6, snapshot.shearY)
+    }
+
+    @Test
+    fun removingShearKeepsNestedTransformAndOtherTags() {
+        val source = "{\\bord2\\fax0.4\\t(0,500,\\fay0.7)\\fay-0.2\\x-custom(foo)}Text"
+        val output = AssGeometrySemantic.removeShear(source)
+        assertEquals("{\\bord2\\t(0,500,\\fay0.7)\\x-custom(foo)}Text", output)
+        assertNull(AssGeometrySemantic.inspect(output).shearX)
+        assertNull(AssGeometrySemantic.inspect(output).shearY)
+    }
+    @Test
     fun scalePatchPreservesUnknownNeighborsAndNestedTransform() {
         val source = "{\\fscx80\\t(0,500,\\fscx140\\fscy60)\\x-custom(foo)\\fscy90}Text"
         val output = AssGeometrySemantic.patchScale(source, 125.0, 75.0)

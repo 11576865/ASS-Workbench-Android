@@ -28,6 +28,8 @@ object AssEffectiveInspector {
         val geometry = AssGeometrySemantic.inspect(event.text)
         val scaleX = geometry.scaleX
         val scaleY = geometry.scaleY
+        val shearX = geometry.shearX
+        val shearY = geometry.shearY
         val angle = geometry.rotationZ
         val primaryColor = lastTag("1c", "c")
         val outlineColor = lastTag("3c")
@@ -123,6 +125,18 @@ object AssEffectiveInspector {
                 format(style.angle),
                 overrideValue = angle?.let(::format),
                 effectiveValue = format(angle ?: style.angle),
+            ),
+            AssEffectiveValue(
+                "Shear X",
+                "0",
+                overrideValue = shearX?.let(::format),
+                effectiveValue = format(shearX ?: 0.0),
+            ),
+            AssEffectiveValue(
+                "Shear Y",
+                "0",
+                overrideValue = shearY?.let(::format),
+                effectiveValue = format(shearY ?: 0.0),
             ),
             AssEffectiveValue(
                 "Primary",
