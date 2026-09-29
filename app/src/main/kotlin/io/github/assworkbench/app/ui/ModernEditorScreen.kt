@@ -352,16 +352,24 @@ private fun WorkbenchEventArea(
                     color = MaterialTheme.colorScheme.surface,
                     contentColor = MaterialTheme.colorScheme.onSurface,
                 ) {
-                    SupportingWorkbench(
-                        state = state,
-                        viewModel = viewModel,
-                        tool = tool,
-                        issues = issues,
-                        onClose = onCloseSupporting,
-                        onImportFont = onImportFont,
-                        onSaveMkv = onSaveMkv,
-                        modifier = Modifier.fillMaxSize(),
-                    )
+                    Row(Modifier.fillMaxSize()) {
+                        Box(
+                            Modifier
+                                .width(2.dp)
+                                .fillMaxHeight()
+                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.72f))
+                        )
+                        SupportingWorkbench(
+                            state = state,
+                            viewModel = viewModel,
+                            tool = tool,
+                            issues = issues,
+                            onClose = onCloseSupporting,
+                            onImportFont = onImportFont,
+                            onSaveMkv = onSaveMkv,
+                            modifier = Modifier.weight(1f).fillMaxHeight(),
+                        )
+                    }
                 }
             }
         }
