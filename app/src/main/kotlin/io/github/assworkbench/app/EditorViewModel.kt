@@ -374,10 +374,11 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                         importedFonts = imported,
                         fallbackFontFamily = fallback?.rendererFamily,
                         fontImportBusy = false,
-                        fontReloadPending = true,
+                        fontReloadPending = false,
+                        fontRevision = it.fontRevision + 1,
                         status = "已导入 " + batch.assets.size + " 个字体" + failureSuffix +
                             " · " + families.take(3).joinToString(", ") +
-                            " · 预览将在字幕重载时采用新字体",
+                            " · 已请求安全重载字幕字体",
                     )
                 }
                 refreshFontDiagnostics()
@@ -389,12 +390,6 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                     )
                 }
             }
-        }
-    }
-
-    fun acknowledgeFontReload() {
-        if (_state.value.fontReloadPending) {
-            _state.update { it.copy(fontReloadPending = false, fontRevision = it.fontRevision + 1) }
         }
     }
 
