@@ -358,7 +358,6 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                         importedFonts = imported,
                         fallbackFontFamily = fallback?.rendererFamily,
                         fontImportBusy = false,
-                        fontReloadPending = false,
                         fontRevision = it.fontRevision + 1,
                         status = "已导入 " + batch.assets.size + " 个字体" + failureSuffix +
                             " · " + families.take(3).joinToString(", ") +
@@ -900,9 +899,6 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             FontBindingRewriter.forceFamily(doc, target)
         }
     }
-
-
-    fun toggleLayoutGuides() = _state.update { it.copy(showLayoutGuides = !it.showLayoutGuides) }
 
     fun clearFocusedStyleOverrides() {
         val id = _state.value.focusedEventId ?: return
