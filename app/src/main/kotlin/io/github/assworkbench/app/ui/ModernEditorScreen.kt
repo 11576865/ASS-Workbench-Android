@@ -36,6 +36,7 @@ import io.github.assworkbench.app.EditorState
 import io.github.assworkbench.app.EditorViewModel
 import io.github.assworkbench.domain.*
 import io.github.assworkbench.fonts.FontOrigin
+import kotlinx.coroutines.launch
 import kotlin.math.abs
 
 private enum class WorkbenchTool(val title: String) {
