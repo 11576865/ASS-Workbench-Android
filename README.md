@@ -1,48 +1,89 @@
 # ASS Workbench Android
 
-A focused Android ASS subtitle workbench for phones and tablets.
+A touch-first, raw-preserving ASS workbench for Android — evolving from subtitle editing into a professional mobile subtitle engineering environment.
 
-**Current version: 0.20.0**
+**Current construction version: 0.26.0 / versionCode 28**
 
-ASS Workbench treats ASS as the primary editable document. A local video may be attached as reference media, or an MKV can be opened as a subtitle project.
+0.26 is an internal construction and hardening cycle. The first planned real-device product handoff after this cycle is **0.27.0**; the version will not be bumped merely because most feature work is present.
 
-## Current status
+See [docs/ABOUT.md](docs/ABOUT.md) for the longer-term direction and [docs/ROADMAP-0.26.md](docs/ROADMAP-0.26.md) for the current handoff gate.
 
-- independent reference-video and ASS selection;
-- adaptive editor workspace: preview + subtitle dock + context inspector, with expanded/tablet/compact arrangements;
-- compact vertical layout on narrow screens;
-- searchable event list, Layer, overlap, multi-select and touch range selection;
-- bounded Undo/Redo and debounced crash-recovery journal;
-- Save / Save As standalone `.ass`;
+## Product model
+
+ASS Workbench treats ASS as the canonical editable document.
+
+A local video can be attached as reference media, or an MKV can be opened as a subtitle project. MKV support is a **container bridge**: it exposes embedded ASS tracks and font attachments and can write an edited ASS track back into a new MKV without transcoding video/audio.
+
+The editor follows several core rules:
+
+- Raw ASS is first-class and unknown syntax should survive round trips.
+- libass is the authoritative visual renderer.
+- continuous gestures use transient preview and commit once at gesture end.
+- one semantic domain should have one primary UI owner.
+- structured tools should rewrite the smallest owned span rather than normalize whole Event text.
+- portrait is the primary workflow layout; landscape is the precision visual layout.
+- standalone ASS and MKV projects remain distinct workflows over the same ASS document core.
+
+## 0.26 current capability
+
+The current mainline includes:
+
+- adaptive preview + Event workbench for phones and tablets;
+- searchable Event list, selection, range selection and batch operations;
+- bounded Undo/Redo and crash recovery;
+- standalone ASS open/save with encoding preservation;
 - mpv + libass authoritative preview;
-- edited ASS reload without restarting reference video;
-- imported TTF/OTF Font Registry with OpenType family-name parsing;
-- explicit Style font assignment;
-- family match diagnostics plus actual OpenType `cmap` glyph-coverage checks;
-- mpv/libass renderer-log capture for font-selection evidence;
-- focused Style typesetting workspace;
-- safe-area guide and 60/40 bilingual layout preset generalized from the HSR workbench;
-- event-level position, blur, fade and restrained soft-entry overrides;
-- bilingual Review workspace with persisted Review Sidecar V2 using stable event fingerprints and V1 compatibility;
-- tri-state select-all and batch time/Layer/Style operations;
-- MKV Container Bridge:
-  - enumerate embedded ASS tracks;
-  - register attached TTF/OTF fonts;
-  - edit a selected ASS track;
-  - replace the selected ASS track in the same track slot while preserving TrackNumber, TrackUID, ordering and track metadata;
-  - save a new MKV with video/audio stream-copied instead of transcoded;
-- preservation of unknown ASS sections plus opaque/comment lines inside known sections;
-- preservation of custom Style/Event Format columns and an initial round-trip regression corpus.
+- transient preview for continuous editing;
+- Style typography and appearance editing;
+- structured position/geometry editing for common ASS geometry domains;
+- Event insert/duplicate/split/merge/delete and format clipboard operations;
+- professionalised timeline zoom/pan, snapping, relation diagnostics and frame metadata;
+- Waveform Lite as a bounded timing aid;
+- structured fade/transform editing with contextual preview scrubbing;
+- font registry, OpenType metadata/glyph diagnostics, renderer evidence and effective font-request inventory;
+- quality checks tied to the same timeline/ASS semantic model;
+- MKV ASS-track replacement with preservation-oriented bridge logic;
+- preservation of unknown sections, opaque lines and custom Format columns;
+- Review Sidecar stable identity and bilingual review infrastructure.
 
-## Product boundary
+The current 0.26 closing cycle still has one explicit Font Phase packaging item: **export / attach selected fonts to MKV**. Karaoke and full Drawing remain deferred beyond the first 0.27 test handoff.
 
-The primary editable/output artifact remains ASS.
+## Workbench ownership
 
-Video encoding and hard-sub rendering are outside scope. MKV support is a **container bridge**, not a video editor: it exposes subtitle tracks/font attachments and can remux an edited ASS track back into a new MKV without re-encoding video/audio.
+- **Event** — text, timing, Layer, Actor/Name, Comment, structural Event operations and batch navigation.
+- **Typography & appearance** — font, size, emphasis, spacing, colors, alpha, border, shadow and blur.
+- **Position & geometry** — alignment, margins, pos/move/org, rotation, scale, shear and rectangular clip.
+- **Animation** — fad/fade, transforms and transformable visual properties.
+- **Timeline** — playback, timing, trim/move, snapping, zoom/pan, waveform and timing relations.
+- **Font Manager** — imported/MKV fonts, origin, family metadata, glyph coverage, request matching and replacement.
+- **QC** — diagnostics and deep links into the relevant owner.
+- **Raw ASS** — escape hatch and preservation boundary for syntax that structured tools do not own.
 
-ASR, OCR and general translation are not core features.
+## 0.27 handoff gate
 
-## Build
+Before 0.27.0 is produced, the project should pass a feature-freeze and hardening cycle covering:
+
+1. bounded remaining capability closure;
+2. current upstream/community failure-case research;
+3. performance and lifecycle hardening;
+4. semantic-integrity and round-trip tests;
+5. destructive combination testing across Raw ASS, structured editing, Undo/Redo, preview, MKV, fonts, waveform, orientation, recovery and save/reopen;
+6. blocker/regression fixes only;
+7. final version/build identity update and first real-device test handoff.
+
+0.27.0 is therefore a **testable product candidate**, not a claim that the project is finished.
+
+## Build identity
+
+CI builds embed:
+
+- app version and versionCode;
+- the source commit SHA;
+- the GitHub Actions run number.
+
+The same identity is visible in the in-app **Diagnostics** surface. CI APK filenames also carry the short commit SHA so a test APK can be traced back to its exact source even while 0.26 remains a rolling construction prerelease.
+
+## Build stack
 
 Current CI uses:
 
@@ -53,143 +94,20 @@ Current CI uses:
 - compileSdk 36
 - targetSdk 35
 - minSdk 26
-- Go toolchain for the pinned arm64 MKV bridge
+- Go 1.27 for the pinned arm64 MKV bridge
+- libmpvKt 0.3.0 with the ASS Workbench Fontconfig-enabled arm64 renderer build
 
-Successful pushes to `main` publish a debug APK as a GitHub prerelease.
+The authoritative preview stack includes mpv, FFmpeg and libass. Because the distributed native combination is GPL, this repository is licensed under **GPL-3.0-or-later**.
 
-The authoritative preview uses `libmpvKt` 0.3.0, which bundles mpv/FFmpeg/libass. Because the distributed native combination is GPL, this repository is licensed under **GPL-3.0-or-later**.
+## Explicit non-goals
 
-See `docs/PRODUCT_SPEC_1_0.md`, `docs/ROADMAP.md`, and `THIRD_PARTY_NOTICES.md`.
+ASS Workbench is not a general video editor or transcoding suite. Video encoding and hard-sub rendering are outside core scope.
 
-## Workspaces
+OCR, ASR, general machine translation, and broad “support every subtitle format” expansion are also outside the current product boundary.
 
-### Edit
+## Project documents
 
-Event text/timing, search, Layer, Style assignment, selection and batch operations. ASS Event Text remains first-class: override blocks stay directly editable and receive syntax-aware rendering instead of being hidden behind a simplified text view.
-
-### Typeset
-
-Font family/size, emphasis, colors, outline/shadow, spacing, nine-grid alignment, margins, safe-area guide and bilingual 60/40 geometry.
-
-### Review
-
-Paired bilingual grouping, source/target Style selection, editing, confirmation state and persistent review metadata.
-
-### Event effects
-
-Managed event-level overrides for position, blur, fade and restrained soft entry. Existing unrelated leading ASS override tags are preserved.
-
-### Container Bridge
-
-An MKV can be opened as a subtitle project. The reader scans Matroska tracks and supported font attachments. On supported arm64 builds, a small ASS Workbench bridge built against the pinned mkvgo revision replaces the selected ASS payload in the original track slot while carrying video/audio streams without transcoding. The source TrackNumber, TrackUID, ordering, language/name and disposition metadata are inherited instead of deleting and appending a new subtitle track.
-
-The original MKV is never modified in place. The write-back path copies the source into app-private storage and writes one new result container; it no longer creates a second full-size intermediate container.
-
-## Current hardening work
-
-0.20.0 is a broader professional-editor/infrastructure pass:
-
-- introduces a shared, lossless ASS inline syntax analyzer used by UI highlighting and validation instead of duplicating ad-hoc regexes;
-- keeps override blocks first-class and directly editable, while visually separating block syntax, tag names, values, escapes and malformed ranges;
-- makes raw Event Text permanently available in the Effects inspector and Review workspace rather than hiding it behind an expert-only toggle;
-- adds validation for malformed override blocks without rewriting unknown/unsupported tags;
-- exposes additional native ASS Style fields in a compact advanced section: SecondaryColour, ScaleX/Y, Angle, BorderStyle and Encoding;
-- adds a visual Style geometry preview for alignment and margins;
-- compacts workspace tabs and subtitle rows while keeping Style/Event metadata visible;
-- adds persisted System / Light / Dark appearance modes;
-- caches imported font metadata/font bytes and debounces glyph diagnostics to reduce typing and typesetting stalls;
-- updates the stable AndroidX baseline to Compose BOM 2026.04.01 (Compose 1.11), Core 1.17.0 and Lifecycle 2.10.0, with compileSdk 36;
-- uses Material3 Adaptive window size classes instead of custom tablet width thresholds;
-- preserves UTF-8 BOM / UTF-16 LE / UTF-16 BE when reopening and saving standalone ASS files;
-- supports selecting multiple TTF/OTF files in one import batch and rebuilds Fontconfig only once;
-- flattens redundant nested cards in Effects, Review and MKV Project inspectors to recover tablet workspace area.
-
-
-0.19.0 batches a larger tablet-usability and diagnostics pass instead of another single-issue hotfix:
-
-- subtitle rows and Event editors keep ASS override tags visible, but syntax-highlight blocks/tags/values/escapes so control syntax is visually distinct from dialogue text;
-- the focused subtitle inspector exposes event-level Margin L/R/V directly, including a one-tap reset to Style inheritance;
-- selected subtitles can bulk-clear style/position overrides instead of repeating the action one event at a time;
-- the Style inspector reports which effective properties are coming from inline ASS overrides versus the shared Style;
-- the Style panel uses the full inspector height instead of a fixed 430dp internal cap;
-- the Project inspector surfaces PlayRes, ScaledBorderAndShadow, optional LayoutRes/YCbCr fields, and the count of events carrying style/position overrides;
-- playback scrubbing no longer issues an exact seek for every slider movement; the seek is committed when the drag finishes;
-- guide mode now draws the mpv-reported video rectangle separately from the ASS safe area, making geometry mismatch visible immediately.
-
-
-0.18.0 focuses on ASS style fidelity and editor semantics:
-
-- makes Style scope explicit: a Style is shared by every event that references it;
-- adds a one-action path to clone the current Style for the selected subtitles when selection-local styling is desired;
-- expands "inherit Style" so it clears managed inline typography/position overrides and event-level margins on the focused event;
-- replaces raw ASS color-string text boxes with a popup RGBA picker that writes canonical `&HAABBGGRR`;
-- uses mpv `osd-dimensions` margins as the authoritative displayed-video rectangle for safe-area guides;
-- explicitly enables `sub-ass-use-video-data=all` for VSFilter-compatible ASS placement semantics;
-- exposes ASS canvas and mpv OSD margin diagnostics to investigate the remaining external-ASS/MKV placement discrepancy.
-
-
-0.17.0 reorganizes the editor UI around three persistent concepts instead of stacking every tool into one scrolling workbench:
-
-- **Preview** remains visually dominant.
-- **Subtitle dock** is a dense searchable event list for selection and navigation.
-- **Inspector** is contextual and switches between Subtitle, Style, Effects, Review, and Project tools.
-- Expanded tablets use preview/list plus a fixed-width inspector; medium tablets use preview above list + inspector; compact screens switch inspector content below the preview.
-- renderer diagnostics and MKV bridge controls move out of the main subtitle list into the Project inspector.
-- secondary actions such as Save As, font import, and font-cache rebuild move into the top-bar overflow menu.
-
-
-0.16.0 is a preview-stabilization build:
-
-- preserves playback position across renderer recreation after font import and reduces global playback-position state churn;
-- disables the MKV's built-in subtitle selection before attaching the workbench preview ASS, so MKV and external-ASS paths render the same generated subtitle track;
-- reports the active preview subtitle source in renderer diagnostics;
-- maps layout/safe-area guides to the actual letterboxed/pillarboxed video rectangle using mpv display dimensions;
-- clips the mpv surface during layout/orientation changes to reduce stale-frame spill;
-- makes Style typesetting changes auto-apply after a short debounce;
-- warns when inline ASS overrides shadow Style changes and provides an explicit action to let the focused event inherit Style again.
-
-
-0.15.2 is a startup compatibility hotfix:
-
-- fixes an Android/ICU `java.util.regex.PatternSyntaxException` caused by an unescaped closing brace in the ASS override-block regex;
-- applies the same brace-safe regex in startup font diagnostics;
-- keeps the Fontconfig renderer experiment unchanged so the next device run can test the actual renderer path rather than failing during `EditorViewModel` construction.
-
-0.15.1 is a focused hotfix:
-
-1. **lower-memory MKV attachment scanning** — embedded attachments are delivered one at a time to the importer instead of retaining the full attachment set in the scan result;
-2. **forced font binding compatibility mode** — an imported font can explicitly rewrite every Style `Fontname` and every non-empty inline `\\fn` request to one family, matching the established MKV-Fast-Muxer-v3 force-mode semantics;
-3. **inline font diagnostics** — explicit `\\fn` requests are included in the font-name diagnostic set instead of checking Style names only.
-
-0.15 hardens MKV write-back:
-
-1. **same-slot ASS replacement** — the selected subtitle keeps its TrackNumber, TrackUID, track ordering, language/name and disposition metadata;
-2. **container preservation test** — the pinned mkvgo source receives an ASS Workbench replacement operation at CI time and is tested for track identity, font attachment, chapter and ordinary tag preservation;
-3. **derived metadata safety** — content hashes/statistics are recomputed when the source carried them instead of copying stale values;
-4. **smaller bridge surface** — the APK now bundles a dedicated `replace-ass` helper rather than the full mkvgo CLI.
-
-0.14 established renderer observability, Review Sidecar V2 stable event identity, the initial ASS round-trip corpus and specification convergence.
-
-
-
-1. **renderer observability** — mpv writes an app-private verbose log and recent libass/font-selection lines are surfaced beside family/glyph diagnostics;
-2. **Review identity** — new sidecars persist stable event fingerprints instead of parse-order IDs, while legacy V1 sidecars remain readable;
-3. **round-trip regression corpus** — representative Aegisub-like, custom-column and opaque-section fixtures exercise open → one-field edit → save → parse;
-4. **scope convergence** — product and roadmap documents describe the implemented MKV Container Bridge and no longer promise an unimplemented SRT importer.
-
-Still unresolved before 1.0: real-device confirmation of the CJK renderer path, exact placement of opaque lines, pathological custom Format layouts, broader MKV preservation, and larger real-world corpora.
-
-
-## 0.21 compact workbench batch
-
-- Compact 42dp editor toolbar; long project/subtitle name no longer consumes a two-line app bar.
-- Preview surface uses a fixed 16:9 workspace frame. Non-16:9 material letterboxes inside that frame instead of changing editor geometry.
-- Playback controls reduced to a 34dp strip.
-- Subtitle search moved from a permanent full-width field to an overlay opened from the search icon.
-- Select-all reduced to a compact toolbar action.
-- Long-press + drag range selection added for subtitle rows.
-- Focused subtitle timing, event margins and raw ASS text now expand directly inside the subtitle row.
-- The former right-side duplicate subtitle inspector is replaced by a 30-second timeline view.
-- Style inspector widened and explanatory copy reduced; geometry preview is smaller.
-- Embedded MKV fonts and standalone imported fonts now feed the same provider=none fallback path.
-- Default fallback selection prefers readable CJK-capable Android system fonts before Latin-only fonts.
+- [About / long-term direction](docs/ABOUT.md)
+- [0.26 → 0.27 roadmap and handoff gate](docs/ROADMAP-0.26.md)
+- [1.0 product specification](docs/PRODUCT_SPEC_1_0.md)
+- [Third-party notices](THIRD_PARTY_NOTICES.md)
