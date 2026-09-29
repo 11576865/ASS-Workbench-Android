@@ -838,11 +838,12 @@ private fun PositionDragOverlay(
         return
     }
 
-    if (geometry.positionMode == AssPositionMode.MOVE && geometry.move != null) {
-        var startX by remember(event.id, event.text) { mutableStateOf(geometry.move.start.x) }
-        var startY by remember(event.id, event.text) { mutableStateOf(geometry.move.start.y) }
-        var endX by remember(event.id, event.text) { mutableStateOf(geometry.move.end.x) }
-        var endY by remember(event.id, event.text) { mutableStateOf(geometry.move.end.y) }
+    val moveGeometry = geometry.move
+    if (geometry.positionMode == AssPositionMode.MOVE && moveGeometry != null) {
+        var startX by remember(event.id, event.text) { mutableStateOf(moveGeometry.start.x) }
+        var startY by remember(event.id, event.text) { mutableStateOf(moveGeometry.start.y) }
+        var endX by remember(event.id, event.text) { mutableStateOf(moveGeometry.end.x) }
+        var endY by remember(event.id, event.text) { mutableStateOf(moveGeometry.end.y) }
 
         DisposableEffect(event.id) {
             onDispose { onCancel() }

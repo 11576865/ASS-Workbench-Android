@@ -1306,7 +1306,8 @@ private fun PositionPane(state: EditorState, viewModel: EditorViewModel, modifie
                 }
             }
         }
-        if (geometry.positionMode == AssPositionMode.MOVE && geometry.move != null) {
+        val moveGeometry = geometry.move
+        if (geometry.positionMode == AssPositionMode.MOVE && moveGeometry != null) {
             item {
                 Text("运动路径 · \\move", style = MaterialTheme.typography.titleSmall)
                 Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small)) {
@@ -1319,8 +1320,10 @@ private fun PositionPane(state: EditorState, viewModel: EditorViewModel, modifie
                 }
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        if (geometry.move.startMs != null && geometry.move.endMs != null) {
-                            "Timing ${geometry.move.startMs.toInt()}–${geometry.move.endMs.toInt()} ms · 编辑端点时原样保留"
+                        val moveStartMs = moveGeometry.startMs
+                        val moveEndMs = moveGeometry.endMs
+                        if (moveStartMs != null && moveEndMs != null) {
+                            "Timing ${moveStartMs.toInt()}–${moveEndMs.toInt()} ms · 编辑端点时原样保留"
                         } else {
                             "Timing：整个 Event 时长 · 4 参数 move"
                         },
@@ -1630,20 +1633,19 @@ private fun PositionPane(state: EditorState, viewModel: EditorViewModel, modifie
                     }
                 }
                 geometry.clipRect != null -> {
+                    val clipRect = requireNotNull(geometry.clipRect)
                     Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small)) {
                         FilterChip(
                             selected = !geometry.clipInverted,
                             onClick = {
-                                val rect = geometry.clipRect
-                                viewModel.setFocusedRectClip(rect.left, rect.top, rect.right, rect.bottom, false)
+                                viewModel.setFocusedRectClip(clipRect.left, clipRect.top, clipRect.right, clipRect.bottom, false)
                             },
                             label = { Text("\\clip · 内部显示") },
                         )
                         FilterChip(
                             selected = geometry.clipInverted,
                             onClick = {
-                                val rect = geometry.clipRect
-                                viewModel.setFocusedRectClip(rect.left, rect.top, rect.right, rect.bottom, true)
+                                viewModel.setFocusedRectClip(clipRect.left, clipRect.top, clipRect.right, clipRect.bottom, true)
                             },
                             label = { Text("\\iclip · 内部隐藏") },
                         )
