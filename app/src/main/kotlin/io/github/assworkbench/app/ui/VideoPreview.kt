@@ -55,7 +55,6 @@ import io.github.assworkbench.domain.AssCodec
 import io.github.assworkbench.domain.AssDocument
 import io.github.assworkbench.domain.AssEvent
 import io.github.assworkbench.domain.EventOverrideEditor
-import io.github.assworkbench.domain.TypesettingMath
 import io.github.assworkbench.fonts.RendererLogParser
 import io.github.yuroyami.libmpvkt.Mpv
 import io.github.yuroyami.libmpvkt.MpvCommands
@@ -565,18 +564,6 @@ private fun AuthoritativeMpvPreview(
                 }
             } else {
                 MpvSurface(mpv, Modifier.fillMaxSize())
-                if (showLayoutGuides) {
-                    LayoutGuideOverlay(
-                        document = document,
-                        osdWidth = osdWidth,
-                        osdHeight = osdHeight,
-                        marginTop = osdMarginTop,
-                        marginBottom = osdMarginBottom,
-                        marginLeft = osdMarginLeft,
-                        marginRight = osdMarginRight,
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                }
                 val focusedEvent = focusedEventId?.let { id ->
                     document.events.firstOrNull { it.id == id }
                 }
@@ -898,66 +885,6 @@ private fun formatClock(seconds: Double): String {
     val s = totalSeconds % 60
     return if (h > 0) "%d:%02d:%02d".format(h, m, s) else "%02d:%02d".format(m, s)
 }
-
-@Composable
-private fun LayoutGuideOverlay(
-    document: AssDocument,
-    osdWidth: Int,
-    osdHeight: Int,
-    marginTop: Int,
-    marginBottom: Int,
-    marginLeft: Int,
-    marginRight: Int,
-    modifier: Modifier = Modifier,
-) {
-    val layout = TypesettingMath.bilingual6040(document.playResX, document.playResY)
-    Canvas(modifier) {
-        val scaleX = if (osdWidth > 0) size.width / osdWidth.toFloat() else 1f
-        val scaleY = if (osdHeight > 0) size.height / osdHeight.toFloat() else 1f
-
-        val contentLeft = marginLeft * scaleX
-        val contentTop = marginTop * scaleY
-        val contentRight = size.width - marginRight * scaleX
-        val contentBottom = size.height - marginBottom * scaleY
-        val contentWidth = (contentRight - contentLeft).coerceAtLeast(0f)
-        val contentHeight = (contentBottom - contentTop).coerceAtLeast(0f)
-
-        drawRect(
-            color = Color.Yellow.copy(alpha = 0.75f),
-            topLeft = androidx.compose.ui.geometry.Offset(contentLeft, contentTop),
-            size = androidx.compose.ui.geometry.Size(contentWidth, contentHeight),
-            style = Stroke(width = 1.dp.toPx()),
-        )
-
-        val sx = contentWidth / layout.playResX.toFloat().coerceAtLeast(1f)
-        val sy = contentHeight / layout.playResY.toFloat().coerceAtLeast(1f)
-        val left = contentLeft + layout.marginHorizontal * sx
-        val right = contentRight - layout.marginHorizontal * sx
-        val top = contentTop + layout.marginVertical * sy
-        val bottom = contentBottom - layout.marginVertical * sy
-        val sourceY = contentTop + layout.sourceBoundaryY * sy
-        val targetY = contentTop + layout.targetBoundaryY * sy
-        drawRect(
-            color = Color.White.copy(alpha = 0.55f),
-            topLeft = androidx.compose.ui.geometry.Offset(left, top),
-            size = androidx.compose.ui.geometry.Size((right - left).coerceAtLeast(0f), (bottom - top).coerceAtLeast(0f)),
-            style = Stroke(width = 1.5.dp.toPx()),
-        )
-        drawLine(
-            color = Color.Cyan.copy(alpha = 0.75f),
-            start = androidx.compose.ui.geometry.Offset(left, sourceY),
-            end = androidx.compose.ui.geometry.Offset(right, sourceY),
-            strokeWidth = 1.5.dp.toPx(),
-        )
-        drawLine(
-            color = Color.Magenta.copy(alpha = 0.75f),
-            start = androidx.compose.ui.geometry.Offset(left, targetY),
-            end = androidx.compose.ui.geometry.Offset(right, targetY),
-            strokeWidth = 1.5.dp.toPx(),
-        )
-    }
-}
-
 
 
 private fun writeStartupProbe(configDir: File, stage: String, status: String, detail: String = "") {
