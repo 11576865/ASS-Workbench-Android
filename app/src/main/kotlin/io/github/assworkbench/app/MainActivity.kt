@@ -1,221 +1,57 @@
 package io.github.assworkbench.app
 
-import android.content.Intent
-import android.net.Uri
 import android.os.Bundle
-import android.provider.OpenableColumns
 import androidx.activity.ComponentActivity
-import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
-import androidx.activity.enableEdgeToEdge
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.activity.viewModels
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.darkColorScheme
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import androidx.core.view.WindowCompat
-import androidx.core.view.WindowInsetsCompat
-import androidx.core.view.WindowInsetsControllerCompat
-import io.github.assworkbench.app.ui.EditorScreen
 
+/**
+ * 0.24 A-stage startup isolation activity.
+ *
+ * Intentionally does not reference EditorViewModel, EditorScreen, mpv/libass,
+ * FontStore, Fontconfig, ActivityResult launchers, edge-to-edge, or system-bar
+ * controller code. If this screen cannot appear on-device, the crash is below
+ * the editor/runtime stack and must be investigated at Activity/theme/resource/
+ * packaging level.
+ */
 class MainActivity : ComponentActivity() {
-    private val viewModel: EditorViewModel by viewModels()
-
-    private val openVideo = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        uri ?: return@registerForActivityResult
-        persist(uri, read = true, write = false)
-        if (isMatroskaDocument(uri)) {
-            viewModel.openMkvProject(uri)
-        } else {
-            viewModel.openPickedVideo(uri)
-        }
-    }
-
-    private val openMkvProject = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        uri ?: return@registerForActivityResult
-        persist(uri, read = true, write = false)
-        viewModel.openMkvProject(uri)
-    }
-
-    private val openSubtitle = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        uri ?: return@registerForActivityResult
-        if (!isAssDocument(uri)) {
-            viewModel.reportError("字幕导入失败", IllegalArgumentException("只接受 .ass 字幕文件"))
-            return@registerForActivityResult
-        }
-        persist(uri, read = true, write = true)
-        runCatching { viewModel.openSubtitle(uri) }
-            .onFailure { viewModel.reportError("字幕导入失败", it) }
-    }
-
-    private val importFont = registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
-        if (uris.isEmpty()) return@registerForActivityResult
-        uris.forEach { persist(it, read = true, write = false) }
-        runCatching { viewModel.importFonts(uris) }
-            .onFailure { viewModel.reportError("字体导入失败", it) }
-    }
-
-    private val saveMkvAs = registerForActivityResult(ActivityResultContracts.CreateDocument("video/x-matroska")) { uri ->
-        uri ?: return@registerForActivityResult
-        viewModel.saveMkvTo(uri)
-    }
-
-    private val saveSubtitleAs = registerForActivityResult(ActivityResultContracts.CreateDocument("text/x-ssa")) { uri ->
-        uri ?: return@registerForActivityResult
-        persist(uri, read = true, write = true)
-        runCatching { viewModel.saveTo(uri) }
-            .onFailure { viewModel.reportError("字幕保存失败", it) }
-    }
-
     override fun onCreate(savedInstanceState: Bundle?) {
-        StartupProbe.mark(this, "activity_onCreate", "starting")
+        StartupProbe.mark(this, "a_probe_activity_onCreate", "starting")
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge(
-            statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
-            navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
-        )
-        WindowCompat.setDecorFitsSystemWindows(window, false)
-        hideSystemBars()
-        StartupProbe.mark(this, "activity_setContent", "starting")
+        StartupProbe.mark(this, "a_probe_super_onCreate", "success")
+
         setContent {
             MaterialTheme(colorScheme = darkColorScheme()) {
-                var editorReady by remember {
-                    mutableStateOf(!BuildConfig.ASSWB_RENDERER_EXPERIMENTAL)
-                }
-                var startupError by remember { mutableStateOf<String?>(null) }
-                var breadcrumb by remember { mutableStateOf(StartupProbe.read(this@MainActivity)) }
-                var latestBreadcrumb by remember { mutableStateOf(StartupProbe.readLatest(this@MainActivity)) }
-
-                if (BuildConfig.ASSWB_RENDERER_EXPERIMENTAL && !editorReady) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .verticalScroll(rememberScrollState())
-                            .padding(24.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        Text("ASS Workbench FC 安全启动")
-                        Text("此页面尚未创建 EditorViewModel，也不会加载 mpv/libass/Fontconfig。")
-                        Text("最新记录（新→旧）：\n$latestBreadcrumb")
-                        startupError?.let { Text("初始化错误：\n$it") }
-                        Text("完整记录：\n$breadcrumb")
-                        Button(
-                            onClick = {
-                                StartupProbe.mark(this@MainActivity, "activity_request_viewmodel", "starting")
-                                runCatching { viewModel.state }
-                                    .onSuccess {
-                                        StartupProbe.mark(this@MainActivity, "activity_request_viewmodel", "success")
-                                        breadcrumb = StartupProbe.read(this@MainActivity)
-                                        latestBreadcrumb = StartupProbe.readLatest(this@MainActivity)
-                                        editorReady = true
-                                    }
-                                    .onFailure { error ->
-                                        startupError = StartupProbe.describe(error)
-                                        StartupProbe.mark(
-                                            this@MainActivity,
-                                            "activity_request_viewmodel",
-                                            "failure",
-                                            startupError.orEmpty(),
-                                        )
-                                        breadcrumb = StartupProbe.read(this@MainActivity)
-                                        latestBreadcrumb = StartupProbe.readLatest(this@MainActivity)
-                                    }
-                            },
-                        ) {
-                            Text("初始化编辑器")
-                        }
+                var tapped by remember { mutableStateOf(false) }
+                Column(
+                    modifier = Modifier.fillMaxSize().padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
+                ) {
+                    Text("ASS Workbench · A 级启动探针")
+                    Text("Activity + Compose 根节点已成功显示。")
+                    Text("此 APK 未进入 EditorViewModel / EditorScreen / mpv / libass / Fontconfig。")
+                    Button(onClick = { tapped = true }) {
+                        Text(if (tapped) "按钮响应正常" else "测试 Compose 交互")
                     }
-                } else {
-                    val state by viewModel.state.collectAsState()
-                    StartupProbe.mark(this@MainActivity, "editor_compose", "success")
-                    EditorScreen(
-                        state = state,
-                        viewModel = viewModel,
-                        onOpenVideo = {
-                            openVideo.launch(arrayOf("video/*", "video/x-matroska", "application/octet-stream"))
-                        },
-                        onOpenMkvProject = { openMkvProject.launch(arrayOf("video/x-matroska", "video/*", "application/octet-stream")) },
-                        onOpenSubtitle = {
-                            openSubtitle.launch(arrayOf("application/x-ass", "text/x-ass", "text/x-ssa", "text/plain"))
-                        },
-                        onImportFont = { importFont.launch(arrayOf("font/ttf", "font/otf", "application/x-font-ttf", "application/x-font-opentype", "application/octet-stream")) },
-                        onSave = {
-                            if (!viewModel.saveCurrent()) saveSubtitleAs.launch(defaultFileName(state.project.title))
-                        },
-                        onSaveAs = { saveSubtitleAs.launch(defaultFileName(state.project.title)) },
-                        onSaveMkv = {
-                            saveMkvAs.launch(defaultMkvFileName(state.container.name.ifBlank { state.project.title }))
-                        },
-                    )
                 }
             }
         }
-        StartupProbe.mark(this, "activity_setContent", "success")
-    }
 
-    override fun onWindowFocusChanged(hasFocus: Boolean) {
-        super.onWindowFocusChanged(hasFocus)
-        if (hasFocus) hideSystemBars()
-    }
-
-    private fun hideSystemBars() {
-        WindowInsetsControllerCompat(window, window.decorView).apply {
-            hide(WindowInsetsCompat.Type.systemBars())
-            systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-        }
-    }
-
-    private fun isMatroskaDocument(uri: Uri): Boolean {
-        val projection = arrayOf(OpenableColumns.DISPLAY_NAME)
-        val name = contentResolver.query(uri, projection, null, null, null)?.use { cursor ->
-            val column = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-            if (column >= 0 && cursor.moveToFirst()) cursor.getString(column) else null
-        } ?: uri.lastPathSegment
-        val mime = contentResolver.getType(uri).orEmpty()
-        return name?.endsWith(".mkv", ignoreCase = true) == true ||
-            mime.equals("video/x-matroska", ignoreCase = true) ||
-            mime.equals("video/webm", ignoreCase = true)
-    }
-
-    private fun isAssDocument(uri: Uri): Boolean {
-        val projection = arrayOf(OpenableColumns.DISPLAY_NAME)
-        val name = contentResolver.query(uri, projection, null, null, null)?.use { cursor ->
-            val column = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-            if (column >= 0 && cursor.moveToFirst()) cursor.getString(column) else null
-        } ?: uri.lastPathSegment
-        return name?.endsWith(".ass", ignoreCase = true) == true
-    }
-
-    private fun persist(uri: Uri, read: Boolean, write: Boolean) {
-        var flags = 0
-        if (read) flags = flags or Intent.FLAG_GRANT_READ_URI_PERMISSION
-        if (write) flags = flags or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-        runCatching { contentResolver.takePersistableUriPermission(uri, flags) }
-    }
-
-    private fun defaultMkvFileName(title: String): String {
-        val stem = title.substringBeforeLast('.').ifBlank { "updated" }
-        return stem + "-edited.mkv"
-    }
-
-    private fun defaultFileName(title: String): String {
-        val stem = title.substringBeforeLast('.').ifBlank { "subtitle" }
-        return "$stem.ass"
+        StartupProbe.mark(this, "a_probe_setContent", "success")
     }
 }
