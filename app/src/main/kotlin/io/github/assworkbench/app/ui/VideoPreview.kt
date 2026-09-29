@@ -30,7 +30,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -39,7 +38,6 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -113,7 +111,7 @@ fun VideoPreview(
         }
     }
 
-        AuthoritativeMpvPreview(
+    AuthoritativeMpvPreview(
             videoUri = videoUri,
             document = document,
             seekRequestMs = seekRequestMs,
@@ -133,7 +131,8 @@ fun VideoPreview(
             onOpenVideo = onOpenVideo,
             onOpenTimeline = onOpenTimeline,
             modifier = modifier,
-        )}
+        )
+}
 
 @Composable
 private fun ExperimentalRendererStartupProbe(
@@ -881,9 +880,12 @@ private fun TimelineProgressStrip(
         }
         Icon(
             Icons.Filled.Timeline,
-            contentDescription = "双击打开时间轴",
-            tint = colorScheme.onSurfaceVariant.copy(alpha = 0.45f),
-            modifier = Modifier.align(Alignment.CenterEnd).width(18.dp),
+            contentDescription = "打开时间轴",
+            tint = colorScheme.onSurfaceVariant.copy(alpha = 0.70f),
+            modifier = Modifier.align(Alignment.CenterEnd)
+                .width(22.dp)
+                .clickable(onClick = onOpenTimeline)
+                .padding(2.dp),
         )
     }
 }
