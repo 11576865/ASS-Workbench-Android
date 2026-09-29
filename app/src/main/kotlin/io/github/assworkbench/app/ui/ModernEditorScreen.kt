@@ -1,5 +1,6 @@
 package io.github.assworkbench.app.ui
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateContentSize
@@ -565,6 +566,7 @@ private fun ModernTimelineEventRow(
     var baseStart by remember { mutableLongStateOf(previewStart) }
     var baseEnd by remember { mutableLongStateOf(previewEnd) }
     var dragPx by remember { mutableFloatStateOf(0f) }
+    val timelineColors = MaterialTheme.colorScheme
 
     Row(
         Modifier.fillMaxWidth().height(40.dp).combinedClickable(onClick = onFocus, onLongClick = onFocus),
@@ -626,9 +628,25 @@ private fun ModernTimelineEventRow(
                 Spacer(Modifier.weight(leftFraction.coerceAtLeast(0.001f)))
                 Box(
                     Modifier.weight((rightFraction - leftFraction).coerceAtLeast(0.015f)).fillMaxHeight()
-                        .background(if (focused) MaterialTheme.colorScheme.primary.copy(alpha = 0.72f) else MaterialTheme.colorScheme.secondary.copy(alpha = 0.44f))
+                        .background(if (focused) timelineColors.primary.copy(alpha = 0.72f) else timelineColors.secondary.copy(alpha = 0.44f))
                 )
                 Spacer(Modifier.weight((1f - rightFraction).coerceAtLeast(0.001f)))
+            }
+            Canvas(Modifier.fillMaxSize()) {
+                val playFraction = ((playheadMs - windowStartMs).toFloat() / (windowEndMs - windowStartMs).coerceAtLeast(1L)).coerceIn(0f, 1f)
+                val playX = size.width * playFraction
+                drawLine(
+                    color = timelineColors.onSurface,
+                    start = androidx.compose.ui.geometry.Offset(playX, 0f),
+                    end = androidx.compose.ui.geometry.Offset(playX, size.height),
+                    strokeWidth = 1.dp.toPx(),
+                )
+                if (focused) {
+                    val sx = size.width * leftFraction
+                    val ex = size.width * rightFraction
+                    drawLine(timelineColors.onPrimary, androidx.compose.ui.geometry.Offset(sx, 0f), androidx.compose.ui.geometry.Offset(sx, size.height), 2.dp.toPx())
+                    drawLine(timelineColors.onPrimary, androidx.compose.ui.geometry.Offset(ex, 0f), androidx.compose.ui.geometry.Offset(ex, size.height), 2.dp.toPx())
+                }
             }
             Text("${formatMs(previewStart)}–${formatMs(previewEnd)}", Modifier.align(Alignment.Center), style = MaterialTheme.typography.labelSmall, maxLines = 1)
         }
