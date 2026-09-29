@@ -706,8 +706,6 @@ private fun InlineEventEditor(
     val size = effective["Size"]?.effectiveValue ?: "?"
     val bold = effective["Bold"]?.effectiveValue?.let { if (it == "true") "1" else if (it == "false") "0" else it } ?: "?"
     val italic = effective["Italic"]?.effectiveValue?.let { if (it == "true") "1" else if (it == "false") "0" else it } ?: "?"
-    val primary = effective["Primary"]?.effectiveValue ?: effective["Primary Color"]?.effectiveValue ?: "?"
-    val outlineColor = effective["Outline Color"]?.effectiveValue ?: "?"
     val border = effective["Border"]?.effectiveValue ?: "?"
     val alignment = effective["Alignment"]?.effectiveValue ?: "?"
     val marginV = effective["Margin V"]?.effectiveValue ?: "?"
@@ -751,16 +749,20 @@ private fun InlineEventEditor(
         Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
         horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small),
     ) {
-        AssistChip(onClick = { onTool(WorkbenchTool.FONTS) }, label = { Text("fn$font") })
-        AssistChip(onClick = { onTool(WorkbenchTool.STYLE) }, label = { Text("fs$size") })
-        AssistChip(onClick = { onTool(WorkbenchTool.STYLE) }, label = { Text("b$bold · i$italic") })
-        AssistChip(onClick = { onTool(WorkbenchTool.STYLE) }, label = { Text("c$primary") })
-        AssistChip(onClick = { onTool(WorkbenchTool.STYLE) }, label = { Text("3c$outlineColor · bord$border") })
+        // Stable feature-level entrances. The summaries follow familiar ASS override
+        // order without promoting every individual tag into its own button.
+        AssistChip(
+            onClick = { onTool(WorkbenchTool.FONTS) },
+            label = { Text("字体 · $font") },
+        )
+        AssistChip(
+            onClick = { onTool(WorkbenchTool.STYLE) },
+            label = { Text("Style · $styleName · fs$size · b$bold/i$italic · bord$border") },
+        )
         AssistChip(
             onClick = { onTool(WorkbenchTool.POSITION) },
-            label = { Text("an$alignment · V$marginV" + if (pos != "alignment anchor") " · pos" else "") },
+            label = { Text("位置 · an$alignment · V$marginV" + if (pos != "alignment anchor") " · pos" else "") },
         )
-        AssistChip(onClick = { onTool(WorkbenchTool.STYLE) }, label = { Text("Style $styleName") })
         AssistChip(
             onClick = { effectsOpen = !effectsOpen },
             label = { Text(if (effectsOpen) "收起效果" else "效果") },
