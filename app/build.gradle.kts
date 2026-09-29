@@ -7,6 +7,8 @@ val baseVersionName = "0.26.0"
 val rendererVersion = providers.gradleProperty("asswb.rendererVersion").getOrElse("0.3.0")
 val rendererProvider = providers.gradleProperty("asswb.rendererProvider").getOrElse("none")
 val rendererExperimental = providers.gradleProperty("asswb.rendererExperimental").map(String::toBoolean).getOrElse(false)
+val buildCommit = providers.environmentVariable("GITHUB_SHA").getOrElse("local").take(12)
+val buildRunNumber = providers.environmentVariable("GITHUB_RUN_NUMBER").getOrElse("local")
 
 android {
     namespace = "io.github.assworkbench.app"
@@ -26,6 +28,8 @@ android {
         buildConfigField("String", "ASSWB_RENDERER_FONT_PROVIDER", "\"$rendererProvider\"")
         buildConfigField("String", "ASSWB_RENDERER_VERSION", "\"$rendererVersion\"")
         buildConfigField("boolean", "ASSWB_RENDERER_EXPERIMENTAL", rendererExperimental.toString())
+        buildConfigField("String", "ASSWB_BUILD_COMMIT", "\"$buildCommit\"")
+        buildConfigField("String", "ASSWB_BUILD_NUMBER", "\"$buildRunNumber\"")
     }
 
     buildFeatures {
