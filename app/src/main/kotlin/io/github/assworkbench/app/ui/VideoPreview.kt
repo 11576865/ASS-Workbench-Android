@@ -84,6 +84,7 @@ fun VideoPreview(
     showLayoutGuides: Boolean,
     focusedEventId: Long?,
     onSetEventPosition: (Double, Double) -> Unit,
+    onFocusEvent: (Long) -> Unit,
     onOpenVideo: () -> Unit,
     onOpenTimeline: () -> Unit = {},
     modifier: Modifier = Modifier,
@@ -127,6 +128,7 @@ fun VideoPreview(
             showLayoutGuides = showLayoutGuides,
             focusedEventId = focusedEventId,
             onSetEventPosition = onSetEventPosition,
+            onFocusEvent = onFocusEvent,
             onOpenVideo = onOpenVideo,
             onOpenTimeline = onOpenTimeline,
             modifier = modifier,
@@ -402,6 +404,7 @@ private fun AuthoritativeMpvPreview(
     showLayoutGuides: Boolean,
     focusedEventId: Long?,
     onSetEventPosition: (Double, Double) -> Unit,
+    onFocusEvent: (Long) -> Unit,
     onOpenVideo: () -> Unit,
     onOpenTimeline: () -> Unit,
     modifier: Modifier,
@@ -582,6 +585,7 @@ private fun AuthoritativeMpvPreview(
                 playback = playback,
                 document = document,
                 focusedEventId = focusedEventId,
+                onFocusEvent = onFocusEvent,
                 onPlayPause = {
                     val shouldPause = playback.status == MpvPlaybackState.Status.Playing ||
                         playback.status == MpvPlaybackState.Status.Buffering
@@ -731,6 +735,7 @@ private fun PlaybackBar(
     playback: MpvPlaybackState,
     document: AssDocument,
     focusedEventId: Long?,
+    onFocusEvent: (Long) -> Unit,
     onPlayPause: () -> Unit,
     onFrameBack: () -> Unit,
     onFrameForward: () -> Unit,
@@ -769,6 +774,7 @@ private fun PlaybackBar(
                 positionSeconds = displayPosition,
                 events = document.events,
                 focusedEventId = focusedEventId,
+                onFocusEvent = onFocusEvent,
                 onScrub = { scrubPosition = it },
                 onScrubFinished = {
                     val target = scrubPosition
@@ -789,6 +795,7 @@ private fun TimelineProgressStrip(
     positionSeconds: Double,
     events: List<AssEvent>,
     focusedEventId: Long?,
+    onFocusEvent: (Long) -> Unit,
     onScrub: (Double) -> Unit,
     onScrubFinished: () -> Unit,
     onOpenTimeline: () -> Unit,
@@ -807,7 +814,16 @@ private fun TimelineProgressStrip(
                         } else {
                             val usableWidth = (size.width - timelineHotspot).coerceAtLeast(1f)
                             val fraction = (offset.x / usableWidth).coerceIn(0f, 1f)
-                            onScrub(durationSeconds * fraction)
+                            val targetMs = (durationSeconds * 1000.0 * fraction).toLong()
+                            val hit = events
+                                .filter { targetMs in it.start.millis..it.end.millis }
+                                .minByOrNull { it.end.millis - it.start.millis }
+                            if (hit != null) {
+                                onFocusEvent(hit.id)
+                                onScrub(hit.start.millis / 1000.0)
+                            } else {
+                                onScrub(durationSeconds * fraction)
+                            }
                             onScrubFinished()
                         }
                     },
@@ -835,12 +851,18 @@ private fun TimelineProgressStrip(
         Canvas(Modifier.fillMaxSize()) {
             val w = size.width.coerceAtLeast(1f)
             val h = size.height
-            val centerY = h * 0.56f
+            val centerY = h * 0.58f
+            drawRoundRect(
+                color = colorScheme.surfaceVariant.copy(alpha = 0.72f),
+                topLeft = androidx.compose.ui.geometry.Offset(0f, h * 0.20f),
+                size = androidx.compose.ui.geometry.Size(w, h * 0.62f),
+                cornerRadius = androidx.compose.ui.geometry.CornerRadius(5.dp.toPx()),
+            )
             drawLine(
-                color = colorScheme.outlineVariant,
+                color = colorScheme.outlineVariant.copy(alpha = 0.75f),
                 start = androidx.compose.ui.geometry.Offset(0f, centerY),
                 end = androidx.compose.ui.geometry.Offset(w, centerY),
-                strokeWidth = 2.dp.toPx(),
+                strokeWidth = 1.dp.toPx(),
             )
             if (durationSeconds > 0.0) {
                 events.forEach { event ->
@@ -849,21 +871,42 @@ private fun TimelineProgressStrip(
                     val x1 = (start * w).toFloat()
                     val x2 = (end * w).toFloat().coerceAtLeast(x1 + 1.dp.toPx())
                     val focused = event.id == focusedEventId
-                    drawRect(
-                        color = if (focused) colorScheme.primary else colorScheme.secondary.copy(alpha = 0.50f),
-                        topLeft = androidx.compose.ui.geometry.Offset(x1, if (focused) h * 0.18f else h * 0.34f),
+                    val top = if (focused) h * 0.12f else h * 0.32f
+                    val barHeight = if (focused) h * 0.72f else h * 0.40f
+                    drawRoundRect(
+                        color = if (focused) colorScheme.primary else colorScheme.secondary.copy(alpha = 0.46f),
+                        topLeft = androidx.compose.ui.geometry.Offset(x1, top),
                         size = androidx.compose.ui.geometry.Size(
                             (x2 - x1).coerceAtLeast(1.dp.toPx()),
-                            if (focused) h * 0.58f else h * 0.38f,
+                            barHeight,
                         ),
+                        cornerRadius = androidx.compose.ui.geometry.CornerRadius(if (focused) 3.dp.toPx() else 2.dp.toPx()),
                     )
+                    if (focused) {
+                        val handleWidth = 2.dp.toPx()
+                        drawRect(
+                            color = colorScheme.onPrimary,
+                            topLeft = androidx.compose.ui.geometry.Offset(x1, top),
+                            size = androidx.compose.ui.geometry.Size(handleWidth, barHeight),
+                        )
+                        drawRect(
+                            color = colorScheme.onPrimary,
+                            topLeft = androidx.compose.ui.geometry.Offset((x2 - handleWidth).coerceAtLeast(x1), top),
+                            size = androidx.compose.ui.geometry.Size(handleWidth, barHeight),
+                        )
+                    }
                 }
                 val px = (positionSeconds / durationSeconds).coerceIn(0.0, 1.0).toFloat() * w
                 drawLine(
                     color = colorScheme.onSurface,
-                    start = androidx.compose.ui.geometry.Offset(px, 0f),
-                    end = androidx.compose.ui.geometry.Offset(px, h),
+                    start = androidx.compose.ui.geometry.Offset(px, h * 0.04f),
+                    end = androidx.compose.ui.geometry.Offset(px, h * 0.96f),
                     strokeWidth = 1.5.dp.toPx(),
+                )
+                drawCircle(
+                    color = colorScheme.onSurface,
+                    radius = 3.dp.toPx(),
+                    center = androidx.compose.ui.geometry.Offset(px, h * 0.05f),
                 )
             }
         }
