@@ -109,6 +109,15 @@ class AssGeometrySemanticTest {
         assertNull(AssGeometrySemantic.inspect(output).clipRect)
     }
     @Test
+    fun negativeScalarKeepsMinusInValueInsteadOfTagName() {
+        val source = "{\\frz-32.5\\fax-0.35\\fay-.6\\x-custom(foo)}Text"
+        val snapshot = AssGeometrySemantic.inspect(source)
+        assertEquals(-32.5, snapshot.rotationZ)
+        assertEquals(-0.35, snapshot.shearX)
+        assertEquals(-0.6, snapshot.shearY)
+        assertEquals("{\\frz-10\\fax-0.2\\fay-0.4\\x-custom(foo)}Text", AssGeometrySemantic.patchShear(AssGeometrySemantic.patchRotationZ(source, -10.0), -0.2, -0.4))
+    }
+    @Test
     fun shearPatchPreservesUnknownNeighborsAndNestedTransform() {
         val source = "{\\fax0.15\\t(0,500,\\fax0.8\\fay-0.4)\\x-custom(foo)\\fay0.25}Text"
         val output = AssGeometrySemantic.patchShear(source, -0.35, 0.6)

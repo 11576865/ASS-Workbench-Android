@@ -364,6 +364,13 @@ object AssGeometrySemantic {
                     cursor++
                 }
             }
+            if (cursor > nameStart && cursor < endExclusive &&
+                text[cursor - 1] == '-' && (text[cursor].isDigit() || text[cursor] == '.')
+            ) {
+                // A minus sign before a numeric scalar belongs to the value, not the tag name.
+                // Keep internal hyphens intact so unknown tags such as \\x-custom still round-trip.
+                cursor--
+            }
             if (cursor == nameStart) continue
 
             val name = text.substring(nameStart, cursor)
