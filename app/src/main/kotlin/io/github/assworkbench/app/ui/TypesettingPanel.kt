@@ -41,7 +41,6 @@ import io.github.assworkbench.app.EditorState
 import io.github.assworkbench.app.EditorViewModel
 import io.github.assworkbench.domain.AssInlineSyntax
 import io.github.assworkbench.domain.AssStyle
-import io.github.assworkbench.domain.TypesettingMath
 import kotlinx.coroutines.delay
 
 private enum class StyleManageMode { CREATE, RENAME, DELETE }
@@ -70,7 +69,6 @@ fun TypesettingPanel(
     var borderStyle by remember(style) { mutableStateOf(style.borderStyle.toString()) }
     var encoding by remember(style) { mutableStateOf(style.encoding.toString()) }
     var advancedOpen by remember { mutableStateOf(false) }
-    var bilingualOpen by remember { mutableStateOf(false) }
     var styleMenuOpen by remember { mutableStateOf(false) }
     var styleManageMode by remember { mutableStateOf<StyleManageMode?>(null) }
     var styleNameDraft by remember(style.name) { mutableStateOf(style.name) }
@@ -86,7 +84,6 @@ fun TypesettingPanel(
     var sourceMenu by remember { mutableStateOf(false) }
     var targetMenu by remember { mutableStateOf(false) }
 
-    val geometry = TypesettingMath.bilingual6040(state.document.playResX, state.document.playResY)
 
     val focusedEvent = state.focusedEventId?.let { id -> state.document.events.firstOrNull { it.id == id } }
     val focusedSources = focusedEvent?.let(::styleOverrideSources).orEmpty()
