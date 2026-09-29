@@ -30,8 +30,6 @@ data class EditorState(
     val fallbackFontFamily: String? = null,
     val fontRevision: Long = 0L,
     val fontImportBusy: Boolean = false,
-    val fontReloadPending: Boolean = false,
-    val showLayoutGuides: Boolean = false,
     val container: ContainerBridgeState = ContainerBridgeState(),
     val recoveryAvailable: Boolean = false,
     val recoveryLabel: String = "",
