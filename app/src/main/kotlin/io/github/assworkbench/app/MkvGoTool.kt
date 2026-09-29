@@ -20,18 +20,27 @@ class MkvGoTool(private val context: Context) {
         trackNumber: Long,
         editedAss: File,
         output: File,
+        fonts: List<File> = emptyList(),
     ) {
         require(isAvailable()) { "MKV 写回工具在此 ABI 上不可用" }
         output.parentFile?.mkdirs() ?: error("输出目录不可用")
         output.delete()
 
-        run(
+        val args = mutableListOf(
             "replace-ass",
             source.absolutePath,
             "-o", output.absolutePath,
             "-t", trackNumber.toString(),
-            editedAss.absolutePath,
         )
+        fonts
+            .distinctBy { it.absolutePath }
+            .forEach { font ->
+                require(font.isFile && font.length() > 0L) { "字体文件不可用：" + font.name }
+                args += "--font"
+                args += font.absolutePath
+            }
+        args += editedAss.absolutePath
+        run(*args.toTypedArray())
         require(output.isFile && output.length() > 0L) { "MKV 写回未生成输出文件" }
     }
 
