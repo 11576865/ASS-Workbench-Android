@@ -3109,6 +3109,18 @@ private fun FontManagerPane(
             .map { it.sha256 }
             .toSet()
     }
+    val embeddedFontShas = remember(state.importedFonts) {
+        state.importedFonts.asSequence()
+            .filter { it.origin == FontOrigin.MKV_ATTACHMENT }
+            .map { it.sha256 }
+            .toSet()
+    }
+    val packageableFontShas = remember(state.importedFonts, embeddedFontShas) {
+        state.importedFonts.asSequence()
+            .filter { it.origin == FontOrigin.MANUAL && it.sha256 !in embeddedFontShas }
+            .map { it.sha256 }
+            .toSet()
+    }
     val mkvAttachmentCount = state.importedFonts.count { it.origin == FontOrigin.MKV_ATTACHMENT }
     val unreferencedMkvCount = state.importedFonts.count { font ->
         font.origin == FontOrigin.MKV_ATTACHMENT &&
@@ -3150,6 +3162,34 @@ private fun FontManagerPane(
         } else {
             Text(
                 "当前 ASS 没有 Event 请求字体；未使用的 Style 定义不会被算作运行时字体需求。",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+
+        if (state.container.uri != null) {
+            Row(
+                Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro),
+            ) {
+                Text(
+                    "MKV 写回字体 " + state.fontPackagingSelection.size + " / " + packageableFontShas.size,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f),
+                )
+                TextButton(
+                    onClick = viewModel::selectRequestedFontsForPackaging,
+                    enabled = packageableFontShas.isNotEmpty(),
+                ) { Text("选择 ASS 请求") }
+                TextButton(
+                    onClick = viewModel::clearFontPackagingSelection,
+                    enabled = state.fontPackagingSelection.isNotEmpty(),
+                ) { Text("清空") }
+            }
+            Text(
+                "所选手动字体会在“保存为新 MKV”时与 ASS 轨替换一起封入；当前 MKV 已有的同一字体不会重复选择。",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -3214,6 +3254,20 @@ private fun FontManagerPane(
                                 MaterialTheme.colorScheme.onSurfaceVariant
                             },
                         )
+                    }
+                    if (state.container.uri != null) {
+                        if (font.origin == FontOrigin.MKV_ATTACHMENT || font.sha256 in embeddedFontShas) {
+                            Text(
+                                "容器已有",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        } else if (font.sha256 in packageableFontShas) {
+                            Checkbox(
+                                checked = font.sha256 in state.fontPackagingSelection,
+                                onCheckedChange = { viewModel.toggleFontPackaging(font.sha256) },
+                            )
+                        }
                     }
                     if (style != null) {
                         TextButton(
