@@ -337,6 +337,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 originalTextById = review.originalTextById,
                 confirmedReviewIds = review.confirmedIds,
                 reviewFilter = "all",
+                container = ContainerBridgeState(),
                 status = "已载入 ${document.events.size} 条 ASS 事件 · ${decoded.encoding.displayName}。",
             )
         }
