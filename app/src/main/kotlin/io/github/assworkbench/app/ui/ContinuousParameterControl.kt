@@ -13,6 +13,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -50,6 +51,7 @@ internal fun ContinuousParameterControl(
         .coerceIn(range.start.toDouble(), range.endInclusive.toDouble())
         .toFloat()
     var lastPreviewAt by remember { mutableLongStateOf(0L) }
+    var latestGestureValue by remember { mutableStateOf<Double?>(null) }
 
     fun format(value: Double): String {
         if (step >= 1.0) return round(value).toLong().toString()
@@ -67,6 +69,12 @@ internal fun ContinuousParameterControl(
         val clamped = value.coerceIn(range.start.toDouble(), range.endInclusive.toDouble())
         onValueTextChange(format(clamped))
         if (preview) onPreview(clamped)
+    }
+
+    fun discreteUpdate(value: Double) {
+        onGestureActive(true)
+        update(value, preview = true)
+        onGestureActive(false)
     }
 
     Column(
@@ -106,7 +114,7 @@ internal fun ContinuousParameterControl(
             horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro),
         ) {
             OutlinedButton(
-                onClick = { update((parsed ?: sliderValue.toDouble()) - step, preview = true) },
+                onClick = { discreteUpdate((parsed ?: sliderValue.toDouble()) - step) },
             ) { Text("−") }
 
             Slider(
@@ -116,6 +124,7 @@ internal fun ContinuousParameterControl(
                     val snapped = if (step > 0.0) {
                         round(raw.toDouble() / step) * step
                     } else raw.toDouble()
+                    latestGestureValue = snapped
                     onValueTextChange(format(snapped))
                     val now = android.os.SystemClock.uptimeMillis()
                     if (now - lastPreviewAt >= 70L) {
@@ -124,7 +133,11 @@ internal fun ContinuousParameterControl(
                     }
                 },
                 onValueChangeFinished = {
-                    onPreview(valueText.toDoubleOrNull() ?: sliderValue.toDouble())
+                    val finalValue = latestGestureValue
+                        ?: valueText.toDoubleOrNull()
+                        ?: sliderValue.toDouble()
+                    onPreview(finalValue)
+                    latestGestureValue = null
                     onGestureActive(false)
                 },
                 valueRange = range,
@@ -132,7 +145,7 @@ internal fun ContinuousParameterControl(
             )
 
             OutlinedButton(
-                onClick = { update((parsed ?: sliderValue.toDouble()) + step, preview = true) },
+                onClick = { discreteUpdate((parsed ?: sliderValue.toDouble()) + step) },
             ) { Text("+") }
         }
     }

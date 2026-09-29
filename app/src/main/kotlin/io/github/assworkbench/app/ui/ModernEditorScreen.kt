@@ -523,8 +523,12 @@ private fun EventWorkspace(
     val listState = rememberLazyListState()
     val rangeScrollScope = rememberCoroutineScope()
     LaunchedEffect(state.focusedEventId, state.filteredEvents) {
-        val index = state.filteredEvents.indexOfFirst { it.id == state.focusedEventId }
+        val focusedId = state.focusedEventId
+        val index = state.filteredEvents.indexOfFirst { it.id == focusedId }
         if (index >= 0) listState.animateScrollToItem(index)
+        if (expandedEventId != null && focusedId != null && expandedEventId != focusedId) {
+            onExpandedChange(focusedId)
+        }
     }
     Column(modifier.background(MaterialTheme.colorScheme.surface)) {
         Row(Modifier.fillMaxWidth().height(WorkbenchDimens.PaneHeaderHeight).padding(horizontal = WorkbenchDimens.Small), verticalAlignment = Alignment.CenterVertically) {
@@ -722,7 +726,8 @@ private fun InlineEventEditor(
 ) {
     var startText by remember(event.id, event.start) { mutableStateOf(event.start.toAss()) }
     var endText by remember(event.id, event.end) { mutableStateOf(event.end.toAss()) }
-    var rawField by remember(event.id, event.text) { mutableStateOf(TextFieldValue(event.text, TextRange(event.text.length))) }
+    var rawField by remember(event.id) { mutableStateOf(TextFieldValue(event.text, TextRange(event.text.length))) }
+    var rawBaseText by remember(event.id) { mutableStateOf(event.text) }
     var inlinePanel by remember(event.id) { mutableStateOf<String?>(null) }
     var layerText by remember(event.id, event.layer) { mutableStateOf(event.layer.toString()) }
     var actorText by remember(event.id, event.name) { mutableStateOf(event.name) }
@@ -741,9 +746,14 @@ private fun InlineEventEditor(
     val pos = effective["Position"]?.effectiveValue ?: "alignment anchor"
 
     LaunchedEffect(event.text) {
-        if (rawField.text != event.text) {
-            val cursor = rawField.selection.start.coerceIn(0, event.text.length)
-            rawField = TextFieldValue(event.text, TextRange(cursor))
+        when {
+            event.text == rawField.text -> rawBaseText = event.text
+            rawField.text == rawBaseText -> {
+                val cursor = rawField.selection.start.coerceIn(0, event.text.length)
+                rawField = TextFieldValue(event.text, TextRange(cursor))
+                rawBaseText = event.text
+            }
+            else -> Unit // Preserve the unsaved draft; UI below exposes the conflict explicitly.
         }
     }
 
@@ -771,6 +781,7 @@ private fun InlineEventEditor(
         modifier = Modifier.fillMaxWidth().heightIn(min = 104.dp, max = 220.dp),
     )
     val rawDirty = rawField.text != event.text
+    val rawExternalConflict = rawDirty && event.text != rawBaseText
     val splitCursor = rawField.selection.start
     val splitReady = !rawDirty && rawField.selection.collapsed &&
         splitCursor in 1 until event.text.length &&
@@ -784,14 +795,26 @@ private fun InlineEventEditor(
                 modifier = Modifier.weight(1f),
             )
             OutlinedButton(
-                onClick = { viewModel.splitFocusedEvent(splitCursor) },
+                onClick = { viewModel.focusEvent(event.id, seek = false); viewModel.splitFocusedEvent(splitCursor) },
                 enabled = splitReady,
             ) { Text("在播放头拆分") }
         } else {
             Spacer(Modifier.weight(1f))
-            TextButton(onClick = { rawField = TextFieldValue(event.text, TextRange(event.text.length)) }) { Text("还原") }
-            Button(onClick = { viewModel.updateEventText(event.id, rawField.text) }) { Text("应用正文") }
+            TextButton(onClick = {
+                rawField = TextFieldValue(event.text, TextRange(event.text.length))
+                rawBaseText = event.text
+            }) { Text(if (rawExternalConflict) "重新载入" else "还原") }
+            Button(onClick = { viewModel.updateEventText(event.id, rawField.text) }) {
+                Text(if (rawExternalConflict) "以草稿覆盖" else "应用正文")
+            }
         }
+    }
+    if (rawExternalConflict) {
+        Text(
+            "当前 Event 的正文/override 已在其他面板发生变化；未保存草稿已保留。重新载入会丢弃草稿，“以草稿覆盖”会明确覆盖当前 canonical Event Text。",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.error,
+        )
     }
     if (!rawDirty && !splitReady) {
         Text(
@@ -857,6 +880,7 @@ private fun InlineEventEditor(
                         inlinePanel = null
                     }) { Text("取消") }
                     Button(onClick = {
+                        viewModel.focusEvent(event.id, seek = false)
                         viewModel.updateFocusedMetadata(
                             layer = layerText.toIntOrNull() ?: event.layer,
                             actor = actorText,
@@ -867,26 +891,38 @@ private fun InlineEventEditor(
                 }
                 Divider()
                 Text("结构操作", style = MaterialTheme.typography.labelMedium)
-                Row(
-                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro),
-                ) {
-                    OutlinedButton(onClick = viewModel::insertFocusedBefore) { Text("前插") }
-                    OutlinedButton(onClick = viewModel::insertFocusedAfter) { Text("后插") }
-                    OutlinedButton(onClick = viewModel::duplicateFocusedEvent) { Text("复制") }
-                    OutlinedButton(onClick = viewModel::mergeFocusedWithPrevious) { Text("合并上一条") }
-                    OutlinedButton(onClick = viewModel::mergeFocusedWithNext) { Text("合并下一条") }
-                    OutlinedButton(onClick = viewModel::deleteSelectedOrFocused) {
-                        Icon(Icons.Filled.Delete, null)
-                        Spacer(Modifier.width(4.dp))
-                        Text("删除")
+                if (state.selectedEventIds.isEmpty()) {
+                    fun withCurrentEvent(action: () -> Unit) {
+                        viewModel.focusEvent(event.id, seek = false)
+                        action()
                     }
+                    Row(
+                        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro),
+                    ) {
+                        OutlinedButton(onClick = { withCurrentEvent(viewModel::insertFocusedBefore) }) { Text("前插") }
+                        OutlinedButton(onClick = { withCurrentEvent(viewModel::insertFocusedAfter) }) { Text("后插") }
+                        OutlinedButton(onClick = { withCurrentEvent(viewModel::duplicateFocusedEvent) }) { Text("复制") }
+                        OutlinedButton(onClick = { withCurrentEvent(viewModel::mergeFocusedWithPrevious) }) { Text("合并上一条") }
+                        OutlinedButton(onClick = { withCurrentEvent(viewModel::mergeFocusedWithNext) }) { Text("合并下一条") }
+                        OutlinedButton(onClick = { withCurrentEvent(viewModel::deleteSelectedOrFocused) }) {
+                            Icon(Icons.Filled.Delete, null)
+                            Spacer(Modifier.width(4.dp))
+                            Text("删除")
+                        }
+                    }
+                    Text(
+                        "前插/后插会继承当前 Event 的 Layer、Style、Actor、Margins、Effect 与 Comment 状态，但正文为空；复制则保留完整正文和时间。所有结构操作都进入 Undo history。",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                } else {
+                    Text(
+                        "当前处于多选模式；为避免旧展开面板误删或误合并其他已选字幕，单 Event 结构操作暂时锁定。批量操作请使用“批量”工作台。",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
-                Text(
-                    "前插/后插会继承当前 Event 的 Layer、Style、Actor、Margins、Effect 与 Comment 状态，但正文为空；复制则保留完整正文和时间。所有结构操作都进入 Undo history。",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
             }
         }
     }
@@ -1957,7 +1993,7 @@ private fun BatchPane(state: EditorState, viewModel: EditorViewModel, modifier: 
                         text = { Text(style.name) },
                         onClick = {
                             styleMenuOpen = false
-                            viewModel.setSelectedStyle(style.name)
+                            viewModel.assignSelectedStyle(style.name)
                         },
                     )
                 }

@@ -554,20 +554,6 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             })
         }
     }
-    fun setSelectedStyle(styleName: String) {
-        val snapshot = _state.value
-        val ids = snapshot.selectedEventIds
-        if (ids.isEmpty()) return
-        if (snapshot.document.styles.none { it.name == styleName }) {
-            _state.update { it.copy(status = "Style 不存在：$styleName") }
-            return
-        }
-        editDocument("已将 " + ids.size + " 条字幕设为 Style " + styleName + "。") { doc ->
-            doc.copy(events = doc.events.map { event ->
-                if (event.id in ids) event.copy(style = styleName) else event
-            })
-        }
-    }
 
     fun setEventTiming(id: Long, startMs: Long, endMs: Long) {
         if (endMs < startMs) return

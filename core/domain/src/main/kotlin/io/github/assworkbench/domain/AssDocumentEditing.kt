@@ -45,11 +45,17 @@ object AssDocumentEditing {
         require(index >= 0) { "当前字幕不存在。" }
         val source = document.events[index]
         val duration = defaultDurationMs.coerceAtLeast(100L)
-        val startMs: Long
-        val endMs: Long
+        var startMs: Long
+        var endMs: Long
         if (before) {
             endMs = source.start.millis
             startMs = (endMs - duration).coerceAtLeast(0L)
+            if (endMs - startMs < 100L) {
+                // Document order is authoritative for insert-before; at time zero there is
+                // no legal negative interval, so overlap rather than creating a zero-length Event.
+                startMs = source.start.millis
+                endMs = startMs + duration
+            }
         } else {
             startMs = source.end.millis
             endMs = startMs + duration
@@ -111,10 +117,10 @@ object AssDocumentEditing {
         val safeTime = splitTimeMs.coerceIn(source.start.millis + 1L, source.end.millis - 1L)
         require(safeTime > source.start.millis && safeTime < source.end.millis) { "当前字幕时长不足以拆分。" }
 
-        var leftText = source.text.substring(0, textIndex).trimEnd()
-        var rightText = source.text.substring(textIndex).trimStart()
-        if (leftText.endsWith("\\N")) leftText = leftText.dropLast(2).trimEnd()
-        if (rightText.startsWith("\\N")) rightText = rightText.drop(2).trimStart()
+        var leftText = source.text.substring(0, textIndex)
+        var rightText = source.text.substring(textIndex)
+        if (leftText.endsWith("\\N")) leftText = leftText.dropLast(2)
+        if (rightText.startsWith("\\N")) rightText = rightText.drop(2)
         require(leftText.isNotBlank() && rightText.isNotBlank()) { "拆分点两侧都需要有文本。" }
 
         val leading = leadingOverridePrefix(source.text)
@@ -149,7 +155,7 @@ object AssDocumentEditing {
         val merged = first.copy(
             start = selected.minBy { it.start.millis }.start,
             end = selected.maxBy { it.end.millis }.end,
-            text = selected.joinToString(separator) { it.text.trim() },
+            text = selected.joinToString(separator) { it.text },
         )
         val firstIndex = document.events.indexOfFirst { it.id == first.id }
         val events = document.events.filterNot { it.id in eventIds }.toMutableList()

@@ -56,6 +56,15 @@ class AssDocumentEditingTest {
         assertEquals("Default", afterEvent.style)
         assertEquals(listOf(1L, afterEvent.id, 2L), after.document.events.map { it.id })
     }
+    @Test
+    fun insertBeforeTimeZeroNeverCreatesZeroDurationEvent() {
+        val source = doc().copy(events = listOf(doc().events.first().copy(start = SubTime(0), end = SubTime(1_000))))
+        val result = AssDocumentEditing.insertAdjacent(source, 1, before = true)
+        val inserted = result.document.events.first { it.id == result.focusedEventId }
+        assertEquals(0, inserted.start.millis)
+        assertEquals(2_000, inserted.end.millis)
+        assertTrue(inserted.end.millis > inserted.start.millis)
+    }
 
     @Test
     fun duplicatePreservesExactEventAndOnlyChangesId() {
@@ -88,6 +97,19 @@ class AssDocumentEditingTest {
         assertEquals("{\\fs56}{\\bord6}你好", first.text)
         assertTrue(second.text.startsWith("{\\fs56}{\\bord6}"))
         assertTrue(second.text.endsWith("世界"))
+    }
+    @Test
+    fun splitAndMergePreserveVisibleBoundaryWhitespace() {
+        val source = doc().copy(events = listOf(
+            doc().events[0].copy(id = 1, start = SubTime(1_000), end = SubTime(4_000), text = "left  right"),
+            doc().events[1].copy(id = 2, start = SubTime(5_000), end = SubTime(7_000), text = " tail "),
+        ))
+        val split = AssDocumentEditing.splitEvent(source, 1, 2_500, 6)
+        assertEquals("left  ", split.document.events[0].text)
+        assertEquals("right", split.document.events[1].text)
+
+        val merged = AssDocumentEditing.mergeEvents(source, setOf(1, 2), "\\N")
+        assertEquals("left  right\\N tail ", merged.document.events.single().text)
     }
 
     @Test
