@@ -743,24 +743,24 @@ private fun PlaybackBar(
     var scrubPosition by remember { mutableStateOf<Double?>(null) }
     val displayPosition = scrubPosition ?: position
 
-    CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 28.dp) {
+    CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides WorkbenchDimens.MinTouchTarget) {
         Row(
             Modifier.fillMaxWidth()
-                .height(38.dp)
+                .height(WorkbenchDimens.TransportHeight)
                 .background(MaterialTheme.colorScheme.surface)
-                .padding(horizontal = 4.dp),
+                .padding(horizontal = WorkbenchDimens.Micro),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(2.dp),
+            horizontalArrangement = Arrangement.spacedBy(0.dp),
         ) {
-            IconButton(onClick = onFrameBack, modifier = Modifier.width(28.dp).height(28.dp)) {
+            IconButton(onClick = onFrameBack) {
                 Icon(Icons.Filled.SkipPrevious, "上一帧")
             }
-            IconButton(onClick = onPlayPause, modifier = Modifier.width(30.dp).height(30.dp)) {
+            IconButton(onClick = onPlayPause) {
                 val playing = playback.status == MpvPlaybackState.Status.Playing ||
                     playback.status == MpvPlaybackState.Status.Buffering
                 Icon(if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow, if (playing) "暂停" else "播放")
             }
-            IconButton(onClick = onFrameForward, modifier = Modifier.width(28.dp).height(28.dp)) {
+            IconButton(onClick = onFrameForward) {
                 Icon(Icons.Filled.SkipNext, "下一帧")
             }
             Text(formatClock(displayPosition), style = MaterialTheme.typography.labelSmall)
@@ -776,7 +776,7 @@ private fun PlaybackBar(
                     scrubPosition = null
                 },
                 onOpenTimeline = onOpenTimeline,
-                modifier = Modifier.weight(1f).height(26.dp),
+                modifier = Modifier.weight(1f).height(WorkbenchDimens.TransportHeight),
             )
             Text(formatClock(duration), style = MaterialTheme.typography.labelSmall)
         }
@@ -801,7 +801,7 @@ private fun TimelineProgressStrip(
             .pointerInput(durationSeconds) {
                 detectTapGestures(
                     onTap = { offset ->
-                        val timelineHotspot = 30.dp.toPx()
+                        val timelineHotspot = WorkbenchDimens.MinTouchTarget.toPx()
                         if (durationSeconds <= 0.0 || offset.x >= size.width - timelineHotspot) {
                             onOpenTimeline()
                         } else {
@@ -867,15 +867,21 @@ private fun TimelineProgressStrip(
                 )
             }
         }
-        Icon(
-            Icons.Filled.Timeline,
-            contentDescription = "打开时间轴",
-            tint = colorScheme.onSurfaceVariant.copy(alpha = 0.70f),
-            modifier = Modifier.align(Alignment.CenterEnd)
-                .width(22.dp)
-                .clickable(onClick = onOpenTimeline)
-                .padding(2.dp),
-        )
+        Box(
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .width(WorkbenchDimens.MinTouchTarget)
+                .height(WorkbenchDimens.MinTouchTarget)
+                .clickable(onClick = onOpenTimeline),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                Icons.Filled.Timeline,
+                contentDescription = "打开时间轴",
+                tint = colorScheme.onSurfaceVariant.copy(alpha = 0.70f),
+                modifier = Modifier.width(22.dp),
+            )
+        }
     }
 }
 
