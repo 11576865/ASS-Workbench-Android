@@ -149,9 +149,9 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                             },
                         )
                     }
-                    if (imported > 0) {
-                        fontStore.refreshFontconfig(pruneOldCaches = true)
-                    }
+                    // Project fonts are exposed to libass through sub-fonts-dir.
+                    // Do not rebuild Fontconfig while an MKV is opening: live native cache
+                    // mutation has caused process-level crashes on some Android devices.
                     scan
                 }
             }.onSuccess { scan ->
