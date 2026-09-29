@@ -25,12 +25,12 @@ object AssEffectiveInspector {
         val underline = parseAssBool(lastTag("u"))
         val strike = parseAssBool(lastTag("s"))
         val spacing = lastTag("fsp")?.toDoubleOrNull()
-        val scaleX = lastTag("fscx")?.toDoubleOrNull()
-        val scaleY = lastTag("fscy")?.toDoubleOrNull()
-        val angle = (lastTag("frz") ?: lastTag("fr"))?.toDoubleOrNull()
+        val geometry = AssGeometrySemantic.inspect(event.text)
+        val scaleX = geometry.scaleX
+        val scaleY = geometry.scaleY
+        val angle = geometry.rotationZ
         val primaryColor = lastTag("1c", "c")
         val outlineColor = lastTag("3c")
-        val pos = EventOverrideEditor.inspect(event.text)
 
         return listOf(
             AssEffectiveValue("Font", style.fontName, overrideValue = fn, effectiveValue = fn ?: style.fontName),
@@ -139,8 +139,22 @@ object AssEffectiveInspector {
             AssEffectiveValue(
                 "Position",
                 "alignment anchor",
-                overrideValue = if (pos.x != null && pos.y != null) "${format(pos.x)}, ${format(pos.y)}" else null,
-                effectiveValue = if (pos.x != null && pos.y != null) "${format(pos.x)}, ${format(pos.y)}" else "alignment anchor",
+                overrideValue = when (geometry.positionMode) {
+                    AssPositionMode.POSITION -> geometry.position?.let { "${format(it.x)}, ${format(it.y)}" }
+                    AssPositionMode.MOVE -> geometry.move?.let {
+                        "move ${format(it.start.x)},${format(it.start.y)} → ${format(it.end.x)},${format(it.end.y)}"
+                    }
+                    AssPositionMode.CONFLICT -> "conflict: pos + move"
+                    AssPositionMode.INHERITED -> null
+                },
+                effectiveValue = when (geometry.positionMode) {
+                    AssPositionMode.POSITION -> geometry.position?.let { "${format(it.x)}, ${format(it.y)}" } ?: "alignment anchor"
+                    AssPositionMode.MOVE -> geometry.move?.let {
+                        "move ${format(it.start.x)},${format(it.start.y)} → ${format(it.end.x)},${format(it.end.y)}"
+                    } ?: "alignment anchor"
+                    AssPositionMode.CONFLICT -> "conflict: pos + move"
+                    AssPositionMode.INHERITED -> "alignment anchor"
+                },
             ),
         )
     }

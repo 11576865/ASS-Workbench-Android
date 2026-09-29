@@ -18,7 +18,7 @@ The first 0.26 runtime slice now establishes the generic render-only transient p
 - Exact-value and non-continuous Style draft edits retain the short auto-commit path.
 - App version is now 0.26.0 / versionCode 28 on this branch.
 
-The existing direct `\\pos` drag now uses the same ViewModel-owned `previewDocument` pipeline. `VideoPreview` keeps the canonical document separate from the render-only document so overlays, effective-value inspection, timeline behavior, and commit semantics do not accidentally bind to transient state. Geometry semantic patching (`\\move`, `\\org`, rotation, scale, clip) is the next layer.
+The existing direct `\\pos` drag now uses the same ViewModel-owned `previewDocument` pipeline. `VideoPreview` keeps the canonical document separate from the render-only document so overlays, effective-value inspection, timeline behavior, and commit semantics do not accidentally bind to transient state. The first conservative geometry semantic layer is now present: leading top-level `\\pos`, `\\move`, `\\org`, `\\fr/\\frz`, `\\fscx`, and `\\fscy` can be inspected and minimally patched without rewriting unknown tags or nested `\\t(...)` payloads. `\\pos` drag now uses that patcher and refuses to silently convert an existing `\\move`. Full editable move/origin/rotation/scale surfaces are the next layer.
 
 ## Baseline
 

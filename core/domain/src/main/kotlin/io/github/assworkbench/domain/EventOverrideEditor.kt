@@ -19,11 +19,11 @@ object EventOverrideEditor {
     private val leadingBlocks = Regex("""^(?:\{[^}]*\})*""")
 
     fun inspect(text: String): EventOverrideSnapshot {
-        val pos = position.find(text)
+        val geometry = AssGeometrySemantic.inspect(text)
         val fadeMatch = fade.find(text)
         return EventOverrideSnapshot(
-            x = pos?.groupValues?.getOrNull(1)?.toDoubleOrNull(),
-            y = pos?.groupValues?.getOrNull(2)?.toDoubleOrNull(),
+            x = geometry.position?.x,
+            y = geometry.position?.y,
             blur = blur.find(text)?.groupValues?.getOrNull(1)?.toDoubleOrNull(),
             fadeInMs = fadeMatch?.groupValues?.getOrNull(1)?.toIntOrNull(),
             fadeOutMs = fadeMatch?.groupValues?.getOrNull(2)?.toIntOrNull(),

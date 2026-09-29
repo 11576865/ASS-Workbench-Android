@@ -12,6 +12,7 @@ import io.github.assworkbench.domain.AssDocumentEditing
 import io.github.assworkbench.domain.AssTextDecoder
 import io.github.assworkbench.domain.AssTextEncoding
 import io.github.assworkbench.domain.EventOverrideEditor
+import io.github.assworkbench.domain.AssGeometrySemantic
 import io.github.assworkbench.domain.EventFormatClipboard
 import io.github.assworkbench.domain.EventFormatClipboardOps
 import io.github.assworkbench.domain.EventFormatPasteMode
@@ -545,34 +546,30 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     fun previewFocusedPosition(x: Double, y: Double) {
         val state = _state.value
         val id = state.focusedEventId ?: return
-        val event = state.document.events.firstOrNull { it.id == id } ?: return
-        val current = EventOverrideEditor.inspect(event.text)
-        previewEventOverrides(
-            id = id,
-            x = x.coerceIn(0.0, state.document.playResX.toDouble()),
-            y = y.coerceIn(0.0, state.document.playResY.toDouble()),
-            blur = current.blur,
-            fadeInMs = current.fadeInMs,
-            fadeOutMs = current.fadeOutMs,
-            softEntry = current.softEntry,
-        )
+        val nx = x.coerceIn(0.0, state.document.playResX.toDouble())
+        val ny = y.coerceIn(0.0, state.document.playResY.toDouble())
+        val preview = withEventPosition(state.document, id, nx, ny)
+        _state.update { current ->
+            current.copy(previewDocument = if (preview == state.document) null else preview)
+        }
     }
 
     fun setFocusedPosition(x: Double, y: Double) {
         val state = _state.value
         val id = state.focusedEventId ?: return
-        val event = state.document.events.firstOrNull { it.id == id } ?: return
-        val current = EventOverrideEditor.inspect(event.text)
-        applyEventOverrides(
-            id = id,
-            x = x.coerceIn(0.0, state.document.playResX.toDouble()),
-            y = y.coerceIn(0.0, state.document.playResY.toDouble()),
-            blur = current.blur,
-            fadeInMs = current.fadeInMs,
-            fadeOutMs = current.fadeOutMs,
-            softEntry = current.softEntry,
-        )
+        val nx = x.coerceIn(0.0, state.document.playResX.toDouble())
+        val ny = y.coerceIn(0.0, state.document.playResY.toDouble())
+        editDocument("已设置当前字幕位置。") { doc ->
+            withEventPosition(doc, id, nx, ny)
+        }
     }
+
+    private fun withEventPosition(document: AssDocument, id: Long, x: Double, y: Double): AssDocument =
+        document.copy(events = document.events.map { event ->
+            if (event.id != id) event
+            else event.copy(text = AssGeometrySemantic.patchPosition(event.text, x, y))
+        })
+
 
     fun setFocusedAlignment(alignment: Int) {
         val id = _state.value.focusedEventId ?: return

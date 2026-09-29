@@ -1167,13 +1167,13 @@ private fun PositionPane(state: EditorState, viewModel: EditorViewModel, modifie
         return
     }
     val style = state.document.styles.firstOrNull { it.name == event.style }
-    val override = remember(event.text) { EventOverrideEditor.inspect(event.text) }
+    val geometry = remember(event.text) { AssGeometrySemantic.inspect(event.text) }
     val effective = remember(state.document, event) {
         AssEffectiveInspector.inspect(state.document, event).associateBy { it.name }
     }
 
-    var x by remember(event.id, event.text) { mutableStateOf(override.x?.toString().orEmpty()) }
-    var y by remember(event.id, event.text) { mutableStateOf(override.y?.toString().orEmpty()) }
+    var x by remember(event.id, event.text) { mutableStateOf(geometry.position?.x?.toString().orEmpty()) }
+    var y by remember(event.id, event.text) { mutableStateOf(geometry.position?.y?.toString().orEmpty()) }
     var styleAlignment by remember(style?.name, style?.alignment) { mutableIntStateOf(style?.alignment ?: 2) }
     var styleMarginL by remember(style?.name, style?.marginL) { mutableStateOf((style?.marginL ?: 0).toString()) }
     var styleMarginR by remember(style?.name, style?.marginR) { mutableStateOf((style?.marginR ?: 0).toString()) }
@@ -1213,11 +1213,12 @@ private fun PositionPane(state: EditorState, viewModel: EditorViewModel, modifie
                 OutlinedTextField(y, { y = it }, label = { Text("Y") }, singleLine = true, modifier = Modifier.weight(1f))
                 Button(
                     onClick = {
-                        viewModel.applyEventOverrides(
-                            event.id, x.toDoubleOrNull(), y.toDoubleOrNull(),
-                            override.blur, override.fadeInMs, override.fadeOutMs, override.softEntry,
-                        )
+                        val px = x.toDoubleOrNull()
+                        val py = y.toDoubleOrNull()
+                        if (px != null && py != null) viewModel.setFocusedPosition(px, py)
                     },
+                    enabled = geometry.positionMode != AssPositionMode.MOVE &&
+                        geometry.positionMode != AssPositionMode.CONFLICT,
                     modifier = Modifier.align(Alignment.CenterVertically),
                 ) { Text("应用") }
             }
@@ -1233,9 +1234,18 @@ private fun PositionPane(state: EditorState, viewModel: EditorViewModel, modifie
                 }
             }
             Text(
-                "此工具打开时，可以直接在 16:9 预览上拖动字幕锚点。",
+                when (geometry.positionMode) {
+                    AssPositionMode.MOVE -> "当前 Event 使用 \\move；不会隐式转换成 \\pos。路径编辑将在 Geometry Workbench 中处理。"
+                    AssPositionMode.CONFLICT -> "当前 Event 同时存在 \\pos 与 \\move；为避免破坏语义，直接位置编辑已暂停。"
+                    AssPositionMode.POSITION -> "当前为显式 \\pos；可直接在 16:9 预览上拖动锚点。"
+                    AssPositionMode.INHERITED -> "当前位置由 Alignment + Margin 推导；第一次拖动会创建显式 \\pos。"
+                },
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = if (geometry.positionMode == AssPositionMode.CONFLICT) {
+                    MaterialTheme.colorScheme.error
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
             )
         }
 

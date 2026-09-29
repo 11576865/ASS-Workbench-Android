@@ -57,7 +57,8 @@ import io.github.assworkbench.app.BuildConfig
 import io.github.assworkbench.domain.AssCodec
 import io.github.assworkbench.domain.AssDocument
 import io.github.assworkbench.domain.AssEvent
-import io.github.assworkbench.domain.EventOverrideEditor
+import io.github.assworkbench.domain.AssGeometrySemantic
+import io.github.assworkbench.domain.AssPositionMode
 import io.github.assworkbench.fonts.RendererLogParser
 import io.github.yuroyami.libmpvkt.Mpv
 import io.github.yuroyami.libmpvkt.MpvCommands
@@ -625,7 +626,7 @@ private fun PositionDragOverlay(
     onCancel: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val override = remember(event.text) { EventOverrideEditor.inspect(event.text) }
+    val geometry = remember(event.text) { AssGeometrySemantic.inspect(event.text) }
     val style = document.styles.firstOrNull { it.name == event.style }
     val marginL = if (event.marginL > 0) event.marginL else style?.marginL ?: 10
     val marginR = if (event.marginR > 0) event.marginR else style?.marginR ?: 10
@@ -646,9 +647,54 @@ private fun PositionDragOverlay(
         4, 5, 6 -> document.playResY / 2.0
         else -> (document.playResY - marginV).toDouble()
     }
-    var x by remember(event.id, event.text) { mutableStateOf(override.x ?: baseX) }
-    var y by remember(event.id, event.text) { mutableStateOf(override.y ?: baseY) }
+    var x by remember(event.id, event.text) { mutableStateOf(geometry.position?.x ?: baseX) }
+    var y by remember(event.id, event.text) { mutableStateOf(geometry.position?.y ?: baseY) }
     val guideColor = MaterialTheme.colorScheme.tertiary
+
+    if (geometry.positionMode == AssPositionMode.MOVE || geometry.positionMode == AssPositionMode.CONFLICT) {
+        val move = geometry.move
+        BoxWithConstraints(modifier) {
+            if (move != null) {
+                Canvas(Modifier.fillMaxSize()) {
+                    val sx = (move.start.x / document.playResX.coerceAtLeast(1)) * size.width
+                    val sy = (move.start.y / document.playResY.coerceAtLeast(1)) * size.height
+                    val ex = (move.end.x / document.playResX.coerceAtLeast(1)) * size.width
+                    val ey = (move.end.y / document.playResY.coerceAtLeast(1)) * size.height
+                    drawLine(
+                        color = guideColor.copy(alpha = 0.7f),
+                        start = androidx.compose.ui.geometry.Offset(sx.toFloat(), sy.toFloat()),
+                        end = androidx.compose.ui.geometry.Offset(ex.toFloat(), ey.toFloat()),
+                        strokeWidth = 2.dp.toPx(),
+                    )
+                    drawCircle(
+                        color = guideColor,
+                        radius = 7.dp.toPx(),
+                        center = androidx.compose.ui.geometry.Offset(sx.toFloat(), sy.toFloat()),
+                        style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2.dp.toPx()),
+                    )
+                    drawCircle(
+                        color = guideColor,
+                        radius = 7.dp.toPx(),
+                        center = androidx.compose.ui.geometry.Offset(ex.toFloat(), ey.toFloat()),
+                    )
+                }
+            }
+            Text(
+                if (geometry.positionMode == AssPositionMode.CONFLICT) {
+                    "pos + move 冲突 · 已暂停直接位置编辑"
+                } else {
+                    "move 路径 · 当前只读，下一步开放端点编辑"
+                },
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .background(Color.Black.copy(alpha = 0.62f))
+                    .padding(horizontal = 6.dp, vertical = 3.dp),
+                color = Color.White,
+                style = MaterialTheme.typography.labelSmall,
+            )
+        }
+        return
+    }
 
     DisposableEffect(event.id) {
         onDispose { onCancel() }
