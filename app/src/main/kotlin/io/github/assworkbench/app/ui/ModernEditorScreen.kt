@@ -10,10 +10,12 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -58,6 +60,7 @@ fun ModernEditorScreen(
     var expandedEventId by rememberSaveable { mutableStateOf<Long?>(null) }
     var searchOpen by rememberSaveable { mutableStateOf(false) }
     var openMenu by remember { mutableStateOf(false) }
+    var saveConfirmOpen by remember { mutableStateOf(false) }
     val tool = WorkbenchTool.entries.firstOrNull { it.name == toolName } ?: WorkbenchTool.TIMELINE
     fun openTool(next: WorkbenchTool) {
         if (next.name != toolName) previousToolName = toolName
@@ -86,9 +89,42 @@ fun ModernEditorScreen(
         ModernAppBar(
             state, viewModel, state.selectedEventIds.isNotEmpty(), searchOpen,
             { searchOpen = !searchOpen }, { openMenu = true }, openMenu, { openMenu = false },
-            onOpenReferenceVideo, onOpenMkvProject, onOpenSubtitle, onImportFont, onSave, onSaveAs, onSaveMkv,
+            onOpenReferenceVideo, onOpenMkvProject, onOpenSubtitle, onImportFont,
+            {
+                if (state.project.subtitleUri == null) onSaveAs()
+                else saveConfirmOpen = true
+            },
+            onSaveAs, onSaveMkv,
             { openTool(it) },
         )
+
+        if (saveConfirmOpen) {
+            AlertDialog(
+                onDismissRequest = { saveConfirmOpen = false },
+                title = { Text("覆盖保存当前 ASS？") },
+                text = {
+                    Text(
+                        if (state.dirty) "将把当前修改写回原字幕文件。原文件内容会被替换。"
+                        else "当前没有未保存修改；仍可覆盖写回原字幕文件。"
+                    )
+                },
+                confirmButton = {
+                    Button(onClick = {
+                        saveConfirmOpen = false
+                        onSave()
+                    }) { Text("覆盖保存") }
+                },
+                dismissButton = {
+                    Row {
+                        TextButton(onClick = {
+                            saveConfirmOpen = false
+                            onSaveAs()
+                        }) { Text("另存为") }
+                        TextButton(onClick = { saveConfirmOpen = false }) { Text("取消") }
+                    }
+                },
+            )
+        }
 
         VideoPreview(
             videoUri = state.project.videoUri,
@@ -215,14 +251,17 @@ private fun ModernAppBar(
                         maxLines = 1,
                     )
                 }
-                IconButton(onClick = onSearchToggle) {
-                    Icon(if (searchOpen) Icons.Filled.Close else Icons.Filled.Search, if (searchOpen) "关闭搜索" else "搜索")
+                TooltipIconButton(
+                    label = if (searchOpen) "关闭搜索" else "搜索",
+                    onClick = onSearchToggle,
+                ) {
+                    Icon(if (searchOpen) Icons.Filled.Close else Icons.Filled.Search, null)
                 }
-                IconButton(onClick = onSave, enabled = state.subtitleLoaded) { Icon(Icons.Filled.Save, "保存") }
-                IconButton(onClick = viewModel::undo, enabled = state.canUndo) { Icon(Icons.Filled.Undo, "撤销") }
-                IconButton(onClick = viewModel::redo, enabled = state.canRedo) { Icon(Icons.Filled.Redo, "重做") }
+                TooltipIconButton("保存", onSave, enabled = state.subtitleLoaded) { Icon(Icons.Filled.Save, null) }
+                TooltipIconButton("撤销", viewModel::undo, enabled = state.canUndo) { Icon(Icons.Filled.Undo, null) }
+                TooltipIconButton("重做", viewModel::redo, enabled = state.canRedo) { Icon(Icons.Filled.Redo, null) }
                 Box {
-                    IconButton(onClick = onOpenMenu) { Icon(Icons.Filled.FolderOpen, "打开") }
+                    TooltipIconButton("打开文件 / 工程", onOpenMenu) { Icon(Icons.Filled.FolderOpen, null) }
                     DropdownMenu(expanded = openMenu, onDismissRequest = onDismissMenu) {
                         DropdownMenuItem(text = { Text("打开独立 ASS") }, leadingIcon = { Icon(Icons.Filled.Subtitles, null) }, onClick = { onDismissMenu(); onOpenSubtitle() })
                         DropdownMenuItem(text = { Text("打开 / 更换参考视频") }, leadingIcon = { Icon(Icons.Filled.Movie, null) }, onClick = { onDismissMenu(); onOpenVideo() })
@@ -232,7 +271,7 @@ private fun ModernAppBar(
                     }
                 }
                 Box {
-                    IconButton(onClick = { moreMenuOpen = true }) { Icon(Icons.Filled.MoreVert, "工具和更多操作") }
+                    TooltipIconButton("工具和更多操作", { moreMenuOpen = true }) { Icon(Icons.Filled.MoreVert, null) }
                     DropdownMenu(expanded = moreMenuOpen, onDismissRequest = { moreMenuOpen = false }) {
                         DropdownMenuItem(text = { Text("字体管理") }, leadingIcon = { Icon(Icons.Filled.FontDownload, null) }, onClick = { moreMenuOpen = false; onTool(WorkbenchTool.FONTS) })
                         DropdownMenuItem(text = { Text("质量检查") }, leadingIcon = { Icon(Icons.Filled.ErrorOutline, null) }, onClick = { moreMenuOpen = false; onTool(WorkbenchTool.QC) })
@@ -246,6 +285,22 @@ private fun ModernAppBar(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun TooltipIconButton(
+    label: String,
+    onClick: () -> Unit,
+    enabled: Boolean = true,
+    content: @Composable () -> Unit,
+) {
+    TooltipBox(
+        positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+        tooltip = { PlainTooltip { Text(label) } },
+        state = rememberTooltipState(),
+    ) {
+        IconButton(onClick = onClick, enabled = enabled) { content() }
     }
 }
 
@@ -277,7 +332,34 @@ private fun EventWorkspace(
             Text(if (state.query.isBlank()) "${state.document.events.size}" else "${state.filteredEvents.size}/${state.document.events.size}", style = MaterialTheme.typography.labelSmall)
         }
         Divider()
-        LazyColumn(Modifier.fillMaxSize()) {
+        val listState = rememberLazyListState()
+        LazyColumn(
+            state = listState,
+            modifier = Modifier
+                .fillMaxSize()
+                .pointerInput(state.filteredEvents) {
+                    detectDragGesturesAfterLongPress(
+                        onDragStart = { offset ->
+                            val item = listState.layoutInfo.visibleItemsInfo.firstOrNull {
+                                offset.y.toInt() in it.offset..(it.offset + it.size)
+                            }
+                            val eventId = item?.index?.let { index -> state.filteredEvents.getOrNull(index)?.id }
+                            if (eventId != null) viewModel.beginRangeSelection(eventId)
+                        },
+                        onDrag = { change, _ ->
+                            change.consume()
+                            val y = change.position.y.toInt()
+                            val item = listState.layoutInfo.visibleItemsInfo.firstOrNull {
+                                y in it.offset..(it.offset + it.size)
+                            }
+                            val eventId = item?.index?.let { index -> state.filteredEvents.getOrNull(index)?.id }
+                            if (eventId != null) viewModel.previewRangeSelection(eventId)
+                        },
+                        onDragEnd = viewModel::finishRangeSelection,
+                        onDragCancel = viewModel::finishRangeSelection,
+                    )
+                },
+        ) {
             items(state.filteredEvents, key = { it.id }) { event ->
                 ModernEventRow(
                     event, event.id == state.focusedEventId, event.id == expandedEventId,
@@ -290,7 +372,11 @@ private fun EventWorkspace(
                             onExpandedChange(if (expandedEventId == event.id) null else event.id)
                         }
                     },
-                    { if (event.id !in state.selectedEventIds) viewModel.toggleSelected(event.id) },
+                    {
+                        if (event.id !in state.selectedEventIds) {
+                            viewModel.toggleSelected(event.id)
+                        }
+                    },
                     { onExpandedChange(null) },
                     onTool,
                 )
