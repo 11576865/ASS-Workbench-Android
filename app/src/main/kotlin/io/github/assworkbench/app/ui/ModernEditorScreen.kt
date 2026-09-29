@@ -1061,6 +1061,7 @@ private fun ModernTimelinePane(state: EditorState, viewModel: EditorViewModel, m
     var snapPlayhead by rememberSaveable { mutableStateOf(true) }
     var snapGrid by rememberSaveable { mutableStateOf(true) }
     var snapGridMs by rememberSaveable { mutableLongStateOf(10L) }
+    var snapStrength by rememberSaveable { mutableStateOf(TimelineSnapStrength.NORMAL.name) }
     var settingsOpen by remember { mutableStateOf(false) }
 
     val playheadMs = state.playbackPositionMs
@@ -1094,8 +1095,10 @@ private fun ModernTimelinePane(state: EditorState, viewModel: EditorViewModel, m
         buildList {
             if (snapPlayhead) add(playheadMs)
             if (snapEvents) visible.forEach { add(it.start.millis); add(it.end.millis) }
-        }.distinct()
+        }
     }
+    val activeSnapStrength = TimelineSnapStrength.entries
+        .firstOrNull { it.name == snapStrength } ?: TimelineSnapStrength.NORMAL
     val zoomIndex = zoomSteps.indexOf(windowSeconds).coerceAtLeast(0)
 
     Column(modifier.padding(WorkbenchDimens.Small), verticalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro)) {
@@ -1156,6 +1159,14 @@ private fun ModernTimelinePane(state: EditorState, viewModel: EditorViewModel, m
                         text = { Text((if (snapGridMs == grid) "✓ " else "") + "网格 " + grid + "ms") },
                         enabled = snapEnabled && snapGrid,
                         onClick = { snapGridMs = grid; settingsOpen = false },
+                    )
+                }
+                Divider()
+                TimelineSnapStrength.entries.forEach { strength ->
+                    DropdownMenuItem(
+                        text = { Text((if (activeSnapStrength == strength) "✓ " else "") + "吸附强度 · " + strength.label) },
+                        enabled = snapEnabled,
+                        onClick = { snapStrength = strength.name; settingsOpen = false },
                     )
                 }
             }
@@ -1267,6 +1278,7 @@ private fun ModernTimelinePane(state: EditorState, viewModel: EditorViewModel, m
                         snapEnabled = snapEnabled,
                         snapGrid = snapGrid,
                         snapGridMs = snapGridMs,
+                        snapStrength = activeSnapStrength,
                         onFocus = { viewModel.focusEvent(event.id, seek = true) },
                         onCommit = { a, b -> viewModel.setEventTiming(event.id, a, b) },
                     )
@@ -1275,6 +1287,12 @@ private fun ModernTimelinePane(state: EditorState, viewModel: EditorViewModel, m
         }
     }
 }
+private enum class TimelineSnapStrength(val label: String, val factor: Double) {
+    LIGHT("轻", 0.5),
+    NORMAL("标准", 1.0),
+    STRONG("强", 2.0),
+}
+
 private enum class ModernTimelineDragMode { START, MOVE, END }
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -1290,6 +1308,7 @@ private fun ModernTimelineEventRow(
     snapEnabled: Boolean,
     snapGrid: Boolean,
     snapGridMs: Long,
+    snapStrength: TimelineSnapStrength,
     onFocus: () -> Unit,
     onCommit: (Long, Long) -> Unit,
 ) {
@@ -1330,23 +1349,37 @@ private fun ModernTimelineEventRow(
         BoxWithConstraints(
             Modifier.weight(1f).height(24.dp)
                 .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
-                .pointerInput(event.id, windowStartMs, windowEndMs, snapTargets, focused, snapGrid, snapGridMs) {
+                .pointerInput(event.id, windowStartMs, windowEndMs, snapTargets, focused, snapEnabled, snapGrid, snapGridMs, snapStrength) {
                     val span = (windowEndMs - windowStartMs).coerceAtLeast(1L)
                     fun xFor(ms: Long): Float = ((ms - windowStartMs).toFloat() / span).coerceIn(0f, 1f) * size.width
-                    fun snap(candidate: Long): Long {
+                    fun thresholdMs(): Long {
+                        val base = minOf(120L, maxOf(24L, span / 220L))
+                        return (base * snapStrength.factor).toLong().coerceIn(12L, 240L)
+                    }
+                    fun activeTargets(): List<Long> = snapTargets.toMutableList().apply {
+                        // Remove only this Event's own edges once; duplicate timestamps from
+                        // another Event or the playhead remain valid snap targets.
+                        remove(baseStart)
+                        remove(baseEnd)
+                    }
+                    fun snapPoint(candidate: Long): Long {
                         if (!snapEnabled) return candidate
-                        val step = snapGridMs.coerceAtLeast(1L)
-                        val gridCandidate = if (snapGrid) {
-                            ((candidate + step / 2L) / step) * step
-                        } else {
-                            candidate
-                        }
-                        val threshold = minOf(120L, maxOf(24L, span / 220L))
-                        val nearest = snapTargets
-                            .asSequence()
-                            .filterNot { it == baseStart || it == baseEnd }
-                            .minByOrNull { abs(it - candidate) }
-                        return if (nearest != null && abs(nearest - candidate) <= threshold) nearest else gridCandidate
+                        return AssTimelineSnap.snapPoint(
+                            candidateMs = candidate,
+                            targets = activeTargets(),
+                            thresholdMs = thresholdMs(),
+                            gridMs = snapGridMs.takeIf { snapGrid },
+                        )
+                    }
+                    fun snapMove(start: Long, end: Long): AssTimelineSpan {
+                        if (!snapEnabled) return AssTimelineSpan(start, end)
+                        return AssTimelineSnap.snapSpan(
+                            startMs = start,
+                            endMs = end,
+                            targets = activeTargets(),
+                            thresholdMs = thresholdMs(),
+                            gridMs = snapGridMs.takeIf { snapGrid },
+                        )
                     }
                     detectDragGestures(
                         onDragStart = { offset ->
@@ -1368,12 +1401,15 @@ private fun ModernTimelineEventRow(
                             change.consume(); dragPx += amount.x
                             val delta = (dragPx / size.width.coerceAtLeast(1) * span).toLong()
                             when (mode) {
-                                ModernTimelineDragMode.START -> previewStart = snap(baseStart + delta).coerceIn(0L, (previewEnd - 10L).coerceAtLeast(0L))
-                                ModernTimelineDragMode.END -> previewEnd = snap(baseEnd + delta).coerceAtLeast(previewStart + 10L)
+                                ModernTimelineDragMode.START -> previewStart = snapPoint(baseStart + delta).coerceIn(0L, (previewEnd - 10L).coerceAtLeast(0L))
+                                ModernTimelineDragMode.END -> previewEnd = snapPoint(baseEnd + delta).coerceAtLeast(previewStart + 10L)
                                 ModernTimelineDragMode.MOVE -> {
                                     val duration = (baseEnd - baseStart).coerceAtLeast(10L)
-                                    val next = snap(baseStart + delta).coerceAtLeast(0L)
-                                    previewStart = next; previewEnd = next + duration
+                                    val rawStart = (baseStart + delta).coerceAtLeast(0L)
+                                    val snapped = snapMove(rawStart, rawStart + duration)
+                                    val clampedStart = snapped.startMs.coerceAtLeast(0L)
+                                    previewStart = clampedStart
+                                    previewEnd = clampedStart + duration
                                 }
                             }
                         },
