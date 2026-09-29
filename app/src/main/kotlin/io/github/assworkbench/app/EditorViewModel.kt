@@ -24,6 +24,7 @@ import io.github.assworkbench.domain.FontBindingRewriter
 import io.github.assworkbench.domain.SubTime
 import io.github.assworkbench.domain.UndoHistory
 import io.github.assworkbench.fonts.FontDiagnostics
+import io.github.assworkbench.fonts.FontOrigin
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -149,6 +150,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 dirty = false,
                 canUndo = false,
                 canRedo = false,
+                fontPackagingSelection = emptySet(),
                 container = ContainerBridgeState(),
                 status = "已新建空白 ASS；可在当前播放位置添加第一条字幕。",
             )
@@ -303,10 +305,24 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             return
         }
 
+        val embeddedShas = snapshot.importedFonts.asSequence()
+            .filter { it.origin == FontOrigin.MKV_ATTACHMENT }
+            .map { it.sha256 }
+            .toSet()
+        val packageAssets = snapshot.importedFonts
+            .filter {
+                it.origin == FontOrigin.MANUAL &&
+                    it.sha256 in snapshot.fontPackagingSelection &&
+                    it.sha256 !in embeddedShas
+            }
+            .distinctBy { it.sha256 }
+
         _state.update {
             it.copy(
                 container = it.container.copy(writeBackBusy = true),
-                status = "正在无重编码更新 MKV；大文件可能需要一些时间……",
+                status = "正在无重编码更新 MKV" +
+                    if (packageAssets.isEmpty()) "；大文件可能需要一些时间……"
+                    else "并封入 " + packageAssets.size + " 个所选字体；大文件可能需要一些时间……",
             )
         }
 
@@ -326,11 +342,16 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                     editedAss.writeText(AssCodec.write(snapshot.document), Charsets.UTF_8)
                     val result = File(work, "updated.mkv")
 
+                    val packageFiles = packageAssets.map { asset ->
+                        fontStore.fileFor(asset)
+                            ?: error("找不到待封入字体文件：" + asset.fileName)
+                    }
                     mkvGoTool.replaceAss(
                         source = source,
                         trackNumber = trackNumber,
                         editedAss = editedAss,
                         output = result,
+                        fonts = packageFiles,
                     )
 
                     app.contentResolver.openOutputStream(outputUri, "w")?.use { output ->
@@ -351,8 +372,9 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                         container = state.container.copy(writeBackBusy = false),
                         recoveryAvailable = if (unchangedSinceSaveStarted) false else state.recoveryAvailable,
                         recoveryLabel = if (unchangedSinceSaveStarted) "" else state.recoveryLabel,
-                        status = "新 MKV 已保存；视频/音频未重新编码，原 ASS 轨身份与顺序保持，输出 " +
-                            (bytes / (1024 * 1024)) + " MiB。" +
+                        status = "新 MKV 已保存；视频/音频未重新编码，原 ASS 轨身份与顺序保持" +
+                            (if (packageAssets.isEmpty()) "" else "，并封入所选字体 " + packageAssets.size + " 个") +
+                            "；输出 " + (bytes / (1024 * 1024)) + " MiB。" +
                             if (unchangedSinceSaveStarted) "" else " · 保存期间出现新编辑，当前工程仍未保存。",
                     )
                 }
@@ -420,6 +442,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 dirty = false,
                 canUndo = false,
                 canRedo = false,
+                fontPackagingSelection = emptySet(),
                 container = ContainerBridgeState(),
                 status = "已载入 ${document.events.size} 条 ASS 事件 · ${decoded.encoding.displayName}。",
             )
@@ -454,8 +477,13 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 val families = batch.assets.map { it.metadata.rendererFamily }.distinct()
                 val failureSuffix = if (batch.failures.isEmpty()) "" else " · 失败 " + batch.failures.size + " 个"
                 _state.update {
+                    val packageableShas = imported.asSequence()
+                        .filter { font -> font.origin == FontOrigin.MANUAL }
+                        .map { font -> font.sha256 }
+                        .toSet()
                     it.copy(
                         importedFonts = imported,
+                        fontPackagingSelection = it.fontPackagingSelection.intersect(packageableShas),
                         fallbackFontFamily = fallback?.rendererFamily,
                         fontImportBusy = false,
                         fontRevision = it.fontRevision + 1,
@@ -1322,6 +1350,62 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    fun toggleFontPackaging(sha256: String) {
+        _state.update { state ->
+            val candidate = state.importedFonts.firstOrNull {
+                it.sha256 == sha256 && it.origin == FontOrigin.MANUAL
+            } ?: return@update state
+            val embeddedShas = state.importedFonts.asSequence()
+                .filter { it.origin == FontOrigin.MKV_ATTACHMENT }
+                .map { it.sha256 }
+                .toSet()
+            if (candidate.sha256 in embeddedShas) {
+                return@update state.copy(status = "该字体已经作为当前 MKV 附件存在，无需重复封入。")
+            }
+            val next = state.fontPackagingSelection.toMutableSet()
+            if (!next.add(candidate.sha256)) next.remove(candidate.sha256)
+            state.copy(
+                fontPackagingSelection = next,
+                status = if (candidate.sha256 in next) {
+                    "已选择字体用于下一次 MKV 写回：" + candidate.metadata.family
+                } else {
+                    "已取消 MKV 字体打包：" + candidate.metadata.family
+                },
+            )
+        }
+    }
+
+    fun selectRequestedFontsForPackaging() {
+        _state.update { state ->
+            if (state.container.uri == null) {
+                return@update state.copy(status = "请先打开 MKV 工程，再选择需要随写回封入的字体。")
+            }
+            val requested = FontBindingRewriter.requestedFamilies(state.document)
+            val embeddedShas = state.importedFonts.asSequence()
+                .filter { it.origin == FontOrigin.MKV_ATTACHMENT }
+                .map { it.sha256 }
+                .toSet()
+            val selected = state.importedFonts.asSequence()
+                .filter { it.origin == FontOrigin.MANUAL && it.sha256 !in embeddedShas }
+                .filter { FontDiagnostics.matchesRequestedFamily(it, requested) }
+                .map { it.sha256 }
+                .toSet()
+            state.copy(
+                fontPackagingSelection = selected,
+                status = "已按当前 ASS 字体请求选择 " + selected.size + " 个可封入字体。",
+            )
+        }
+    }
+
+    fun clearFontPackagingSelection() {
+        _state.update {
+            it.copy(
+                fontPackagingSelection = emptySet(),
+                status = "已清空 MKV 字体打包选择。",
+            )
+        }
+    }
+
     fun setStyleFont(styleName: String, family: String) {
         if (family.isBlank()) return
         editDocument("Style " + styleName + " 已改用字体 " + family + "。") { doc ->
@@ -1940,8 +2024,17 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         val fallback = fontStore.ensureFallbackFont()
         val imported = fontStore.listImported()
         _state.update {
+            val embeddedShas = imported.asSequence()
+                .filter { font -> font.origin == FontOrigin.MKV_ATTACHMENT }
+                .map { font -> font.sha256 }
+                .toSet()
+            val packageableShas = imported.asSequence()
+                .filter { font -> font.origin == FontOrigin.MANUAL && font.sha256 !in embeddedShas }
+                .map { font -> font.sha256 }
+                .toSet()
             it.copy(
                 importedFonts = imported,
+                fontPackagingSelection = it.fontPackagingSelection.intersect(packageableShas),
                 fallbackFontFamily = fallback?.rendererFamily,
                 fontRevision = if (initial) it.fontRevision else it.fontRevision + 1,
                 status = status ?: it.status,
