@@ -4,6 +4,9 @@ import (
 	"context"
 	"crypto/sha256"
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/gravity-zero/mkvgo/mkv"
 	"github.com/gravity-zero/mkvgo/mkv/reader"
@@ -15,7 +18,22 @@ import (
 // track-identity level. TrackNumber, TrackUID, ordering, language/name,
 // disposition flags and other track metadata are inherited from the source.
 // Only the subtitle codec/header and blocks are replaced.
-func ReplaceASS(ctx context.Context, srcPath string, trackID uint64, assPath, dstPath string, opts ...mkv.Options) (err error) {
+func ReplaceASS(ctx context.Context, srcPath string, trackID uint64, assPath, dstPath string, opts ...mkv.Options) error {
+	return ReplaceASSWithFonts(ctx, srcPath, trackID, assPath, dstPath, nil, opts...)
+}
+
+// ReplaceASSWithFonts performs the same same-slot ASS replacement and, in the
+// same remux pass, appends selected TTF/OTF files as Matroska attachments.
+// Existing attachments are preserved. Attachment names are never overwritten:
+// a selected font whose generated attachment name already exists is skipped.
+func ReplaceASSWithFonts(
+	ctx context.Context,
+	srcPath string,
+	trackID uint64,
+	assPath, dstPath string,
+	fontPaths []string,
+	opts ...mkv.Options,
+) (err error) {
 	ass, err := subtitle.ParseASS(assPath)
 	if err != nil {
 		return fmt.Errorf("parse ASS: %w", err)
@@ -27,6 +45,9 @@ func ReplaceASS(ctx context.Context, srcPath string, trackID uint64, assPath, ds
 	fs := mkv.FSFrom(opts)
 	c, err := reader.OpenWithFS(ctx, srcPath, fs, reader.WithoutAttachmentData())
 	if err != nil {
+		return err
+	}
+	if err := appendFontAttachments(c, fontPaths); err != nil {
 		return err
 	}
 
@@ -129,4 +150,60 @@ func ReplaceASS(ctx context.Context, srcPath string, trackID uint64, assPath, ds
 		return err
 	}
 	return mw.Finalize()
+}
+
+func appendFontAttachments(c *mkv.Container, fontPaths []string) error {
+	if len(fontPaths) == 0 {
+		return nil
+	}
+
+	existingNames := make(map[string]struct{}, len(c.Attachments))
+	var nextID uint64 = 1
+	for _, att := range c.Attachments {
+		existingNames[strings.ToLower(att.Name)] = struct{}{}
+		if att.ID >= nextID {
+			nextID = att.ID + 1
+		}
+	}
+
+	seenPaths := make(map[string]struct{}, len(fontPaths))
+	for _, path := range fontPaths {
+		clean := filepath.Clean(path)
+		if _, ok := seenPaths[clean]; ok {
+			continue
+		}
+		seenPaths[clean] = struct{}{}
+
+		ext := strings.ToLower(filepath.Ext(clean))
+		if ext != ".ttf" && ext != ".otf" {
+			return fmt.Errorf("unsupported font attachment %q", filepath.Base(clean))
+		}
+		data, err := os.ReadFile(clean)
+		if err != nil {
+			return fmt.Errorf("read font attachment %q: %w", filepath.Base(clean), err)
+		}
+		if len(data) == 0 {
+			return fmt.Errorf("font attachment %q is empty", filepath.Base(clean))
+		}
+
+		name := filepath.Base(clean)
+		key := strings.ToLower(name)
+		if _, exists := existingNames[key]; exists {
+			continue
+		}
+		mime := "font/ttf"
+		if ext == ".otf" {
+			mime = "font/otf"
+		}
+		c.Attachments = append(c.Attachments, mkv.Attachment{
+			ID:       nextID,
+			Name:     name,
+			MIMEType: mime,
+			Size:     int64(len(data)),
+			Data:     data,
+		})
+		existingNames[key] = struct{}{}
+		nextID++
+	}
+	return nil
 }
