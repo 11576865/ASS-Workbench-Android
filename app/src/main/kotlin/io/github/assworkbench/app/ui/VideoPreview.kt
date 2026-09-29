@@ -85,6 +85,7 @@ fun VideoPreview(
     focusedEventId: Long?,
     onSetEventPosition: (Double, Double) -> Unit,
     onFocusEvent: (Long) -> Unit,
+    onSetEventTiming: (Long, Long, Long) -> Unit,
     onOpenVideo: () -> Unit,
     onOpenTimeline: () -> Unit = {},
     modifier: Modifier = Modifier,
@@ -129,6 +130,7 @@ fun VideoPreview(
             focusedEventId = focusedEventId,
             onSetEventPosition = onSetEventPosition,
             onFocusEvent = onFocusEvent,
+            onSetEventTiming = onSetEventTiming,
             onOpenVideo = onOpenVideo,
             onOpenTimeline = onOpenTimeline,
             modifier = modifier,
@@ -405,6 +407,7 @@ private fun AuthoritativeMpvPreview(
     focusedEventId: Long?,
     onSetEventPosition: (Double, Double) -> Unit,
     onFocusEvent: (Long) -> Unit,
+    onSetEventTiming: (Long, Long, Long) -> Unit,
     onOpenVideo: () -> Unit,
     onOpenTimeline: () -> Unit,
     modifier: Modifier,
@@ -586,6 +589,7 @@ private fun AuthoritativeMpvPreview(
                 document = document,
                 focusedEventId = focusedEventId,
                 onFocusEvent = onFocusEvent,
+                onSetEventTiming = onSetEventTiming,
                 onPlayPause = {
                     val shouldPause = playback.status == MpvPlaybackState.Status.Playing ||
                         playback.status == MpvPlaybackState.Status.Buffering
@@ -736,6 +740,7 @@ private fun PlaybackBar(
     document: AssDocument,
     focusedEventId: Long?,
     onFocusEvent: (Long) -> Unit,
+    onSetEventTiming: (Long, Long, Long) -> Unit,
     onPlayPause: () -> Unit,
     onFrameBack: () -> Unit,
     onFrameForward: () -> Unit,
@@ -775,6 +780,7 @@ private fun PlaybackBar(
                 events = document.events,
                 focusedEventId = focusedEventId,
                 onFocusEvent = onFocusEvent,
+                onSetEventTiming = onSetEventTiming,
                 onScrub = { scrubPosition = it },
                 onScrubFinished = {
                     val target = scrubPosition
@@ -796,12 +802,17 @@ private fun TimelineProgressStrip(
     events: List<AssEvent>,
     focusedEventId: Long?,
     onFocusEvent: (Long) -> Unit,
+    onSetEventTiming: (Long, Long, Long) -> Unit,
     onScrub: (Double) -> Unit,
     onScrubFinished: () -> Unit,
     onOpenTimeline: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var dragging by remember { mutableStateOf(false) }
+    var dragMode by remember { mutableStateOf("scrub") }
+    var trimStartMs by remember { mutableLongStateOf(0L) }
+    var trimEndMs by remember { mutableLongStateOf(0L) }
+    val focusedEvent = events.firstOrNull { it.id == focusedEventId }
     val colorScheme = MaterialTheme.colorScheme
     Box(
         modifier
@@ -830,26 +841,67 @@ private fun TimelineProgressStrip(
                     onDoubleTap = { onOpenTimeline() },
                 )
             }
-            .pointerInput(durationSeconds) {
+            .pointerInput(durationSeconds, focusedEventId, focusedEvent?.start?.millis, focusedEvent?.end?.millis) {
                 detectHorizontalDragGestures(
-                    onDragStart = { dragging = true },
+                    onDragStart = { offset ->
+                        dragging = true
+                        val usableWidth = (size.width - WorkbenchDimens.MinTouchTarget.toPx()).coerceAtLeast(1f)
+                        val edgeThreshold = 14.dp.toPx()
+                        val startX = focusedEvent?.let {
+                            (it.start.millis / 1000.0 / durationSeconds.coerceAtLeast(0.001)).toFloat() * usableWidth
+                        }
+                        val endX = focusedEvent?.let {
+                            (it.end.millis / 1000.0 / durationSeconds.coerceAtLeast(0.001)).toFloat() * usableWidth
+                        }
+                        dragMode = when {
+                            startX != null && kotlin.math.abs(offset.x - startX) <= edgeThreshold -> "trim-start"
+                            endX != null && kotlin.math.abs(offset.x - endX) <= edgeThreshold -> "trim-end"
+                            else -> "scrub"
+                        }
+                        focusedEvent?.let {
+                            trimStartMs = it.start.millis
+                            trimEndMs = it.end.millis
+                        }
+                    },
                     onHorizontalDrag = { change, _ ->
                         if (durationSeconds > 0.0) {
                             change.consume()
-                            val fraction = (change.position.x / size.width.coerceAtLeast(1)).coerceIn(0f, 1f)
-                            onScrub(durationSeconds * fraction)
+                            val usableWidth = (size.width - WorkbenchDimens.MinTouchTarget.toPx()).coerceAtLeast(1f)
+                            val fraction = (change.position.x / usableWidth).coerceIn(0f, 1f)
+                            val candidateMs = (durationSeconds * 1000.0 * fraction).toLong()
+                            when (dragMode) {
+                                "trim-start" -> trimStartMs = candidateMs.coerceIn(
+                                    0L,
+                                    (trimEndMs - 10L).coerceAtLeast(0L),
+                                )
+                                "trim-end" -> trimEndMs = candidateMs
+                                    .coerceAtLeast(trimStartMs + 10L)
+                                    .coerceAtMost((durationSeconds * 1000.0).toLong())
+                                else -> onScrub(durationSeconds * fraction)
+                            }
                         }
                     },
                     onDragEnd = {
-                        if (dragging) onScrubFinished()
+                        val current = focusedEvent
+                        when {
+                            current != null && dragMode == "trim-start" ->
+                                onSetEventTiming(current.id, trimStartMs, current.end.millis)
+                            current != null && dragMode == "trim-end" ->
+                                onSetEventTiming(current.id, current.start.millis, trimEndMs)
+                            dragMode == "scrub" && dragging -> onScrubFinished()
+                        }
                         dragging = false
+                        dragMode = "scrub"
                     },
-                    onDragCancel = { dragging = false },
+                    onDragCancel = {
+                        dragging = false
+                        dragMode = "scrub"
+                    },
                 )
             },
     ) {
         Canvas(Modifier.fillMaxSize()) {
-            val w = size.width.coerceAtLeast(1f)
+            val w = (size.width - WorkbenchDimens.MinTouchTarget.toPx()).coerceAtLeast(1f)
             val h = size.height
             val centerY = h * 0.58f
             drawRoundRect(
@@ -866,8 +918,10 @@ private fun TimelineProgressStrip(
             )
             if (durationSeconds > 0.0) {
                 events.forEach { event ->
-                    val start = (event.start.millis / 1000.0 / durationSeconds).coerceIn(0.0, 1.0)
-                    val end = (event.end.millis / 1000.0 / durationSeconds).coerceIn(start, 1.0)
+                    val previewStartMs = if (event.id == focusedEventId && dragMode == "trim-start") trimStartMs else event.start.millis
+                    val previewEndMs = if (event.id == focusedEventId && dragMode == "trim-end") trimEndMs else event.end.millis
+                    val start = (previewStartMs / 1000.0 / durationSeconds).coerceIn(0.0, 1.0)
+                    val end = (previewEndMs / 1000.0 / durationSeconds).coerceIn(start, 1.0)
                     val x1 = (start * w).toFloat()
                     val x2 = (end * w).toFloat().coerceAtLeast(x1 + 1.dp.toPx())
                     val focused = event.id == focusedEventId
@@ -909,6 +963,21 @@ private fun TimelineProgressStrip(
                     center = androidx.compose.ui.geometry.Offset(px, h * 0.05f),
                 )
             }
+        }
+        if (focusedEvent != null && dragMode != "scrub") {
+            Text(
+                text = if (dragMode == "trim-start") {
+                    "Start ${formatClock(trimStartMs / 1000.0)}"
+                } else {
+                    "End ${formatClock(trimEndMs / 1000.0)}"
+                },
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(start = WorkbenchDimens.Micro, top = 1.dp),
+                style = MaterialTheme.typography.labelSmall,
+                color = colorScheme.onSurfaceVariant,
+                maxLines = 1,
+            )
         }
         Box(
             modifier = Modifier
