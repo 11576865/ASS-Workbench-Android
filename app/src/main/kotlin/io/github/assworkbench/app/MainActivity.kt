@@ -46,6 +46,12 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private val openReferenceVideo = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri ?: return@registerForActivityResult
+        persist(uri, read = true, write = false)
+        viewModel.openPickedVideo(uri)
+    }
+
     private val openMkvProject = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri ?: return@registerForActivityResult
         persist(uri, read = true, write = false)
@@ -149,6 +155,9 @@ class MainActivity : ComponentActivity() {
                         viewModel = viewModel,
                         onOpenVideo = {
                             openVideo.launch(arrayOf("video/*", "video/x-matroska", "application/octet-stream"))
+                        },
+                        onOpenReferenceVideo = {
+                            openReferenceVideo.launch(arrayOf("video/*", "video/x-matroska", "application/octet-stream"))
                         },
                         onOpenMkvProject = { openMkvProject.launch(arrayOf("video/x-matroska", "video/*", "application/octet-stream")) },
                         onOpenSubtitle = {
