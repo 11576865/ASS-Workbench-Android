@@ -570,6 +570,63 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             else event.copy(text = AssGeometrySemantic.patchPosition(event.text, x, y))
         })
 
+    fun previewFocusedMove(startX: Double, startY: Double, endX: Double, endY: Double) {
+        val state = _state.value
+        val id = state.focusedEventId ?: return
+        val preview = withEventMove(
+            document = state.document,
+            id = id,
+            startX = startX,
+            startY = startY,
+            endX = endX,
+            endY = endY,
+        )
+        _state.update { current ->
+            current.copy(previewDocument = if (preview == state.document) null else preview)
+        }
+    }
+
+    fun setFocusedMove(startX: Double, startY: Double, endX: Double, endY: Double) {
+        val id = _state.value.focusedEventId ?: return
+        editDocument("已更新当前字幕的 \\move 路径。") { doc ->
+            withEventMove(
+                document = doc,
+                id = id,
+                startX = startX,
+                startY = startY,
+                endX = endX,
+                endY = endY,
+            )
+        }
+    }
+
+    private fun withEventMove(
+        document: AssDocument,
+        id: Long,
+        startX: Double,
+        startY: Double,
+        endX: Double,
+        endY: Double,
+    ): AssDocument {
+        val event = document.events.firstOrNull { it.id == id } ?: return document
+        val move = AssGeometrySemantic.inspect(event.text).move ?: return document
+        val sx = startX.coerceIn(0.0, document.playResX.toDouble())
+        val sy = startY.coerceIn(0.0, document.playResY.toDouble())
+        val ex = endX.coerceIn(0.0, document.playResX.toDouble())
+        val ey = endY.coerceIn(0.0, document.playResY.toDouble())
+        val patched = AssGeometrySemantic.patchMove(
+            text = event.text,
+            start = io.github.assworkbench.domain.AssPoint(sx, sy),
+            end = io.github.assworkbench.domain.AssPoint(ex, ey),
+            startMs = move.startMs,
+            endMs = move.endMs,
+        )
+        if (patched == event.text) return document
+        return document.copy(events = document.events.map { candidate ->
+            if (candidate.id == id) candidate.copy(text = patched) else candidate
+        })
+    }
+
 
     fun setFocusedAlignment(alignment: Int) {
         val id = _state.value.focusedEventId ?: return
@@ -1225,20 +1282,22 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     fun nudgeEventPosition(id: Long, dx: Double, dy: Double) {
         val state = _state.value
         val event = state.document.events.firstOrNull { it.id == id } ?: return
-        val snapshot = EventOverrideEditor.inspect(event.text)
+        val geometry = AssGeometrySemantic.inspect(event.text)
+        if (geometry.positionMode == io.github.assworkbench.domain.AssPositionMode.MOVE ||
+            geometry.positionMode == io.github.assworkbench.domain.AssPositionMode.CONFLICT
+        ) return
         val style = state.document.styles.firstOrNull { it.name == event.style }
         val base = eventAnchor(event, style, state.document.playResX, state.document.playResY)
-        val x = (snapshot.x ?: base.first) + dx
-        val y = (snapshot.y ?: base.second) + dy
-        applyEventOverrides(
-            id = id,
-            x = x.coerceIn(0.0, state.document.playResX.toDouble()),
-            y = y.coerceIn(0.0, state.document.playResY.toDouble()),
-            blur = snapshot.blur,
-            fadeInMs = snapshot.fadeInMs,
-            fadeOutMs = snapshot.fadeOutMs,
-            softEntry = snapshot.softEntry,
-        )
+        val x = (geometry.position?.x ?: base.first) + dx
+        val y = (geometry.position?.y ?: base.second) + dy
+        editDocument("已微调字幕位置。") { doc ->
+            withEventPosition(
+                document = doc,
+                id = id,
+                x = x.coerceIn(0.0, state.document.playResX.toDouble()),
+                y = y.coerceIn(0.0, state.document.playResY.toDouble()),
+            )
+        }
     }
 
     private fun eventAnchor(

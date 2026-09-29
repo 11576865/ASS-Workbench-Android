@@ -42,6 +42,20 @@ class AssGeometrySemanticTest {
     }
 
     @Test
+    fun endpointPatchPreservesTimedMoveWindowAndUnknownNeighbors() {
+        val source = "{\\bord3\\move(10,20,30,40,125,875)\\x-custom(foo)}Text"
+        val snapshot = AssGeometrySemantic.inspect(source)
+        val move = requireNotNull(snapshot.move)
+        val output = AssGeometrySemantic.patchMove(
+            text = source,
+            start = AssPoint(100.0, 200.0),
+            end = AssPoint(700.0, 800.0),
+            startMs = move.startMs,
+            endMs = move.endMs,
+        )
+        assertEquals("{\\bord3\\move(100,200,700,800,125,875)\\x-custom(foo)}Text", output)
+    }
+    @Test
     fun preservesFrAliasWhenPatchingRotation() {
         val source = "{\\fr15\\bord2}Text"
         assertEquals("{\\fr27.5\\bord2}Text", AssGeometrySemantic.patchRotationZ(source, 27.5))

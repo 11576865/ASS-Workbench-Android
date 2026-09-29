@@ -281,6 +281,8 @@ private fun WorkbenchPreview(
         positionEditEventId = if (positionEditing) state.focusedEventId else null,
         onPreviewEventPosition = viewModel::previewFocusedPosition,
         onSetEventPosition = viewModel::setFocusedPosition,
+        onPreviewEventMove = viewModel::previewFocusedMove,
+        onSetEventMove = viewModel::setFocusedMove,
         onCancelEventPositionPreview = viewModel::clearTransientPreview,
         onFocusEvent = { viewModel.focusEvent(it, seek = false) },
         onSetEventTiming = viewModel::setEventTiming,
@@ -1174,6 +1176,10 @@ private fun PositionPane(state: EditorState, viewModel: EditorViewModel, modifie
 
     var x by remember(event.id, event.text) { mutableStateOf(geometry.position?.x?.toString().orEmpty()) }
     var y by remember(event.id, event.text) { mutableStateOf(geometry.position?.y?.toString().orEmpty()) }
+    var moveStartX by remember(event.id, event.text) { mutableStateOf(geometry.move?.start?.x?.toString().orEmpty()) }
+    var moveStartY by remember(event.id, event.text) { mutableStateOf(geometry.move?.start?.y?.toString().orEmpty()) }
+    var moveEndX by remember(event.id, event.text) { mutableStateOf(geometry.move?.end?.x?.toString().orEmpty()) }
+    var moveEndY by remember(event.id, event.text) { mutableStateOf(geometry.move?.end?.y?.toString().orEmpty()) }
     var styleAlignment by remember(style?.name, style?.alignment) { mutableIntStateOf(style?.alignment ?: 2) }
     var styleMarginL by remember(style?.name, style?.marginL) { mutableStateOf((style?.marginL ?: 0).toString()) }
     var styleMarginR by remember(style?.name, style?.marginR) { mutableStateOf((style?.marginR ?: 0).toString()) }
@@ -1206,11 +1212,51 @@ private fun PositionPane(state: EditorState, viewModel: EditorViewModel, modifie
                 }
             }
         }
+        if (geometry.positionMode == AssPositionMode.MOVE && geometry.move != null) {
+            item {
+                Text("运动路径 · \\move", style = MaterialTheme.typography.titleSmall)
+                Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small)) {
+                    OutlinedTextField(moveStartX, { moveStartX = it }, label = { Text("Start X") }, singleLine = true, modifier = Modifier.weight(1f))
+                    OutlinedTextField(moveStartY, { moveStartY = it }, label = { Text("Start Y") }, singleLine = true, modifier = Modifier.weight(1f))
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small)) {
+                    OutlinedTextField(moveEndX, { moveEndX = it }, label = { Text("End X") }, singleLine = true, modifier = Modifier.weight(1f))
+                    OutlinedTextField(moveEndY, { moveEndY = it }, label = { Text("End Y") }, singleLine = true, modifier = Modifier.weight(1f))
+                }
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        if (geometry.move.startMs != null && geometry.move.endMs != null) {
+                            "Timing ${geometry.move.startMs.toInt()}–${geometry.move.endMs.toInt()} ms · 编辑端点时原样保留"
+                        } else {
+                            "Timing：整个 Event 时长 · 4 参数 move"
+                        },
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Button(onClick = {
+                        val sx = moveStartX.toDoubleOrNull()
+                        val sy = moveStartY.toDoubleOrNull()
+                        val ex = moveEndX.toDoubleOrNull()
+                        val ey = moveEndY.toDoubleOrNull()
+                        if (sx != null && sy != null && ex != null && ey != null) {
+                            viewModel.setFocusedMove(sx, sy, ex, ey)
+                        }
+                    }) { Text("应用路径") }
+                }
+                Text(
+                    "预览上的空心圆是 Start，实心圆是 End；拖任一端点都会实时走 libass transient preview。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+
         item {
             Text("任意位置")
             Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small)) {
-                OutlinedTextField(x, { x = it }, label = { Text("X") }, singleLine = true, modifier = Modifier.weight(1f))
-                OutlinedTextField(y, { y = it }, label = { Text("Y") }, singleLine = true, modifier = Modifier.weight(1f))
+                OutlinedTextField(x, { x = it }, label = { Text("X") }, singleLine = true, enabled = geometry.positionMode != AssPositionMode.MOVE && geometry.positionMode != AssPositionMode.CONFLICT, modifier = Modifier.weight(1f))
+                OutlinedTextField(y, { y = it }, label = { Text("Y") }, singleLine = true, enabled = geometry.positionMode != AssPositionMode.MOVE && geometry.positionMode != AssPositionMode.CONFLICT, modifier = Modifier.weight(1f))
                 Button(
                     onClick = {
                         val px = x.toDoubleOrNull()
@@ -1229,13 +1275,14 @@ private fun PositionPane(state: EditorState, viewModel: EditorViewModel, modifie
                 ).forEach { (label, delta) ->
                     OutlinedButton(
                         onClick = { viewModel.nudgeEventPosition(event.id, delta.first, delta.second) },
+                        enabled = geometry.positionMode != AssPositionMode.MOVE && geometry.positionMode != AssPositionMode.CONFLICT,
                         modifier = Modifier.weight(1f),
                     ) { Text(label) }
                 }
             }
             Text(
                 when (geometry.positionMode) {
-                    AssPositionMode.MOVE -> "当前 Event 使用 \\move；不会隐式转换成 \\pos。路径编辑将在 Geometry Workbench 中处理。"
+                    AssPositionMode.MOVE -> "当前 Event 使用 \\move；直接拖动 Start / End 编辑路径，不会隐式转换成 \\pos。"
                     AssPositionMode.CONFLICT -> "当前 Event 同时存在 \\pos 与 \\move；为避免破坏语义，直接位置编辑已暂停。"
                     AssPositionMode.POSITION -> "当前为显式 \\pos；可直接在 16:9 预览上拖动锚点。"
                     AssPositionMode.INHERITED -> "当前位置由 Alignment + Margin 推导；第一次拖动会创建显式 \\pos。"

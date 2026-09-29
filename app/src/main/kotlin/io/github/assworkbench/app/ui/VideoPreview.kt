@@ -90,6 +90,8 @@ fun VideoPreview(
     positionEditEventId: Long?,
     onPreviewEventPosition: (Double, Double) -> Unit,
     onSetEventPosition: (Double, Double) -> Unit,
+    onPreviewEventMove: (Double, Double, Double, Double) -> Unit,
+    onSetEventMove: (Double, Double, Double, Double) -> Unit,
     onCancelEventPositionPreview: () -> Unit,
     onFocusEvent: (Long) -> Unit,
     onSetEventTiming: (Long, Long, Long) -> Unit,
@@ -138,6 +140,8 @@ fun VideoPreview(
             positionEditEventId = positionEditEventId,
             onPreviewEventPosition = onPreviewEventPosition,
             onSetEventPosition = onSetEventPosition,
+            onPreviewEventMove = onPreviewEventMove,
+            onSetEventMove = onSetEventMove,
             onCancelEventPositionPreview = onCancelEventPositionPreview,
             onFocusEvent = onFocusEvent,
             onSetEventTiming = onSetEventTiming,
@@ -418,6 +422,8 @@ private fun AuthoritativeMpvPreview(
     positionEditEventId: Long?,
     onPreviewEventPosition: (Double, Double) -> Unit,
     onSetEventPosition: (Double, Double) -> Unit,
+    onPreviewEventMove: (Double, Double, Double, Double) -> Unit,
+    onSetEventMove: (Double, Double, Double, Double) -> Unit,
     onCancelEventPositionPreview: () -> Unit,
     onFocusEvent: (Long) -> Unit,
     onSetEventTiming: (Long, Long, Long) -> Unit,
@@ -590,6 +596,8 @@ private fun AuthoritativeMpvPreview(
                         event = positionEvent,
                         onPreview = onPreviewEventPosition,
                         onCommit = onSetEventPosition,
+                        onPreviewMove = onPreviewEventMove,
+                        onCommitMove = onSetEventMove,
                         onCancel = onCancelEventPositionPreview,
                         modifier = Modifier.fillMaxSize(),
                     )
@@ -623,6 +631,8 @@ private fun PositionDragOverlay(
     event: AssEvent,
     onPreview: (Double, Double) -> Unit,
     onCommit: (Double, Double) -> Unit,
+    onPreviewMove: (Double, Double, Double, Double) -> Unit,
+    onCommitMove: (Double, Double, Double, Double) -> Unit,
     onCancel: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -651,7 +661,7 @@ private fun PositionDragOverlay(
     var y by remember(event.id, event.text) { mutableStateOf(geometry.position?.y ?: baseY) }
     val guideColor = MaterialTheme.colorScheme.tertiary
 
-    if (geometry.positionMode == AssPositionMode.MOVE || geometry.positionMode == AssPositionMode.CONFLICT) {
+    if (geometry.positionMode == AssPositionMode.CONFLICT) {
         val move = geometry.move
         BoxWithConstraints(modifier) {
             if (move != null) {
@@ -660,35 +670,120 @@ private fun PositionDragOverlay(
                     val sy = (move.start.y / document.playResY.coerceAtLeast(1)) * size.height
                     val ex = (move.end.x / document.playResX.coerceAtLeast(1)) * size.width
                     val ey = (move.end.y / document.playResY.coerceAtLeast(1)) * size.height
-                    drawLine(
-                        color = guideColor.copy(alpha = 0.7f),
-                        start = androidx.compose.ui.geometry.Offset(sx.toFloat(), sy.toFloat()),
-                        end = androidx.compose.ui.geometry.Offset(ex.toFloat(), ey.toFloat()),
-                        strokeWidth = 2.dp.toPx(),
-                    )
-                    drawCircle(
-                        color = guideColor,
-                        radius = 7.dp.toPx(),
-                        center = androidx.compose.ui.geometry.Offset(sx.toFloat(), sy.toFloat()),
-                        style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2.dp.toPx()),
-                    )
-                    drawCircle(
-                        color = guideColor,
-                        radius = 7.dp.toPx(),
-                        center = androidx.compose.ui.geometry.Offset(ex.toFloat(), ey.toFloat()),
-                    )
+                    drawLine(guideColor.copy(alpha = 0.7f), androidx.compose.ui.geometry.Offset(sx.toFloat(), sy.toFloat()), androidx.compose.ui.geometry.Offset(ex.toFloat(), ey.toFloat()), 2.dp.toPx())
+                    drawCircle(guideColor, 7.dp.toPx(), androidx.compose.ui.geometry.Offset(sx.toFloat(), sy.toFloat()), style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2.dp.toPx()))
+                    drawCircle(guideColor, 7.dp.toPx(), androidx.compose.ui.geometry.Offset(ex.toFloat(), ey.toFloat()))
                 }
             }
             Text(
-                if (geometry.positionMode == AssPositionMode.CONFLICT) {
-                    "pos + move 冲突 · 已暂停直接位置编辑"
-                } else {
-                    "move 路径 · 当前只读，下一步开放端点编辑"
-                },
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .background(Color.Black.copy(alpha = 0.62f))
-                    .padding(horizontal = 6.dp, vertical = 3.dp),
+                "pos + move 冲突 · 已暂停直接位置编辑",
+                modifier = Modifier.align(Alignment.TopStart).background(Color.Black.copy(alpha = 0.62f)).padding(horizontal = 6.dp, vertical = 3.dp),
+                color = Color.White,
+                style = MaterialTheme.typography.labelSmall,
+            )
+        }
+        return
+    }
+
+    if (geometry.positionMode == AssPositionMode.MOVE && geometry.move != null) {
+        var startX by remember(event.id, event.text) { mutableStateOf(geometry.move.start.x) }
+        var startY by remember(event.id, event.text) { mutableStateOf(geometry.move.start.y) }
+        var endX by remember(event.id, event.text) { mutableStateOf(geometry.move.end.x) }
+        var endY by remember(event.id, event.text) { mutableStateOf(geometry.move.end.y) }
+
+        DisposableEffect(event.id) {
+            onDispose { onCancel() }
+        }
+
+        BoxWithConstraints(
+            modifier.pointerInput(event.id, event.text, document.playResX, document.playResY) {
+                var activeHandle = 0 // 1=start, 2=end
+                var lastPreviewAt = 0L
+                fun distanceTo(px: Double, py: Double, touchX: Float, touchY: Float): Double {
+                    val hx = (px / document.playResX.coerceAtLeast(1)) * size.width
+                    val hy = (py / document.playResY.coerceAtLeast(1)) * size.height
+                    val dx = touchX - hx.toFloat()
+                    val dy = touchY - hy.toFloat()
+                    return kotlin.math.sqrt((dx * dx + dy * dy).toDouble())
+                }
+                detectDragGestures(
+                    onDragStart = { touch ->
+                        val startDistance = distanceTo(startX, startY, touch.x, touch.y)
+                        val endDistance = distanceTo(endX, endY, touch.x, touch.y)
+                        val threshold = 36.dp.toPx().toDouble()
+                        activeHandle = when {
+                            startDistance <= threshold && startDistance <= endDistance -> 1
+                            endDistance <= threshold -> 2
+                            else -> 0
+                        }
+                    },
+                    onDrag = { change, _ ->
+                        if (activeHandle == 0) return@detectDragGestures
+                        change.consume()
+                        val px = change.position.x.coerceIn(0f, size.width.toFloat())
+                        val py = change.position.y.coerceIn(0f, size.height.toFloat())
+                        var nx = px / size.width.coerceAtLeast(1) * document.playResX
+                        var ny = py / size.height.coerceAtLeast(1) * document.playResY
+                        val xTargets = listOf(marginL.toDouble(), document.playResX / 2.0, (document.playResX - marginR).toDouble())
+                        val yTargets = listOf(marginV.toDouble(), document.playResY / 2.0, (document.playResY - marginV).toDouble())
+                        val xThreshold = document.playResX * 0.015
+                        val yThreshold = document.playResY * 0.015
+                        xTargets.minByOrNull { kotlin.math.abs(nx - it) }?.let { target ->
+                            if (kotlin.math.abs(nx - target) < xThreshold) nx = target.toFloat()
+                        }
+                        yTargets.minByOrNull { kotlin.math.abs(ny - it) }?.let { target ->
+                            if (kotlin.math.abs(ny - target) < yThreshold) ny = target.toFloat()
+                        }
+                        if (activeHandle == 1) {
+                            startX = nx.toDouble()
+                            startY = ny.toDouble()
+                        } else {
+                            endX = nx.toDouble()
+                            endY = ny.toDouble()
+                        }
+                        val now = android.os.SystemClock.uptimeMillis()
+                        if (now - lastPreviewAt >= 80L) {
+                            lastPreviewAt = now
+                            onPreviewMove(startX, startY, endX, endY)
+                        }
+                    },
+                    onDragEnd = {
+                        if (activeHandle != 0) onCommitMove(startX, startY, endX, endY)
+                        activeHandle = 0
+                    },
+                    onDragCancel = {
+                        onCancel()
+                        activeHandle = 0
+                    },
+                )
+            }
+        ) {
+            Canvas(Modifier.fillMaxSize()) {
+                val sx = (startX / document.playResX.coerceAtLeast(1)) * size.width
+                val sy = (startY / document.playResY.coerceAtLeast(1)) * size.height
+                val ex = (endX / document.playResX.coerceAtLeast(1)) * size.width
+                val ey = (endY / document.playResY.coerceAtLeast(1)) * size.height
+                drawLine(
+                    color = guideColor.copy(alpha = 0.78f),
+                    start = androidx.compose.ui.geometry.Offset(sx.toFloat(), sy.toFloat()),
+                    end = androidx.compose.ui.geometry.Offset(ex.toFloat(), ey.toFloat()),
+                    strokeWidth = 2.dp.toPx(),
+                )
+                drawCircle(
+                    color = guideColor,
+                    radius = 9.dp.toPx(),
+                    center = androidx.compose.ui.geometry.Offset(sx.toFloat(), sy.toFloat()),
+                    style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2.dp.toPx()),
+                )
+                drawCircle(
+                    color = guideColor,
+                    radius = 9.dp.toPx(),
+                    center = androidx.compose.ui.geometry.Offset(ex.toFloat(), ey.toFloat()),
+                )
+            }
+            Text(
+                "move S ${startX.toInt()},${startY.toInt()} → E ${endX.toInt()},${endY.toInt()} · 拖端点",
+                modifier = Modifier.align(Alignment.TopStart).background(Color.Black.copy(alpha = 0.62f)).padding(horizontal = 6.dp, vertical = 3.dp),
                 color = Color.White,
                 style = MaterialTheme.typography.labelSmall,
             )
