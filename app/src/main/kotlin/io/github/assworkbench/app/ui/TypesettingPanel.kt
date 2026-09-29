@@ -281,8 +281,7 @@ fun TypesettingPanel(
                             )
                         }
                     }
-                    Text("安全区")
-                    Switch(checked = state.showLayoutGuides, onCheckedChange = { viewModel.toggleLayoutGuides() })
+
                 }
                 val styleUseCount = state.document.events.count { it.style == style.name }
                 val unusedStyleCount = state.document.styles.count { candidate ->
@@ -471,6 +470,20 @@ fun TypesettingPanel(
                 }
                 if (bilingualOpen) {
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                "60/40 参考线（HSR / 黑屏工作流）",
+                                modifier = Modifier.weight(1f),
+                                style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
+                            )
+                            Switch(
+                                checked = state.showLayoutGuides,
+                                onCheckedChange = { viewModel.toggleLayoutGuides() },
+                            )
+                        }
                         Text(
                             "安全区 3% / 5% · 中央间隔 " + geometry.centralGap +
                                 " · 分界 Y " + geometry.sourceBoundaryY + "/" + geometry.targetBoundaryY,
