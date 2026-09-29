@@ -22,8 +22,6 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.ArrowBackIosNew
-import androidx.compose.material.icons.filled.ArrowForwardIos
 import androidx.compose.material.icons.filled.Timeline
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
@@ -802,11 +800,11 @@ private fun PlaybackBar(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(0.dp),
         ) {
-            TransportTooltipButton("上一帧", {
+            TransportTooltipButton("后退 1 帧", {
                 onFrameBack()
-                actionHint = "上一帧"
+                actionHint = "后退 1 帧"
             }) {
-                Icon(Icons.Filled.ArrowBackIosNew, null)
+                Text("−1帧", style = MaterialTheme.typography.labelSmall)
             }
             TransportTooltipButton(
                 if (playback.status == MpvPlaybackState.Status.Playing ||
@@ -821,11 +819,11 @@ private fun PlaybackBar(
                     playback.status == MpvPlaybackState.Status.Buffering
                 Icon(if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow, null)
             }
-            TransportTooltipButton("下一帧", {
+            TransportTooltipButton("前进 1 帧", {
                 onFrameForward()
-                actionHint = "下一帧"
+                actionHint = "前进 1 帧"
             }) {
-                Icon(Icons.Filled.ArrowForwardIos, null)
+                Text("+1帧", style = MaterialTheme.typography.labelSmall)
             }
             Text(formatClock(displayPosition), style = MaterialTheme.typography.labelSmall)
             actionHint?.let {
