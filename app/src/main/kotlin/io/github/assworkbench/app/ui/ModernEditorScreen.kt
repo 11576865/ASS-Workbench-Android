@@ -177,6 +177,7 @@ private fun ModernAppBar(
     onSaveMkv: () -> Unit,
     onTool: (WorkbenchTool) -> Unit,
 ) {
+    var moreMenuOpen by remember { mutableStateOf(false) }
     Surface(tonalElevation = 2.dp) {
         Row(
             Modifier.fillMaxWidth().height(46.dp).padding(horizontal = 6.dp),
@@ -209,20 +210,26 @@ private fun ModernAppBar(
                 IconButton(onClick = viewModel::undo, enabled = state.canUndo) { Icon(Icons.Filled.Undo, "撤销") }
                 IconButton(onClick = viewModel::redo, enabled = state.canRedo) { Icon(Icons.Filled.Redo, "重做") }
                 Box {
-                    IconButton(onClick = onOpenMenu) { Icon(Icons.Filled.MoreVert, "更多") }
+                    IconButton(onClick = onOpenMenu) { Icon(Icons.Filled.FolderOpen, "打开") }
                     DropdownMenu(expanded = openMenu, onDismissRequest = onDismissMenu) {
-                        DropdownMenuItem(text = { Text("打开独立 ASS") }, leadingIcon = { Icon(Icons.Filled.FolderOpen, null) }, onClick = { onDismissMenu(); onOpenSubtitle() })
-                        DropdownMenuItem(text = { Text("打开 / 更换参考视频") }, onClick = { onDismissMenu(); onOpenVideo() })
-                        DropdownMenuItem(text = { Text("打开 MKV 工程") }, onClick = { onDismissMenu(); onOpenMkvProject() })
+                        DropdownMenuItem(text = { Text("打开独立 ASS") }, leadingIcon = { Icon(Icons.Filled.Subtitles, null) }, onClick = { onDismissMenu(); onOpenSubtitle() })
+                        DropdownMenuItem(text = { Text("打开 / 更换参考视频") }, leadingIcon = { Icon(Icons.Filled.Movie, null) }, onClick = { onDismissMenu(); onOpenVideo() })
+                        DropdownMenuItem(text = { Text("打开 MKV 工程") }, leadingIcon = { Icon(Icons.Filled.VideoFile, null) }, onClick = { onDismissMenu(); onOpenMkvProject() })
+                        Divider()
                         DropdownMenuItem(text = { Text("新建空白 ASS") }, leadingIcon = { Icon(Icons.Filled.Add, null) }, onClick = { onDismissMenu(); viewModel.newSubtitleProject() })
+                    }
+                }
+                Box {
+                    IconButton(onClick = { moreMenuOpen = true }) { Icon(Icons.Filled.MoreVert, "工具和更多操作") }
+                    DropdownMenu(expanded = moreMenuOpen, onDismissRequest = { moreMenuOpen = false }) {
+                        DropdownMenuItem(text = { Text("字体管理") }, leadingIcon = { Icon(Icons.Filled.FontDownload, null) }, onClick = { moreMenuOpen = false; onTool(WorkbenchTool.FONTS) })
+                        DropdownMenuItem(text = { Text("质量检查") }, leadingIcon = { Icon(Icons.Filled.ErrorOutline, null) }, onClick = { moreMenuOpen = false; onTool(WorkbenchTool.QC) })
+                        DropdownMenuItem(text = { Text("项目") }, leadingIcon = { Icon(Icons.Filled.Info, null) }, onClick = { moreMenuOpen = false; onTool(WorkbenchTool.PROJECT) })
+                        DropdownMenuItem(text = { Text("诊断") }, leadingIcon = { Icon(Icons.Filled.Tune, null) }, onClick = { moreMenuOpen = false; onTool(WorkbenchTool.DIAGNOSTICS) })
                         Divider()
-                        DropdownMenuItem(text = { Text("字体管理") }, leadingIcon = { Icon(Icons.Filled.FontDownload, null) }, onClick = { onDismissMenu(); onTool(WorkbenchTool.FONTS) })
-                        DropdownMenuItem(text = { Text("质量检查") }, leadingIcon = { Icon(Icons.Filled.ErrorOutline, null) }, onClick = { onDismissMenu(); onTool(WorkbenchTool.QC) })
-                        DropdownMenuItem(text = { Text("诊断") }, leadingIcon = { Icon(Icons.Filled.Tune, null) }, onClick = { onDismissMenu(); onTool(WorkbenchTool.DIAGNOSTICS) })
-                        Divider()
-                        DropdownMenuItem(text = { Text("另存 ASS") }, onClick = { onDismissMenu(); onSaveAs() })
-                        if (state.container.uri != null) DropdownMenuItem(text = { Text("保存为新 MKV") }, onClick = { onDismissMenu(); onSaveMkv() })
-                        DropdownMenuItem(text = { Text("导入字体") }, onClick = { onDismissMenu(); onImportFont() })
+                        DropdownMenuItem(text = { Text("另存 ASS") }, onClick = { moreMenuOpen = false; onSaveAs() })
+                        if (state.container.uri != null) DropdownMenuItem(text = { Text("保存为新 MKV") }, onClick = { moreMenuOpen = false; onSaveMkv() })
+                        DropdownMenuItem(text = { Text("导入字体") }, onClick = { moreMenuOpen = false; onImportFont() })
                     }
                 }
             }
