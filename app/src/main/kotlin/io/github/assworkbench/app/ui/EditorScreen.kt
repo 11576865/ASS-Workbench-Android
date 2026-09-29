@@ -1165,6 +1165,7 @@ private fun TimelineInspector(
     var snapEnabled by rememberSaveable { mutableStateOf(true) }
     var snapGridMs by rememberSaveable { mutableStateOf(10L) }
     var timelineSettingsOpen by remember { mutableStateOf(false) }
+    var timelineOpen by rememberSaveable { mutableStateOf(false) }
     val focused = state.document.events.firstOrNull { it.id == state.focusedEventId }
     val centerMs = when {
         state.project.videoUri != null -> state.playbackPositionMs
@@ -1187,9 +1188,33 @@ private fun TimelineInspector(
         }.distinct()
     }
 
-    Column(modifier.padding(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Column(modifier.padding(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        if (focused != null) {
+            Text(
+                "当前字幕 · #" + focused.id,
+                style = MaterialTheme.typography.titleSmall,
+            )
+            FocusedEventEditor(
+                event = focused,
+                viewModel = viewModel,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Divider()
+        } else {
+            Text(
+                "从左侧选择一条字幕进行编辑。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Divider()
+        }
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("时间轴", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+            TextButton(
+                onClick = { timelineOpen = !timelineOpen },
+                modifier = Modifier.weight(1f),
+            ) {
+                Text(if (timelineOpen) "收起时间轴" else "展开时间轴")
+            }
             Text(
                 formatTimelineClock(centerMs),
                 style = MaterialTheme.typography.labelSmall,
@@ -1233,6 +1258,7 @@ private fun TimelineInspector(
                 }
             }
         }
+        if (timelineOpen) {
         if (visible.isEmpty()) {
             Text(
                 "当前窗口没有字幕事件。",
@@ -1258,6 +1284,7 @@ private fun TimelineInspector(
                     )
                 }
             }
+        }
         }
         if (state.selectedEventIds.isNotEmpty()) {
             Divider()
@@ -1577,7 +1604,7 @@ private fun SubtitleRow(
             Column(Modifier.weight(1f)) {
                 Text(
                     text = AssInlineSyntax.visibleText(event.text).ifBlank { "（空字幕）" },
-                    maxLines = if (focused) 4 else 3,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                     style = MaterialTheme.typography.bodySmall,
                 )
@@ -1592,13 +1619,6 @@ private fun SubtitleRow(
                 }
             }
             HintIconButton(Icons.Filled.PlayArrow, "跳转到这条字幕", onJump, compact = true)
-        }
-        if (focused) {
-            FocusedEventEditor(
-                event = event,
-                viewModel = viewModel,
-                modifier = Modifier.fillMaxWidth().padding(start = 30.dp, end = 4.dp, bottom = 4.dp),
-            )
         }
     }
 }
