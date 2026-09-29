@@ -362,6 +362,10 @@ private fun InlineEventEditor(
     var endText by remember(event.id, event.end) { mutableStateOf(event.end.toAss()) }
     var body by remember(event.id, event.text) { mutableStateOf(AssInlineSyntax.visibleText(event.text)) }
     var rawOpen by remember(event.id) { mutableStateOf(false) }
+    var metadataOpen by remember(event.id) { mutableStateOf(false) }
+    var layerText by remember(event.id, event.layer) { mutableStateOf(event.layer.toString()) }
+    var actorText by remember(event.id, event.name) { mutableStateOf(event.name) }
+    var comment by remember(event.id, event.comment) { mutableStateOf(event.comment) }
     var raw by remember(event.id, event.text) { mutableStateOf(event.text) }
     val effective = remember(state.document, event) { AssEffectiveInspector.inspect(state.document, event).associateBy { it.name } }
     val font = effective["Font"]?.effectiveValue ?: "?"
@@ -369,6 +373,9 @@ private fun InlineEventEditor(
     val alignment = effective["Alignment"]?.effectiveValue ?: "?"
     val marginV = effective["Margin V"]?.effectiveValue ?: "?"
     val pos = effective["Position"]?.effectiveValue ?: "alignment anchor"
+    val prefixLength = remember(event.text) { leadingOverridePrefixLength(event.text) }
+    val tail = remember(event.text, prefixLength) { event.text.substring(prefixLength) }
+    val simpleBody = remember(tail) { '{' !in tail && '}' !in tail }
 
     LaunchedEffect(event.text) {
         if (!rawOpen) raw = event.text
@@ -392,16 +399,18 @@ private fun InlineEventEditor(
     OutlinedTextField(
         body,
         { next ->
-            body = next
-            val prefixLength = leadingOverridePrefixLength(event.text)
-            val tail = event.text.substring(prefixLength)
-            if ('{' !in tail && '}' !in tail) {
+            if (simpleBody) {
+                body = next
                 val prefix = event.text.substring(0, prefixLength)
                 viewModel.updateEventText(event.id, prefix + next.replace("\\n", "\\\\N"))
             }
         },
-        label = { Text("字幕正文") },
-        modifier = Modifier.fillMaxWidth().heightIn(min = 72.dp, max = 120.dp),
+        readOnly = !simpleBody,
+        label = { Text(if (simpleBody) "字幕正文" else "字幕正文 · 含内联 ASS") },
+        supportingText = if (simpleBody) null else {
+            { Text("正文中穿插了 ASS override；为避免破坏标签顺序，请直接编辑下方 Raw ASS。") }
+        },
+        modifier = Modifier.fillMaxWidth().heightIn(min = 72.dp, max = 126.dp),
     )
 
     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -409,7 +418,64 @@ private fun InlineEventEditor(
         AssistChip(onClick = { onTool(WorkbenchTool.POSITION) }, label = { Text("an$alignment · V$marginV" + if (pos != "alignment anchor") " · pos" else "") })
         AssistChip(onClick = { onTool(WorkbenchTool.FONTS) }, label = { Text("$font · $size") })
         AssistChip(onClick = { onTool(WorkbenchTool.EFFECTS) }, label = { Text("效果") })
-        AssistChip(onClick = { onTool(WorkbenchTool.DIAGNOSTICS) }, label = { Text("L${event.layer}" + if (event.name.isNotBlank()) " · ${event.name}" else "") })
+        AssistChip(
+            onClick = { metadataOpen = !metadataOpen },
+            label = {
+                Text(
+                    "Event · L${event.layer}" +
+                        (if (event.name.isNotBlank()) " · ${event.name}" else "") +
+                        (if (event.comment) " · Comment" else "")
+                )
+            },
+        )
+    }
+
+    if (metadataOpen) {
+        Surface(
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.38f),
+            shape = MaterialTheme.shapes.small,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Column(Modifier.padding(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedTextField(
+                        layerText,
+                        { layerText = it },
+                        label = { Text("Layer") },
+                        singleLine = true,
+                        modifier = Modifier.width(88.dp),
+                    )
+                    OutlinedTextField(
+                        actorText,
+                        { actorText = it },
+                        label = { Text("Actor") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f),
+                    )
+                    FilterChip(
+                        selected = comment,
+                        onClick = { comment = !comment },
+                        label = { Text(if (comment) "Comment" else "Dialogue") },
+                    )
+                }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    TextButton(onClick = {
+                        layerText = event.layer.toString()
+                        actorText = event.name
+                        comment = event.comment
+                        metadataOpen = false
+                    }) { Text("取消") }
+                    Button(onClick = {
+                        viewModel.updateFocusedMetadata(
+                            layer = layerText.toIntOrNull() ?: event.layer,
+                            actor = actorText,
+                            comment = comment,
+                        )
+                        metadataOpen = false
+                    }) { Text("应用") }
+                }
+            }
+        }
     }
 
     Surface(color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f), shape = MaterialTheme.shapes.small, modifier = Modifier.fillMaxWidth()) {
