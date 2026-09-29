@@ -17,8 +17,6 @@ import io.github.assworkbench.domain.EventFormatClipboard
 import io.github.assworkbench.domain.EventFormatClipboardOps
 import io.github.assworkbench.domain.EventFormatPasteMode
 import io.github.assworkbench.domain.FontBindingRewriter
-import io.github.assworkbench.domain.ReviewEventKey
-import io.github.assworkbench.domain.ReviewSidecar
 import io.github.assworkbench.domain.SubTime
 import io.github.assworkbench.domain.UndoHistory
 import io.github.assworkbench.fonts.FontDiagnostics
@@ -44,37 +42,21 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     private val mkvGoTool = StartupProbe.stage(application, "viewmodel_mkvgo") {
         MkvGoTool(application)
     }
-    private val prefs = StartupProbe.stage(application, "viewmodel_prefs") {
-        application.getSharedPreferences("ass_workbench_editor", Context.MODE_PRIVATE)
-    }
     private val recoveryStore = StartupProbe.stage(application, "viewmodel_recovery_store") {
         RecoveryStore(application)
     }
-    private val reviewStateStore = StartupProbe.stage(application, "viewmodel_review_store") {
-        ReviewStateStore(application)
-    }
     private var recoveryJob: Job? = null
-    private var reviewPersistJob: Job? = null
     private var fontDiagnosticJob: Job? = null
     private var containerScan: MatroskaScanResult? = null
     private var eventFormatClipboard: EventFormatClipboard? = null
     private val _state = MutableStateFlow(
         EditorState(
-            project = io.github.assworkbench.domain.SubtitleProject(
-                splitRatio = prefs.getFloat("split_ratio", 0.56f).coerceIn(0.28f, 0.78f)
-            ),
+            project = io.github.assworkbench.domain.SubtitleProject(),
             recoveryAvailable = recoveryStore.exists(),
             recoveryLabel = recoveryStore.label(),
         )
     )
     val state: StateFlow<EditorState> = _state.asStateFlow()
-
-    private data class RestoredReviewState(
-        val sourceStyle: String,
-        val targetStyle: String,
-        val confirmedIds: Set<Long>,
-        val originalTextById: Map<Long, String>,
-    )
 
     init {
         StartupProbe.stage(application, "viewmodel_initial_refresh") {
@@ -102,11 +84,6 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 dirty = false,
                 canUndo = false,
                 canRedo = false,
-                reviewSourceStyle = "",
-                reviewTargetStyle = "",
-                originalTextById = emptyMap(),
-                confirmedReviewIds = emptySet(),
-                reviewFilter = "all",
                 container = ContainerBridgeState(),
                 status = "已新建空白 ASS；可在当前播放位置添加第一条字幕。",
             )
@@ -190,9 +167,6 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         val track = scan.subtitleTracks.firstOrNull { it.number == trackNumber } ?: return
         val document = AssCodec.parse(track.toAss())
         history.reset(document)
-        val styleNames = document.styles.map { it.name }
-        val identity = containerReviewIdentity(it = _state.value, trackNumber = trackNumber)
-        val review = restoreReviewSidecar(identity, document, styleNames)
         _state.update {
             it.copy(
                 project = it.project.copy(subtitleUri = null, title = it.container.name + " · " + track.displayName),
@@ -204,11 +178,6 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 dirty = false,
                 canUndo = false,
                 canRedo = false,
-                reviewSourceStyle = review.sourceStyle,
-                reviewTargetStyle = review.targetStyle,
-                originalTextById = review.originalTextById,
-                confirmedReviewIds = review.confirmedIds,
-                reviewFilter = "all",
                 container = it.container.copy(selectedTrackNumber = trackNumber),
                 status = "已从 MKV 载入 " + track.displayName + "，共 " + document.events.size + " 条。",
             )
@@ -319,8 +288,6 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         val decoded = AssTextDecoder.decode(bytes)
         val document = AssCodec.parse(decoded.text)
         history.reset(document)
-        val styleNames = document.styles.map { it.name }
-        val review = restoreReviewSidecar(uri.toString(), document, styleNames)
         _state.update {
             it.copy(
                 project = it.project.copy(subtitleUri = uri.toString(), title = displayName(uri) ?: "ASS project"),
@@ -332,11 +299,6 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 dirty = false,
                 canUndo = false,
                 canRedo = false,
-                reviewSourceStyle = review.sourceStyle,
-                reviewTargetStyle = review.targetStyle,
-                originalTextById = review.originalTextById,
-                confirmedReviewIds = review.confirmedIds,
-                reviewFilter = "all",
                 container = ContainerBridgeState(),
                 status = "已载入 ${document.events.size} 条 ASS 事件 · ${decoded.encoding.displayName}。",
             )
@@ -416,7 +378,6 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 status = "ASS 已保存。",
             )
         }
-        persistReviewSidecar()
     }
 
     fun saveCurrent(): Boolean {
@@ -600,7 +561,6 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             it.copy(
                 focusedEventId = result.focusedEventId,
                 selectedEventIds = result.selectedEventIds,
-                originalTextById = result.focusedEventId?.let { id -> it.originalTextById + (id to "") } ?: it.originalTextById,
             )
         }
     }
@@ -618,8 +578,6 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 focusedEventId = result.focusedEventId,
                 selectedEventIds = emptySet(),
                 selectionAnchorId = null,
-                originalTextById = it.originalTextById.filterKeys { id -> id !in ids },
-                confirmedReviewIds = it.confirmedReviewIds - ids,
             )
         }
     }
@@ -641,9 +599,6 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 state.copy(
                     focusedEventId = result.focusedEventId,
                     selectedEventIds = result.selectedEventIds,
-                    originalTextById = state.originalTextById + newIds.associateWith { newId ->
-                        result.document.events.firstOrNull { it.id == newId }?.text.orEmpty()
-                    },
                 )
             }
         }.onFailure { reportError("拆分失败", it) }
@@ -666,8 +621,6 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                     focusedEventId = result.focusedEventId,
                     selectedEventIds = result.selectedEventIds,
                     selectionAnchorId = null,
-                    originalTextById = it.originalTextById.filterKeys { id -> id !in ids || id == result.focusedEventId },
-                    confirmedReviewIds = it.confirmedReviewIds - ids,
                 )
             }
         }.onFailure { reportError("合并失败", it) }
@@ -1046,30 +999,6 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    fun setReviewSourceStyle(value: String) {
-        _state.update { it.copy(reviewSourceStyle = value) }
-        persistReviewSidecar()
-    }
-
-    fun setReviewTargetStyle(value: String) {
-        _state.update { it.copy(reviewTargetStyle = value) }
-        persistReviewSidecar()
-    }
-
-    fun setReviewFilter(value: String) = _state.update { it.copy(reviewFilter = value) }
-
-    fun confirmReviewTarget(id: Long, confirmed: Boolean) {
-        _state.update {
-            val next = it.confirmedReviewIds.toMutableSet()
-            if (confirmed) next.add(id) else next.remove(id)
-            it.copy(
-                confirmedReviewIds = next,
-                status = if (confirmed) "已确认字幕 #" + id else "已取消确认字幕 #" + id,
-            )
-        }
-        persistReviewSidecar()
-    }
-
     fun updateEventText(id: Long, text: String) {
         editDocument("已修改字幕 #" + id + "。") { doc ->
             doc.copy(events = doc.events.map { if (it.id == id) it.copy(text = text) else it })
@@ -1214,19 +1143,12 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
 
     fun setPlaybackPosition(positionMs: Long) = _state.update { it.copy(playbackPositionMs = positionMs.coerceAtLeast(0)) }
 
-    fun setSplitRatio(value: Float) {
-        val next = value.coerceIn(0.28f, 0.78f)
-        prefs.edit().putFloat("split_ratio", next).apply()
-        _state.update { it.copy(project = it.project.copy(splitRatio = next)) }
-    }
-
     fun restoreRecovery() {
         val snapshot = recoveryStore.read() ?: run {
             _state.update { it.copy(recoveryAvailable = false, recoveryLabel = "") }
             return
         }
         history.reset(snapshot.document)
-        val styleNames = snapshot.document.styles.map { it.name }
         _state.update {
             it.copy(
                 project = snapshot.project,
@@ -1277,77 +1199,6 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         val normalized = lines.filter(String::isNotBlank).takeLast(12)
         if (_state.value.rendererDiagnostics == normalized) return
         _state.update { it.copy(rendererDiagnostics = normalized) }
-    }
-
-    private fun restoreReviewSidecar(
-        identity: String,
-        document: AssDocument,
-        styleNames: List<String>,
-    ): RestoredReviewState {
-        val loaded = reviewStateStore.load(identity)
-        val validIds = document.events.mapTo(hashSetOf()) { it.id }
-        val defaults = document.events.associate { event -> event.id to event.text }
-        if (loaded == null) {
-            return RestoredReviewState(
-                sourceStyle = styleNames.firstOrNull().orEmpty(),
-                targetStyle = styleNames.drop(1).firstOrNull().orEmpty(),
-                confirmedIds = emptySet(),
-                originalTextById = defaults,
-            )
-        }
-
-        val source = loaded.sourceStyle.takeIf { it in styleNames } ?: styleNames.firstOrNull().orEmpty()
-        val target = loaded.targetStyle.takeIf { it in styleNames && it != source }
-            ?: styleNames.firstOrNull { it != source }.orEmpty()
-
-        val keyById = ReviewEventKey.keys(document.events)
-        val idByKey = keyById.entries.associate { (id, key) -> key to id }
-        val originals = defaults.toMutableMap()
-        loaded.legacyOriginalTextById.forEach { (id, text) ->
-            if (id in validIds) originals[id] = text
-        }
-        loaded.originalTextByKey.forEach { (key, text) ->
-            idByKey[key]?.let { id -> originals[id] = text }
-        }
-
-        val confirmed = linkedSetOf<Long>()
-        loaded.legacyConfirmedIds.filterTo(confirmed) { it in validIds }
-        loaded.confirmedKeys.mapNotNullTo(confirmed) { idByKey[it] }
-
-        return RestoredReviewState(source, target, confirmed, originals)
-    }
-
-    private fun persistReviewSidecar() {
-        val snapshot = _state.value
-        val identity = reviewIdentity(snapshot) ?: return
-        val keyById = ReviewEventKey.keys(snapshot.document.events)
-        val value = ReviewSidecar(
-            sourceStyle = snapshot.reviewSourceStyle,
-            targetStyle = snapshot.reviewTargetStyle,
-            confirmedKeys = snapshot.confirmedReviewIds.mapNotNull { keyById[it] }.toSet(),
-            originalTextByKey = snapshot.originalTextById.entries.mapNotNull { (id, text) ->
-                keyById[id]?.let { key -> key to text }
-            }.toMap(),
-        )
-        reviewPersistJob?.cancel()
-        reviewPersistJob = viewModelScope.launch {
-            delay(250)
-            withContext(Dispatchers.IO) { reviewStateStore.write(identity, value) }
-        }
-    }
-
-    private fun reviewIdentity(state: EditorState): String? {
-        val containerUri = state.container.uri
-        val track = state.container.selectedTrackNumber
-        return when {
-            !containerUri.isNullOrBlank() && track != null -> "mkv:" + containerUri + "#track=" + track
-            !state.project.subtitleUri.isNullOrBlank() -> state.project.subtitleUri
-            else -> null
-        }
-    }
-
-    private fun containerReviewIdentity(it: EditorState, trackNumber: Long): String {
-        return "mkv:" + it.container.uri.orEmpty() + "#track=" + trackNumber
     }
 
     private inline fun editDocument(status: String, transform: (AssDocument) -> AssDocument) {
