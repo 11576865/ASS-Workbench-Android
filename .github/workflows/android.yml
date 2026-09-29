@@ -104,13 +104,15 @@ jobs:
           VERSION="$(sed -nE 's/^val baseVersionName = "([^"]+)"/\1/p' app/build.gradle.kts | head -1)"
           test -n "$VERSION"
           [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9._-]+)?$ ]]
+          SHORT_SHA="$(printf '%s' "$GITHUB_SHA" | cut -c1-12)"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          cp app/build/outputs/apk/debug/app-debug.apk "ASS-Workbench-Android-$VERSION-debug.apk"
+          echo "short_sha=$SHORT_SHA" >> "$GITHUB_OUTPUT"
+          cp app/build/outputs/apk/debug/app-debug.apk "ASS-Workbench-Android-$VERSION-$SHORT_SHA-debug.apk"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: ASS-Workbench-Android-${{ steps.version.outputs.version }}-debug
-          path: ASS-Workbench-Android-${{ steps.version.outputs.version }}-debug.apk
+          name: ASS-Workbench-Android-${{ steps.version.outputs.version }}-${{ steps.version.outputs.short_sha }}-debug
+          path: ASS-Workbench-Android-${{ steps.version.outputs.version }}-${{ steps.version.outputs.short_sha }}-debug.apk
           if-no-files-found: error
 
       # Release publication is owned by the Fontconfig renderer workflow.
