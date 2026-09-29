@@ -39,11 +39,9 @@ class MainActivity : ComponentActivity() {
     private val openVideo = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri ?: return@registerForActivityResult
         persist(uri, read = true, write = false)
-        if (isMatroskaDocument(uri)) {
-            viewModel.openMkvProject(uri)
-        } else {
-            viewModel.openPickedVideo(uri)
-        }
+        // This picker belongs to the standalone/reference-video workflow.
+        // MKV project import has its own explicit entry and confirmation flow.
+        viewModel.openPickedVideo(uri)
     }
 
     private val openReferenceVideo = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
