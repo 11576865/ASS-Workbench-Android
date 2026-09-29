@@ -2,7 +2,6 @@ package io.github.assworkbench.app
 
 import android.app.Application
 import android.net.Uri
-import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.assworkbench.container.MatroskaReader
@@ -1161,9 +1160,6 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 dirty = true,
                 canUndo = false,
                 canRedo = false,
-                reviewSourceStyle = styleNames.firstOrNull().orEmpty(),
-                reviewTargetStyle = styleNames.drop(1).firstOrNull().orEmpty(),
-                originalTextById = snapshot.document.events.associate { event -> event.id to event.text },
                 recoveryAvailable = false,
                 recoveryLabel = "",
                 status = "已恢复上次未保存编辑。",
@@ -1202,22 +1198,13 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     private inline fun editDocument(status: String, transform: (AssDocument) -> AssDocument) {
-        val beforeState = _state.value
-        val before = beforeState.document
+        val before = _state.value.document
         val next = transform(before)
         if (next == before) return
 
-        val changedConfirmedIds = beforeState.confirmedReviewIds.filterTo(hashSetOf()) { id ->
-            before.events.firstOrNull { it.id == id } != next.events.firstOrNull { it.id == id }
-        }
-
         history.commit(next)
         publishDocument(next, status, dirty = true)
-        if (changedConfirmedIds.isNotEmpty()) {
-            _state.update { it.copy(confirmedReviewIds = it.confirmedReviewIds - changedConfirmedIds) }
-        }
         scheduleRecovery(next)
-        persistReviewSidecar()
     }
 
     private fun publishDocument(document: AssDocument, status: String, dirty: Boolean = true) {
