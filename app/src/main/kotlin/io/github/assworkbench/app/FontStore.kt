@@ -101,7 +101,7 @@ class FontStore(private val context: Context) {
         val sha = OpenTypeNameReader.sha256(bytes)
         val safeStem = safeFileStem(metadata.family)
         val target = File(importedDir, "${safeStem}-${sha.take(10)}.$ext")
-        if (!target.exists()) target.writeBytes(bytes)
+        if (!target.exists()) atomicWrite(target, bytes)
         fontBytesCache[target.absolutePath] = bytes
         invalidateImportedCache()
 
@@ -117,7 +117,7 @@ class FontStore(private val context: Context) {
         val sha = OpenTypeNameReader.sha256(bytes)
         val safeStem = safeFileStem(metadata.family)
         val target = File(projectFontDir, "${safeStem}-${sha.take(10)}.$ext")
-        if (!target.exists()) target.writeBytes(bytes)
+        if (!target.exists()) atomicWrite(target, bytes)
         fontBytesCache[target.absolutePath] = bytes
         invalidateImportedCache()
         // Keep the fallback file immutable during an active renderer session.
@@ -217,6 +217,27 @@ class FontStore(private val context: Context) {
                     aliases = setOf("sans-serif"),
                 )
         } else null
+    }
+
+    private fun atomicWrite(target: File, bytes: ByteArray) {
+        target.parentFile?.mkdirs()
+        val temp = File(target.parentFile, target.name + ".tmp-" + System.nanoTime())
+        try {
+            java.io.FileOutputStream(temp).use { output ->
+                output.write(bytes)
+                output.fd.sync()
+            }
+            if (!temp.renameTo(target)) {
+                java.io.FileInputStream(temp).use { input ->
+                    java.io.FileOutputStream(target).use { output ->
+                        input.copyTo(output)
+                        output.fd.sync()
+                    }
+                }
+            }
+        } finally {
+            if (temp.exists()) temp.delete()
+        }
     }
 
     private fun safeFileStem(value: String): String {
