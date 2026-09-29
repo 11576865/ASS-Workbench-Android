@@ -207,6 +207,8 @@ Preview must remain libass-authoritative where practical.
 
 ### Phase C — Event operations
 
+**Core slice complete.** The listed Event operations are now present in their contextual owner surfaces and Android CI #294 passed after the batch/clipboard consolidation.
+
 Implementation has started. The first structural slice now exposes contextual insert-before / insert-after, exact duplicate, merge-with-previous / merge-with-next, and delete actions in the existing Event surface. These operations reuse `AssDocumentEditing` and Undo history rather than introducing a permanent operations toolbar. The Event text editor now retains the real cursor/selection state so split-at-playhead can use the exact text cursor without inventing a second split UI; split is disabled for unsaved text, selections, boundary cursors, or a playhead outside the Event. Batch Style assignment, filtered previous/next navigation, and QC issue previous/next navigation are also wired into their existing contextual surfaces. Multi-select merge and the format clipboard are now consolidated in Batch: merge requires a contiguous Event range, while one paste menu owns Style / Margins / Position / Effects / Overrides / All. Clipboard rewriting is top-level aware, preserves target `{comment}` blocks, excludes source comments, and does not reach into nested `\\t(...)` payloads. Stability pass: unsaved Raw Event Text drafts now survive external canonical edits and surface an explicit conflict instead of being silently overwritten; expanded Event controls retarget the displayed Event before focus-dependent actions; discrete +/- continuous controls now commit through the same gesture contract; structural split/merge no longer trim visible boundary whitespace. A second integrity pass now keeps Undo/Redo focus and selection IDs valid, preserves non-override leading `{comment}` blocks during split/format-copy, clamps batch time shifts as one group so relative spacing cannot collapse at time zero, and makes delayed recovery/MKV writeback snapshot-safe against project switches and edits made while saving.
 
 Add:
@@ -225,6 +227,8 @@ Add:
 Keep these contextual; do not create a permanent toolbar for all operations.
 
 ### Phase D — Timeline professionalisation
+
+Implementation has started. The timeline viewport is no longer hard-wired to playback: it now has 5/10/30/60/120-second horizontal zoom levels, direct touch panning on a dedicated ruler, an explicit follow-playhead mode, and a return-to-playhead action. The playhead is drawn only when it is actually inside the viewport instead of being falsely clamped to an edge. Existing focused-Event trim/body-drag and snapping remain the first editing layer.
 
 Add:
 - horizontal zoom;

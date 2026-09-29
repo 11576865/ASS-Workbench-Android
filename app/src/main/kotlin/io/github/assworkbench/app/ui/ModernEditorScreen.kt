@@ -11,6 +11,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.horizontalScroll
@@ -1051,34 +1052,77 @@ private fun SupportingWorkbench(
 
 @Composable
 private fun ModernTimelinePane(state: EditorState, viewModel: EditorViewModel, modifier: Modifier = Modifier) {
+    val zoomSteps = listOf(5, 10, 30, 60, 120)
     var windowSeconds by rememberSaveable { mutableStateOf(30) }
+    var viewportCenterMs by rememberSaveable { mutableLongStateOf(state.playbackPositionMs) }
+    var followPlayhead by rememberSaveable { mutableStateOf(true) }
     var snapEnabled by rememberSaveable { mutableStateOf(true) }
     var snapEvents by rememberSaveable { mutableStateOf(true) }
     var snapPlayhead by rememberSaveable { mutableStateOf(true) }
     var snapGrid by rememberSaveable { mutableStateOf(true) }
     var snapGridMs by rememberSaveable { mutableLongStateOf(10L) }
     var settingsOpen by remember { mutableStateOf(false) }
-    val centerMs = state.playbackPositionMs
+
+    val playheadMs = state.playbackPositionMs
     val focusedEvent = state.document.events.firstOrNull { it.id == state.focusedEventId }
-    val half = windowSeconds * 500L
-    val windowStart = (centerMs - half).coerceAtLeast(0L)
-    val windowEnd = windowStart + windowSeconds * 1000L
-    val visible = state.document.events.filter { it.end.millis >= windowStart && it.start.millis <= windowEnd }.take(50)
-    val snapTargets = remember(visible, centerMs, snapEvents, snapPlayhead) {
+    val windowDurationMs = windowSeconds * 1000L
+    val halfWindowMs = windowDurationMs / 2L
+
+    LaunchedEffect(playheadMs, followPlayhead, halfWindowMs) {
+        if (followPlayhead) {
+            viewportCenterMs = playheadMs.coerceAtLeast(halfWindowMs)
+        } else if (viewportCenterMs < halfWindowMs) {
+            viewportCenterMs = halfWindowMs
+        }
+    }
+
+    val windowStart = (viewportCenterMs - halfWindowMs).coerceAtLeast(0L)
+    val windowEnd = windowStart + windowDurationMs
+    val visible = state.document.events
+        .filter { it.end.millis >= windowStart && it.start.millis <= windowEnd }
+        .take(120)
+    val snapTargets = remember(visible, playheadMs, snapEvents, snapPlayhead) {
         buildList {
-            if (snapPlayhead) add(centerMs)
+            if (snapPlayhead) add(playheadMs)
             if (snapEvents) visible.forEach { add(it.start.millis); add(it.end.millis) }
         }.distinct()
     }
+    val zoomIndex = zoomSteps.indexOf(windowSeconds).coerceAtLeast(0)
 
     Column(modifier.padding(WorkbenchDimens.Small), verticalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(formatMs(centerMs), style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
-            TextButton(onClick = { settingsOpen = true }) { Text("${windowSeconds}s · " + if (snapEnabled) "Snap ${snapGridMs}ms" else "Snap off") }
+        Row(
+            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro),
+        ) {
+            Text(formatMs(playheadMs), style = MaterialTheme.typography.titleSmall)
+            FilterChip(
+                selected = followPlayhead,
+                onClick = {
+                    followPlayhead = !followPlayhead
+                    if (followPlayhead) viewportCenterMs = playheadMs.coerceAtLeast(halfWindowMs)
+                },
+                label = { Text("跟随播放头") },
+            )
+            OutlinedButton(
+                onClick = { if (zoomIndex > 0) windowSeconds = zoomSteps[zoomIndex - 1] },
+                enabled = zoomIndex > 0,
+            ) { Text("放大") }
+            OutlinedButton(
+                onClick = { if (zoomIndex < zoomSteps.lastIndex) windowSeconds = zoomSteps[zoomIndex + 1] },
+                enabled = zoomIndex < zoomSteps.lastIndex,
+            ) { Text("缩小") }
+            Text("${windowSeconds}s", style = MaterialTheme.typography.labelMedium)
+            if (!followPlayhead) {
+                TextButton(onClick = {
+                    viewportCenterMs = playheadMs.coerceAtLeast(halfWindowMs)
+                    followPlayhead = true
+                }) { Text("回到播放头") }
+            }
+            TextButton(onClick = { settingsOpen = true }) {
+                Text(if (snapEnabled) "Snap ${snapGridMs}ms" else "Snap off")
+            }
             DropdownMenu(expanded = settingsOpen, onDismissRequest = { settingsOpen = false }) {
-                listOf(10, 30, 60).forEach { seconds ->
-                    DropdownMenuItem(text = { Text((if (windowSeconds == seconds) "✓ " else "") + "窗口 ${seconds}s") }, onClick = { windowSeconds = seconds; settingsOpen = false })
-                }
                 DropdownMenuItem(
                     text = { Text((if (snapEnabled) "✓ " else "") + "吸附总开关") },
                     onClick = { snapEnabled = !snapEnabled },
@@ -1107,8 +1151,63 @@ private fun ModernTimelinePane(state: EditorState, viewModel: EditorViewModel, m
                 }
             }
         }
+
+        BoxWithConstraints(
+            Modifier
+                .fillMaxWidth()
+                .height(34.dp)
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.38f))
+                .pointerInput(windowDurationMs, halfWindowMs) {
+                    detectHorizontalDragGestures(
+                        onDragStart = { followPlayhead = false },
+                        onHorizontalDrag = { change, dragAmount ->
+                            change.consume()
+                            val widthPx = size.width.coerceAtLeast(1)
+                            val deltaMs = (dragAmount / widthPx * windowDurationMs).toLong()
+                            viewportCenterMs = (viewportCenterMs - deltaMs).coerceAtLeast(halfWindowMs)
+                        },
+                    )
+                },
+        ) {
+            val viewportColors = MaterialTheme.colorScheme
+            Canvas(Modifier.fillMaxSize()) {
+                val span = (windowEnd - windowStart).coerceAtLeast(1L).toFloat()
+                for (i in 1..3) {
+                    val x = size.width * (i / 4f)
+                    drawLine(
+                        color = viewportColors.outline.copy(alpha = 0.35f),
+                        start = androidx.compose.ui.geometry.Offset(x, 0f),
+                        end = androidx.compose.ui.geometry.Offset(x, size.height),
+                        strokeWidth = 1.dp.toPx(),
+                    )
+                }
+                if (playheadMs in windowStart..windowEnd) {
+                    val fraction = (playheadMs - windowStart).toFloat() / span
+                    val x = size.width * fraction
+                    drawLine(
+                        color = viewportColors.primary,
+                        start = androidx.compose.ui.geometry.Offset(x, 0f),
+                        end = androidx.compose.ui.geometry.Offset(x, size.height),
+                        strokeWidth = 2.dp.toPx(),
+                    )
+                }
+            }
+            Text(
+                formatMs(windowStart),
+                modifier = Modifier.align(Alignment.CenterStart).padding(start = 4.dp),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                formatMs(windowEnd),
+                modifier = Modifier.align(Alignment.CenterEnd).padding(end = 4.dp),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+
         Text(
-            "拖左右边缘调整 Start / End；先点选 Event，再拖主体平移。",
+            "拖上方时间标尺平移视窗；关闭“跟随播放头”后，播放继续也不会把视窗拉回。Event：拖左右边缘调整 Start / End，拖主体整体平移。",
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -1128,20 +1227,31 @@ private fun ModernTimelinePane(state: EditorState, viewModel: EditorViewModel, m
             }
         }
         Divider()
-        if (visible.isEmpty()) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("当前窗口没有字幕事件。") }
-        else LazyColumn(Modifier.fillMaxSize()) {
-            items(visible, key = { it.id }) { event ->
-                ModernTimelineEventRow(
-                    event, windowStart, windowEnd, centerMs, event.id == state.focusedEventId,
-                    snapTargets, snapEnabled, snapGrid, snapGridMs,
-                    { viewModel.focusEvent(event.id, seek = true) },
-                    { a, b -> viewModel.setEventTiming(event.id, a, b) },
-                )
+        if (visible.isEmpty()) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text("当前视窗没有字幕事件。拖动上方时间标尺，或回到播放头。")
+            }
+        } else {
+            LazyColumn(Modifier.fillMaxSize()) {
+                items(visible, key = { it.id }) { event ->
+                    ModernTimelineEventRow(
+                        event = event,
+                        windowStartMs = windowStart,
+                        windowEndMs = windowEnd,
+                        playheadMs = playheadMs,
+                        focused = event.id == state.focusedEventId,
+                        snapTargets = snapTargets,
+                        snapEnabled = snapEnabled,
+                        snapGrid = snapGrid,
+                        snapGridMs = snapGridMs,
+                        onFocus = { viewModel.focusEvent(event.id, seek = true) },
+                        onCommit = { a, b -> viewModel.setEventTiming(event.id, a, b) },
+                    )
+                }
             }
         }
     }
 }
-
 private enum class ModernTimelineDragMode { START, MOVE, END }
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -1243,14 +1353,17 @@ private fun ModernTimelineEventRow(
                 Spacer(Modifier.weight((1f - rightFraction).coerceAtLeast(0.001f)))
             }
             Canvas(Modifier.fillMaxSize()) {
-                val playFraction = ((playheadMs - windowStartMs).toFloat() / (windowEndMs - windowStartMs).coerceAtLeast(1L)).coerceIn(0f, 1f)
-                val playX = size.width * playFraction
-                drawLine(
-                    color = timelineColors.onSurface,
-                    start = androidx.compose.ui.geometry.Offset(playX, 0f),
-                    end = androidx.compose.ui.geometry.Offset(playX, size.height),
-                    strokeWidth = 1.dp.toPx(),
-                )
+                if (playheadMs in windowStartMs..windowEndMs) {
+                    val playFraction = (playheadMs - windowStartMs).toFloat() /
+                        (windowEndMs - windowStartMs).coerceAtLeast(1L)
+                    val playX = size.width * playFraction
+                    drawLine(
+                        color = timelineColors.onSurface,
+                        start = androidx.compose.ui.geometry.Offset(playX, 0f),
+                        end = androidx.compose.ui.geometry.Offset(playX, size.height),
+                        strokeWidth = 1.dp.toPx(),
+                    )
+                }
                 if (focused) {
                     val sx = size.width * leftFraction
                     val ex = size.width * rightFraction
