@@ -1319,9 +1319,9 @@ private fun PositionPane(state: EditorState, viewModel: EditorViewModel, modifie
                     OutlinedTextField(moveEndY, { moveEndY = it }, label = { Text("End Y") }, singleLine = true, modifier = Modifier.weight(1f))
                 }
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    val moveStartMs = moveGeometry.startMs
+                    val moveEndMs = moveGeometry.endMs
                     Text(
-                        val moveStartMs = moveGeometry.startMs
-                        val moveEndMs = moveGeometry.endMs
                         if (moveStartMs != null && moveEndMs != null) {
                             "Timing ${moveStartMs.toInt()}–${moveEndMs.toInt()} ms · 编辑端点时原样保留"
                         } else {
