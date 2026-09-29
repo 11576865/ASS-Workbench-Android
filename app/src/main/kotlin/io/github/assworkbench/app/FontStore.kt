@@ -117,7 +117,7 @@ class FontStore(private val context: Context) {
         val safeStem = safeFileStem(metadata.family)
         val target = File(projectFontDir, "${safeStem}-${sha.take(10)}.$ext")
         if (!target.exists()) target.writeBytes(bytes)
-        fontBytesCache[target.name] = bytes
+        fontBytesCache[target.absolutePath] = bytes
         invalidateImportedCache()
         // Embedded MKV fonts must feed the same provider=none fallback path as manually imported fonts.
         // This removes the old "standalone import vs MKV attachment" renderer asymmetry.
@@ -158,7 +158,7 @@ class FontStore(private val context: Context) {
         ).firstOrNull { it.isFile }
             ?: return FontGlyphDiagnostic(family, asset.metadata.family, 0, emptyList())
         val bytes = runCatching {
-            fontBytesCache.computeIfAbsent(asset.fileName) { file.readBytes() }
+            fontBytesCache.computeIfAbsent(file.absolutePath) { file.readBytes() }
         }.getOrNull() ?: return FontGlyphDiagnostic(family, asset.metadata.family, 0, emptyList())
 
         val cps = text.codePoints()
