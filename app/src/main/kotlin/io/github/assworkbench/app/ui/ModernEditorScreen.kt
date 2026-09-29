@@ -42,6 +42,7 @@ fun ModernEditorScreen(
     state: EditorState,
     viewModel: EditorViewModel,
     onOpenVideo: () -> Unit,
+    onOpenReferenceVideo: () -> Unit,
     onOpenMkvProject: () -> Unit,
     onOpenSubtitle: () -> Unit,
     onImportFont: () -> Unit,
@@ -61,7 +62,7 @@ fun ModernEditorScreen(
         ModernAppBar(
             state, viewModel, state.selectedEventIds.isNotEmpty(), searchOpen,
             { searchOpen = !searchOpen }, { openMenu = true }, openMenu, { openMenu = false },
-            onOpenVideo, onOpenMkvProject, onOpenSubtitle, onImportFont, onSave, onSaveAs, onSaveMkv,
+            onOpenReferenceVideo, onOpenMkvProject, onOpenSubtitle, onImportFont, onSave, onSaveAs, onSaveMkv,
             { toolName = it.name },
         )
 
