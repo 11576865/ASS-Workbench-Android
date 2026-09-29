@@ -608,6 +608,7 @@ private fun ModernTimelinePane(state: EditorState, viewModel: EditorViewModel, m
     var snapGridMs by rememberSaveable { mutableLongStateOf(10L) }
     var settingsOpen by remember { mutableStateOf(false) }
     val centerMs = state.playbackPositionMs
+    val focusedEvent = state.document.events.firstOrNull { it.id == state.focusedEventId }
     val half = windowSeconds * 500L
     val windowStart = (centerMs - half).coerceAtLeast(0L)
     val windowEnd = windowStart + windowSeconds * 1000L
@@ -655,7 +656,26 @@ private fun ModernTimelinePane(state: EditorState, viewModel: EditorViewModel, m
                 }
             }
         }
-        Text("拖左右边缘调整 Start / End；先选中 Event，再拖主体平移。", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(
+            "拖左右边缘调整 Start / End；先点选 Event，再拖主体平移。",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        if (focusedEvent != null) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                OutlinedButton(
+                    onClick = viewModel::setFocusedStartToPlayback,
+                    modifier = Modifier.weight(1f),
+                ) { Text("Start ← 播放头") }
+                OutlinedButton(
+                    onClick = viewModel::setFocusedEndToPlayback,
+                    modifier = Modifier.weight(1f),
+                ) { Text("End ← 播放头") }
+            }
+        }
         Divider()
         if (visible.isEmpty()) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("当前窗口没有字幕事件。") }
         else LazyColumn(Modifier.fillMaxSize()) {
