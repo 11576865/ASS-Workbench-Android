@@ -1160,10 +1160,21 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
 
     fun focusEvent(id: Long, seek: Boolean = true) {
         val event = _state.value.document.events.firstOrNull { it.id == id } ?: return
+        val seekInsideEvent = if (seek) {
+            val start = event.start.millis
+            val end = event.end.millis
+            val duration = (end - start).coerceAtLeast(0L)
+            val inset = when {
+                duration <= 2L -> 0L
+                duration < 160L -> (duration / 3L).coerceAtLeast(1L)
+                else -> 80L
+            }
+            (start + inset).coerceAtMost((end - 1L).coerceAtLeast(start))
+        } else null
         _state.update {
             it.copy(
                 focusedEventId = id,
-                seekRequestMs = if (seek) event.start.millis else it.seekRequestMs,
+                seekRequestMs = seekInsideEvent ?: it.seekRequestMs,
                 seekRequestNonce = if (seek) it.seekRequestNonce + 1 else it.seekRequestNonce,
             )
         }
