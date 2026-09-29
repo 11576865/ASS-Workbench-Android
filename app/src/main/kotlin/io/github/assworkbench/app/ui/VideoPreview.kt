@@ -4,6 +4,8 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -20,6 +22,9 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.SkipNext
+import androidx.compose.material.icons.filled.SkipPrevious
+import androidx.compose.material.icons.filled.Timeline
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -83,6 +88,7 @@ fun VideoPreview(
     focusedEventId: Long?,
     onSetEventPosition: (Double, Double) -> Unit,
     onOpenVideo: () -> Unit,
+    onOpenTimeline: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     var normalPreview by remember { mutableStateOf(!BuildConfig.ASSWB_RENDERER_EXPERIMENTAL) }
@@ -107,7 +113,6 @@ fun VideoPreview(
         }
     }
 
-    key(fontRevision) {
         AuthoritativeMpvPreview(
             videoUri = videoUri,
             document = document,
@@ -120,15 +125,15 @@ fun VideoPreview(
             onRendererDiagnostics = onRendererDiagnostics,
             configDir = configDir,
             fontsDir = fontsDir,
+            fontRevision = fontRevision,
             initialPositionMs = resumePositionMs,
             showLayoutGuides = showLayoutGuides,
             focusedEventId = focusedEventId,
             onSetEventPosition = onSetEventPosition,
             onOpenVideo = onOpenVideo,
+            onOpenTimeline = onOpenTimeline,
             modifier = modifier,
-        )
-    }
-}
+        )}
 
 @Composable
 private fun ExperimentalRendererStartupProbe(
@@ -394,11 +399,13 @@ private fun AuthoritativeMpvPreview(
     onRendererDiagnostics: (List<String>) -> Unit,
     configDir: File,
     fontsDir: File,
+    fontRevision: Long,
     initialPositionMs: Long,
     showLayoutGuides: Boolean,
     focusedEventId: Long?,
     onSetEventPosition: (Double, Double) -> Unit,
     onOpenVideo: () -> Unit,
+    onOpenTimeline: () -> Unit,
     modifier: Modifier,
 ) {
     val context = LocalContext.current
@@ -477,8 +484,11 @@ private fun AuthoritativeMpvPreview(
         }
     }
 
-    LaunchedEffect(mpv, videoUri, document, protocolReady) {
+    LaunchedEffect(mpv, videoUri, document, protocolReady, fontRevision) {
         if (!protocolReady || videoUri.isNullOrBlank()) return@LaunchedEffect
+        if (fontRevision > 0L) {
+            mpv.command("set", "sub-fonts-dir", fontsDir.absolutePath)
+        }
         delay(120)
         val tmp = File(previewFile.parentFile, "current.ass.tmp")
         tmp.writeText(AssCodec.write(document), Charsets.UTF_8)
@@ -584,12 +594,17 @@ private fun AuthoritativeMpvPreview(
         if (!videoUri.isNullOrBlank()) {
             PlaybackBar(
                 playback = playback,
+                document = document,
+                focusedEventId = focusedEventId,
                 onPlayPause = {
                     val shouldPause = playback.status == MpvPlaybackState.Status.Playing ||
                         playback.status == MpvPlaybackState.Status.Buffering
                     mpv[MpvProperties.Pause] = shouldPause
                 },
+                onFrameBack = { mpv.command("frame-back-step") },
+                onFrameForward = { mpv.command("frame-step") },
                 onSeek = { seconds -> mpv.command("seek", seconds.toString(), "absolute+exact") },
+                onOpenTimeline = onOpenTimeline,
             )
         }
     }
@@ -728,37 +743,148 @@ private fun PositionDragOverlay(
 @Composable
 private fun PlaybackBar(
     playback: MpvPlaybackState,
+    document: AssDocument,
+    focusedEventId: Long?,
     onPlayPause: () -> Unit,
+    onFrameBack: () -> Unit,
+    onFrameForward: () -> Unit,
     onSeek: (Double) -> Unit,
+    onOpenTimeline: () -> Unit,
 ) {
     val duration = (playback.durationSeconds ?: 0.0).coerceAtLeast(0.0)
-    val position = (playback.positionSeconds ?: 0.0).coerceIn(0.0, if (duration > 0.0) duration else Double.MAX_VALUE)
-    var scrubPosition by remember { mutableStateOf<Float?>(null) }
-    val displayPosition = scrubPosition?.toDouble() ?: position
+    val position = (playback.positionSeconds ?: 0.0)
+        .coerceIn(0.0, if (duration > 0.0) duration else Double.MAX_VALUE)
+    var scrubPosition by remember { mutableStateOf<Double?>(null) }
+    val displayPosition = scrubPosition ?: position
+
     CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 28.dp) {
         Row(
-            Modifier.fillMaxWidth().height(34.dp).background(MaterialTheme.colorScheme.surface).padding(horizontal = 4.dp),
+            Modifier.fillMaxWidth()
+                .height(38.dp)
+                .background(MaterialTheme.colorScheme.surface)
+                .padding(horizontal = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(2.dp),
         ) {
-        IconButton(onClick = onPlayPause, modifier = Modifier.width(30.dp).height(30.dp)) {
-            val playing = playback.status == MpvPlaybackState.Status.Playing || playback.status == MpvPlaybackState.Status.Buffering
-            Icon(if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow, if (playing) "暂停" else "播放")
+            IconButton(onClick = onFrameBack, modifier = Modifier.width(28.dp).height(28.dp)) {
+                Icon(Icons.Filled.SkipPrevious, "上一帧")
+            }
+            IconButton(onClick = onPlayPause, modifier = Modifier.width(30.dp).height(30.dp)) {
+                val playing = playback.status == MpvPlaybackState.Status.Playing ||
+                    playback.status == MpvPlaybackState.Status.Buffering
+                Icon(if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow, if (playing) "暂停" else "播放")
+            }
+            IconButton(onClick = onFrameForward, modifier = Modifier.width(28.dp).height(28.dp)) {
+                Icon(Icons.Filled.SkipNext, "下一帧")
+            }
+            Text(formatClock(displayPosition), style = MaterialTheme.typography.labelSmall)
+            TimelineProgressStrip(
+                durationSeconds = duration,
+                positionSeconds = displayPosition,
+                events = document.events,
+                focusedEventId = focusedEventId,
+                onScrub = { scrubPosition = it },
+                onScrubFinished = {
+                    val target = scrubPosition
+                    if (target != null) onSeek(target)
+                    scrubPosition = null
+                },
+                onOpenTimeline = onOpenTimeline,
+                modifier = Modifier.weight(1f).height(26.dp),
+            )
+            Text(formatClock(duration), style = MaterialTheme.typography.labelSmall)
         }
-        Text(formatClock(displayPosition), style = MaterialTheme.typography.labelSmall)
-        Slider(
-            value = if (duration > 0.0) (scrubPosition ?: position.toFloat()) else 0f,
-            onValueChange = { if (duration > 0.0) scrubPosition = it },
-            onValueChangeFinished = {
-                scrubPosition?.let { onSeek(it.toDouble()) }
-                scrubPosition = null
+    }
+}
+
+@Composable
+private fun TimelineProgressStrip(
+    durationSeconds: Double,
+    positionSeconds: Double,
+    events: List<AssEvent>,
+    focusedEventId: Long?,
+    onScrub: (Double) -> Unit,
+    onScrubFinished: () -> Unit,
+    onOpenTimeline: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var dragging by remember { mutableStateOf(false) }
+    val colorScheme = MaterialTheme.colorScheme
+    Box(
+        modifier
+            .pointerInput(durationSeconds) {
+                detectTapGestures(
+                    onTap = { offset ->
+                        if (durationSeconds <= 0.0) {
+                            onOpenTimeline()
+                        } else {
+                            val fraction = (offset.x / size.width.coerceAtLeast(1)).coerceIn(0f, 1f)
+                            onScrub(durationSeconds * fraction)
+                            onScrubFinished()
+                        }
+                    },
+                    onDoubleTap = { onOpenTimeline() },
+                )
+            }
+            .pointerInput(durationSeconds) {
+                detectHorizontalDragGestures(
+                    onDragStart = { dragging = true },
+                    onHorizontalDrag = { change, _ ->
+                        if (durationSeconds > 0.0) {
+                            change.consume()
+                            val fraction = (change.position.x / size.width.coerceAtLeast(1)).coerceIn(0f, 1f)
+                            onScrub(durationSeconds * fraction)
+                        }
+                    },
+                    onDragEnd = {
+                        if (dragging) onScrubFinished()
+                        dragging = false
+                    },
+                    onDragCancel = { dragging = false },
+                )
             },
-            valueRange = 0f..duration.coerceAtLeast(1.0).toFloat(),
-            enabled = duration > 0.0,
-            modifier = Modifier.weight(1f).height(28.dp),
-        )
-        Text(formatClock(duration), style = MaterialTheme.typography.labelSmall)
+    ) {
+        Canvas(Modifier.fillMaxSize()) {
+            val w = size.width.coerceAtLeast(1f)
+            val h = size.height
+            val centerY = h * 0.56f
+            drawLine(
+                color = colorScheme.outlineVariant,
+                start = androidx.compose.ui.geometry.Offset(0f, centerY),
+                end = androidx.compose.ui.geometry.Offset(w, centerY),
+                strokeWidth = 2.dp.toPx(),
+            )
+            if (durationSeconds > 0.0) {
+                events.forEach { event ->
+                    val start = (event.start.millis / 1000.0 / durationSeconds).coerceIn(0.0, 1.0)
+                    val end = (event.end.millis / 1000.0 / durationSeconds).coerceIn(start, 1.0)
+                    val x1 = (start * w).toFloat()
+                    val x2 = (end * w).toFloat().coerceAtLeast(x1 + 1.dp.toPx())
+                    val focused = event.id == focusedEventId
+                    drawRect(
+                        color = if (focused) colorScheme.primary else colorScheme.secondary.copy(alpha = 0.50f),
+                        topLeft = androidx.compose.ui.geometry.Offset(x1, if (focused) h * 0.18f else h * 0.34f),
+                        size = androidx.compose.ui.geometry.Size(
+                            (x2 - x1).coerceAtLeast(1.dp.toPx()),
+                            if (focused) h * 0.58f else h * 0.38f,
+                        ),
+                    )
+                }
+                val px = (positionSeconds / durationSeconds).coerceIn(0.0, 1.0).toFloat() * w
+                drawLine(
+                    color = colorScheme.onSurface,
+                    start = androidx.compose.ui.geometry.Offset(px, 0f),
+                    end = androidx.compose.ui.geometry.Offset(px, h),
+                    strokeWidth = 1.5.dp.toPx(),
+                )
+            }
         }
+        Icon(
+            Icons.Filled.Timeline,
+            contentDescription = "双击打开时间轴",
+            tint = colorScheme.onSurfaceVariant.copy(alpha = 0.45f),
+            modifier = Modifier.align(Alignment.CenterEnd).width(18.dp),
+        )
     }
 }
 
