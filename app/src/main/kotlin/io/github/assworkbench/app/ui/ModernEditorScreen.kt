@@ -503,6 +503,9 @@ private fun SupportingWorkbench(
 private fun ModernTimelinePane(state: EditorState, viewModel: EditorViewModel, modifier: Modifier = Modifier) {
     var windowSeconds by rememberSaveable { mutableStateOf(30) }
     var snapEnabled by rememberSaveable { mutableStateOf(true) }
+    var snapEvents by rememberSaveable { mutableStateOf(true) }
+    var snapPlayhead by rememberSaveable { mutableStateOf(true) }
+    var snapGrid by rememberSaveable { mutableStateOf(true) }
     var snapGridMs by rememberSaveable { mutableLongStateOf(10L) }
     var settingsOpen by remember { mutableStateOf(false) }
     val centerMs = state.playbackPositionMs
@@ -510,8 +513,11 @@ private fun ModernTimelinePane(state: EditorState, viewModel: EditorViewModel, m
     val windowStart = (centerMs - half).coerceAtLeast(0L)
     val windowEnd = windowStart + windowSeconds * 1000L
     val visible = state.document.events.filter { it.end.millis >= windowStart && it.start.millis <= windowEnd }.take(50)
-    val snapTargets = remember(visible, centerMs) {
-        buildList { add(centerMs); visible.forEach { add(it.start.millis); add(it.end.millis) } }.distinct()
+    val snapTargets = remember(visible, centerMs, snapEvents, snapPlayhead) {
+        buildList {
+            if (snapPlayhead) add(centerMs)
+            if (snapEvents) visible.forEach { add(it.start.millis); add(it.end.millis) }
+        }.distinct()
     }
 
     Column(modifier.padding(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -522,9 +528,31 @@ private fun ModernTimelinePane(state: EditorState, viewModel: EditorViewModel, m
                 listOf(10, 30, 60).forEach { seconds ->
                     DropdownMenuItem(text = { Text((if (windowSeconds == seconds) "✓ " else "") + "窗口 ${seconds}s") }, onClick = { windowSeconds = seconds; settingsOpen = false })
                 }
-                DropdownMenuItem(text = { Text((if (snapEnabled) "✓ " else "") + "吸附") }, onClick = { snapEnabled = !snapEnabled })
+                DropdownMenuItem(
+                    text = { Text((if (snapEnabled) "✓ " else "") + "吸附总开关") },
+                    onClick = { snapEnabled = !snapEnabled },
+                )
+                DropdownMenuItem(
+                    text = { Text((if (snapEvents) "✓ " else "") + "字幕边界") },
+                    enabled = snapEnabled,
+                    onClick = { snapEvents = !snapEvents },
+                )
+                DropdownMenuItem(
+                    text = { Text((if (snapPlayhead) "✓ " else "") + "播放头") },
+                    enabled = snapEnabled,
+                    onClick = { snapPlayhead = !snapPlayhead },
+                )
+                DropdownMenuItem(
+                    text = { Text((if (snapGrid) "✓ " else "") + "时间网格") },
+                    enabled = snapEnabled,
+                    onClick = { snapGrid = !snapGrid },
+                )
                 listOf(10L, 100L).forEach { grid ->
-                    DropdownMenuItem(text = { Text((if (snapGridMs == grid) "✓ " else "") + "网格 ${grid}ms") }, enabled = snapEnabled, onClick = { snapGridMs = grid; settingsOpen = false })
+                    DropdownMenuItem(
+                        text = { Text((if (snapGridMs == grid) "✓ " else "") + "网格 " + grid + "ms") },
+                        enabled = snapEnabled && snapGrid,
+                        onClick = { snapGridMs = grid; settingsOpen = false },
+                    )
                 }
             }
         }
@@ -535,7 +563,7 @@ private fun ModernTimelinePane(state: EditorState, viewModel: EditorViewModel, m
             items(visible, key = { it.id }) { event ->
                 ModernTimelineEventRow(
                     event, windowStart, windowEnd, centerMs, event.id == state.focusedEventId,
-                    snapTargets, snapEnabled, snapGridMs,
+                    snapTargets, snapEnabled, snapGrid, snapGridMs,
                     { viewModel.focusEvent(event.id, seek = true) },
                     { a, b -> viewModel.setEventTiming(event.id, a, b) },
                 )
@@ -556,6 +584,7 @@ private fun ModernTimelineEventRow(
     focused: Boolean,
     snapTargets: List<Long>,
     snapEnabled: Boolean,
+    snapGrid: Boolean,
     snapGridMs: Long,
     onFocus: () -> Unit,
     onCommit: (Long, Long) -> Unit,
@@ -580,16 +609,20 @@ private fun ModernTimelineEventRow(
         BoxWithConstraints(
             Modifier.weight(1f).height(24.dp)
                 .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
-                .pointerInput(event.id, windowStartMs, windowEndMs, snapTargets, focused) {
+                .pointerInput(event.id, windowStartMs, windowEndMs, snapTargets, focused, snapGrid, snapGridMs) {
                     val span = (windowEndMs - windowStartMs).coerceAtLeast(1L)
                     fun xFor(ms: Long): Float = ((ms - windowStartMs).toFloat() / span).coerceIn(0f, 1f) * size.width
                     fun snap(candidate: Long): Long {
                         if (!snapEnabled) return candidate
                         val step = snapGridMs.coerceAtLeast(1L)
-                        val grid = ((candidate + step / 2L) / step) * step
+                        val gridCandidate = if (snapGrid) {
+                            ((candidate + step / 2L) / step) * step
+                        } else {
+                            candidate
+                        }
                         val threshold = minOf(120L, maxOf(24L, span / 220L))
                         val nearest = snapTargets.minByOrNull { abs(it - candidate) }
-                        return if (nearest != null && abs(nearest - candidate) <= threshold) nearest else grid
+                        return if (nearest != null && abs(nearest - candidate) <= threshold) nearest else gridCandidate
                     }
                     detectDragGestures(
                         onDragStart = { offset ->
