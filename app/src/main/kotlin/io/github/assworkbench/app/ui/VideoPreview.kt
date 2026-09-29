@@ -406,7 +406,6 @@ private fun AuthoritativeMpvPreview(
     fontsDir: File,
     fontRevision: Long,
     initialPositionMs: Long,
-    showLayoutGuides: Boolean,
     focusedEventId: Long?,
     positionEditEventId: Long?,
     onSetEventPosition: (Double, Double) -> Unit,
