@@ -1587,6 +1587,18 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    fun previewEventTransform(id: Long, index: Int, transform: AssTransform) {
+        val before = _state.value.document
+        val preview = before.copy(events = before.events.map { event ->
+            if (event.id != id) event else event.copy(
+                text = AssAnimationSemantic.patchTransform(event.text, index, transform),
+            )
+        })
+        _state.update { state ->
+            state.copy(previewDocument = if (preview == before) null else preview)
+        }
+    }
+
     fun setEventTransform(id: Long, index: Int, transform: AssTransform) {
         editDocument("已更新字幕 #" + id + " 的 Transform #" + (index + 1) + "。") { doc ->
             doc.copy(events = doc.events.map { event ->

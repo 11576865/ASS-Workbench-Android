@@ -1288,6 +1288,26 @@ private fun InlineTransformCard(
                     OutlinedTextField(end, { end = it }, label = { Text("End ms") }, singleLine = true, modifier = Modifier.weight(1f))
                     OutlinedTextField(accel, { accel = it }, label = { Text("Accel") }, singleLine = true, modifier = Modifier.weight(1f))
                 }
+
+                TransformVisualPropertyEditor(
+                    tags = tags,
+                    onTagsChange = { nextTags ->
+                        tags = nextTags
+                        if (timingPairValid && accelValid && nextTags.trimStart().startsWith("\\")) {
+                            viewModel.previewEventTransform(
+                                eventId,
+                                index,
+                                AssTransform(
+                                    startMs = startValue,
+                                    endMs = endValue,
+                                    accel = accelValue,
+                                    tags = nextTags,
+                                ),
+                            )
+                        }
+                    },
+                )
+
                 OutlinedTextField(
                     value = tags,
                     onValueChange = { tags = it },
@@ -1315,6 +1335,211 @@ private fun InlineTransformCard(
                         },
                     ) { Text("应用 Transform") }
                 }
+            }
+        }
+    }
+}
+
+private data class TransformPropertyUiSpec(
+    val label: String,
+    val range: ClosedFloatingPointRange<Float>,
+    val step: Double,
+    val suffix: String = "",
+)
+
+private fun transformPropertyUiSpec(property: AssTransformVisualProperty): TransformPropertyUiSpec =
+    when (property) {
+        AssTransformVisualProperty.FONT_SIZE ->
+            TransformPropertyUiSpec("Font size · \\fs", 1f..300f, 1.0)
+        AssTransformVisualProperty.SPACING ->
+            TransformPropertyUiSpec("Spacing · \\fsp", -100f..100f, 0.1)
+        AssTransformVisualProperty.SCALE_X ->
+            TransformPropertyUiSpec("Scale X · \\fscx", 0f..1000f, 1.0, "%")
+        AssTransformVisualProperty.SCALE_Y ->
+            TransformPropertyUiSpec("Scale Y · \\fscy", 0f..1000f, 1.0, "%")
+        AssTransformVisualProperty.ROTATION_X ->
+            TransformPropertyUiSpec("Rotate X · \\frx", -720f..720f, 1.0, "°")
+        AssTransformVisualProperty.ROTATION_Y ->
+            TransformPropertyUiSpec("Rotate Y · \\fry", -720f..720f, 1.0, "°")
+        AssTransformVisualProperty.ROTATION_Z ->
+            TransformPropertyUiSpec("Rotate Z · \\frz", -720f..720f, 1.0, "°")
+        AssTransformVisualProperty.SHEAR_X ->
+            TransformPropertyUiSpec("Shear X · \\fax", -2f..2f, 0.01)
+        AssTransformVisualProperty.SHEAR_Y ->
+            TransformPropertyUiSpec("Shear Y · \\fay", -2f..2f, 0.01)
+        AssTransformVisualProperty.BORDER ->
+            TransformPropertyUiSpec("Border · \\bord", 0f..50f, 0.1)
+        AssTransformVisualProperty.BORDER_X ->
+            TransformPropertyUiSpec("Border X · \\xbord", 0f..50f, 0.1)
+        AssTransformVisualProperty.BORDER_Y ->
+            TransformPropertyUiSpec("Border Y · \\ybord", 0f..50f, 0.1)
+        AssTransformVisualProperty.SHADOW ->
+            TransformPropertyUiSpec("Shadow · \\shad", 0f..50f, 0.1)
+        AssTransformVisualProperty.SHADOW_X ->
+            TransformPropertyUiSpec("Shadow X · \\xshad", -50f..50f, 0.1)
+        AssTransformVisualProperty.SHADOW_Y ->
+            TransformPropertyUiSpec("Shadow Y · \\yshad", -50f..50f, 0.1)
+        AssTransformVisualProperty.EDGE_BLUR ->
+            TransformPropertyUiSpec("Edge blur · \\be", 0f..20f, 1.0)
+        AssTransformVisualProperty.GAUSSIAN_BLUR ->
+            TransformPropertyUiSpec("Gaussian blur · \\blur", 0f..20f, 0.1)
+    }
+
+@Composable
+private fun TransformVisualPropertyEditor(
+    tags: String,
+    onTagsChange: (String) -> Unit,
+) {
+    val snapshot = remember(tags) { AssTransformVisualSemantic.inspect(tags) }
+    var selectedName by rememberSaveable {
+        mutableStateOf(
+            snapshot.values.keys.firstOrNull()?.name
+                ?: AssTransformVisualProperty.SCALE_X.name
+        )
+    }
+    var menuOpen by remember { mutableStateOf(false) }
+    val selected = AssTransformVisualProperty.entries
+        .firstOrNull { it.name == selectedName }
+        ?: AssTransformVisualProperty.SCALE_X
+    val currentValue = snapshot.values[selected]
+    var draft by remember(selected, currentValue) {
+        mutableStateOf(currentValue?.toString().orEmpty())
+    }
+    val spec = transformPropertyUiSpec(selected)
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.small,
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.22f),
+    ) {
+        Column(
+            Modifier.padding(WorkbenchDimens.Small),
+            verticalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("常用可动画属性", style = MaterialTheme.typography.labelLarge)
+                    Text(
+                        snapshot.values.size.toString() + " structured · " +
+                            snapshot.warnings.size + " compatibility notes",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (snapshot.warnings.isEmpty()) {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        } else {
+                            MaterialTheme.colorScheme.tertiary
+                        },
+                    )
+                }
+                Box {
+                    OutlinedButton(onClick = { menuOpen = true }) {
+                        Text(spec.label)
+                    }
+                    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                        AssTransformVisualProperty.entries.forEach { property ->
+                            val propertySpec = transformPropertyUiSpec(property)
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        (if (property in snapshot.values) "✓ " else "") +
+                                            propertySpec.label
+                                    )
+                                },
+                                onClick = {
+                                    selectedName = property.name
+                                    menuOpen = false
+                                },
+                            )
+                        }
+                    }
+                }
+            }
+
+            if (snapshot.values.isNotEmpty()) {
+                Row(
+                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro),
+                ) {
+                    snapshot.values.keys.forEach { property ->
+                        AssistChip(
+                            onClick = { selectedName = property.name },
+                            label = {
+                                Text(
+                                    transformPropertyUiSpec(property).label.substringBefore(" · ") +
+                                        " " + (snapshot.values[property] ?: "")
+                                )
+                            },
+                        )
+                    }
+                }
+            }
+
+            ContinuousParameterControl(
+                label = spec.label,
+                valueText = draft,
+                onValueTextChange = { draft = it },
+                range = spec.range,
+                step = spec.step,
+                suffix = spec.suffix,
+                supportingText = when (selected) {
+                    AssTransformVisualProperty.FONT_SIZE ->
+                        "\\fs 可动画，但字形 hinting 会让尺寸动画不如 \\fscx/\\fscy 平滑。"
+                    AssTransformVisualProperty.SHEAR_X,
+                    AssTransformVisualProperty.SHEAR_Y ->
+                        "常用范围通常很小；滑杆限制在 ±2，精确值仍可手动输入。"
+                    else ->
+                        "这里只改当前 Transform 草稿中的一个 tag；其他 tags 保持原顺序和内容。"
+                },
+                resetLabel = "移除",
+                onReset = {
+                    draft = ""
+                    onTagsChange(
+                        AssTransformVisualSemantic.patchNumeric(tags, selected, null)
+                    )
+                },
+                onPreview = { value ->
+                    draft = value.toString()
+                    onTagsChange(
+                        AssTransformVisualSemantic.patchNumeric(tags, selected, value)
+                    )
+                },
+            )
+
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                Button(
+                    enabled = draft.toDoubleOrNull()?.let { value ->
+                        value.isFinite() &&
+                            (selected.minimum == null || value >= selected.minimum)
+                    } == true,
+                    onClick = {
+                        val value = draft.toDoubleOrNull() ?: return@Button
+                        onTagsChange(
+                            AssTransformVisualSemantic.patchNumeric(tags, selected, value)
+                        )
+                    },
+                ) {
+                    Text("写入 Transform 草稿")
+                }
+            }
+
+            snapshot.warnings.forEach { warning ->
+                Text(
+                    when (warning.kind) {
+                        AssTransformWarningKind.NON_ANIMATABLE_TAG ->
+                            "\\" + warning.tag + " 不属于标准 \\t 可动画属性；保留 Raw，不替你猜渲染结果。"
+                        AssTransformWarningKind.VECTOR_CLIP ->
+                            "检测到 vector \\" + warning.tag + "；标准 \\t 只适合动画矩形 clip。"
+                        AssTransformWarningKind.CLIP_ICLIP_MIX ->
+                            "同一 Transform 同时含 \\clip 与 \\iclip，存在渲染兼容性风险。"
+                        AssTransformWarningKind.NESTED_TRANSFORM ->
+                            "检测到嵌套 \\t；保持 Raw-only，不递归结构化。"
+                        AssTransformWarningKind.FONT_SIZE_HINTING ->
+                            "\\fs 动画会受到字体 hinting 影响；平滑缩放通常优先 \\fscx / \\fscy。"
+                        AssTransformWarningKind.DUPLICATE_PROPERTY ->
+                            "同一属性重复出现；结构化修改只改最后一个生效值，移除会清除该属性全部重复项。"
+                    },
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.tertiary,
+                )
             }
         }
     }
