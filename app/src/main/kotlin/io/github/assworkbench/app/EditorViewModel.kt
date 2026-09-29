@@ -958,6 +958,26 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    fun updateStylePosition(
+        styleName: String,
+        alignment: Int,
+        marginL: Int,
+        marginR: Int,
+        marginV: Int,
+    ) {
+        editDocument("已更新 Style " + styleName + " 的位置字段。") { doc ->
+            if (doc.styles.none { it.name == styleName }) return@editDocument doc
+            doc.copy(styles = doc.styles.map { style ->
+                if (style.name != styleName) style else style.copy(
+                    alignment = alignment.coerceIn(1, 9),
+                    marginL = marginL.coerceIn(0, 9999),
+                    marginR = marginR.coerceIn(0, 9999),
+                    marginV = marginV.coerceIn(0, 9999),
+                )
+            })
+        }
+    }
+
     fun updateStyleTypography(
         styleName: String,
         fontSize: Double,
