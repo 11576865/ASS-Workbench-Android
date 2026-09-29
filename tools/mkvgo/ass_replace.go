@@ -3,6 +3,7 @@ package ops
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -189,7 +190,20 @@ func appendFontAttachments(c *mkv.Container, fontPaths []string) error {
 		name := filepath.Base(clean)
 		key := strings.ToLower(name)
 		if _, exists := existingNames[key]; exists {
-			continue
+			sum := sha256.Sum256(data)
+			digest := hex.EncodeToString(sum[:4])
+			stem := strings.TrimSuffix(name, filepath.Ext(name))
+			candidate := stem + "-asswb-" + digest + ext
+			candidateKey := strings.ToLower(candidate)
+			for suffix := 2; ; suffix++ {
+				if _, taken := existingNames[candidateKey]; !taken {
+					break
+				}
+				candidate = stem + "-asswb-" + digest + "-" + fmt.Sprint(suffix) + ext
+				candidateKey = strings.ToLower(candidate)
+			}
+			name = candidate
+			key = candidateKey
 		}
 		mime := "font/ttf"
 		if ext == ".otf" {
