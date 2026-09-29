@@ -4,6 +4,22 @@
 
 The goal is not to add more permanent UI. The goal is to make existing contextual surfaces substantially more capable, visual, and precise while keeping Raw ASS lossless and observable.
 
+
+## Implementation status — Phase A first end-to-end slice
+
+The first 0.26 runtime slice now establishes the generic render-only transient path:
+
+- `EditorState.previewDocument` is consumed by the authoritative preview before the canonical document.
+- ViewModel preview mutations never enter Undo history, dirty state, recovery, or font diagnostics.
+- Canonical document publication clears stale transient state.
+- Style FontSize / Spacing / Outline / Shadow use `ContinuousParameterControl`.
+- Event-level Blur uses the same transient preview path.
+- Slider drag is preview-only; gesture end performs one canonical commit.
+- Exact-value and non-continuous Style draft edits retain the short auto-commit path.
+- App version is now 0.26.0 / versionCode 28 on this branch.
+
+The existing direct `\\pos` drag still uses its older local preview adapter in `VideoPreview`; migrating it onto the same generic transient pipeline is the next cleanup after this slice is device-tested.
+
 ## Baseline
 
 0.25 remains the architectural baseline:

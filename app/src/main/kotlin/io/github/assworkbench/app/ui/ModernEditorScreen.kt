@@ -267,7 +267,7 @@ private fun WorkbenchPreview(
 ) {
     VideoPreview(
         videoUri = state.project.videoUri,
-        document = state.document,
+        document = state.previewDocument ?: state.document,
         seekRequestMs = state.seekRequestMs,
         seekRequestNonce = state.seekRequestNonce,
         onPosition = viewModel::setPlaybackPosition,
@@ -824,6 +824,34 @@ private fun InlineEffectsEditor(
     var fadeOut by remember(event.id, event.text) { mutableStateOf(snapshot.fadeOutMs?.toString().orEmpty()) }
     var softEntry by remember(event.id, event.text) { mutableStateOf(snapshot.softEntry) }
 
+    fun previewEffects(blurValue: Double? = blur.toDoubleOrNull()) {
+        viewModel.previewEventOverrides(
+            id = event.id,
+            x = snapshot.x,
+            y = snapshot.y,
+            blur = blurValue,
+            fadeInMs = fadeIn.toIntOrNull(),
+            fadeOutMs = fadeOut.toIntOrNull(),
+            softEntry = softEntry,
+        )
+    }
+
+    fun commitEffects() {
+        viewModel.applyEventOverrides(
+            id = event.id,
+            x = snapshot.x,
+            y = snapshot.y,
+            blur = blur.toDoubleOrNull(),
+            fadeInMs = fadeIn.toIntOrNull(),
+            fadeOutMs = fadeOut.toIntOrNull(),
+            softEntry = softEntry,
+        )
+    }
+
+    DisposableEffect(event.id) {
+        onDispose { viewModel.clearTransientPreview() }
+    }
+
     Surface(
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.38f),
         shape = MaterialTheme.shapes.small,
@@ -833,8 +861,19 @@ private fun InlineEffectsEditor(
             Modifier.padding(WorkbenchDimens.Small),
             verticalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro),
         ) {
+            ContinuousParameterControl(
+                label = "Blur",
+                valueText = blur,
+                onValueTextChange = { blur = it },
+                range = 0f..20f,
+                step = 0.1,
+                supportingText = "连续拖动直接送入 libass transient preview。",
+                onPreview = { previewEffects(it) },
+                onGestureActive = { active ->
+                    if (!active) commitEffects()
+                },
+            )
             Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro)) {
-                OutlinedTextField(blur, { blur = it }, label = { Text("Blur") }, singleLine = true, modifier = Modifier.weight(1f))
                 OutlinedTextField(fadeIn, { fadeIn = it }, label = { Text("Fade In ms") }, singleLine = true, modifier = Modifier.weight(1f))
                 OutlinedTextField(fadeOut, { fadeOut = it }, label = { Text("Fade Out ms") }, singleLine = true, modifier = Modifier.weight(1f))
             }
@@ -845,17 +884,7 @@ private fun InlineEffectsEditor(
                     label = { Text("Soft Entry · 160ms") },
                 )
                 Spacer(Modifier.weight(1f))
-                Button(onClick = {
-                    viewModel.applyEventOverrides(
-                        id = event.id,
-                        x = snapshot.x,
-                        y = snapshot.y,
-                        blur = blur.toDoubleOrNull(),
-                        fadeInMs = fadeIn.toIntOrNull(),
-                        fadeOutMs = fadeOut.toIntOrNull(),
-                        softEntry = softEntry,
-                    )
-                }) { Text("应用") }
+                Button(onClick = ::commitEffects) { Text("应用") }
             }
         }
     }

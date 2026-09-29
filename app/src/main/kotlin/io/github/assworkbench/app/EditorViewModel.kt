@@ -75,6 +75,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                     subtitleUri = null,
                 ),
                 document = document,
+                previewDocument = null,
                 subtitleLoaded = true,
                 subtitleTextEncoding = AssTextEncoding.UTF8,
                 selectedEventIds = emptySet(),
@@ -192,6 +193,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             it.copy(
                 project = it.project.copy(subtitleUri = null, title = it.container.name + " · " + track.displayName),
                 document = document,
+                previewDocument = null,
                 subtitleLoaded = true,
                 subtitleTextEncoding = AssTextEncoding.UTF8,
                 selectedEventIds = emptySet(),
@@ -313,6 +315,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             it.copy(
                 project = it.project.copy(subtitleUri = uri.toString(), title = displayName(uri) ?: "ASS project"),
                 document = document,
+                previewDocument = null,
                 subtitleLoaded = true,
                 subtitleTextEncoding = decoded.encoding,
                 selectedEventIds = emptySet(),
@@ -978,6 +981,61 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    fun previewStyleTypography(
+        styleName: String,
+        fontSize: Double,
+        bold: Boolean,
+        italic: Boolean,
+        underline: Boolean,
+        strikeOut: Boolean,
+        spacing: Double,
+        outline: Double,
+        shadow: Double,
+        alignment: Int,
+        marginL: Int,
+        marginR: Int,
+        marginV: Int,
+        primaryColor: String,
+        secondaryColor: String,
+        outlineColor: String,
+        backColor: String,
+        scaleX: Double,
+        scaleY: Double,
+        angle: Double,
+        borderStyle: Int,
+        encoding: Int,
+    ) {
+        val before = _state.value.document
+        val preview = withStyleTypography(
+            document = before,
+            styleName = styleName,
+            fontSize = fontSize,
+            bold = bold,
+            italic = italic,
+            underline = underline,
+            strikeOut = strikeOut,
+            spacing = spacing,
+            outline = outline,
+            shadow = shadow,
+            alignment = alignment,
+            marginL = marginL,
+            marginR = marginR,
+            marginV = marginV,
+            primaryColor = primaryColor,
+            secondaryColor = secondaryColor,
+            outlineColor = outlineColor,
+            backColor = backColor,
+            scaleX = scaleX,
+            scaleY = scaleY,
+            angle = angle,
+            borderStyle = borderStyle,
+            encoding = encoding,
+        )
+        _state.update { state ->
+            state.copy(previewDocument = if (preview == before) null else preview)
+        }
+    }
+
     fun updateStyleTypography(
         styleName: String,
         fontSize: Double,
@@ -1003,42 +1061,110 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         encoding: Int,
     ) {
         editDocument("已更新 Style " + styleName + " 的排版。") { doc ->
-            if (doc.styles.none { it.name == styleName }) return@editDocument doc
-            doc.copy(styles = doc.styles.map { style ->
-                if (style.name != styleName) {
-                    style
-                } else {
-                    style.copy(
-                        fontSize = fontSize.coerceIn(6.0, 240.0),
-                        bold = bold,
-                        italic = italic,
-                        underline = underline,
-                        strikeOut = strikeOut,
-                        spacing = spacing.coerceIn(-20.0, 100.0),
-                        outline = outline.coerceIn(0.0, 20.0),
-                        shadow = shadow.coerceIn(0.0, 20.0),
-                        alignment = alignment.coerceIn(1, 9),
-                        marginL = marginL.coerceIn(0, 9999),
-                        marginR = marginR.coerceIn(0, 9999),
-                        marginV = marginV.coerceIn(0, 9999),
-                        primaryColor = primaryColor.trim().ifBlank { style.primaryColor },
-                        secondaryColor = secondaryColor.trim().ifBlank { style.secondaryColor },
-                        outlineColor = outlineColor.trim().ifBlank { style.outlineColor },
-                        backColor = backColor.trim().ifBlank { style.backColor },
-                        scaleX = scaleX.coerceIn(1.0, 1000.0),
-                        scaleY = scaleY.coerceIn(1.0, 1000.0),
-                        angle = angle.coerceIn(-3600.0, 3600.0),
-                        borderStyle = borderStyle.coerceIn(1, 4),
-                        encoding = encoding.coerceIn(0, 255),
-                    )
-                }
-            })
+            withStyleTypography(
+                document = doc,
+                styleName = styleName,
+                fontSize = fontSize,
+                bold = bold,
+                italic = italic,
+                underline = underline,
+                strikeOut = strikeOut,
+                spacing = spacing,
+                outline = outline,
+                shadow = shadow,
+                alignment = alignment,
+                marginL = marginL,
+                marginR = marginR,
+                marginV = marginV,
+                primaryColor = primaryColor,
+                secondaryColor = secondaryColor,
+                outlineColor = outlineColor,
+                backColor = backColor,
+                scaleX = scaleX,
+                scaleY = scaleY,
+                angle = angle,
+                borderStyle = borderStyle,
+                encoding = encoding,
+            )
         }
+    }
+
+    private fun withStyleTypography(
+        document: AssDocument,
+        styleName: String,
+        fontSize: Double,
+        bold: Boolean,
+        italic: Boolean,
+        underline: Boolean,
+        strikeOut: Boolean,
+        spacing: Double,
+        outline: Double,
+        shadow: Double,
+        alignment: Int,
+        marginL: Int,
+        marginR: Int,
+        marginV: Int,
+        primaryColor: String,
+        secondaryColor: String,
+        outlineColor: String,
+        backColor: String,
+        scaleX: Double,
+        scaleY: Double,
+        angle: Double,
+        borderStyle: Int,
+        encoding: Int,
+    ): AssDocument {
+        if (document.styles.none { it.name == styleName }) return document
+        return document.copy(styles = document.styles.map { style ->
+            if (style.name != styleName) {
+                style
+            } else {
+                style.copy(
+                    fontSize = fontSize.coerceIn(6.0, 240.0),
+                    bold = bold,
+                    italic = italic,
+                    underline = underline,
+                    strikeOut = strikeOut,
+                    spacing = spacing.coerceIn(-20.0, 100.0),
+                    outline = outline.coerceIn(0.0, 20.0),
+                    shadow = shadow.coerceIn(0.0, 20.0),
+                    alignment = alignment.coerceIn(1, 9),
+                    marginL = marginL.coerceIn(0, 9999),
+                    marginR = marginR.coerceIn(0, 9999),
+                    marginV = marginV.coerceIn(0, 9999),
+                    primaryColor = primaryColor.trim().ifBlank { style.primaryColor },
+                    secondaryColor = secondaryColor.trim().ifBlank { style.secondaryColor },
+                    outlineColor = outlineColor.trim().ifBlank { style.outlineColor },
+                    backColor = backColor.trim().ifBlank { style.backColor },
+                    scaleX = scaleX.coerceIn(1.0, 1000.0),
+                    scaleY = scaleY.coerceIn(1.0, 1000.0),
+                    angle = angle.coerceIn(-3600.0, 3600.0),
+                    borderStyle = borderStyle.coerceIn(1, 4),
+                    encoding = encoding.coerceIn(0, 255),
+                )
+            }
+        })
     }
 
     fun updateEventText(id: Long, text: String) {
         editDocument("已修改字幕 #" + id + "。") { doc ->
             doc.copy(events = doc.events.map { if (it.id == id) it.copy(text = text) else it })
+        }
+    }
+
+    fun previewEventOverrides(
+        id: Long,
+        x: Double?,
+        y: Double?,
+        blur: Double?,
+        fadeInMs: Int?,
+        fadeOutMs: Int?,
+        softEntry: Boolean,
+    ) {
+        val before = _state.value.document
+        val preview = withEventOverrides(before, id, x, y, blur, fadeInMs, fadeOutMs, softEntry)
+        _state.update { state ->
+            state.copy(previewDocument = if (preview == before) null else preview)
         }
     }
 
@@ -1052,25 +1178,36 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         softEntry: Boolean,
     ) {
         editDocument("已更新字幕 #" + id + " 的事件级效果。") { doc ->
-            doc.copy(events = doc.events.map { event ->
-                if (event.id != id) {
-                    event
-                } else {
-                    event.copy(
-                        text = EventOverrideEditor.update(
-                            text = event.text,
-                            x = x,
-                            y = y,
-                            blurRadius = blur,
-                            fadeInMs = fadeInMs,
-                            fadeOutMs = fadeOutMs,
-                            enableSoftEntry = softEntry,
-                        )
-                    )
-                }
-            })
+            withEventOverrides(doc, id, x, y, blur, fadeInMs, fadeOutMs, softEntry)
         }
     }
+
+    private fun withEventOverrides(
+        document: AssDocument,
+        id: Long,
+        x: Double?,
+        y: Double?,
+        blur: Double?,
+        fadeInMs: Int?,
+        fadeOutMs: Int?,
+        softEntry: Boolean,
+    ): AssDocument = document.copy(events = document.events.map { event ->
+        if (event.id != id) {
+            event
+        } else {
+            event.copy(
+                text = EventOverrideEditor.update(
+                    text = event.text,
+                    x = x,
+                    y = y,
+                    blurRadius = blur,
+                    fadeInMs = fadeInMs,
+                    fadeOutMs = fadeOutMs,
+                    enableSoftEntry = softEntry,
+                )
+            )
+        }
+    })
 
     fun nudgeEventPosition(id: Long, dx: Double, dy: Double) {
         val state = _state.value
@@ -1190,6 +1327,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             it.copy(
                 project = snapshot.project,
                 document = snapshot.document,
+                previewDocument = null,
                 subtitleLoaded = true,
                 subtitleTextEncoding = snapshot.textEncoding,
                 selectedEventIds = emptySet(),
@@ -1235,10 +1373,19 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         _state.update { it.copy(rendererDiagnostics = normalized) }
     }
 
+    fun clearTransientPreview() {
+        _state.update { state ->
+            if (state.previewDocument == null) state else state.copy(previewDocument = null)
+        }
+    }
+
     private inline fun editDocument(status: String, transform: (AssDocument) -> AssDocument) {
         val before = _state.value.document
         val next = transform(before)
-        if (next == before) return
+        if (next == before) {
+            clearTransientPreview()
+            return
+        }
 
         history.commit(next)
         publishDocument(next, status, dirty = true)
@@ -1248,6 +1395,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         _state.update {
             it.copy(
                 document = document,
+                previewDocument = null,
                 dirty = dirty,
                 canUndo = history.canUndo,
                 canRedo = history.canRedo,

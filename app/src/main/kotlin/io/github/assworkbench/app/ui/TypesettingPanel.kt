@@ -25,6 +25,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -89,6 +90,67 @@ fun TypesettingPanel(
             (styleOverrideSources(event).isNotEmpty() || event.marginL > 0 || event.marginR > 0 || event.marginV > 0)
     }
 
+    var continuousGestureActive by remember(style.name) { mutableStateOf(false) }
+
+    fun previewTypography(
+        fontSizeValue: Double? = null,
+        spacingValue: Double? = null,
+        outlineValue: Double? = null,
+        shadowValue: Double? = null,
+    ) {
+        viewModel.previewStyleTypography(
+            styleName = style.name,
+            fontSize = fontSizeValue ?: fontSize.toDoubleOrNull() ?: style.fontSize,
+            bold = bold,
+            italic = italic,
+            underline = underline,
+            strikeOut = strikeOut,
+            spacing = spacingValue ?: spacing.toDoubleOrNull() ?: style.spacing,
+            outline = outlineValue ?: outline.toDoubleOrNull() ?: style.outline,
+            shadow = shadowValue ?: shadow.toDoubleOrNull() ?: style.shadow,
+            alignment = alignment,
+            marginL = marginL.toIntOrNull() ?: style.marginL,
+            marginR = marginR.toIntOrNull() ?: style.marginR,
+            marginV = marginV.toIntOrNull() ?: style.marginV,
+            primaryColor = primaryColor,
+            secondaryColor = secondaryColor,
+            outlineColor = outlineColor,
+            backColor = backColor,
+            scaleX = scaleX.toDoubleOrNull() ?: style.scaleX,
+            scaleY = scaleY.toDoubleOrNull() ?: style.scaleY,
+            angle = angle.toDoubleOrNull() ?: style.angle,
+            borderStyle = borderStyle.toIntOrNull() ?: style.borderStyle,
+            encoding = encoding.toIntOrNull() ?: style.encoding,
+        )
+    }
+
+    fun commitTypography() {
+        viewModel.updateStyleTypography(
+            styleName = style.name,
+            fontSize = fontSize.toDoubleOrNull() ?: return,
+            bold = bold,
+            italic = italic,
+            underline = underline,
+            strikeOut = strikeOut,
+            spacing = spacing.toDoubleOrNull() ?: return,
+            outline = outline.toDoubleOrNull() ?: return,
+            shadow = shadow.toDoubleOrNull() ?: return,
+            alignment = alignment,
+            marginL = marginL.toIntOrNull() ?: return,
+            marginR = marginR.toIntOrNull() ?: return,
+            marginV = marginV.toIntOrNull() ?: return,
+            primaryColor = primaryColor,
+            secondaryColor = secondaryColor,
+            outlineColor = outlineColor,
+            backColor = backColor,
+            scaleX = scaleX.toDoubleOrNull() ?: return,
+            scaleY = scaleY.toDoubleOrNull() ?: return,
+            angle = angle.toDoubleOrNull() ?: return,
+            borderStyle = borderStyle.toIntOrNull() ?: return,
+            encoding = encoding.toIntOrNull() ?: return,
+        )
+    }
+
     LaunchedEffect(
         style.name,
         fontSize,
@@ -112,32 +174,16 @@ fun TypesettingPanel(
         underline,
         strikeOut,
         alignment,
+        continuousGestureActive,
     ) {
-        delay(220)
-        viewModel.updateStyleTypography(
-            styleName = style.name,
-            fontSize = fontSize.toDoubleOrNull() ?: return@LaunchedEffect,
-            bold = bold,
-            italic = italic,
-            underline = underline,
-            strikeOut = strikeOut,
-            spacing = spacing.toDoubleOrNull() ?: return@LaunchedEffect,
-            outline = outline.toDoubleOrNull() ?: return@LaunchedEffect,
-            shadow = shadow.toDoubleOrNull() ?: return@LaunchedEffect,
-            alignment = alignment,
-            marginL = marginL.toIntOrNull() ?: return@LaunchedEffect,
-            marginR = marginR.toIntOrNull() ?: return@LaunchedEffect,
-            marginV = marginV.toIntOrNull() ?: return@LaunchedEffect,
-            primaryColor = primaryColor,
-            secondaryColor = secondaryColor,
-            outlineColor = outlineColor,
-            backColor = backColor,
-            scaleX = scaleX.toDoubleOrNull() ?: return@LaunchedEffect,
-            scaleY = scaleY.toDoubleOrNull() ?: return@LaunchedEffect,
-            angle = angle.toDoubleOrNull() ?: return@LaunchedEffect,
-            borderStyle = borderStyle.toIntOrNull() ?: return@LaunchedEffect,
-            encoding = encoding.toIntOrNull() ?: return@LaunchedEffect,
-        )
+        if (continuousGestureActive) return@LaunchedEffect
+        previewTypography()
+        delay(320)
+        commitTypography()
+    }
+
+    DisposableEffect(style.name) {
+        onDispose { viewModel.clearTransientPreview() }
     }
 
     when (styleManageMode) {
@@ -302,14 +348,64 @@ fun TypesettingPanel(
             }
             item {
                 Column(verticalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small)) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small)) {
-                        SmallField("字号", fontSize, { fontSize = it }, Modifier.weight(1f))
-                        SmallField("字距", spacing, { spacing = it }, Modifier.weight(1f))
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small)) {
-                        SmallField("描边", outline, { outline = it }, Modifier.weight(1f))
-                        SmallField("阴影", shadow, { shadow = it }, Modifier.weight(1f))
-                    }
+                    Text(
+                        "连续视觉参数",
+                        style = androidx.compose.material3.MaterialTheme.typography.titleSmall,
+                    )
+                    Text(
+                        "拖动只进入 transient preview；手势结束后只写入一次 Undo 历史。",
+                        style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
+                        color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    ContinuousParameterControl(
+                        label = "字号",
+                        valueText = fontSize,
+                        onValueTextChange = { fontSize = it },
+                        range = 6f..240f,
+                        step = 1.0,
+                        suffix = "px",
+                        onPreview = { previewTypography(fontSizeValue = it) },
+                        onGestureActive = { active ->
+                            continuousGestureActive = active
+                            if (!active) commitTypography()
+                        },
+                    )
+                    ContinuousParameterControl(
+                        label = "字距",
+                        valueText = spacing,
+                        onValueTextChange = { spacing = it },
+                        range = -20f..100f,
+                        step = 0.5,
+                        onPreview = { previewTypography(spacingValue = it) },
+                        onGestureActive = { active ->
+                            continuousGestureActive = active
+                            if (!active) commitTypography()
+                        },
+                    )
+                    ContinuousParameterControl(
+                        label = "描边",
+                        valueText = outline,
+                        onValueTextChange = { outline = it },
+                        range = 0f..20f,
+                        step = 0.1,
+                        onPreview = { previewTypography(outlineValue = it) },
+                        onGestureActive = { active ->
+                            continuousGestureActive = active
+                            if (!active) commitTypography()
+                        },
+                    )
+                    ContinuousParameterControl(
+                        label = "阴影",
+                        valueText = shadow,
+                        onValueTextChange = { shadow = it },
+                        range = 0f..20f,
+                        step = 0.1,
+                        onPreview = { previewTypography(shadowValue = it) },
+                        onGestureActive = { active ->
+                            continuousGestureActive = active
+                            if (!active) commitTypography()
+                        },
+                    )
                 }
             }
             item {
