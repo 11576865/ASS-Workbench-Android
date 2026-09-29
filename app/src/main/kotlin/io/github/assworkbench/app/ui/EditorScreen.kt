@@ -1815,24 +1815,33 @@ private fun FocusedEventEditor(
     }
 }
 
-private val leadingAssOverrideBlocks = Regex("""^(?:\\{[^}]*\\})*""")
+private fun leadingAssOverridePrefixLength(text: String): Int {
+    var cursor = 0
+    while (cursor < text.length && text[cursor] == '{') {
+        val close = text.indexOf('}', cursor + 1)
+        if (close < 0) break
+        cursor = close + 1
+    }
+    return cursor
+}
 
 private fun hasSimpleEditableAssBody(text: String): Boolean {
-    val leading = leadingAssOverrideBlocks.find(text)?.value.orEmpty()
-    val body = text.removePrefix(leading)
+    val prefixLength = leadingAssOverridePrefixLength(text)
+    val body = text.substring(prefixLength)
     return '{' !in body && '}' !in body
 }
 
 private fun editableAssBody(text: String): String {
-    val leading = leadingAssOverrideBlocks.find(text)?.value.orEmpty()
-    return text.removePrefix(leading)
+    val prefixLength = leadingAssOverridePrefixLength(text)
+    return text.substring(prefixLength)
         .replace("\\N", "\n")
         .replace("\\n", "\n")
         .replace("\\h", " ")
 }
 
 private fun replaceEditableAssBody(original: String, body: String): String {
-    val leading = leadingAssOverrideBlocks.find(original)?.value.orEmpty()
+    val prefixLength = leadingAssOverridePrefixLength(original)
+    val leading = original.substring(0, prefixLength)
     return leading + body.replace("\r\n", "\n").replace("\r", "\n").replace("\n", "\\N")
 }
 
