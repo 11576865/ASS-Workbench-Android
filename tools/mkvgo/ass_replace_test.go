@@ -5,6 +5,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/gravity-zero/mkvgo/mkv"
@@ -149,5 +150,79 @@ func TestReplaceASSPreservesTrackIdentityAndContainerMetadata(t *testing.T) {
 	}
 	if blk.Timecode != 500 || blk.Duration != 1500 || !bytes.Contains(blk.Data, []byte("Edited")) {
 		t.Fatalf("replacement subtitle block = %+v %q", blk, string(blk.Data))
+	}
+}
+
+
+func TestReplaceASSWithFontsRenamesAttachmentNameCollision(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "source.mkv")
+	dst := filepath.Join(dir, "updated.mkv")
+	assPath := filepath.Join(dir, "edited.ass")
+	fontPath := filepath.Join(dir, "Fixture.ttf")
+
+	header := "[Script Info]\nScriptType: v4.00+\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Default,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&H64000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text"
+	if err := os.WriteFile(assPath, []byte(header+"\nDialogue: 0,0:00:00.00,0:00:01.00,Default,,0,0,0,,Edited"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	newFont := append([]byte{0x00, 0x01, 0x00, 0x00}, bytes.Repeat([]byte{0x55}, 128)...)
+	if err := os.WriteFile(fontPath, newFont, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	existingFont := bytes.Repeat([]byte("different-source-font"), 32)
+	container := &mkv.Container{
+		Info: mkv.SegmentInfo{TimecodeScale: 1_000_000},
+		Attachments: []mkv.Attachment{{
+			ID: 7, Name: "Fixture.ttf", MIMEType: "font/ttf",
+			Data: existingFont, Size: int64(len(existingFont)),
+		}},
+	}
+	video := mkv.Track{ID: 1, UID: 101, Type: mkv.VideoTrack, Codec: "vp9"}
+	sub := mkv.Track{ID: 2, UID: 202, Type: mkv.SubtitleTrack, Codec: "ass", CodecPrivate: []byte(header)}
+
+	f, err := os.Create(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mw := writer.NewMKVWriter(f)
+	if err := mw.WriteStart(); err != nil {
+		t.Fatal(err)
+	}
+	if err := mw.WriteMetadata(container, []mkv.Track{video, sub}, 1000); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.WriteCluster(f, 0, 1_000_000, []mkv.Block{
+		{TrackNumber: 1, Timecode: 0, Keyframe: true, Data: []byte{0x01}},
+		{TrackNumber: 2, Timecode: 0, Duration: 1000, Data: []byte("0,0,Default,,0,0,0,,Old")},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := mw.Finalize(); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := ReplaceASSWithFonts(context.Background(), src, 2, assPath, dst, []string{fontPath}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := reader.Open(context.Background(), dst)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Attachments) != 2 {
+		t.Fatalf("attachment count = %d, want 2: %+v", len(got.Attachments), got.Attachments)
+	}
+	if got.Attachments[0].Name != "Fixture.ttf" || !bytes.Equal(got.Attachments[0].Data, existingFont) {
+		t.Fatalf("source attachment changed: %+v", got.Attachments)
+	}
+	added := got.Attachments[1]
+	if added.Name == "Fixture.ttf" || !strings.HasPrefix(added.Name, "Fixture-asswb-") || !strings.HasSuffix(added.Name, ".ttf") {
+		t.Fatalf("collision was not renamed deterministically: %+v", added)
+	}
+	if !bytes.Equal(added.Data, newFont) {
+		t.Fatalf("renamed attachment payload changed: %+v", added)
 	}
 }
