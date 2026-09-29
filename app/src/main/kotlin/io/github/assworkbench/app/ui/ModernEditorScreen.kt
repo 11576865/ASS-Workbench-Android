@@ -1131,34 +1131,128 @@ private fun StylePane(state: EditorState, viewModel: EditorViewModel, modifier: 
 @Composable
 private fun PositionPane(state: EditorState, viewModel: EditorViewModel, modifier: Modifier = Modifier) {
     val event = state.document.events.firstOrNull { it.id == state.focusedEventId }
-    if (event == null) { Box(modifier, contentAlignment = Alignment.Center) { Text("先选择一条字幕") }; return }
+    if (event == null) {
+        Box(modifier, contentAlignment = Alignment.Center) { Text("先选择一条字幕") }
+        return
+    }
+    val style = state.document.styles.firstOrNull { it.name == event.style }
     val override = remember(event.text) { EventOverrideEditor.inspect(event.text) }
-    val effective = remember(state.document, event) { AssEffectiveInspector.inspect(state.document, event).associateBy { it.name } }
+    val effective = remember(state.document, event) {
+        AssEffectiveInspector.inspect(state.document, event).associateBy { it.name }
+    }
+
     var x by remember(event.id, event.text) { mutableStateOf(override.x?.toString().orEmpty()) }
     var y by remember(event.id, event.text) { mutableStateOf(override.y?.toString().orEmpty()) }
-    Column(modifier.padding(WorkbenchDimens.Small), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("九宫格对齐", style = MaterialTheme.typography.titleSmall)
-        listOf(listOf(7,8,9), listOf(4,5,6), listOf(1,2,3)).forEach { row ->
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small)) {
-                row.forEach { a -> OutlinedButton({ viewModel.setFocusedAlignment(a) }, Modifier.weight(1f)) { Text(a.toString()) } }
+    var styleAlignment by remember(style?.name, style?.alignment) { mutableIntStateOf(style?.alignment ?: 2) }
+    var styleMarginL by remember(style?.name, style?.marginL) { mutableStateOf((style?.marginL ?: 0).toString()) }
+    var styleMarginR by remember(style?.name, style?.marginR) { mutableStateOf((style?.marginR ?: 0).toString()) }
+    var styleMarginV by remember(style?.name, style?.marginV) { mutableStateOf((style?.marginV ?: 0).toString()) }
+
+    LazyColumn(
+        modifier.padding(WorkbenchDimens.Small),
+        verticalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small),
+    ) {
+        item {
+            Text("当前 Event", style = MaterialTheme.typography.titleSmall)
+            Text(
+                "Effective: an${effective["Alignment"]?.effectiveValue} · V${effective["Margin V"]?.effectiveValue} · ${effective["Position"]?.effectiveValue}",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        item {
+            Text("Event 对齐覆盖")
+            Column(verticalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro)) {
+                listOf(listOf(7, 8, 9), listOf(4, 5, 6), listOf(1, 2, 3)).forEach { row ->
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro)) {
+                        row.forEach { value ->
+                            OutlinedButton(
+                                onClick = { viewModel.setFocusedAlignment(value) },
+                                modifier = Modifier.weight(1f),
+                            ) { Text(value.toString()) }
+                        }
+                    }
+                }
             }
         }
-        Text("Effective: an${effective["Alignment"]?.effectiveValue} · V${effective["Margin V"]?.effectiveValue} · ${effective["Position"]?.effectiveValue}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Divider()
-        Text("任意位置", style = MaterialTheme.typography.titleSmall)
-        Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small)) {
-            OutlinedTextField(x, { x = it }, label = { Text("X") }, singleLine = true, modifier = Modifier.weight(1f))
-            OutlinedTextField(y, { y = it }, label = { Text("Y") }, singleLine = true, modifier = Modifier.weight(1f))
-            Button({
-                viewModel.applyEventOverrides(event.id, x.toDoubleOrNull(), y.toDoubleOrNull(), override.blur, override.fadeInMs, override.fadeOutMs, override.softEntry)
-            }, Modifier.align(Alignment.CenterVertically)) { Text("应用") }
+        item {
+            Text("任意位置")
+            Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small)) {
+                OutlinedTextField(x, { x = it }, label = { Text("X") }, singleLine = true, modifier = Modifier.weight(1f))
+                OutlinedTextField(y, { y = it }, label = { Text("Y") }, singleLine = true, modifier = Modifier.weight(1f))
+                Button(
+                    onClick = {
+                        viewModel.applyEventOverrides(
+                            event.id, x.toDoubleOrNull(), y.toDoubleOrNull(),
+                            override.blur, override.fadeInMs, override.fadeOutMs, override.softEntry,
+                        )
+                    },
+                    modifier = Modifier.align(Alignment.CenterVertically),
+                ) { Text("应用") }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro)) {
+                listOf(
+                    "←" to (-5.0 to 0.0), "→" to (5.0 to 0.0),
+                    "↑" to (0.0 to -5.0), "↓" to (0.0 to 5.0),
+                ).forEach { (label, delta) ->
+                    OutlinedButton(
+                        onClick = { viewModel.nudgeEventPosition(event.id, delta.first, delta.second) },
+                        modifier = Modifier.weight(1f),
+                    ) { Text(label) }
+                }
+            }
+            Text(
+                "此工具打开时，可以直接在 16:9 预览上拖动字幕锚点。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro)) {
-            listOf("←" to (-5.0 to 0.0), "→" to (5.0 to 0.0), "↑" to (0.0 to -5.0), "↓" to (0.0 to 5.0)).forEach { (label, delta) ->
-                OutlinedButton({ viewModel.nudgeEventPosition(event.id, delta.first, delta.second) }, Modifier.weight(1f)) { Text(label) }
+
+        if (style != null) {
+            item { Divider() }
+            item {
+                Text("Style 基础位置 · ${style.name}", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    "这里编辑 Style 的 an / Margin；Event override 仍会覆盖这些值。",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            item {
+                Text("Style 对齐")
+                Column(verticalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro)) {
+                    listOf(listOf(7, 8, 9), listOf(4, 5, 6), listOf(1, 2, 3)).forEach { row ->
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro)) {
+                            row.forEach { value ->
+                                if (styleAlignment == value) {
+                                    Button(onClick = { styleAlignment = value }, modifier = Modifier.weight(1f)) { Text(value.toString()) }
+                                } else {
+                                    OutlinedButton(onClick = { styleAlignment = value }, modifier = Modifier.weight(1f)) { Text(value.toString()) }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            item {
+                Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small)) {
+                    OutlinedTextField(styleMarginL, { styleMarginL = it }, label = { Text("Margin L") }, singleLine = true, modifier = Modifier.weight(1f))
+                    OutlinedTextField(styleMarginR, { styleMarginR = it }, label = { Text("Margin R") }, singleLine = true, modifier = Modifier.weight(1f))
+                    OutlinedTextField(styleMarginV, { styleMarginV = it }, label = { Text("Margin V") }, singleLine = true, modifier = Modifier.weight(1f))
+                }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    Button(onClick = {
+                        viewModel.updateStylePosition(
+                            styleName = style.name,
+                            alignment = styleAlignment,
+                            marginL = styleMarginL.toIntOrNull() ?: style.marginL,
+                            marginR = styleMarginR.toIntOrNull() ?: style.marginR,
+                            marginV = styleMarginV.toIntOrNull() ?: style.marginV,
+                        )
+                    }) { Text("应用 Style 位置") }
+                }
             }
         }
-        Text("此工具打开时，可以直接在 16:9 预览上拖动字幕锚点。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
