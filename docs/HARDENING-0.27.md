@@ -36,11 +36,17 @@ ASS Workbench impact:
 - structured Geometry/Transform controls must never become a generator for pathological values;
 - imported Raw ASS must remain preservable even if previewing it is considered unsafe.
 
-Required work:
+Implemented hardening:
 
-- add a renderer-risk diagnostic corpus for extreme finite numeric values;
-- verify every structured exact-value commit has practical bounds, not only slider bounds;
-- decide a non-destructive preview policy for input known to be dangerous to the native renderer;
+- `AssRendererRiskAnalyzer` now detects extreme geometry values before they are handed to native preview;
+- QC exposes these as `RENDERER_RISK` errors;
+- authoritative preview fails closed for a risky render document while the canonical Raw ASS remains unchanged and saveable;
+- the preview surface explains that rendering is suspended and automatically resumes when the risky input is corrected.
+
+Still required:
+
+- verify structured exact-value commit ranges systematically, not only slider ranges;
+- exercise the guard and recovery path on the physical Android target;
 - never “fix” Raw ASS by silently clamping stored text.
 
 ### H2 — Pathological Drawing input is a native crash / memory-risk domain even though Drawing editing is deferred
@@ -58,12 +64,17 @@ ASS Workbench impact:
 - Raw ASS and unknown syntax preservation mean external `\\p` content still reaches the renderer;
 - lossless preservation and renderer safety therefore have to be treated as separate requirements.
 
-Required work:
+Implemented hardening:
 
-- include extreme-coordinate and very-large-drawing fixtures in the destructive corpus;
-- measure parse/editor memory independently from libass renderer memory;
-- define a preview refusal/degradation path if a bounded safety rule is introduced;
-- preserve the original drawing bytes/text even when structured preview is refused.
+- the renderer-risk corpus covers extreme Drawing coordinates and oversized vector-clip/Drawing payloads;
+- `\\p` Drawing text and vector `\\clip/\\iclip` payloads share the same conservative preflight;
+- risky payloads suspend native preview without rewriting the original Event text.
+
+Still required:
+
+- profile parse/editor memory independently from libass renderer memory;
+- verify thresholds against a real-world complex typesetting corpus and physical device;
+- preserve the original drawing bytes/text even when preview is refused.
 
 ### H3 — Complex moving subtitles can remain expensive frame after frame
 
@@ -127,9 +138,9 @@ Status values: **AUTO** = current automated coverage exists; **ADD** = add autom
 | R2 | Raw ASS | custom Style/Event Format columns + edit | columns and values remain | AUTO |
 | R3 | Encoding | UTF-8 BOM / UTF-16LE standalone ASS save | original detected encoding retained | AUTO |
 | R4 | Raw draft | unsaved Event text while another canonical edit occurs | draft not silently overwritten; conflict visible | ADD |
-| R5 | Raw/native | extreme rotation/shear/position/scale literals | project remains editable; preview policy is safe and explicit | RESEARCH |
-| R6 | Drawing/native | extreme `\\p` coordinates | no silent rewrite; native failure does not destroy project data | RESEARCH |
-| R7 | Drawing/native | very large Drawing token stream | bounded behaviour; project state survives | RESEARCH |
+| R5 | Raw/native | extreme rotation/shear/position/scale literals | project remains editable; preview policy is safe and explicit | AUTO + DEVICE |
+| R6 | Drawing/native | extreme `\\p` / vector-clip coordinates | no silent rewrite; native failure does not destroy project data | AUTO + DEVICE |
+| R7 | Drawing/native | very large Drawing / vector-clip token stream | bounded preview behaviour; project state survives | AUTO + DEVICE |
 | E1 | Event ops | split → merge → Undo → Redo | text boundary whitespace and focus/selection remain valid | AUTO + ADD combinations |
 | E2 | Event ops | multi-select batch time shift across t=0 | relative spacing retained; group clamp only | AUTO |
 | E3 | Clipboard | paste Position/Effects beside nested `\\t(...)` | nested transform payload untouched | AUTO |

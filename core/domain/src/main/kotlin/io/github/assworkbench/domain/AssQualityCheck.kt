@@ -12,6 +12,7 @@ enum class AssQcKind {
     UNKNOWN_STYLE,
     INLINE_SYNTAX,
     INVALID_POSITION,
+    RENDERER_RISK,
 }
 
 data class AssQcIssue(
@@ -63,6 +64,15 @@ object AssQualityCheck {
             if ("\\move(" in lower && !validMove.containsMatchIn(event.text)) {
                 out += AssQcIssue(event.id, AssQcKind.INVALID_POSITION, AssQcSeverity.ERROR, "无效 \\move 参数")
             }
+        }
+
+        AssRendererRiskAnalyzer.inspect(document).forEach { risk ->
+            out += AssQcIssue(
+                eventId = risk.eventId,
+                kind = AssQcKind.RENDERER_RISK,
+                severity = AssQcSeverity.ERROR,
+                message = risk.message,
+            )
         }
 
         AssTimelineRelations.analyze(document.events).forEach { relation ->

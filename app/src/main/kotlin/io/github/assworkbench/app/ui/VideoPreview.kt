@@ -59,6 +59,7 @@ import io.github.assworkbench.domain.AssDocument
 import io.github.assworkbench.domain.AssEvent
 import io.github.assworkbench.domain.AssGeometrySemantic
 import io.github.assworkbench.domain.AssPositionMode
+import io.github.assworkbench.domain.AssRendererRiskAnalyzer
 import io.github.assworkbench.fonts.RendererLogParser
 import io.github.yuroyami.libmpvkt.Mpv
 import io.github.yuroyami.libmpvkt.MpvCommands
@@ -505,6 +506,9 @@ private fun AuthoritativeMpvPreview(
     var osdMarginRight by remember(mpv, videoUri) { mutableIntStateOf(0) }
     var lastReportedPositionMs by remember(mpv) { mutableLongStateOf(initialPositionMs.coerceAtLeast(0L)) }
     val previewFile = remember(mpv) { File(context.cacheDir, "ass-preview/current.ass").apply { parentFile?.mkdirs() } }
+    val blockingRendererRisks = remember(renderDocument) {
+        AssRendererRiskAnalyzer.inspect(renderDocument)
+    }
     LaunchedEffect(mpv) {
         if (BuildConfig.ASSWB_RENDERER_EXPERIMENTAL) {
             writeStartupProbe(configDir, "7_preview_core", "success", "rememberMpv returned")
@@ -545,8 +549,17 @@ private fun AuthoritativeMpvPreview(
         }
     }
 
-    LaunchedEffect(mpv, videoUri, renderDocument, protocolReady, fontRevision) {
+    LaunchedEffect(mpv, videoUri, renderDocument, protocolReady, fontRevision, blockingRendererRisks) {
         if (!protocolReady || videoUri.isNullOrBlank()) return@LaunchedEffect
+        if (blockingRendererRisks.isNotEmpty()) {
+            onRendererDiagnostics(
+                listOf(
+                    "Preview safety：已暂停 ASS native 预览；Raw ASS 仍保持可编辑/可保存。",
+                    "风险 Event：" + blockingRendererRisks.map { "#" + it.eventId }.distinct().joinToString(", "),
+                ) + blockingRendererRisks.take(4).map { it.message }
+            )
+            return@LaunchedEffect
+        }
         val transientRendering = renderDocument != document
         if (!transientRendering) delay(120)
         val tmp = File(previewFile.parentFile, "current.ass.tmp")
@@ -632,7 +645,45 @@ private fun AuthoritativeMpvPreview(
                 val renderPositionEvent = positionEditEventId?.let { id ->
                     renderDocument.events.firstOrNull { it.id == id }
                 }
-                if (positionEvent != null) {
+                if (blockingRendererRisks.isNotEmpty()) {
+                    Surface(
+                        modifier = Modifier
+                            .align(Alignment.Center)
+                            .padding(12.dp),
+                        color = Color.Black.copy(alpha = 0.86f),
+                        shape = MaterialTheme.shapes.medium,
+                    ) {
+                        Column(
+                            Modifier.padding(12.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            Text(
+                                "ASS 预览已安全暂停",
+                                color = Color.White,
+                                style = MaterialTheme.typography.titleSmall,
+                            )
+                            Text(
+                                blockingRendererRisks.first().message,
+                                color = Color.White.copy(alpha = 0.82f),
+                                style = MaterialTheme.typography.labelSmall,
+                            )
+                            if (blockingRendererRisks.size > 1) {
+                                Text(
+                                    "另有 " + (blockingRendererRisks.size - 1) + " 个 renderer 风险；请在 QC 中查看。",
+                                    color = Color.White.copy(alpha = 0.66f),
+                                    style = MaterialTheme.typography.labelSmall,
+                                )
+                            }
+                            Text(
+                                "字幕文本未被修改；修正危险参数后预览会自动恢复。",
+                                color = Color.White.copy(alpha = 0.66f),
+                                style = MaterialTheme.typography.labelSmall,
+                            )
+                        }
+                    }
+                }
+                if (positionEvent != null && blockingRendererRisks.isEmpty()) {
                     PositionDragOverlay(
                         document = document,
                         event = positionEvent,
