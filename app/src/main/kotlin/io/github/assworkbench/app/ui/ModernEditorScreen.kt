@@ -36,6 +36,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import io.github.assworkbench.app.BuildConfig
 import io.github.assworkbench.app.EditorState
 import io.github.assworkbench.app.EditorViewModel
 import io.github.assworkbench.app.WaveformLiteState
@@ -3375,6 +3376,16 @@ private fun DiagnosticsPane(state: EditorState, viewModel: EditorViewModel, modi
     val effective = event?.let { AssEffectiveInspector.inspect(state.document, it) }.orEmpty()
     LazyColumn(modifier.padding(WorkbenchDimens.Small), verticalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small)) {
         item {
+            Text("构建身份", style = MaterialTheme.typography.titleSmall)
+            Text("Version ${BuildConfig.VERSION_NAME} · code ${BuildConfig.VERSION_CODE}")
+            Text(
+                "Commit ${BuildConfig.ASSWB_BUILD_COMMIT} · CI ${BuildConfig.ASSWB_BUILD_NUMBER}",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        item {
+            Divider()
             Text("渲染几何指纹", style = MaterialTheme.typography.titleSmall)
             Text("PlayRes ${state.document.playResX}×${state.document.playResY}")
             state.document.scriptInfo["LayoutResX"]?.let { Text("LayoutResX $it") }
