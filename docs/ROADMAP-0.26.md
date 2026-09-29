@@ -207,7 +207,7 @@ Preview must remain libass-authoritative where practical.
 
 ### Phase C — Event operations
 
-Implementation has started. The first structural slice now exposes contextual insert-before / insert-after, exact duplicate, merge-with-previous / merge-with-next, and delete actions in the existing Event surface. These operations reuse `AssDocumentEditing` and Undo history rather than introducing a permanent operations toolbar.
+Implementation has started. The first structural slice now exposes contextual insert-before / insert-after, exact duplicate, merge-with-previous / merge-with-next, and delete actions in the existing Event surface. These operations reuse `AssDocumentEditing` and Undo history rather than introducing a permanent operations toolbar. The Event text editor now retains the real cursor/selection state so split-at-playhead can use the exact text cursor without inventing a second split UI; split is disabled for unsaved text, selections, boundary cursors, or a playhead outside the Event. Batch Style assignment, filtered previous/next navigation, and QC issue previous/next navigation are also wired into their existing contextual surfaces.
 
 Add:
 - insert before / after;

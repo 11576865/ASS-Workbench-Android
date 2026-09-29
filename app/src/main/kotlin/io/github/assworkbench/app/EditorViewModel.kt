@@ -496,6 +496,29 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         val target = events[(if (index < 0) 0 else (index + 1).coerceAtMost(events.lastIndex))]
         focusEvent(target.id, seek = true)
     }
+    fun focusPreviousFilteredEvent() {
+        focusRelativeFilteredEvent(-1)
+    }
+
+    fun focusNextFilteredEvent() {
+        focusRelativeFilteredEvent(1)
+    }
+
+    private fun focusRelativeFilteredEvent(direction: Int) {
+        val snapshot = _state.value
+        val events = snapshot.filteredEvents
+        if (events.isEmpty()) {
+            _state.update { it.copy(status = "当前筛选没有可导航的字幕。") }
+            return
+        }
+        val currentIndex = events.indexOfFirst { it.id == snapshot.focusedEventId }
+        val targetIndex = when {
+            currentIndex < 0 && direction >= 0 -> 0
+            currentIndex < 0 -> events.lastIndex
+            else -> (currentIndex + direction).coerceIn(0, events.lastIndex)
+        }
+        focusEvent(events[targetIndex].id, seek = true)
+    }
 
     fun alignSelectedStartToPlayback() {
         val snapshot = _state.value
@@ -528,6 +551,20 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         editDocument(if (comment) "已把选中字幕设为 Comment。" else "已把选中字幕设为 Dialogue。") { doc ->
             doc.copy(events = doc.events.map { event ->
                 if (event.id in ids) event.copy(comment = comment) else event
+            })
+        }
+    }
+    fun setSelectedStyle(styleName: String) {
+        val snapshot = _state.value
+        val ids = snapshot.selectedEventIds
+        if (ids.isEmpty()) return
+        if (snapshot.document.styles.none { it.name == styleName }) {
+            _state.update { it.copy(status = "Style 不存在：$styleName") }
+            return
+        }
+        editDocument("已将 " + ids.size + " 条字幕设为 Style " + styleName + "。") { doc ->
+            doc.copy(events = doc.events.map { event ->
+                if (event.id in ids) event.copy(style = styleName) else event
             })
         }
     }

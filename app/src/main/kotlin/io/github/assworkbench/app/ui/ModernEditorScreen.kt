@@ -29,7 +29,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.github.assworkbench.app.EditorState
@@ -518,14 +520,26 @@ private fun EventWorkspace(
     modifier: Modifier = Modifier,
 ) {
     val selectionMode = state.selectedEventIds.isNotEmpty()
+    val listState = rememberLazyListState()
+    val rangeScrollScope = rememberCoroutineScope()
+    LaunchedEffect(state.focusedEventId, state.filteredEvents) {
+        val index = state.filteredEvents.indexOfFirst { it.id == state.focusedEventId }
+        if (index >= 0) listState.animateScrollToItem(index)
+    }
     Column(modifier.background(MaterialTheme.colorScheme.surface)) {
         Row(Modifier.fillMaxWidth().height(WorkbenchDimens.PaneHeaderHeight).padding(horizontal = WorkbenchDimens.Small), verticalAlignment = Alignment.CenterVertically) {
             Text(if (selectionMode) "选择模式" else "字幕", style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
             Text(if (state.query.isBlank()) "${state.document.events.size}" else "${state.filteredEvents.size}/${state.document.events.size}", style = MaterialTheme.typography.labelSmall)
+            if (!selectionMode && state.filteredEvents.isNotEmpty()) {
+                TooltipIconButton("上一条筛选结果", viewModel::focusPreviousFilteredEvent) {
+                    Icon(Icons.Filled.KeyboardArrowUp, null)
+                }
+                TooltipIconButton("下一条筛选结果", viewModel::focusNextFilteredEvent) {
+                    Icon(Icons.Filled.KeyboardArrowDown, null)
+                }
+            }
         }
         Divider()
-        val listState = rememberLazyListState()
-        val rangeScrollScope = rememberCoroutineScope()
         LazyColumn(
             state = listState,
             modifier = Modifier
@@ -708,7 +722,7 @@ private fun InlineEventEditor(
 ) {
     var startText by remember(event.id, event.start) { mutableStateOf(event.start.toAss()) }
     var endText by remember(event.id, event.end) { mutableStateOf(event.end.toAss()) }
-    var raw by remember(event.id, event.text) { mutableStateOf(event.text) }
+    var rawField by remember(event.id, event.text) { mutableStateOf(TextFieldValue(event.text, TextRange(event.text.length))) }
     var inlinePanel by remember(event.id) { mutableStateOf<String?>(null) }
     var layerText by remember(event.id, event.layer) { mutableStateOf(event.layer.toString()) }
     var actorText by remember(event.id, event.name) { mutableStateOf(event.name) }
@@ -727,7 +741,10 @@ private fun InlineEventEditor(
     val pos = effective["Position"]?.effectiveValue ?: "alignment anchor"
 
     LaunchedEffect(event.text) {
-        if (raw != event.text) raw = event.text
+        if (rawField.text != event.text) {
+            val cursor = rawField.selection.start.coerceIn(0, event.text.length)
+            rawField = TextFieldValue(event.text, TextRange(cursor))
+        }
     }
 
     Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro)) {
@@ -746,18 +763,42 @@ private fun InlineEventEditor(
     }
 
     OutlinedTextField(
-        value = raw,
-        onValueChange = { raw = it },
+        value = rawField,
+        onValueChange = { rawField = it },
         label = { Text("字幕正文 · ASS Event Text") },
         textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
         visualTransformation = rememberAssSyntaxTransformation(),
         modifier = Modifier.fillMaxWidth().heightIn(min = 104.dp, max = 220.dp),
     )
-    if (raw != event.text) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-            TextButton(onClick = { raw = event.text }) { Text("还原") }
-            Button(onClick = { viewModel.updateEventText(event.id, raw) }) { Text("应用正文") }
+    val rawDirty = rawField.text != event.text
+    val splitCursor = rawField.selection.start
+    val splitReady = !rawDirty && rawField.selection.collapsed &&
+        splitCursor in 1 until event.text.length &&
+        state.playbackPositionMs > event.start.millis && state.playbackPositionMs < event.end.millis
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
+        if (!rawDirty) {
+            Text(
+                "光标 $splitCursor · 播放头 ${formatMs(state.playbackPositionMs)}",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f),
+            )
+            OutlinedButton(
+                onClick = { viewModel.splitFocusedEvent(splitCursor) },
+                enabled = splitReady,
+            ) { Text("在播放头拆分") }
+        } else {
+            Spacer(Modifier.weight(1f))
+            TextButton(onClick = { rawField = TextFieldValue(event.text, TextRange(event.text.length)) }) { Text("还原") }
+            Button(onClick = { viewModel.updateEventText(event.id, rawField.text) }) { Text("应用正文") }
         }
+    }
+    if (!rawDirty && !splitReady) {
+        Text(
+            "拆分需要：正文光标位于文本中间、没有选区，并且播放头位于当前 Event 的 Start 与 End 之间。override block 内部仍由语义层拒绝拆分。",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 
     Row(
@@ -1862,8 +1903,22 @@ private fun QcPane(state: EditorState, viewModel: EditorViewModel, issues: List<
     Column(modifier.padding(WorkbenchDimens.Small), verticalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small)) {
         val errors = issues.count { it.severity == AssQcSeverity.ERROR }
         val warnings = issues.count { it.severity == AssQcSeverity.WARNING }
+        val issueEventIds = remember(issues) { issues.map { it.eventId }.distinct() }
+        val issueIndex = issueEventIds.indexOf(state.focusedEventId)
+        val previousIssueId = if (issueIndex > 0) issueEventIds[issueIndex - 1] else null
+        val nextIssueId = when {
+            issueEventIds.isEmpty() -> null
+            issueIndex < 0 -> issueEventIds.first()
+            issueIndex < issueEventIds.lastIndex -> issueEventIds[issueIndex + 1]
+            else -> null
+        }
         Text("质量检查 · ${issues.size}", style = MaterialTheme.typography.titleSmall)
-        Text("$errors error · $warnings warning · ${issues.size-errors-warnings} info", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text("$errors error · $warnings warning · ${issues.size-errors-warnings} info", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+            OutlinedButton(onClick = { previousIssueId?.let { viewModel.focusEvent(it, true) } }, enabled = previousIssueId != null) { Text("上一问题") }
+            Spacer(Modifier.width(WorkbenchDimens.Micro))
+            OutlinedButton(onClick = { nextIssueId?.let { viewModel.focusEvent(it, true) } }, enabled = nextIssueId != null) { Text("下一问题") }
+        }
         Divider()
         LazyColumn(Modifier.fillMaxSize()) {
             items(issues) { issue ->
@@ -1888,9 +1943,26 @@ private fun QcPane(state: EditorState, viewModel: EditorViewModel, issues: List<
 
 @Composable
 private fun BatchPane(state: EditorState, viewModel: EditorViewModel, modifier: Modifier = Modifier) {
+    var styleMenuOpen by remember { mutableStateOf(false) }
     Column(modifier.padding(WorkbenchDimens.Small), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("已选 ${state.selectedEventIds.size} 条", style = MaterialTheme.typography.titleSmall)
         if (state.selectedEventIds.isEmpty()) { Text("长按字幕进入多选。"); return }
+        Box {
+            OutlinedButton(onClick = { styleMenuOpen = true }, modifier = Modifier.fillMaxWidth()) {
+                Text("批量指定 Style")
+            }
+            DropdownMenu(expanded = styleMenuOpen, onDismissRequest = { styleMenuOpen = false }) {
+                state.document.styles.forEach { style ->
+                    DropdownMenuItem(
+                        text = { Text(style.name) },
+                        onClick = {
+                            styleMenuOpen = false
+                            viewModel.setSelectedStyle(style.name)
+                        },
+                    )
+                }
+            }
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small)) {
             OutlinedButton({ viewModel.shiftSelected(-100) }, Modifier.weight(1f)) { Text("−100 ms") }
             OutlinedButton({ viewModel.shiftSelected(100) }, Modifier.weight(1f)) { Text("+100 ms") }
