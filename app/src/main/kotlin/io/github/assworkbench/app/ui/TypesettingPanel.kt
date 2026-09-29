@@ -303,17 +303,6 @@ fun TypesettingPanel(
                 }
             }
             item {
-                StyleGeometryPreview(
-                    playResX = state.document.playResX,
-                    playResY = state.document.playResY,
-                    alignment = alignment,
-                    marginL = marginL.toIntOrNull() ?: style.marginL,
-                    marginR = marginR.toIntOrNull() ?: style.marginR,
-                    marginV = marginV.toIntOrNull() ?: style.marginV,
-                    modifier = Modifier.fillMaxWidth().height(80.dp),
-                )
-            }
-            item {
                 Column(verticalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small)) {
                     Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small)) {
                         SmallField("字号", fontSize, { fontSize = it }, Modifier.weight(1f))
@@ -331,32 +320,6 @@ fun TypesettingPanel(
                     Flag("I", italic) { italic = it }
                     Flag("U", underline) { underline = it }
                     Flag("S", strikeOut) { strikeOut = it }
-                }
-            }
-            item {
-                Text("九宫格对齐")
-                Column(verticalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro)) {
-                    listOf(listOf(7, 8, 9), listOf(4, 5, 6), listOf(1, 2, 3)).forEach { row ->
-                        Row(
-                            Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro),
-                        ) {
-                            row.forEach { value ->
-                                if (alignment == value) {
-                                    Button(onClick = { alignment = value }, modifier = Modifier.weight(1f)) { Text(value.toString()) }
-                                } else {
-                                    OutlinedButton(onClick = { alignment = value }, modifier = Modifier.weight(1f)) { Text(value.toString()) }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            item {
-                Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small)) {
-                    SmallField("Margin L", marginL, { marginL = it }, Modifier.weight(1f))
-                    SmallField("Margin R", marginR, { marginR = it }, Modifier.weight(1f))
-                    SmallField("Margin V", marginV, { marginV = it }, Modifier.weight(1f))
                 }
             }
             item {
@@ -450,59 +413,6 @@ fun TypesettingPanel(
                 }
             }
         }
-}
-
-@Composable
-private fun StyleGeometryPreview(
-    playResX: Int,
-    playResY: Int,
-    alignment: Int,
-    marginL: Int,
-    marginR: Int,
-    marginV: Int,
-    modifier: Modifier = Modifier,
-) {
-    val outline = androidx.compose.material3.MaterialTheme.colorScheme.outline
-    val safe = androidx.compose.material3.MaterialTheme.colorScheme.primary
-    val anchorColor = androidx.compose.material3.MaterialTheme.colorScheme.tertiary
-    val surface = androidx.compose.material3.MaterialTheme.colorScheme.surfaceVariant
-
-    Canvas(modifier.background(surface.copy(alpha = 0.28f))) {
-        val px = playResX.coerceAtLeast(1).toFloat()
-        val py = playResY.coerceAtLeast(1).toFloat()
-        val sx = size.width / px
-        val sy = size.height / py
-        val left = marginL.coerceAtLeast(0) * sx
-        val right = size.width - marginR.coerceAtLeast(0) * sx
-        val top = marginV.coerceAtLeast(0) * sy
-        val bottom = size.height - marginV.coerceAtLeast(0) * sy
-
-        drawRect(
-            color = outline,
-            style = Stroke(width = 1.dp.toPx()),
-        )
-        drawRect(
-            color = safe.copy(alpha = 0.75f),
-            topLeft = androidx.compose.ui.geometry.Offset(left, top),
-            size = androidx.compose.ui.geometry.Size(
-                (right - left).coerceAtLeast(0f),
-                (bottom - top).coerceAtLeast(0f),
-            ),
-            style = Stroke(width = 1.dp.toPx()),
-        )
-
-        val x = when (alignment) {
-            1, 4, 7 -> left
-            3, 6, 9 -> right
-            else -> size.width / 2f
-        }
-        val y = when (alignment) {
-            7, 8, 9 -> top
-            4, 5, 6 -> size.height / 2f
-            else -> bottom
-        }
-        drawCircle(anchorColor, radius = 5.dp.toPx(), center = androidx.compose.ui.geometry.Offset(x, y))
-    }
 }
 
 @Composable
