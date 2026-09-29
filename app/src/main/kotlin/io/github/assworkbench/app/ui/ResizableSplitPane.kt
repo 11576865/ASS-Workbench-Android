@@ -15,6 +15,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
@@ -30,15 +31,15 @@ fun ResizableSplitPane(
 ) {
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val density = LocalDensity.current
-        val divider = 10.dp
+        val dividerTouch = 24.dp
+        val dividerLine = 1.dp
         val latestRatio by rememberUpdatedState(ratio)
         if (horizontal) {
             val totalPx = with(density) { maxWidth.toPx() }.coerceAtLeast(1f)
             Row(Modifier.fillMaxSize()) {
                 first(Modifier.weight(ratio).fillMaxHeight())
                 Box(
-                    Modifier.width(divider).fillMaxHeight()
-                        .background(MaterialTheme.colorScheme.outlineVariant)
+                    Modifier.width(dividerTouch).fillMaxHeight()
                         .pointerInput(totalPx) {
                             var workingRatio = latestRatio
                             detectDragGestures(
@@ -50,7 +51,13 @@ fun ResizableSplitPane(
                                 },
                             )
                         },
-                )
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Box(
+                        Modifier.width(dividerLine).fillMaxHeight()
+                            .background(MaterialTheme.colorScheme.outlineVariant)
+                    )
+                }
                 second(Modifier.weight(1f - ratio).fillMaxHeight())
             }
         } else {
@@ -58,8 +65,7 @@ fun ResizableSplitPane(
             Column(Modifier.fillMaxSize()) {
                 first(Modifier.weight(ratio).fillMaxWidth())
                 Box(
-                    Modifier.height(divider).fillMaxWidth()
-                        .background(MaterialTheme.colorScheme.outlineVariant)
+                    Modifier.height(dividerTouch).fillMaxWidth()
                         .pointerInput(totalPx) {
                             var workingRatio = latestRatio
                             detectDragGestures(
@@ -71,7 +77,13 @@ fun ResizableSplitPane(
                                 },
                             )
                         },
-                )
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Box(
+                        Modifier.height(dividerLine).fillMaxWidth()
+                            .background(MaterialTheme.colorScheme.outlineVariant)
+                    )
+                }
                 second(Modifier.weight(1f - ratio).fillMaxWidth())
             }
         }
