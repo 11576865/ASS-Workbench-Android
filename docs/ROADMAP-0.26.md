@@ -246,6 +246,8 @@ Waveform UI appears only after the waveform implementation exists.
 
 ### Phase E — Animation
 
+Implementation has started inside the existing Event “效果” owner. The first slice adds conservative top-level `\\fad` / `\\fade` inspection and replacement, including explicit conflict handling when both forms coexist. Blur / Soft Entry are now separated from Fade ownership so changing Blur no longer rewrites Fade or nested `\\t(...)` payloads. No new Animation workbench is introduced.
+
 Provide a structured editor for:
 
 - fad / fade;

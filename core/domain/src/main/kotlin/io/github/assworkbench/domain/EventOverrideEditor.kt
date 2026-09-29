@@ -20,17 +20,85 @@ object EventOverrideEditor {
 
     fun inspect(text: String): EventOverrideSnapshot {
         val geometry = AssGeometrySemantic.inspect(text)
-        val fadeMatch = fade.find(text)
+        val animation = AssAnimationSemantic.inspect(text)
+        val leading = leadingBlocks.find(text)?.value.orEmpty()
+        val topLevelBlur = Regex("""\\blur(-?\d+(?:\.\d+)?)""").find(removeTransformPayloads(leading))
         return EventOverrideSnapshot(
             x = geometry.position?.x,
             y = geometry.position?.y,
-            blur = blur.find(text)?.groupValues?.getOrNull(1)?.toDoubleOrNull(),
-            fadeInMs = fadeMatch?.groupValues?.getOrNull(1)?.toIntOrNull(),
-            fadeOutMs = fadeMatch?.groupValues?.getOrNull(2)?.toIntOrNull(),
+            blur = topLevelBlur?.groupValues?.getOrNull(1)?.toDoubleOrNull(),
+            fadeInMs = animation.simpleFade?.fadeInMs,
+            fadeOutMs = animation.simpleFade?.fadeOutMs,
             softEntry = softEntry.containsMatchIn(text),
         )
     }
 
+    fun updateVisualEffects(
+        text: String,
+        blurRadius: Double?,
+        enableSoftEntry: Boolean,
+        softEntryMs: Int = 160,
+    ): String {
+        val leading = leadingBlocks.find(text)?.value.orEmpty()
+        val body = text.removePrefix(leading)
+        var preserved = leading.replace(softEntry, "")
+        preserved = removeTopLevelBlur(preserved)
+        preserved = preserved.replace(Regex("""\{\s*\}"""), "")
+        val tags = buildString {
+            if (blurRadius != null && blurRadius > 0.0) {
+                append("\\blur")
+                append(formatNumber(blurRadius.coerceIn(0.0, 20.0)))
+            }
+            if (enableSoftEntry) {
+                append("\\fscx98\\fscy98\\blur1.5\\t(0,")
+                append(softEntryMs.coerceIn(80, 1000))
+                append(",\\fscx100\\fscy100\\blur0)")
+            }
+        }
+        val managed = if (tags.isEmpty()) "" else "{$tags}"
+        return preserved + managed + body
+    }
+
+    private fun removeTopLevelBlur(leading: String): String {
+        val out = StringBuilder()
+        var cursor = 0
+        while (cursor < leading.length) {
+            if (leading[cursor] != '{') { out.append(leading[cursor++]); continue }
+            val close = leading.indexOf('}', cursor + 1)
+            if (close < 0) return leading
+            val block = leading.substring(cursor + 1, close)
+            val cleaned = stripBlurTagsFromBlock(block)
+            if (cleaned.isNotBlank()) out.append('{').append(cleaned).append('}')
+            cursor = close + 1
+        }
+        return out.toString()
+    }
+
+    private fun stripBlurTagsFromBlock(block: String): String {
+        val remove = mutableListOf<IntRange>()
+        var cursor = 0
+        while (cursor < block.length) {
+            if (block[cursor] != '\\') { cursor++; continue }
+            val start = cursor++
+            val nameStart = cursor
+            while (cursor < block.length && (block[cursor].isLetter() || block[cursor] == '-' || block[cursor] == '_')) cursor++
+            if (cursor == nameStart) continue
+            val name = block.substring(nameStart, cursor)
+            var depth = 0
+            while (cursor < block.length) {
+                when (block[cursor]) {
+                    '(' -> depth++
+                    ')' -> if (depth > 0) depth--
+                    '\\' -> if (depth == 0) break
+                }
+                cursor++
+            }
+            if (name.equals("blur", true)) remove += start until cursor
+        }
+        var result = block
+        remove.asReversed().forEach { result = result.removeRange(it.first, it.last + 1) }
+        return result
+    }
     fun update(
         text: String,
         x: Double?,
@@ -84,6 +152,25 @@ object EventOverrideEditor {
         return preserved + managed + body
     }
 
+    private fun removeTransformPayloads(text: String): String {
+        val out = StringBuilder()
+        var cursor = 0
+        while (cursor < text.length) {
+            if (text.startsWith("\\t(", cursor)) {
+                var depth = 0
+                var end = cursor
+                while (end < text.length) {
+                    if (text[end] == '(') depth++
+                    if (text[end] == ')') { depth--; if (depth == 0) { end++; break } }
+                    end++
+                }
+                cursor = end
+            } else {
+                out.append(text[cursor++])
+            }
+        }
+        return out.toString()
+    }
     private fun formatNumber(value: Double): String {
         val rounded = kotlin.math.round(value * 100.0) / 100.0
         return if (rounded % 1.0 == 0.0) rounded.toInt().toString() else rounded.toString()

@@ -930,82 +930,102 @@ private fun InlineEventEditor(
 }
 
 @Composable
-private fun InlineEffectsEditor(
-    event: AssEvent,
-    viewModel: EditorViewModel,
-) {
-    val snapshot = remember(event.id, event.text) { EventOverrideEditor.inspect(event.text) }
-    var blur by remember(event.id, event.text) { mutableStateOf(snapshot.blur?.toString().orEmpty()) }
-    var fadeIn by remember(event.id, event.text) { mutableStateOf(snapshot.fadeInMs?.toString().orEmpty()) }
-    var fadeOut by remember(event.id, event.text) { mutableStateOf(snapshot.fadeOutMs?.toString().orEmpty()) }
-    var softEntry by remember(event.id, event.text) { mutableStateOf(snapshot.softEntry) }
-
-    fun previewEffects(blurValue: Double? = blur.toDoubleOrNull()) {
-        viewModel.previewEventOverrides(
-            id = event.id,
-            x = snapshot.x,
-            y = snapshot.y,
-            blur = blurValue,
-            fadeInMs = fadeIn.toIntOrNull(),
-            fadeOutMs = fadeOut.toIntOrNull(),
-            softEntry = softEntry,
-        )
+private fun InlineEffectsEditor(event: AssEvent, viewModel: EditorViewModel) {
+    val visual = remember(event.id, event.text) { EventOverrideEditor.inspect(event.text) }
+    val animation = remember(event.id, event.text) { AssAnimationSemantic.inspect(event.text) }
+    var blur by remember(event.id, event.text) { mutableStateOf(visual.blur?.toString().orEmpty()) }
+    var softEntry by remember(event.id, event.text) { mutableStateOf(visual.softEntry) }
+    var fadeMode by remember(event.id, event.text) {
+        mutableStateOf(when { animation.complexFade != null -> "fade"; animation.simpleFade != null -> "fad"; else -> "none" })
     }
+    var fadeIn by remember(event.id, event.text) { mutableStateOf((animation.simpleFade?.fadeInMs ?: 150).toString()) }
+    var fadeOut by remember(event.id, event.text) { mutableStateOf((animation.simpleFade?.fadeOutMs ?: 150).toString()) }
+    val complex = animation.complexFade
+    var a1 by remember(event.id, event.text) { mutableStateOf((complex?.alpha1 ?: 255).toString()) }
+    var a2 by remember(event.id, event.text) { mutableStateOf((complex?.alpha2 ?: 0).toString()) }
+    var a3 by remember(event.id, event.text) { mutableStateOf((complex?.alpha3 ?: 255).toString()) }
+    var t1 by remember(event.id, event.text) { mutableStateOf((complex?.time1Ms ?: 0).toString()) }
+    var t2 by remember(event.id, event.text) { mutableStateOf((complex?.time2Ms ?: 150).toString()) }
+    var t3 by remember(event.id, event.text) { mutableStateOf((complex?.time3Ms ?: 850).toString()) }
+    var t4 by remember(event.id, event.text) { mutableStateOf((complex?.time4Ms ?: 1000).toString()) }
 
-    fun commitEffects() {
-        viewModel.applyEventOverrides(
-            id = event.id,
-            x = snapshot.x,
-            y = snapshot.y,
-            blur = blur.toDoubleOrNull(),
-            fadeInMs = fadeIn.toIntOrNull(),
-            fadeOutMs = fadeOut.toIntOrNull(),
-            softEntry = softEntry,
-        )
+    fun previewVisual(value: Double? = blur.toDoubleOrNull()) {
+        viewModel.previewEventVisualEffects(event.id, value, softEntry)
     }
+    fun commitVisual() { viewModel.applyEventVisualEffects(event.id, blur.toDoubleOrNull(), softEntry) }
 
-    DisposableEffect(event.id) {
-        onDispose { viewModel.clearTransientPreview() }
-    }
+    DisposableEffect(event.id) { onDispose { viewModel.clearTransientPreview() } }
 
     Surface(
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.38f),
         shape = MaterialTheme.shapes.small,
         modifier = Modifier.fillMaxWidth(),
     ) {
-        Column(
-            Modifier.padding(WorkbenchDimens.Small),
-            verticalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro),
-        ) {
+        Column(Modifier.padding(WorkbenchDimens.Small), verticalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small)) {
+            Text("视觉效果", style = MaterialTheme.typography.titleSmall)
             ContinuousParameterControl(
                 label = "Blur",
                 valueText = blur,
                 onValueTextChange = { blur = it },
                 range = 0f..20f,
                 step = 0.1,
-                supportingText = "连续拖动直接送入 libass transient preview。",
-                onPreview = { previewEffects(it) },
-                onGestureActive = { active ->
-                    if (!active) commitEffects()
-                },
+                supportingText = "只编辑顶层 \\blur；\\t(...) 内部的 Blur 不会被改写。",
+                onPreview = { previewVisual(it) },
+                onGestureActive = { active -> if (!active) commitVisual() },
             )
-            Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro)) {
-                OutlinedTextField(fadeIn, { fadeIn = it }, label = { Text("Fade In ms") }, singleLine = true, modifier = Modifier.weight(1f))
-                OutlinedTextField(fadeOut, { fadeOut = it }, label = { Text("Fade Out ms") }, singleLine = true, modifier = Modifier.weight(1f))
-            }
             Row(verticalAlignment = Alignment.CenterVertically) {
-                FilterChip(
-                    selected = softEntry,
-                    onClick = { softEntry = !softEntry },
-                    label = { Text("Soft Entry · 160ms") },
-                )
+                FilterChip(selected = softEntry, onClick = { softEntry = !softEntry; previewVisual() }, label = { Text("Soft Entry · 160ms") })
                 Spacer(Modifier.weight(1f))
-                Button(onClick = ::commitEffects) { Text("应用") }
+                Button(onClick = ::commitVisual) { Text("应用视觉效果") }
+            }
+
+            Divider()
+            Text("Fade · \\fad / \\fade", style = MaterialTheme.typography.titleSmall)
+            if (animation.fadeConflict) {
+                Text("检测到顶层 \\fad 与 \\fade 同时存在；应用任一模式时才会显式消解冲突。", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro)) {
+                FilterChip(selected = fadeMode == "none", onClick = { fadeMode = "none" }, label = { Text("无") })
+                FilterChip(selected = fadeMode == "fad", onClick = { fadeMode = "fad" }, label = { Text("\\fad") })
+                FilterChip(selected = fadeMode == "fade", onClick = { fadeMode = "fade" }, label = { Text("\\fade") })
+            }
+            if (fadeMode == "fad") {
+                Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro)) {
+                    OutlinedTextField(fadeIn, { fadeIn = it }, label = { Text("Fade In ms") }, singleLine = true, modifier = Modifier.weight(1f))
+                    OutlinedTextField(fadeOut, { fadeOut = it }, label = { Text("Fade Out ms") }, singleLine = true, modifier = Modifier.weight(1f))
+                }
+            } else if (fadeMode == "fade") {
+                Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro)) {
+                    OutlinedTextField(a1, { a1 = it }, label = { Text("A1") }, singleLine = true, modifier = Modifier.weight(1f))
+                    OutlinedTextField(a2, { a2 = it }, label = { Text("A2") }, singleLine = true, modifier = Modifier.weight(1f))
+                    OutlinedTextField(a3, { a3 = it }, label = { Text("A3") }, singleLine = true, modifier = Modifier.weight(1f))
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro)) {
+                    OutlinedTextField(t1, { t1 = it }, label = { Text("T1") }, singleLine = true, modifier = Modifier.weight(1f))
+                    OutlinedTextField(t2, { t2 = it }, label = { Text("T2") }, singleLine = true, modifier = Modifier.weight(1f))
+                    OutlinedTextField(t3, { t3 = it }, label = { Text("T3") }, singleLine = true, modifier = Modifier.weight(1f))
+                    OutlinedTextField(t4, { t4 = it }, label = { Text("T4") }, singleLine = true, modifier = Modifier.weight(1f))
+                }
+                Text("A1/A2/A3：0 不透明，255 透明；T1–T4：相对 Event 起点的毫秒时间。", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                Button(onClick = {
+                    when (fadeMode) {
+                        "none" -> viewModel.clearEventFade(event.id)
+                        "fad" -> {
+                            val fi = fadeIn.toIntOrNull(); val fo = fadeOut.toIntOrNull()
+                            if (fi != null && fo != null) viewModel.setEventSimpleFade(event.id, fi, fo)
+                        }
+                        "fade" -> {
+                            val v = listOf(a1, a2, a3, t1, t2, t3, t4).map { it.toIntOrNull() }
+                            if (v.all { it != null }) viewModel.setEventComplexFade(event.id, AssComplexFade(v[0]!!, v[1]!!, v[2]!!, v[3]!!, v[4]!!, v[5]!!, v[6]!!))
+                        }
+                    }
+                }) { Text("应用 Fade") }
             }
         }
     }
 }
-
 @Composable
 private fun SupportingWorkbench(
     state: EditorState,

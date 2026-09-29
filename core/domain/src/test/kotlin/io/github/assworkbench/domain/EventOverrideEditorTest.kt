@@ -62,4 +62,14 @@ class EventOverrideEditorTest {
         assertFalse(EventOverrideEditor.inspect(removed).softEntry)
         assertEquals("Hello", removed)
     }
+    @Test
+    fun visualEffectsUpdateDoesNotDeleteFadeOrNestedTransformBlur() {
+        val input = "{editor note}{\\blur1\\fad(100,200)\\t(0,500,\\blur8\\frz30)}Hi"
+        val output = EventOverrideEditor.updateVisualEffects(input, 2.5, false)
+        assertTrue("{editor note}" in output)
+        assertTrue("\\fad(100,200)" in output)
+        assertTrue("\\t(0,500,\\blur8\\frz30)" in output)
+        assertTrue("\\blur2.5" in output)
+        assertFalse("\\blur1\\fad" in output)
+    }
 }

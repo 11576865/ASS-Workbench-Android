@@ -1537,63 +1537,52 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    fun previewEventOverrides(
-        id: Long,
-        x: Double?,
-        y: Double?,
-        blur: Double?,
-        fadeInMs: Int?,
-        fadeOutMs: Int?,
-        softEntry: Boolean,
-    ) {
+    fun previewEventVisualEffects(id: Long, blur: Double?, softEntry: Boolean) {
         val before = _state.value.document
-        val preview = withEventOverrides(before, id, x, y, blur, fadeInMs, fadeOutMs, softEntry)
-        _state.update { state ->
-            state.copy(previewDocument = if (preview == before) null else preview)
+        val preview = withEventVisualEffects(before, id, blur, softEntry)
+        _state.update { state -> state.copy(previewDocument = if (preview == before) null else preview) }
+    }
+
+    fun applyEventVisualEffects(id: Long, blur: Double?, softEntry: Boolean) {
+        editDocument("已更新字幕 #" + id + " 的 Blur / Soft Entry。") { doc ->
+            withEventVisualEffects(doc, id, blur, softEntry)
         }
     }
 
-    fun applyEventOverrides(
-        id: Long,
-        x: Double?,
-        y: Double?,
-        blur: Double?,
-        fadeInMs: Int?,
-        fadeOutMs: Int?,
-        softEntry: Boolean,
-    ) {
-        editDocument("已更新字幕 #" + id + " 的事件级效果。") { doc ->
-            withEventOverrides(doc, id, x, y, blur, fadeInMs, fadeOutMs, softEntry)
-        }
-    }
-
-    private fun withEventOverrides(
-        document: AssDocument,
-        id: Long,
-        x: Double?,
-        y: Double?,
-        blur: Double?,
-        fadeInMs: Int?,
-        fadeOutMs: Int?,
-        softEntry: Boolean,
-    ): AssDocument = document.copy(events = document.events.map { event ->
-        if (event.id != id) {
-            event
-        } else {
-            event.copy(
-                text = EventOverrideEditor.update(
-                    text = event.text,
-                    x = x,
-                    y = y,
-                    blurRadius = blur,
-                    fadeInMs = fadeInMs,
-                    fadeOutMs = fadeOutMs,
-                    enableSoftEntry = softEntry,
-                )
+    private fun withEventVisualEffects(document: AssDocument, id: Long, blur: Double?, softEntry: Boolean): AssDocument =
+        document.copy(events = document.events.map { event ->
+            if (event.id != id) event else event.copy(
+                text = EventOverrideEditor.updateVisualEffects(event.text, blur, softEntry),
             )
-        }
-    })
+        })
 
+    fun setEventSimpleFade(id: Long, fadeInMs: Int, fadeOutMs: Int) {
+        editDocument("已设置字幕 #" + id + " 的 \\fad。") { doc ->
+            doc.copy(events = doc.events.map { event ->
+                if (event.id != id) event else event.copy(
+                    text = AssAnimationSemantic.patchSimpleFade(event.text, fadeInMs, fadeOutMs),
+                )
+            })
+        }
+    }
+
+    fun setEventComplexFade(id: Long, fade: AssComplexFade) {
+        editDocument("已设置字幕 #" + id + " 的 \\fade。") { doc ->
+            doc.copy(events = doc.events.map { event ->
+                if (event.id != id) event else event.copy(
+                    text = AssAnimationSemantic.patchComplexFade(event.text, fade),
+                )
+            })
+        }
+    }
+
+    fun clearEventFade(id: Long) {
+        editDocument("已移除字幕 #" + id + " 的 Fade。") { doc ->
+            doc.copy(events = doc.events.map { event ->
+                if (event.id != id) event else event.copy(text = AssAnimationSemantic.removeFade(event.text))
+            })
+        }
+    }
     fun nudgeEventPosition(id: Long, dx: Double, dy: Double) {
         val state = _state.value
         val event = state.document.events.firstOrNull { it.id == id } ?: return
