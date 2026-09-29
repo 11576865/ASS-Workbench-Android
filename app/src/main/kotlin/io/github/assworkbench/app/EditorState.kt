@@ -11,6 +11,7 @@ import io.github.assworkbench.fonts.FontGlyphDiagnostic
 data class EditorState(
     val project: SubtitleProject = SubtitleProject(),
     val document: AssDocument = AssDocument(),
+    val previewDocument: AssDocument? = null,
     val subtitleLoaded: Boolean = false,
     val subtitleTextEncoding: AssTextEncoding = AssTextEncoding.UTF8,
     val selectedEventIds: Set<Long> = emptySet(),
