@@ -244,7 +244,6 @@ private fun ModernAppBar(
     onOpenSubtitle: () -> Unit,
     onImportFont: () -> Unit,
     onSave: () -> Unit,
-    onSaveAs: () -> Unit,
     onSaveMkv: () -> Unit,
     onTool: (WorkbenchTool) -> Unit,
 ) {
