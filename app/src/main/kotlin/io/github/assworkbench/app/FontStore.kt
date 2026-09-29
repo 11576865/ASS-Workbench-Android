@@ -7,6 +7,7 @@ import io.github.assworkbench.fonts.AndroidFontconfigPolicy
 import io.github.assworkbench.fonts.FontAsset
 import io.github.assworkbench.fonts.FontGlyphDiagnostic
 import io.github.assworkbench.fonts.FontMetadata
+import io.github.assworkbench.fonts.FontOrigin
 import io.github.assworkbench.fonts.FontconfigPrepared
 import io.github.assworkbench.fonts.OpenTypeCmap
 import io.github.assworkbench.fonts.OpenTypeNameReader
@@ -48,7 +49,16 @@ class FontStore(private val context: Context) {
                 runCatching {
                     val cacheKey = file.absolutePath
                     val bytes = fontBytesCache.computeIfAbsent(cacheKey) { file.readBytes() }
-                    FontAsset(file.name, OpenTypeNameReader.sha256(bytes), OpenTypeNameReader.read(bytes))
+                    FontAsset(
+                        fileName = file.name,
+                        sha256 = OpenTypeNameReader.sha256(bytes),
+                        metadata = OpenTypeNameReader.read(bytes),
+                        origin = if (file.parentFile?.absolutePath == projectFontDir.absolutePath) {
+                            FontOrigin.MKV_ATTACHMENT
+                        } else {
+                            FontOrigin.MANUAL
+                        },
+                    )
                 }.getOrNull()
             }
             .sortedWith(compareBy<FontAsset> { it.metadata.family.lowercase() }.thenBy { it.sha256 })
@@ -88,15 +98,15 @@ class FontStore(private val context: Context) {
         val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: error("无法读取字体")
         val metadata = OpenTypeNameReader.read(bytes)
         val sha = OpenTypeNameReader.sha256(bytes)
-        val safeStem = metadata.family.replace(Regex("[^A-Za-z0-9._-]+"), "_").trim('_').ifBlank { "font" }
+        val safeStem = safeFileStem(metadata.family)
         val target = File(importedDir, "${safeStem}-${sha.take(10)}.$ext")
         if (!target.exists()) target.writeBytes(bytes)
-        fontBytesCache[target.name] = bytes
+        fontBytesCache[target.absolutePath] = bytes
         invalidateImportedCache()
 
         // Keep provider=none fallback deterministic: the last imported font becomes subfont.ttf.
         File(mpvConfigDir, "subfont.ttf").writeBytes(bytes)
-        return FontAsset(target.name, sha, metadata)
+        return FontAsset(target.name, sha, metadata, FontOrigin.MANUAL)
     }
 
     fun importEmbeddedFont(fileName: String, bytes: ByteArray): FontAsset? {
@@ -104,7 +114,7 @@ class FontStore(private val context: Context) {
         if (ext !in setOf("ttf", "otf")) return null
         val metadata = OpenTypeNameReader.read(bytes)
         val sha = OpenTypeNameReader.sha256(bytes)
-        val safeStem = metadata.family.replace(Regex("[^A-Za-z0-9._-]+"), "_").trim('_').ifBlank { "font" }
+        val safeStem = safeFileStem(metadata.family)
         val target = File(projectFontDir, "${safeStem}-${sha.take(10)}.$ext")
         if (!target.exists()) target.writeBytes(bytes)
         fontBytesCache[target.name] = bytes
@@ -112,7 +122,7 @@ class FontStore(private val context: Context) {
         // Embedded MKV fonts must feed the same provider=none fallback path as manually imported fonts.
         // This removes the old "standalone import vs MKV attachment" renderer asymmetry.
         File(mpvConfigDir, "subfont.ttf").writeBytes(bytes)
-        return FontAsset(target.name, sha, metadata)
+        return FontAsset(target.name, sha, metadata, FontOrigin.MKV_ATTACHMENT)
     }
 
     fun rebuildFontconfigCache(): FontconfigPrepared {
@@ -208,6 +218,23 @@ class FontStore(private val context: Context) {
                     aliases = setOf("sans-serif"),
                 )
         } else null
+    }
+
+    private fun safeFileStem(value: String): String {
+        val out = StringBuilder(value.length)
+        var previousUnderscore = false
+        value.forEach { ch ->
+            val keep = ch.isLetterOrDigit() || ch == '.' || ch == '-' || ch == '_'
+            val next = if (keep) ch else '_'
+            if (next == '_') {
+                if (!previousUnderscore) out.append(next)
+                previousUnderscore = true
+            } else {
+                out.append(next)
+                previousUnderscore = false
+            }
+        }
+        return out.toString().trim('_').ifBlank { "font" }
     }
 
     private fun queryName(uri: Uri): String? {
