@@ -53,10 +53,27 @@ fun ModernEditorScreen(
     onSaveMkv: () -> Unit,
 ) {
     var toolName by rememberSaveable { mutableStateOf(WorkbenchTool.TIMELINE.name) }
+    var previousToolName by rememberSaveable { mutableStateOf<String?>(null) }
+    var supportingOpen by rememberSaveable { mutableStateOf(false) }
     var expandedEventId by rememberSaveable { mutableStateOf<Long?>(null) }
     var searchOpen by rememberSaveable { mutableStateOf(false) }
     var openMenu by remember { mutableStateOf(false) }
     val tool = WorkbenchTool.entries.firstOrNull { it.name == toolName } ?: WorkbenchTool.TIMELINE
+    fun openTool(next: WorkbenchTool) {
+        if (next.name != toolName) previousToolName = toolName
+        toolName = next.name
+        supportingOpen = true
+    }
+    fun returnTool() {
+        val previous = previousToolName?.let { name -> WorkbenchTool.entries.firstOrNull { it.name == name } }
+        if (previous != null && previous != tool) {
+            toolName = previous.name
+            previousToolName = null
+        } else {
+            toolName = WorkbenchTool.TIMELINE.name
+            previousToolName = null
+        }
+    }
     val issues = remember(state.document) { AssQualityCheck.inspect(state.document) }
     val issuesByEvent = remember(issues) { issues.groupBy { it.eventId } }
 
@@ -65,7 +82,7 @@ fun ModernEditorScreen(
             state, viewModel, state.selectedEventIds.isNotEmpty(), searchOpen,
             { searchOpen = !searchOpen }, { openMenu = true }, openMenu, { openMenu = false },
             onOpenReferenceVideo, onOpenMkvProject, onOpenSubtitle, onImportFont, onSave, onSaveAs, onSaveMkv,
-            { toolName = it.name },
+            { openTool(it) },
         )
 
         VideoPreview(
@@ -83,7 +100,7 @@ fun ModernEditorScreen(
             focusedEventId = if (tool == WorkbenchTool.POSITION) state.focusedEventId else null,
             onSetEventPosition = viewModel::setFocusedPosition,
             onOpenVideo = onOpenVideo,
-            onOpenTimeline = { toolName = WorkbenchTool.TIMELINE.name },
+            onOpenTimeline = { openTool(WorkbenchTool.TIMELINE) },
             modifier = Modifier.fillMaxWidth(),
         )
 
@@ -96,16 +113,16 @@ fun ModernEditorScreen(
             if (compact) {
                 EventWorkspace(
                     state, viewModel, issuesByEvent, expandedEventId,
-                    { expandedEventId = it }, { toolName = it.name }, Modifier.fillMaxSize()
+                    { expandedEventId = it }, { openTool(it) }, Modifier.fillMaxSize()
                 )
-                if (tool != WorkbenchTool.TIMELINE || state.selectedEventIds.isNotEmpty()) {
+                if (supportingOpen || state.selectedEventIds.isNotEmpty()) {
                     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
                     ModalBottomSheet(
-                        onDismissRequest = { toolName = WorkbenchTool.TIMELINE.name },
+                        onDismissRequest = { supportingOpen = false },
                         sheetState = sheetState,
                     ) {
                         SupportingWorkbench(
-                            state, viewModel, tool, issues, { toolName = it.name },
+                            state, viewModel, tool, issues, { openTool(it) }, { returnTool() },
                             onImportFont, onSaveMkv,
                             Modifier.fillMaxWidth().heightIn(min = 220.dp, max = 640.dp),
                         )
@@ -119,7 +136,7 @@ fun ModernEditorScreen(
                     first = { pane ->
                         EventWorkspace(
                             state, viewModel, issuesByEvent, expandedEventId,
-                            { expandedEventId = it }, { toolName = it.name }, pane
+                            { expandedEventId = it }, { openTool(it) }, pane
                         )
                     },
                     second = { pane ->
@@ -128,7 +145,8 @@ fun ModernEditorScreen(
                             viewModel,
                             if (state.selectedEventIds.isNotEmpty() && tool == WorkbenchTool.TIMELINE) WorkbenchTool.BATCH else tool,
                             issues,
-                            { toolName = it.name },
+                            { openTool(it) },
+                            { returnTool() },
                             onImportFont,
                             onSaveMkv,
                             pane,
@@ -521,6 +539,7 @@ private fun SupportingWorkbench(
     tool: WorkbenchTool,
     issues: List<AssQcIssue>,
     onTool: (WorkbenchTool) -> Unit,
+    onBackTool: () -> Unit,
     onImportFont: () -> Unit,
     onSaveMkv: () -> Unit,
     modifier: Modifier = Modifier,
@@ -528,9 +547,16 @@ private fun SupportingWorkbench(
     var menuOpen by remember { mutableStateOf(false) }
     Column(modifier.background(MaterialTheme.colorScheme.surface)) {
         Row(Modifier.fillMaxWidth().height(38.dp).padding(horizontal = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            if (tool != WorkbenchTool.TIMELINE) {
+                IconButton(onClick = onBackTool, modifier = Modifier.size(34.dp)) {
+                    Icon(Icons.Filled.ArrowBack, "返回上一工具")
+                }
+            }
             Text(tool.title, style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
             if (state.focusedEventId != null && tool != WorkbenchTool.TIMELINE) {
-                TextButton(onClick = { onTool(WorkbenchTool.TIMELINE) }) { Icon(Icons.Filled.Timeline, null); Spacer(Modifier.width(4.dp)); Text("时间轴") }
+                IconButton(onClick = { onTool(WorkbenchTool.TIMELINE) }, modifier = Modifier.size(34.dp)) {
+                    Icon(Icons.Filled.Timeline, "时间轴")
+                }
             }
             Box {
                 IconButton(onClick = { menuOpen = true }) { Icon(Icons.Filled.MoreVert, "切换工具") }
