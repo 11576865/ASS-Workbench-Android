@@ -20,7 +20,6 @@ import io.github.assworkbench.domain.FontBindingRewriter
 import io.github.assworkbench.domain.ReviewEventKey
 import io.github.assworkbench.domain.ReviewSidecar
 import io.github.assworkbench.domain.SubTime
-import io.github.assworkbench.domain.TypesettingMath
 import io.github.assworkbench.domain.UndoHistory
 import io.github.assworkbench.fonts.FontDiagnostics
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -349,27 +348,54 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun importFonts(uris: List<Uri>) {
-        if (uris.isEmpty()) return
-        val batch = fontStore.importAll(uris)
-        if (batch.assets.isEmpty()) {
-            error(
-                "没有字体导入成功" +
-                    batch.failures.firstOrNull()?.let { "：$it" }.orEmpty()
-            )
+        if (uris.isEmpty() || _state.value.fontImportBusy) return
+        _state.update { it.copy(fontImportBusy = true, status = "正在验证并注册字体……") }
+        viewModelScope.launch {
+            val result = runCatching {
+                withContext(Dispatchers.IO) { fontStore.importAll(uris) }
+            }
+            result.onSuccess { batch ->
+                if (batch.assets.isEmpty()) {
+                    _state.update {
+                        it.copy(
+                            fontImportBusy = false,
+                            status = "字体导入失败" +
+                                batch.failures.firstOrNull()?.let { "：$it" }.orEmpty(),
+                        )
+                    }
+                    return@onSuccess
+                }
+                val fallback = withContext(Dispatchers.IO) { fontStore.ensureFallbackFont() }
+                val imported = withContext(Dispatchers.IO) { fontStore.listImported() }
+                val families = batch.assets.map { it.metadata.rendererFamily }.distinct()
+                val failureSuffix = if (batch.failures.isEmpty()) "" else " · 失败 " + batch.failures.size + " 个"
+                _state.update {
+                    it.copy(
+                        importedFonts = imported,
+                        fallbackFontFamily = fallback?.rendererFamily,
+                        fontImportBusy = false,
+                        fontReloadPending = true,
+                        status = "已导入 " + batch.assets.size + " 个字体" + failureSuffix +
+                            " · " + families.take(3).joinToString(", ") +
+                            " · 预览将在字幕重载时采用新字体",
+                    )
+                }
+                refreshFontDiagnostics()
+            }.onFailure { error ->
+                _state.update {
+                    it.copy(
+                        fontImportBusy = false,
+                        status = "字体导入失败：" + (error.message ?: error::class.java.simpleName),
+                    )
+                }
+            }
         }
-        val families = batch.assets.map { it.metadata.rendererFamily }.distinct()
-        val failureSuffix = if (batch.failures.isEmpty()) {
-            ""
-        } else {
-            " · 失败 " + batch.failures.size + " 个"
+    }
+
+    fun acknowledgeFontReload() {
+        if (_state.value.fontReloadPending) {
+            _state.update { it.copy(fontReloadPending = false, fontRevision = it.fontRevision + 1) }
         }
-        refreshFonts(
-            initial = false,
-            status = "已导入 " + batch.assets.size + " 个字体文件" + failureSuffix +
-                " · renderer family：" +
-                families.take(4).joinToString(", ") +
-                if (families.size > 4) " …" else "",
-        )
     }
 
     fun reportError(prefix: String, error: Throwable) {
@@ -1019,38 +1045,6 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                         borderStyle = borderStyle.coerceIn(1, 4),
                         encoding = encoding.coerceIn(0, 255),
                     )
-                }
-            })
-        }
-    }
-
-    fun applyBilingual6040Preset(sourceStyleName: String, targetStyleName: String) {
-        if (sourceStyleName.isBlank() || targetStyleName.isBlank() || sourceStyleName == targetStyleName) return
-        editDocument("已应用双语 60/40 排版预设。") { doc ->
-            val names = doc.styles.map { it.name }.toSet()
-            if (sourceStyleName !in names || targetStyleName !in names) return@editDocument doc
-            val layout = TypesettingMath.bilingual6040(doc.playResX, doc.playResY)
-            doc.copy(styles = doc.styles.map { style ->
-                when (style.name) {
-                    sourceStyleName -> style.copy(
-                        fontSize = 42.0,
-                        alignment = 2,
-                        marginL = layout.marginHorizontal,
-                        marginR = layout.marginHorizontal,
-                        marginV = layout.sourceMarginV,
-                        outline = 3.0,
-                        shadow = 2.0,
-                    )
-                    targetStyleName -> style.copy(
-                        fontSize = 48.0,
-                        alignment = 8,
-                        marginL = layout.marginHorizontal,
-                        marginR = layout.marginHorizontal,
-                        marginV = layout.targetMarginV,
-                        outline = 3.0,
-                        shadow = 2.0,
-                    )
-                    else -> style
                 }
             })
         }
