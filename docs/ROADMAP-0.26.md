@@ -228,7 +228,7 @@ Keep these contextual; do not create a permanent toolbar for all operations.
 
 ### Phase D — Timeline professionalisation
 
-Implementation has started. The timeline viewport is no longer hard-wired to playback: it now has 5/10/30/60/120-second horizontal zoom levels, direct touch panning on a dedicated ruler, an explicit follow-playhead mode, and a return-to-playhead action. The playhead is drawn only when it is actually inside the viewport instead of being falsely clamped to an edge. Existing focused-Event trim/body-drag and snapping remain the first editing layer.
+Implementation has started. The timeline viewport is no longer hard-wired to playback: it now has 5/10/30/60/120-second horizontal zoom levels, direct touch panning on a dedicated ruler, an explicit follow-playhead mode, and a return-to-playhead action. The playhead is drawn only when it is actually inside the viewport instead of being falsely clamped to an edge. Existing focused-Event trim/body-drag and snapping remain the first editing layer. The second slice adds chronological ordering and explicit Gap/Overlap annotations. Shared `AssTimelineRelations` frontier analysis drives both timeline indicators and QC, so long Events containing several shorter Events no longer hide later overlaps behind the immediately previous short Event.
 
 Add:
 - horizontal zoom;

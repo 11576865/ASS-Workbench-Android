@@ -1078,9 +1078,18 @@ private fun ModernTimelinePane(state: EditorState, viewModel: EditorViewModel, m
 
     val windowStart = (viewportCenterMs - halfWindowMs).coerceAtLeast(0L)
     val windowEnd = windowStart + windowDurationMs
-    val visible = state.document.events
+    val timelineRelations = remember(state.document.events) {
+        AssTimelineRelations.analyze(state.document.events)
+    }
+    val relationByEventId = remember(timelineRelations) { timelineRelations.associateBy { it.eventId } }
+    val visible = state.document.events.asSequence()
         .filter { it.end.millis >= windowStart && it.start.millis <= windowEnd }
+        .sortedWith(compareBy<AssEvent> { it.start.millis }.thenBy { it.end.millis }.thenBy { it.id })
         .take(120)
+        .toList()
+    val visibleRelationCount = remember(visible, relationByEventId) {
+        visible.asSequence().mapNotNull { relationByEventId[it.id] }.groupingBy { it.kind }.eachCount()
+    }
     val snapTargets = remember(visible, playheadMs, snapEvents, snapPlayhead) {
         buildList {
             if (snapPlayhead) add(playheadMs)
@@ -1211,6 +1220,19 @@ private fun ModernTimelinePane(state: EditorState, viewModel: EditorViewModel, m
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            val overlapCount = visibleRelationCount[AssTimelineRelationKind.OVERLAP] ?: 0
+            val gapCount = visibleRelationCount[AssTimelineRelationKind.GAP] ?: 0
+            Text(
+                "当前视窗：Overlap $overlapCount · Gap $gapCount",
+                style = MaterialTheme.typography.labelSmall,
+                color = if (overlapCount > 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
         if (focusedEvent != null) {
             Row(
                 Modifier.fillMaxWidth(),
@@ -1236,6 +1258,7 @@ private fun ModernTimelinePane(state: EditorState, viewModel: EditorViewModel, m
                 items(visible, key = { it.id }) { event ->
                     ModernTimelineEventRow(
                         event = event,
+                        relation = relationByEventId[event.id],
                         windowStartMs = windowStart,
                         windowEndMs = windowEnd,
                         playheadMs = playheadMs,
@@ -1258,6 +1281,7 @@ private enum class ModernTimelineDragMode { START, MOVE, END }
 @Composable
 private fun ModernTimelineEventRow(
     event: AssEvent,
+    relation: AssTimelineRelation?,
     windowStartMs: Long,
     windowEndMs: Long,
     playheadMs: Long,
@@ -1278,13 +1302,30 @@ private fun ModernTimelineEventRow(
     val timelineColors = MaterialTheme.colorScheme
 
     Row(
-        Modifier.fillMaxWidth().height(40.dp).combinedClickable(onClick = onFocus, onLongClick = onFocus),
+        Modifier.fillMaxWidth().height(52.dp).combinedClickable(onClick = onFocus, onLongClick = onFocus),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small),
     ) {
-        Column(Modifier.width(86.dp)) {
+        Column(Modifier.width(108.dp)) {
             Text("#${event.id}", style = MaterialTheme.typography.labelSmall)
             Text(AssInlineSyntax.visibleText(event.text), style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            relation?.let { timingRelation ->
+                when (timingRelation.kind) {
+                    AssTimelineRelationKind.OVERLAP -> Text(
+                        "Overlap ${timingRelation.durationMs}ms · #${timingRelation.previousEventId}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.error,
+                        maxLines = 1,
+                    )
+                    AssTimelineRelationKind.GAP -> Text(
+                        "Gap ${timingRelation.durationMs}ms",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                    )
+                    AssTimelineRelationKind.TOUCH -> Unit
+                }
+            }
         }
         BoxWithConstraints(
             Modifier.weight(1f).height(24.dp)

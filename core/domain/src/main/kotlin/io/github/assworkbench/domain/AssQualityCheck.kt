@@ -65,25 +65,30 @@ object AssQualityCheck {
             }
         }
 
-        val ordered = document.events.filterNot { it.comment }.sortedBy { it.start.millis }
-        for (i in 0 until ordered.lastIndex) {
-            val current = ordered[i]
-            val next = ordered[i + 1]
-            val gap = next.start.millis - current.end.millis
-            if (gap < 0L) {
-                out += AssQcIssue(
-                    current.id,
+        AssTimelineRelations.analyze(document.events).forEach { relation ->
+            when (relation.kind) {
+                AssTimelineRelationKind.OVERLAP -> out += AssQcIssue(
+                    relation.previousEventId,
                     AssQcKind.OVERLAP,
                     AssQcSeverity.WARNING,
-                    "与下一条 #${next.id} 重叠 ${-gap} ms",
+                    "与 #${relation.eventId} 重叠 ${relation.durationMs} ms",
                 )
-            } else if (gap in 0L until tinyGapMs) {
-                out += AssQcIssue(
-                    current.id,
-                    AssQcKind.TINY_GAP,
-                    AssQcSeverity.INFO,
-                    "与下一条 #${next.id} 间隔仅 ${gap} ms",
-                )
+                AssTimelineRelationKind.GAP -> if (relation.durationMs < tinyGapMs) {
+                    out += AssQcIssue(
+                        relation.previousEventId,
+                        AssQcKind.TINY_GAP,
+                        AssQcSeverity.INFO,
+                        "与 #${relation.eventId} 间隔仅 ${relation.durationMs} ms",
+                    )
+                }
+                AssTimelineRelationKind.TOUCH -> if (tinyGapMs > 0L) {
+                    out += AssQcIssue(
+                        relation.previousEventId,
+                        AssQcKind.TINY_GAP,
+                        AssQcSeverity.INFO,
+                        "与 #${relation.eventId} 间隔仅 0 ms",
+                    )
+                }
             }
         }
         return out
