@@ -270,7 +270,6 @@ private fun WorkbenchPreview(
         fontsDir = viewModel.rendererFontsDir(),
         fontRevision = state.fontRevision,
         initialPositionMs = state.playbackPositionMs,
-        showLayoutGuides = false,
         focusedEventId = state.focusedEventId,
         positionEditEventId = if (positionEditing) state.focusedEventId else null,
         onSetEventPosition = viewModel::setFocusedPosition,
