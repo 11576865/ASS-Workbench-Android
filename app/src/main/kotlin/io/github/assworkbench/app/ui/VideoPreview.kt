@@ -586,12 +586,12 @@ private fun AuthoritativeMpvPreview(
                             tint = Color.White.copy(alpha = 0.70f),
                         )
                         Text(
-                            "未载入视频 / MKV",
+                            "未载入参考视频",
                             color = Color.White,
                             style = MaterialTheme.typography.titleMedium,
                         )
                         Text(
-                            "点击此处选择视频；若选择 MKV，将同时载入内嵌 ASS 与字体",
+                            "点击此处选择参考视频；编辑内嵌 ASS 请使用“打开 MKV 工程”",
                             color = Color.White.copy(alpha = 0.60f),
                             style = MaterialTheme.typography.labelSmall,
                         )
