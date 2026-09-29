@@ -207,6 +207,8 @@ Preview must remain libass-authoritative where practical.
 
 ### Phase C — Event operations
 
+Implementation has started. The first structural slice now exposes contextual insert-before / insert-after, exact duplicate, merge-with-previous / merge-with-next, and delete actions in the existing Event surface. These operations reuse `AssDocumentEditing` and Undo history rather than introducing a permanent operations toolbar.
+
 Add:
 - insert before / after;
 - duplicate;

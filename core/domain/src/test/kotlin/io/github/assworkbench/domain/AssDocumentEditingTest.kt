@@ -40,6 +40,43 @@ class AssDocumentEditingTest {
     }
 
     @Test
+    fun insertAdjacentCopiesEventContextAndUsesNeighborTiming() {
+        val before = AssDocumentEditing.insertAdjacent(doc(), 2, before = true)
+        val beforeEvent = before.document.events.first { it.id == before.focusedEventId }
+        assertEquals(3_000, beforeEvent.start.millis)
+        assertEquals(5_000, beforeEvent.end.millis)
+        assertEquals("Alt", beforeEvent.style)
+        assertEquals("", beforeEvent.text)
+        assertEquals(listOf(1L, beforeEvent.id, 2L), before.document.events.map { it.id })
+
+        val after = AssDocumentEditing.insertAdjacent(doc(), 1, before = false)
+        val afterEvent = after.document.events.first { it.id == after.focusedEventId }
+        assertEquals(4_000, afterEvent.start.millis)
+        assertEquals(6_000, afterEvent.end.millis)
+        assertEquals("Default", afterEvent.style)
+        assertEquals(listOf(1L, afterEvent.id, 2L), after.document.events.map { it.id })
+    }
+
+    @Test
+    fun duplicatePreservesExactEventAndOnlyChangesId() {
+        val source = doc().events.first()
+        val result = AssDocumentEditing.duplicateEvent(doc(), source.id)
+        val duplicate = result.document.events[1]
+        assertEquals(source.copy(id = duplicate.id), duplicate)
+        assertTrue(duplicate.id != source.id)
+    }
+
+    @Test
+    fun mergeAdjacentUsesDocumentNeighborOrder() {
+        val withPrevious = AssDocumentEditing.mergeAdjacent(doc(), 2, previous = true)
+        assertEquals(1, withPrevious.document.events.size)
+        assertEquals("{\\fs56}{\\bord6}你好世界\\N第二句", withPrevious.document.events.single().text)
+
+        val withNext = AssDocumentEditing.mergeAdjacent(doc(), 1, previous = false)
+        assertEquals(1, withNext.document.events.size)
+        assertEquals("{\\fs56}{\\bord6}你好世界\\N第二句", withNext.document.events.single().text)
+    }
+    @Test
     fun splitUsesCursorAndPlaybackTimeAndCarriesLeadingOverrides() {
         val source = doc()
         val splitIndex = source.events.first().text.indexOf("世界")

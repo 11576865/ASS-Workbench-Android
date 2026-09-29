@@ -35,6 +35,65 @@ object AssDocumentEditing {
         }
         return AssStructuralEditResult(document.copy(events = events), newId)
     }
+    fun insertAdjacent(
+        document: AssDocument,
+        eventId: Long,
+        before: Boolean,
+        defaultDurationMs: Long = 2_000L,
+    ): AssStructuralEditResult {
+        val index = document.events.indexOfFirst { it.id == eventId }
+        require(index >= 0) { "当前字幕不存在。" }
+        val source = document.events[index]
+        val duration = defaultDurationMs.coerceAtLeast(100L)
+        val startMs: Long
+        val endMs: Long
+        if (before) {
+            endMs = source.start.millis
+            startMs = (endMs - duration).coerceAtLeast(0L)
+        } else {
+            startMs = source.end.millis
+            endMs = startMs + duration
+        }
+        val newId = nextEventId(document)
+        val inserted = source.copy(
+            id = newId,
+            start = SubTime(startMs),
+            end = SubTime(endMs),
+            text = "",
+        )
+        val events = document.events.toMutableList().apply {
+            add(if (before) index else index + 1, inserted)
+        }
+        return AssStructuralEditResult(document.copy(events = events), newId)
+    }
+
+    fun duplicateEvent(document: AssDocument, eventId: Long): AssStructuralEditResult {
+        val index = document.events.indexOfFirst { it.id == eventId }
+        require(index >= 0) { "当前字幕不存在。" }
+        val newId = nextEventId(document)
+        val duplicate = document.events[index].copy(id = newId)
+        val events = document.events.toMutableList().apply { add(index + 1, duplicate) }
+        return AssStructuralEditResult(document.copy(events = events), newId)
+    }
+
+    fun mergeAdjacent(
+        document: AssDocument,
+        eventId: Long,
+        previous: Boolean,
+        separator: String = "\\N",
+    ): AssStructuralEditResult {
+        val index = document.events.indexOfFirst { it.id == eventId }
+        require(index >= 0) { "当前字幕不存在。" }
+        val neighborIndex = if (previous) index - 1 else index + 1
+        require(neighborIndex in document.events.indices) {
+            if (previous) "当前字幕已经是第一条，无法与上一条合并。" else "当前字幕已经是最后一条，无法与下一条合并。"
+        }
+        return mergeEvents(
+            document = document,
+            eventIds = setOf(eventId, document.events[neighborIndex].id),
+            separator = separator,
+        )
+    }
 
     fun splitEvent(
         document: AssDocument,

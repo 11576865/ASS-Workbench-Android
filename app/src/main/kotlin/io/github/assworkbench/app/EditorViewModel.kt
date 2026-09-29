@@ -877,6 +877,53 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             )
         }
     }
+    fun insertFocusedBefore() {
+        val snapshot = _state.value
+        val id = snapshot.focusedEventId ?: return
+        runCatching { AssDocumentEditing.insertAdjacent(snapshot.document, id, before = true) }
+            .onSuccess { result ->
+                editDocument("已在当前字幕前插入一条空字幕。") { result.document }
+                _state.update { it.copy(focusedEventId = result.focusedEventId, selectedEventIds = emptySet(), selectionAnchorId = null) }
+            }
+            .onFailure { reportError("前插字幕失败", it) }
+    }
+
+    fun insertFocusedAfter() {
+        val snapshot = _state.value
+        val id = snapshot.focusedEventId ?: return
+        runCatching { AssDocumentEditing.insertAdjacent(snapshot.document, id, before = false) }
+            .onSuccess { result ->
+                editDocument("已在当前字幕后插入一条空字幕。") { result.document }
+                _state.update { it.copy(focusedEventId = result.focusedEventId, selectedEventIds = emptySet(), selectionAnchorId = null) }
+            }
+            .onFailure { reportError("后插字幕失败", it) }
+    }
+
+    fun duplicateFocusedEvent() {
+        val snapshot = _state.value
+        val id = snapshot.focusedEventId ?: return
+        runCatching { AssDocumentEditing.duplicateEvent(snapshot.document, id) }
+            .onSuccess { result ->
+                editDocument("已复制当前字幕。") { result.document }
+                _state.update { it.copy(focusedEventId = result.focusedEventId, selectedEventIds = emptySet(), selectionAnchorId = null) }
+            }
+            .onFailure { reportError("复制字幕失败", it) }
+    }
+
+    fun mergeFocusedWithPrevious() { mergeFocusedAdjacent(previous = true) }
+
+    fun mergeFocusedWithNext() { mergeFocusedAdjacent(previous = false) }
+
+    private fun mergeFocusedAdjacent(previous: Boolean) {
+        val snapshot = _state.value
+        val id = snapshot.focusedEventId ?: return
+        runCatching { AssDocumentEditing.mergeAdjacent(snapshot.document, id, previous = previous) }
+            .onSuccess { result ->
+                editDocument(if (previous) "已与上一条字幕合并。" else "已与下一条字幕合并。") { result.document }
+                _state.update { it.copy(focusedEventId = result.focusedEventId, selectedEventIds = emptySet(), selectionAnchorId = null) }
+            }
+            .onFailure { reportError(if (previous) "与上一条合并失败" else "与下一条合并失败", it) }
+    }
 
     fun deleteSelectedOrFocused() {
         val snapshot = _state.value

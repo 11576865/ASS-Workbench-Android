@@ -824,6 +824,28 @@ private fun InlineEventEditor(
                         inlinePanel = null
                     }) { Text("应用") }
                 }
+                Divider()
+                Text("结构操作", style = MaterialTheme.typography.labelMedium)
+                Row(
+                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro),
+                ) {
+                    OutlinedButton(onClick = viewModel::insertFocusedBefore) { Text("前插") }
+                    OutlinedButton(onClick = viewModel::insertFocusedAfter) { Text("后插") }
+                    OutlinedButton(onClick = viewModel::duplicateFocusedEvent) { Text("复制") }
+                    OutlinedButton(onClick = viewModel::mergeFocusedWithPrevious) { Text("合并上一条") }
+                    OutlinedButton(onClick = viewModel::mergeFocusedWithNext) { Text("合并下一条") }
+                    OutlinedButton(onClick = viewModel::deleteSelectedOrFocused) {
+                        Icon(Icons.Filled.Delete, null)
+                        Spacer(Modifier.width(4.dp))
+                        Text("删除")
+                    }
+                }
+                Text(
+                    "前插/后插会继承当前 Event 的 Layer、Style、Actor、Margins、Effect 与 Comment 状态，但正文为空；复制则保留完整正文和时间。所有结构操作都进入 Undo history。",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
     }
