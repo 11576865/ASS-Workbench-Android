@@ -49,6 +49,17 @@ Window guidance:
 
 Do not substitute device labels such as "phone" or "tablet" for actual window constraints.
 
+## Orientation
+
+Portrait remains the design baseline and the only orientation used to judge or refine the primary information architecture.
+
+Landscape is supported as a lightweight adaptive presentation, not a second independently designed UI:
+- preview/transport moves to the left;
+- Event workspace moves to the right;
+- contextual tools overlay the Event workspace;
+- no landscape-only feature hierarchy is introduced;
+- changes made only to improve landscape must not distort the portrait baseline.
+
 ## Preview
 
 The preview stage is always 16:9 and must not change height because an Event expands, a tool opens, or the supporting pane changes state.
