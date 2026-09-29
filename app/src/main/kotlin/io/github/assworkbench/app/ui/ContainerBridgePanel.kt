@@ -30,8 +30,8 @@ fun ContainerBridgePanel(
     if (state.uri == null) return
     var menuOpen by remember { mutableStateOf(false) }
     Column(
-        modifier.fillMaxWidth().padding(vertical = 4.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
+        modifier.fillMaxWidth().padding(vertical = WorkbenchDimens.Micro),
+        verticalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro),
     ) {
             Text("MKV Container Bridge")
             Text(state.name)
@@ -47,7 +47,7 @@ fun ContainerBridgePanel(
                     Row(
                         Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small),
                     ) {
                         val selected = state.tracks.firstOrNull { it.number == state.selectedTrackNumber }
                         Text(
@@ -78,7 +78,7 @@ fun ContainerBridgePanel(
                     Row(
                         Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small),
                     ) {
                         Text(
                             if (state.writeBackAvailable) "无重编码 MKV 写回可用" else "当前 ABI 暂无 MKV 写回工具",
