@@ -257,7 +257,7 @@ Waveform UI appears only after the waveform implementation exists.
 
 ### Phase E — Animation
 
-Implementation has started inside the existing Event “效果” owner. The first slice adds conservative top-level `\\fad` / `\\fade` inspection and replacement, including explicit conflict handling when both forms coexist. Blur / Soft Entry are now separated from Fade ownership so changing Blur no longer rewrites Fade or nested `\\t(...)` payloads. No new Animation workbench is introduced.
+Implementation has started inside the existing Event “效果” owner. The first slice adds conservative top-level `\\fad` / `\\fade` inspection and replacement, including explicit conflict handling when both forms coexist. Blur / Soft Entry are now separated from Fade ownership so changing Blur no longer rewrites Fade or nested `\\t(...)` payloads. No new Animation workbench is introduced. The second slice adds a contextual Transform sub-interface inside that owner: all four ASS `\\t` forms are parsed, multiple transforms are listed independently, nested comma-bearing payloads such as `\\clip(...)` remain intact, and edits replace only the selected top-level transform span. Malformed transforms are surfaced as Raw-only rather than normalized or guessed.
 
 Provide a structured editor for:
 

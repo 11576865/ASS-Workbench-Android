@@ -1064,9 +1064,241 @@ private fun InlineEffectsEditor(event: AssEvent, viewModel: EditorViewModel) {
                     }
                 }) { Text("应用 Fade") }
             }
+
+            Divider()
+            InlineTransformWorkspace(event, animation.transforms, viewModel)
         }
     }
 }
+@Composable
+private fun InlineTransformWorkspace(
+    event: AssEvent,
+    transforms: List<AssTransform>,
+    viewModel: EditorViewModel,
+) {
+    var expanded by rememberSaveable(event.id) { mutableStateOf(false) }
+    var addOpen by rememberSaveable(event.id) { mutableStateOf(false) }
+    val malformedCount = transforms.count { it.malformed }
+
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text("Animation · \\t", style = MaterialTheme.typography.titleSmall)
+            Text(
+                buildString {
+                    append(transforms.size).append(" transforms")
+                    if (malformedCount > 0) append(" · ").append(malformedCount).append(" raw-only")
+                },
+                style = MaterialTheme.typography.labelSmall,
+                color = if (malformedCount > 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        TextButton(onClick = { expanded = !expanded }) {
+            Text(if (expanded) "收起" else "编辑")
+        }
+    }
+
+    if (!expanded) {
+        Text(
+            "Transform 是 Event 内随时间变化的 override。展开后可分别编辑每个 \\t(...)；不会建立新的全局 Animation 工作台。",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        return
+    }
+
+    if (transforms.isEmpty()) {
+        Text(
+            "当前没有顶层 \\t(...)。",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    } else {
+        transforms.forEachIndexed { index, transform ->
+            key(event.id, index, transform.rawValue) {
+                InlineTransformCard(
+                    eventId = event.id,
+                    index = index,
+                    transform = transform,
+                    viewModel = viewModel,
+                )
+            }
+        }
+    }
+
+    if (addOpen) {
+        AddTransformCard(
+            event = event,
+            onCancel = { addOpen = false },
+            onAdd = { transform ->
+                viewModel.addEventTransform(event.id, transform)
+                addOpen = false
+            },
+        )
+    } else {
+        OutlinedButton(
+            onClick = { addOpen = true },
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Icon(Icons.Filled.Add, null)
+            Spacer(Modifier.width(WorkbenchDimens.Micro))
+            Text("添加 Transform")
+        }
+    }
+}
+
+@Composable
+private fun InlineTransformCard(
+    eventId: Long,
+    index: Int,
+    transform: AssTransform,
+    viewModel: EditorViewModel,
+) {
+    var start by remember(transform.rawValue) { mutableStateOf(transform.startMs?.toString().orEmpty()) }
+    var end by remember(transform.rawValue) { mutableStateOf(transform.endMs?.toString().orEmpty()) }
+    var accel by remember(transform.rawValue) { mutableStateOf(transform.accel?.toString().orEmpty()) }
+    var tags by remember(transform.rawValue) { mutableStateOf(transform.tags) }
+
+    val startValue = start.takeIf { it.isNotBlank() }?.toDoubleOrNull()
+    val endValue = end.takeIf { it.isNotBlank() }?.toDoubleOrNull()
+    val accelValue = accel.takeIf { it.isNotBlank() }?.toDoubleOrNull()
+    val timingPairValid = (start.isBlank() && end.isBlank()) ||
+        (startValue != null && endValue != null && startValue <= endValue)
+    val accelValid = accel.isBlank() || (accelValue != null && accelValue > 0.0)
+    val tagsValid = tags.trimStart().startsWith("\\")
+    val canApply = !transform.malformed && timingPairValid && accelValid && tagsValid
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.small,
+        tonalElevation = 1.dp,
+    ) {
+        Column(
+            Modifier.padding(WorkbenchDimens.Small),
+            verticalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Transform #${index + 1}", style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
+                TextButton(onClick = { viewModel.removeEventTransform(eventId, index) }) {
+                    Text("删除")
+                }
+            }
+
+            if (transform.malformed) {
+                Text(
+                    "该 \\t(...) 无法安全结构化解析，因此保持 Raw-only；除显式删除外不会自动重写。",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+                Text(
+                    "\\t" + transform.rawValue,
+                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                )
+            } else {
+                Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro)) {
+                    OutlinedTextField(start, { start = it }, label = { Text("Start ms") }, singleLine = true, modifier = Modifier.weight(1f))
+                    OutlinedTextField(end, { end = it }, label = { Text("End ms") }, singleLine = true, modifier = Modifier.weight(1f))
+                    OutlinedTextField(accel, { accel = it }, label = { Text("Accel") }, singleLine = true, modifier = Modifier.weight(1f))
+                }
+                OutlinedTextField(
+                    value = tags,
+                    onValueChange = { tags = it },
+                    label = { Text("Transform tags") },
+                    supportingText = { Text("留空 Start/End = 整个 Event；Accel 留空 = ASS 默认。Tags 必须以 \\ 开始。") },
+                    textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                    minLines = 1,
+                    maxLines = 3,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    Button(
+                        enabled = canApply,
+                        onClick = {
+                            viewModel.setEventTransform(
+                                eventId,
+                                index,
+                                AssTransform(
+                                    startMs = startValue,
+                                    endMs = endValue,
+                                    accel = accelValue,
+                                    tags = tags,
+                                ),
+                            )
+                        },
+                    ) { Text("应用 Transform") }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AddTransformCard(
+    event: AssEvent,
+    onCancel: () -> Unit,
+    onAdd: (AssTransform) -> Unit,
+) {
+    val durationMs = (event.end.millis - event.start.millis).coerceAtLeast(0L)
+    var start by remember(event.id) { mutableStateOf("0") }
+    var end by remember(event.id, durationMs) { mutableStateOf(durationMs.toString()) }
+    var accel by remember(event.id) { mutableStateOf("") }
+    var tags by remember(event.id) { mutableStateOf("") }
+
+    val startValue = start.toDoubleOrNull()
+    val endValue = end.toDoubleOrNull()
+    val accelValue = accel.takeIf { it.isNotBlank() }?.toDoubleOrNull()
+    val valid = startValue != null && endValue != null && startValue <= endValue &&
+        (accel.isBlank() || (accelValue != null && accelValue > 0.0)) &&
+        tags.trimStart().startsWith("\\")
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.small,
+        tonalElevation = 2.dp,
+    ) {
+        Column(
+            Modifier.padding(WorkbenchDimens.Small),
+            verticalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro),
+        ) {
+            Text("新 Transform", style = MaterialTheme.typography.labelLarge)
+            Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro)) {
+                OutlinedTextField(start, { start = it }, label = { Text("Start ms") }, singleLine = true, modifier = Modifier.weight(1f))
+                OutlinedTextField(end, { end = it }, label = { Text("End ms") }, singleLine = true, modifier = Modifier.weight(1f))
+                OutlinedTextField(accel, { accel = it }, label = { Text("Accel") }, singleLine = true, modifier = Modifier.weight(1f))
+            }
+            OutlinedTextField(
+                value = tags,
+                onValueChange = { tags = it },
+                label = { Text("Tags，例如 \\frz30\\blur2") },
+                textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                minLines = 1,
+                maxLines = 3,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Text(
+                "Transform timing 相对当前 Event 起点。这里新增的是上下文子界面，不是另一套 Animation 工作台。",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                TextButton(onClick = onCancel) { Text("取消") }
+                Button(
+                    enabled = valid,
+                    onClick = {
+                        onAdd(
+                            AssTransform(
+                                startMs = startValue,
+                                endMs = endValue,
+                                accel = accelValue,
+                                tags = tags,
+                            ),
+                        )
+                    },
+                ) { Text("添加") }
+            }
+        }
+    }
+}
+
 @Composable
 private fun SupportingWorkbench(
     state: EditorState,

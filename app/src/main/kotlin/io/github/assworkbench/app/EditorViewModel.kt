@@ -16,6 +16,7 @@ import io.github.assworkbench.domain.AssGeometrySemantic
 import io.github.assworkbench.domain.AssClipRect
 import io.github.assworkbench.domain.AssAnimationSemantic
 import io.github.assworkbench.domain.AssComplexFade
+import io.github.assworkbench.domain.AssTransform
 import io.github.assworkbench.domain.EventFormatClipboard
 import io.github.assworkbench.domain.EventFormatClipboardOps
 import io.github.assworkbench.domain.EventFormatPasteMode
@@ -1582,6 +1583,36 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         editDocument("已移除字幕 #" + id + " 的 Fade。") { doc ->
             doc.copy(events = doc.events.map { event ->
                 if (event.id != id) event else event.copy(text = AssAnimationSemantic.removeFade(event.text))
+            })
+        }
+    }
+
+    fun setEventTransform(id: Long, index: Int, transform: AssTransform) {
+        editDocument("已更新字幕 #" + id + " 的 Transform #" + (index + 1) + "。") { doc ->
+            doc.copy(events = doc.events.map { event ->
+                if (event.id != id) event else event.copy(
+                    text = AssAnimationSemantic.patchTransform(event.text, index, transform),
+                )
+            })
+        }
+    }
+
+    fun addEventTransform(id: Long, transform: AssTransform) {
+        editDocument("已为字幕 #" + id + " 添加 Transform。") { doc ->
+            doc.copy(events = doc.events.map { event ->
+                if (event.id != id) event else event.copy(
+                    text = AssAnimationSemantic.appendTransform(event.text, transform),
+                )
+            })
+        }
+    }
+
+    fun removeEventTransform(id: Long, index: Int) {
+        editDocument("已移除字幕 #" + id + " 的 Transform #" + (index + 1) + "。") { doc ->
+            doc.copy(events = doc.events.map { event ->
+                if (event.id != id) event else event.copy(
+                    text = AssAnimationSemantic.removeTransform(event.text, index),
+                )
             })
         }
     }
