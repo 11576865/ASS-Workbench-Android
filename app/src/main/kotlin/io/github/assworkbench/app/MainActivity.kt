@@ -36,14 +36,6 @@ import io.github.assworkbench.app.ui.ModernEditorScreen
 class MainActivity : ComponentActivity() {
     private val viewModel: EditorViewModel by viewModels()
 
-    private val openVideo = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        uri ?: return@registerForActivityResult
-        persist(uri, read = true, write = false)
-        // This picker belongs to the standalone/reference-video workflow.
-        // MKV project import has its own explicit entry and confirmation flow.
-        viewModel.openPickedVideo(uri)
-    }
-
     private val openReferenceVideo = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri ?: return@registerForActivityResult
         persist(uri, read = true, write = false)
@@ -151,9 +143,6 @@ class MainActivity : ComponentActivity() {
                     ModernEditorScreen(
                         state = state,
                         viewModel = viewModel,
-                        onOpenVideo = {
-                            openVideo.launch(arrayOf("video/*", "video/x-matroska", "application/octet-stream"))
-                        },
                         onOpenReferenceVideo = {
                             openReferenceVideo.launch(arrayOf("video/*", "video/x-matroska", "application/octet-stream"))
                         },
@@ -186,18 +175,6 @@ class MainActivity : ComponentActivity() {
             hide(WindowInsetsCompat.Type.systemBars())
             systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         }
-    }
-
-    private fun isMatroskaDocument(uri: Uri): Boolean {
-        val projection = arrayOf(OpenableColumns.DISPLAY_NAME)
-        val name = contentResolver.query(uri, projection, null, null, null)?.use { cursor ->
-            val column = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-            if (column >= 0 && cursor.moveToFirst()) cursor.getString(column) else null
-        } ?: uri.lastPathSegment
-        val mime = contentResolver.getType(uri).orEmpty()
-        return name?.endsWith(".mkv", ignoreCase = true) == true ||
-            mime.equals("video/x-matroska", ignoreCase = true) ||
-            mime.equals("video/webm", ignoreCase = true)
     }
 
     private fun isAssDocument(uri: Uri): Boolean {
