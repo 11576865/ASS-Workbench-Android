@@ -1522,6 +1522,12 @@ private fun TransformVisualPropertyEditor(
                 }
             }
 
+            TransformColorAlphaClipEditor(
+                tags = tags,
+                snapshot = snapshot,
+                onTagsChange = onTagsChange,
+            )
+
             snapshot.warnings.forEach { warning ->
                 Text(
                     when (warning.kind) {
@@ -1541,6 +1547,266 @@ private fun TransformVisualPropertyEditor(
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.tertiary,
                 )
+            }
+        }
+    }
+}
+
+private fun rgbToHex(rgb: AssRgb?): String =
+    rgb?.let { "%02X%02X%02X".format(it.red, it.green, it.blue) }.orEmpty()
+
+private fun parseRgbHex(text: String): AssRgb? {
+    val clean = text.trim().removePrefix("#")
+    if (clean.length != 6) return null
+    val red = clean.substring(0, 2).toIntOrNull(16) ?: return null
+    val green = clean.substring(2, 4).toIntOrNull(16) ?: return null
+    val blue = clean.substring(4, 6).toIntOrNull(16) ?: return null
+    return AssRgb(red, green, blue)
+}
+
+@Composable
+private fun TransformColorAlphaClipEditor(
+    tags: String,
+    snapshot: AssTransformVisualSnapshot,
+    onTagsChange: (String) -> Unit,
+) {
+    var open by rememberSaveable { mutableStateOf(false) }
+    if (!open) {
+        OutlinedButton(
+            onClick = { open = true },
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text("颜色 / Alpha / Rect Clip")
+        }
+        return
+    }
+
+    var colorChannelName by rememberSaveable { mutableStateOf(AssTransformColorChannel.PRIMARY.name) }
+    var alphaChannelName by rememberSaveable { mutableStateOf(AssTransformAlphaChannel.ALL.name) }
+    val colorChannel = AssTransformColorChannel.entries
+        .firstOrNull { it.name == colorChannelName } ?: AssTransformColorChannel.PRIMARY
+    val alphaChannel = AssTransformAlphaChannel.entries
+        .firstOrNull { it.name == alphaChannelName } ?: AssTransformAlphaChannel.ALL
+
+    val currentColor = snapshot.colors[colorChannel]
+    var colorHex by remember(colorChannel, currentColor) {
+        mutableStateOf(rgbToHex(currentColor))
+    }
+    val parsedColor = parseRgbHex(colorHex)
+
+    val currentAlpha = snapshot.alphas[alphaChannel]
+    var alphaText by remember(alphaChannel, currentAlpha) {
+        mutableStateOf(currentAlpha?.toString().orEmpty())
+    }
+
+    val rect = snapshot.rectClip
+    var inverse by remember(rect) { mutableStateOf(rect?.inverted ?: false) }
+    var left by remember(rect) { mutableStateOf(rect?.left?.toString().orEmpty()) }
+    var top by remember(rect) { mutableStateOf(rect?.top?.toString().orEmpty()) }
+    var right by remember(rect) { mutableStateOf(rect?.right?.toString().orEmpty()) }
+    var bottom by remember(rect) { mutableStateOf(rect?.bottom?.toString().orEmpty()) }
+
+    var colorMenuOpen by remember { mutableStateOf(false) }
+    var alphaMenuOpen by remember { mutableStateOf(false) }
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.small,
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.18f),
+    ) {
+        Column(
+            Modifier.padding(WorkbenchDimens.Small),
+            verticalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("扩展可动画属性", style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
+                TextButton(onClick = { open = false }) { Text("收起") }
+            }
+
+            Text("颜色", style = MaterialTheme.typography.labelLarge)
+            Row(
+                Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro),
+            ) {
+                Box {
+                    OutlinedButton(onClick = { colorMenuOpen = true }) {
+                        Text(
+                            when (colorChannel) {
+                                AssTransformColorChannel.PRIMARY -> "Primary"
+                                AssTransformColorChannel.SECONDARY -> "Secondary"
+                                AssTransformColorChannel.OUTLINE -> "Outline"
+                                AssTransformColorChannel.SHADOW -> "Shadow"
+                            }
+                        )
+                    }
+                    DropdownMenu(expanded = colorMenuOpen, onDismissRequest = { colorMenuOpen = false }) {
+                        AssTransformColorChannel.entries.forEach { channel ->
+                            DropdownMenuItem(
+                                text = { Text(channel.name.lowercase().replaceFirstChar { it.uppercase() }) },
+                                onClick = {
+                                    colorChannelName = channel.name
+                                    colorMenuOpen = false
+                                },
+                            )
+                        }
+                    }
+                }
+                if (parsedColor != null) {
+                    Box(
+                        Modifier
+                            .size(36.dp)
+                            .background(
+                                Color(
+                                    red = parsedColor.red / 255f,
+                                    green = parsedColor.green / 255f,
+                                    blue = parsedColor.blue / 255f,
+                                ),
+                                shape = MaterialTheme.shapes.small,
+                            )
+                    )
+                }
+                OutlinedTextField(
+                    value = colorHex,
+                    onValueChange = { colorHex = it.uppercase().take(7) },
+                    label = { Text("#RRGGBB") },
+                    singleLine = true,
+                    modifier = Modifier.weight(1f),
+                )
+                TextButton(
+                    onClick = {
+                        colorHex = ""
+                        onTagsChange(
+                            AssTransformVisualSemantic.patchColor(tags, colorChannel, null)
+                        )
+                    },
+                ) { Text("移除") }
+                Button(
+                    enabled = parsedColor != null,
+                    onClick = {
+                        onTagsChange(
+                            AssTransformVisualSemantic.patchColor(tags, colorChannel, parsedColor)
+                        )
+                    },
+                ) { Text("写入") }
+            }
+            Text(
+                "UI 使用常见 #RRGGBB；写入 ASS 时自动转换成 BGR 的 &HBBGGRR&。",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            Divider()
+            Text("Alpha", style = MaterialTheme.typography.labelLarge)
+            Row(
+                Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro),
+            ) {
+                Box {
+                    OutlinedButton(onClick = { alphaMenuOpen = true }) {
+                        Text(
+                            when (alphaChannel) {
+                                AssTransformAlphaChannel.ALL -> "All"
+                                AssTransformAlphaChannel.PRIMARY -> "Primary"
+                                AssTransformAlphaChannel.SECONDARY -> "Secondary"
+                                AssTransformAlphaChannel.OUTLINE -> "Outline"
+                                AssTransformAlphaChannel.SHADOW -> "Shadow"
+                            }
+                        )
+                    }
+                    DropdownMenu(expanded = alphaMenuOpen, onDismissRequest = { alphaMenuOpen = false }) {
+                        AssTransformAlphaChannel.entries.forEach { channel ->
+                            DropdownMenuItem(
+                                text = { Text(channel.name.lowercase().replaceFirstChar { it.uppercase() }) },
+                                onClick = {
+                                    alphaChannelName = channel.name
+                                    alphaMenuOpen = false
+                                },
+                            )
+                        }
+                    }
+                }
+                OutlinedTextField(
+                    value = alphaText,
+                    onValueChange = { alphaText = it.filter(Char::isDigit).take(3) },
+                    label = { Text("0–255") },
+                    supportingText = { Text("0 = 不透明，255 = 全透明") },
+                    singleLine = true,
+                    modifier = Modifier.weight(1f),
+                )
+                TextButton(
+                    onClick = {
+                        alphaText = ""
+                        onTagsChange(
+                            AssTransformVisualSemantic.patchAlpha(tags, alphaChannel, null)
+                        )
+                    },
+                ) { Text("移除") }
+                Button(
+                    enabled = alphaText.toIntOrNull() in 0..255,
+                    onClick = {
+                        val value = alphaText.toIntOrNull() ?: return@Button
+                        onTagsChange(
+                            AssTransformVisualSemantic.patchAlpha(tags, alphaChannel, value)
+                        )
+                    },
+                ) { Text("写入") }
+            }
+
+            Divider()
+            Text("Rect Clip", style = MaterialTheme.typography.labelLarge)
+            if (snapshot.vectorClipPresent) {
+                Text(
+                    "检测到 vector clip。为避免覆盖 drawing path，Rect Clip 结构化编辑已锁定；请继续使用 Raw tags。",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            } else {
+                Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro)) {
+                    FilterChip(
+                        selected = !inverse,
+                        onClick = { inverse = false },
+                        label = { Text("\\clip") },
+                    )
+                    FilterChip(
+                        selected = inverse,
+                        onClick = { inverse = true },
+                        label = { Text("\\iclip") },
+                    )
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro)) {
+                    OutlinedTextField(left, { left = it }, label = { Text("L") }, singleLine = true, modifier = Modifier.weight(1f))
+                    OutlinedTextField(top, { top = it }, label = { Text("T") }, singleLine = true, modifier = Modifier.weight(1f))
+                    OutlinedTextField(right, { right = it }, label = { Text("R") }, singleLine = true, modifier = Modifier.weight(1f))
+                    OutlinedTextField(bottom, { bottom = it }, label = { Text("B") }, singleLine = true, modifier = Modifier.weight(1f))
+                }
+                val clipValues = listOf(left, top, right, bottom).map { it.toDoubleOrNull() }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    TextButton(
+                        onClick = {
+                            left = ""; top = ""; right = ""; bottom = ""
+                            onTagsChange(AssTransformVisualSemantic.patchRectClip(tags, null))
+                        },
+                    ) { Text("移除 Rect Clip") }
+                    Button(
+                        enabled = clipValues.all { it?.isFinite() == true },
+                        onClick = {
+                            onTagsChange(
+                                AssTransformVisualSemantic.patchRectClip(
+                                    tags,
+                                    AssRectTransformClip(
+                                        left = clipValues[0]!!,
+                                        top = clipValues[1]!!,
+                                        right = clipValues[2]!!,
+                                        bottom = clipValues[3]!!,
+                                        inverted = inverse,
+                                    ),
+                                )
+                            )
+                        },
+                    ) { Text("写入 Rect Clip") }
+                }
             }
         }
     }

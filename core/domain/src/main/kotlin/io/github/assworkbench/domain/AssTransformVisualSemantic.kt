@@ -40,8 +40,47 @@ data class AssTransformWarning(
     val property: AssTransformVisualProperty? = null,
 )
 
+enum class AssTransformColorChannel(
+    val tag: String,
+    val aliases: Set<String> = setOf(tag),
+) {
+    PRIMARY("1c", setOf("1c", "c")),
+    SECONDARY("2c"),
+    OUTLINE("3c"),
+    SHADOW("4c"),
+}
+
+data class AssRgb(
+    val red: Int,
+    val green: Int,
+    val blue: Int,
+)
+
+enum class AssTransformAlphaChannel(
+    val tag: String,
+    val aliases: Set<String> = setOf(tag),
+) {
+    ALL("alpha"),
+    PRIMARY("1a"),
+    SECONDARY("2a"),
+    OUTLINE("3a"),
+    SHADOW("4a"),
+}
+
+data class AssRectTransformClip(
+    val left: Double,
+    val top: Double,
+    val right: Double,
+    val bottom: Double,
+    val inverted: Boolean,
+)
+
 data class AssTransformVisualSnapshot(
     val values: Map<AssTransformVisualProperty, Double> = emptyMap(),
+    val colors: Map<AssTransformColorChannel, AssRgb> = emptyMap(),
+    val alphas: Map<AssTransformAlphaChannel, Int> = emptyMap(),
+    val rectClip: AssRectTransformClip? = null,
+    val vectorClipPresent: Boolean = false,
     val warnings: List<AssTransformWarning> = emptyList(),
 )
 
@@ -117,10 +156,85 @@ object AssTransformVisualSemantic {
             warnings += AssTransformWarning(kind = AssTransformWarningKind.FONT_SIZE_HINTING, tag = "fs")
         }
 
+        val colors = linkedMapOf<AssTransformColorChannel, AssRgb>()
+        AssTransformColorChannel.entries.forEach { channel ->
+            refs.lastOrNull { ref ->
+                channel.aliases.any { it.equals(ref.name, ignoreCase = true) }
+            }?.value?.let(::parseColor)?.let { colors[channel] = it }
+        }
+
+        val alphas = linkedMapOf<AssTransformAlphaChannel, Int>()
+        AssTransformAlphaChannel.entries.forEach { channel ->
+            refs.lastOrNull { ref ->
+                channel.aliases.any { it.equals(ref.name, ignoreCase = true) }
+            }?.value?.let(::parseAlpha)?.let { alphas[channel] = it }
+        }
+
+        val rectClipRef = (clips + inverseClips)
+            .filter { isRectClip(it.value) }
+            .maxByOrNull { it.start }
+        val rectClip = rectClipRef?.let { ref ->
+            parseRectClip(
+                ref.value,
+                inverted = ref.name.equals("iclip", ignoreCase = true),
+            )
+        }
+
         return AssTransformVisualSnapshot(
             values = values,
+            colors = colors,
+            alphas = alphas,
+            rectClip = rectClip,
+            vectorClipPresent = (clips + inverseClips).any { !isRectClip(it.value) },
             warnings = warnings.distinct(),
         )
+    }
+
+    fun patchColor(
+        tags: String,
+        channel: AssTransformColorChannel,
+        value: AssRgb?,
+    ): String {
+        val rendered = value?.let {
+            if (it.red !in 0..255 || it.green !in 0..255 || it.blue !in 0..255) return tags
+            "&H%02X%02X%02X&".format(it.blue, it.green, it.red)
+        }
+        return patchScalarTag(tags, channel.aliases, channel.tag, rendered)
+    }
+
+    fun patchAlpha(
+        tags: String,
+        channel: AssTransformAlphaChannel,
+        value: Int?,
+    ): String {
+        if (value != null && value !in 0..255) return tags
+        val rendered = value?.let { "&H%02X&".format(it) }
+        return patchScalarTag(tags, channel.aliases, channel.tag, rendered)
+    }
+
+    fun patchRectClip(
+        tags: String,
+        value: AssRectTransformClip?,
+    ): String {
+        val refs = scan(tags)
+        val clipRefs = refs.filter {
+            it.name.equals("clip", true) || it.name.equals("iclip", true)
+        }
+        if (clipRefs.any { !isRectClip(it.value) }) return tags
+
+        var result = tags
+        clipRefs.sortedByDescending { it.start }.forEach { ref ->
+            result = result.removeRange(ref.start, ref.endExclusive)
+        }
+        if (value == null) return result
+        if (!listOf(value.left, value.top, value.right, value.bottom).all { it.isFinite() }) {
+            return tags
+        }
+        val name = if (value.inverted) "iclip" else "clip"
+        return result + "\\" + name + "(" +
+            listOf(value.left, value.top, value.right, value.bottom)
+                .joinToString(",") { formatNumber(it) } +
+            ")"
     }
 
     fun patchNumeric(
@@ -154,6 +268,71 @@ object AssTransformVisualSemantic {
         } else {
             tags + replacement
         }
+    }
+
+    private fun patchScalarTag(
+        tags: String,
+        aliases: Set<String>,
+        canonicalName: String,
+        renderedValue: String?,
+    ): String {
+        val refs = scan(tags)
+        val matches = refs.filter { ref ->
+            aliases.any { it.equals(ref.name, ignoreCase = true) }
+        }
+        if (renderedValue == null) {
+            var result = tags
+            matches.sortedByDescending { it.start }.forEach { ref ->
+                result = result.removeRange(ref.start, ref.endExclusive)
+            }
+            return result
+        }
+        val target = matches.lastOrNull()
+        val name = target?.name ?: canonicalName
+        val replacement = "\\" + name + renderedValue
+        return if (target != null) {
+            tags.replaceRange(target.start, target.endExclusive, replacement)
+        } else {
+            tags + replacement
+        }
+    }
+
+    private fun parseColor(value: String): AssRgb? {
+        val hex = unwrapAssHex(value)
+        if (hex.length != 6) return null
+        val blue = hex.substring(0, 2).toIntOrNull(16) ?: return null
+        val green = hex.substring(2, 4).toIntOrNull(16) ?: return null
+        val red = hex.substring(4, 6).toIntOrNull(16) ?: return null
+        return AssRgb(red = red, green = green, blue = blue)
+    }
+
+    private fun parseAlpha(value: String): Int? {
+        val hex = unwrapAssHex(value)
+        if (hex.length != 2) return null
+        return hex.toIntOrNull(16)
+    }
+
+    private fun unwrapAssHex(value: String): String {
+        var text = value.trim()
+        if (text.endsWith("&")) text = text.dropLast(1)
+        if (text.startsWith("&H", ignoreCase = true)) text = text.drop(2)
+        else if (text.startsWith("H", ignoreCase = true)) text = text.drop(1)
+        return text.uppercase()
+    }
+
+    private fun parseRectClip(value: String, inverted: Boolean): AssRectTransformClip? {
+        val trimmed = value.trim()
+        if (!trimmed.startsWith("(") || !trimmed.endsWith(")")) return null
+        val parts = splitTopLevel(trimmed.substring(1, trimmed.length - 1))
+        if (parts.size != 4) return null
+        val numbers = parts.map { it.trim().toDoubleOrNull() ?: return null }
+        return AssRectTransformClip(
+            left = numbers[0],
+            top = numbers[1],
+            right = numbers[2],
+            bottom = numbers[3],
+            inverted = inverted,
+        )
     }
 
     private fun isRectClip(value: String): Boolean {

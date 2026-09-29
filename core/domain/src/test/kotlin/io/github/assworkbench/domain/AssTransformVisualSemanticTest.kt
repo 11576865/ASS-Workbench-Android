@@ -83,4 +83,64 @@ class AssTransformVisualSemanticTest {
             ),
         )
     }
+    @Test
+    fun readsAndPatchesAssBgrColorsWithoutTouchingSiblingTags() {
+        val input = "\\1c&H332211&\\blur2\\3c&HCCBBAA&"
+        val snapshot = AssTransformVisualSemantic.inspect(input)
+        assertEquals(AssRgb(0x11, 0x22, 0x33), snapshot.colors[AssTransformColorChannel.PRIMARY])
+        assertEquals(AssRgb(0xAA, 0xBB, 0xCC), snapshot.colors[AssTransformColorChannel.OUTLINE])
+
+        val output = AssTransformVisualSemantic.patchColor(
+            input,
+            AssTransformColorChannel.PRIMARY,
+            AssRgb(0xFE, 0x80, 0x01),
+        )
+        assertTrue("\\1c&H0180FE&" in output)
+        assertTrue("\\blur2" in output)
+        assertTrue("\\3c&HCCBBAA&" in output)
+    }
+
+    @Test
+    fun primaryColorAliasAndAlphaChannelsArePreserved() {
+        val colored = AssTransformVisualSemantic.patchColor(
+            "\\c&H0000FF&\\bord2",
+            AssTransformColorChannel.PRIMARY,
+            AssRgb(0, 255, 0),
+        )
+        assertTrue("\\c&H00FF00&" in colored)
+
+        val alpha = AssTransformVisualSemantic.patchAlpha(
+            "\\alpha&H80&\\blur2",
+            AssTransformAlphaChannel.ALL,
+            32,
+        )
+        assertTrue("\\alpha&H20&" in alpha)
+        assertTrue("\\blur2" in alpha)
+    }
+
+    @Test
+    fun rectangularClipIsStructuredButVectorClipIsNeverOverwritten() {
+        val input = "\\clip(10,20,300,400)\\blur2"
+        val snapshot = AssTransformVisualSemantic.inspect(input)
+        assertEquals(
+            AssRectTransformClip(10.0, 20.0, 300.0, 400.0, false),
+            snapshot.rectClip,
+        )
+        val updated = AssTransformVisualSemantic.patchRectClip(
+            input,
+            AssRectTransformClip(15.0, 25.0, 320.0, 420.0, true),
+        )
+        assertTrue("\\iclip(15,25,320,420)" in updated)
+        assertTrue("\\blur2" in updated)
+
+        val vector = "\\clip(m 0 0 l 10 10)\\blur2"
+        assertTrue(AssTransformVisualSemantic.inspect(vector).vectorClipPresent)
+        assertEquals(
+            vector,
+            AssTransformVisualSemantic.patchRectClip(
+                vector,
+                AssRectTransformClip(0.0, 0.0, 100.0, 100.0, false),
+            ),
+        )
+    }
 }
