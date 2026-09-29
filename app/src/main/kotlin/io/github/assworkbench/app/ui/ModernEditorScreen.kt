@@ -900,7 +900,7 @@ private fun InlineEventEditor(
         )
     }
 
-    if (inlinePanel == "effects") InlineEffectsEditor(event, viewModel)
+    if (inlinePanel == "effects") InlineEffectsEditor(event, state.playbackPositionMs, viewModel)
 
     if (inlinePanel == "event") {
         Surface(
@@ -971,7 +971,7 @@ private fun InlineEventEditor(
 }
 
 @Composable
-private fun InlineEffectsEditor(event: AssEvent, viewModel: EditorViewModel) {
+private fun InlineEffectsEditor(event: AssEvent, playbackPositionMs: Long, viewModel: EditorViewModel) {
     val visual = remember(event.id, event.text) { EventOverrideEditor.inspect(event.text) }
     val animation = remember(event.id, event.text) { AssAnimationSemantic.inspect(event.text) }
     var blur by remember(event.id, event.text) { mutableStateOf(visual.blur?.toString().orEmpty()) }
@@ -1066,7 +1066,7 @@ private fun InlineEffectsEditor(event: AssEvent, viewModel: EditorViewModel) {
             }
 
             Divider()
-            InlineTransformWorkspace(event, animation.transforms, viewModel)
+            InlineTransformWorkspace(event, animation.transforms, playbackPositionMs, viewModel)
         }
     }
 }
@@ -1074,6 +1074,7 @@ private fun InlineEffectsEditor(event: AssEvent, viewModel: EditorViewModel) {
 private fun InlineTransformWorkspace(
     event: AssEvent,
     transforms: List<AssTransform>,
+    playbackPositionMs: Long,
     viewModel: EditorViewModel,
 ) {
     var expanded by rememberSaveable(event.id) { mutableStateOf(false) }
@@ -1106,6 +1107,12 @@ private fun InlineTransformWorkspace(
         return
     }
 
+    AnimationPreviewScrubber(
+        event = event,
+        playbackPositionMs = playbackPositionMs,
+        onSeek = viewModel::seekPreviewTo,
+    )
+
     if (transforms.isEmpty()) {
         Text(
             "当前没有顶层 \\t(...)。",
@@ -1119,6 +1126,9 @@ private fun InlineTransformWorkspace(
                     eventId = event.id,
                     index = index,
                     transform = transform,
+                    previewLocalMs = (playbackPositionMs - event.start.millis)
+                        .coerceIn(0L, (event.end.millis - event.start.millis).coerceAtLeast(0L)),
+                    eventDurationMs = (event.end.millis - event.start.millis).coerceAtLeast(0L),
                     viewModel = viewModel,
                 )
             }
@@ -1147,10 +1157,80 @@ private fun InlineTransformWorkspace(
 }
 
 @Composable
+private fun AnimationPreviewScrubber(
+    event: AssEvent,
+    playbackPositionMs: Long,
+    onSeek: (Long) -> Unit,
+) {
+    val durationMs = (event.end.millis - event.start.millis).coerceAtLeast(0L)
+    if (durationMs <= 0L) return
+
+    val canonicalLocal = (playbackPositionMs - event.start.millis).coerceIn(0L, durationMs)
+    var localMs by remember(event.id) { mutableLongStateOf(canonicalLocal) }
+    var dragging by remember(event.id) { mutableStateOf(false) }
+    var lastSeekSent by remember(event.id) { mutableLongStateOf(Long.MIN_VALUE) }
+
+    LaunchedEffect(playbackPositionMs, event.id, durationMs, dragging) {
+        if (!dragging) {
+            localMs = canonicalLocal
+        }
+    }
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.small,
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.28f),
+    ) {
+        Column(
+            Modifier.padding(WorkbenchDimens.Small),
+            verticalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "Preview scrub",
+                    style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier.weight(1f),
+                )
+                Text(
+                    localMs.toString() + " / " + durationMs + " ms",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Slider(
+                value = localMs.toFloat(),
+                onValueChange = { raw ->
+                    dragging = true
+                    val next = kotlin.math.round(raw.toDouble()).toLong().coerceIn(0L, durationMs)
+                    localMs = next
+                    if (lastSeekSent == Long.MIN_VALUE || kotlin.math.abs(next - lastSeekSent) >= 33L) {
+                        lastSeekSent = next
+                        onSeek(event.start.millis + next)
+                    }
+                },
+                onValueChangeFinished = {
+                    dragging = false
+                    lastSeekSent = localMs
+                    onSeek(event.start.millis + localMs)
+                },
+                valueRange = 0f..durationMs.toFloat(),
+            )
+            Text(
+                "拖动只改变预览播放头，不改 Event timing，也不产生 Undo 历史；约 33ms 节流避免连续拖动时过量 seek。",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
 private fun InlineTransformCard(
     eventId: Long,
     index: Int,
     transform: AssTransform,
+    previewLocalMs: Long,
+    eventDurationMs: Long,
     viewModel: EditorViewModel,
 ) {
     var start by remember(transform.rawValue) { mutableStateOf(transform.startMs?.toString().orEmpty()) }
@@ -1182,6 +1262,15 @@ private fun InlineTransformCard(
                     Text("删除")
                 }
             }
+            val effectiveStart = transform.startMs?.toLong()?.coerceAtLeast(0L) ?: 0L
+            val effectiveEnd = transform.endMs?.toLong()?.coerceAtMost(eventDurationMs) ?: eventDurationMs
+            val playheadInside = !transform.malformed && previewLocalMs in effectiveStart..effectiveEnd
+            Text(
+                (if (playheadInside) "播放头在此 Transform 范围内" else "播放头在范围外") +
+                    " · " + effectiveStart + "–" + effectiveEnd + " ms",
+                style = MaterialTheme.typography.labelSmall,
+                color = if (playheadInside) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
 
             if (transform.malformed) {
                 Text(

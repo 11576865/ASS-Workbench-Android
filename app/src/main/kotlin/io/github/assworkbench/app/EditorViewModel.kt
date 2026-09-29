@@ -1726,6 +1726,17 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
 
     fun setPlaybackPosition(positionMs: Long) = _state.update { it.copy(playbackPositionMs = positionMs.coerceAtLeast(0)) }
 
+    fun seekPreviewTo(positionMs: Long) {
+        val target = positionMs.coerceAtLeast(0L)
+        _state.update {
+            it.copy(
+                playbackPositionMs = target,
+                seekRequestMs = target,
+                seekRequestNonce = it.seekRequestNonce + 1,
+            )
+        }
+    }
+
     fun restoreRecovery() {
         val snapshot = recoveryStore.read() ?: run {
             _state.update { it.copy(recoveryAvailable = false, recoveryLabel = "") }
