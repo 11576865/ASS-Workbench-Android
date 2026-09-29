@@ -79,10 +79,6 @@ fun TypesettingPanel(
     var alignment by remember(style) { mutableIntStateOf(style.alignment) }
 
     val styleNames = state.document.styles.map { it.name }
-    var sourceStyle by remember(styleNames) { mutableStateOf(styleNames.firstOrNull() ?: "") }
-    var targetStyle by remember(styleNames) { mutableStateOf(styleNames.drop(1).firstOrNull() ?: "") }
-    var sourceMenu by remember { mutableStateOf(false) }
-    var targetMenu by remember { mutableStateOf(false) }
 
 
     val focusedEvent = state.focusedEventId?.let { id -> state.document.events.firstOrNull { it.id == id } }
@@ -456,63 +452,6 @@ fun TypesettingPanel(
                         onClick = viewModel::clearFocusedStyleOverrides,
                         modifier = Modifier.fillMaxWidth(),
                     ) { Text("清除覆盖，改由 Style 控制") }
-                }
-            }
-            item {
-                TextButton(
-                    onClick = { bilingualOpen = !bilingualOpen },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(if (bilingualOpen) "收起双语布局工具" else "双语 60/40 布局工具")
-                }
-                if (bilingualOpen) {
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Row(
-                            Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text(
-                                "60/40 参考线（HSR / 黑屏工作流）",
-                                modifier = Modifier.weight(1f),
-                                style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
-                            )
-                            Switch(
-                                checked = state.showLayoutGuides,
-                                onCheckedChange = { viewModel.toggleLayoutGuides() },
-                            )
-                        }
-                        Text(
-                            "安全区 3% / 5% · 中央间隔 " + geometry.centralGap +
-                                " · 分界 Y " + geometry.sourceBoundaryY + "/" + geometry.targetBoundaryY,
-                            style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
-                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            StylePicker(
-                                label = "上方 / 源",
-                                value = sourceStyle,
-                                names = styleNames,
-                                expanded = sourceMenu,
-                                onExpanded = { sourceMenu = it },
-                                onPick = { sourceStyle = it; sourceMenu = false },
-                                modifier = Modifier.weight(1f),
-                            )
-                            StylePicker(
-                                label = "下方 / 目标",
-                                value = targetStyle,
-                                names = styleNames,
-                                expanded = targetMenu,
-                                onExpanded = { targetMenu = it },
-                                onPick = { targetStyle = it; targetMenu = false },
-                                modifier = Modifier.weight(1f),
-                            )
-                        }
-                        Button(
-                            onClick = { viewModel.applyBilingual6040Preset(sourceStyle, targetStyle) },
-                            enabled = sourceStyle.isNotBlank() && targetStyle.isNotBlank() && sourceStyle != targetStyle,
-                            modifier = Modifier.fillMaxWidth(),
-                        ) { Text("应用 60/40 预设") }
-                    }
                 }
             }
         }
