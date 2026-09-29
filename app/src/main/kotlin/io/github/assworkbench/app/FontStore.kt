@@ -124,6 +124,18 @@ class FontStore(private val context: Context) {
         return FontAsset(target.name, sha, metadata, FontOrigin.MKV_ATTACHMENT)
     }
 
+    fun fileFor(asset: FontAsset): File? {
+        val candidates = when (asset.origin) {
+            FontOrigin.MANUAL -> listOf(File(importedDir, asset.fileName))
+            FontOrigin.MKV_ATTACHMENT -> listOf(File(projectFontDir, asset.fileName))
+            FontOrigin.UNKNOWN -> listOf(
+                File(importedDir, asset.fileName),
+                File(projectFontDir, asset.fileName),
+            )
+        }
+        return candidates.firstOrNull { it.isFile }
+    }
+
     fun rebuildFontconfigCache(): FontconfigPrepared {
         fontconfigCacheRoot.deleteRecursively()
         fontconfigCacheRoot.mkdirs()
