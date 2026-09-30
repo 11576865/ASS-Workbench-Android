@@ -36,6 +36,18 @@ jobs:
           go-version: '1.27.0'
           cache: false
 
+      - uses: android-actions/setup-android@v4
+
+      - name: Install Android SDK / NDK packages
+        shell: bash
+        run: |
+          set -euxo pipefail
+          NDK_VERSION=29.0.14206865
+          sdkmanager "platforms;android-36" "platform-tools" "ndk;$NDK_VERSION" >/dev/null
+          test -d "$ANDROID_HOME/platforms/android-36"
+          test -f "$ANDROID_HOME/ndk/$NDK_VERSION/source.properties"
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/$NDK_VERSION" >> "$GITHUB_ENV"
+
       - name: Prepare x86_64 MKV bridge and deterministic fixture
         shell: bash
         run: |
@@ -48,7 +60,8 @@ jobs:
 
           mkdir -p app/src/debug/jniLibs/x86_64 app/src/androidTest/assets/mkv
           cd .mkvgo-src
-          CGO_ENABLED=0 GOOS=android GOARCH=amd64 \
+          CC="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android26-clang" \
+          CGO_ENABLED=1 GOOS=android GOARCH=amd64 \
             go build -buildmode=pie -trimpath -ldflags="-s -w" \
             -o "$GITHUB_WORKSPACE/app/src/debug/jniLibs/x86_64/libmkvgo.so" ./cmd/asswb-mkvgo
           go run ./cmd/asswb-fixture "$GITHUB_WORKSPACE/app/src/androidTest/assets/mkv/source.mkv"
@@ -59,15 +72,6 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-
-      - uses: android-actions/setup-android@v4
-
-      - name: Install Android SDK packages
-        shell: bash
-        run: |
-          set -euxo pipefail
-          sdkmanager "platforms;android-36" "platform-tools" >/dev/null
-          test -d "$ANDROID_HOME/platforms/android-36"
 
       - uses: gradle/actions/setup-gradle@v4
         with:
