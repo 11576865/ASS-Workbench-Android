@@ -126,17 +126,25 @@ fun ModernEditorScreen(
     }
     val issuesByEvent = remember(issues) { issues.groupBy { it.eventId } }
 
+    fun isInlineOwner(next: WorkbenchTool): Boolean =
+        next == WorkbenchTool.TEXT || next == WorkbenchTool.EFFECTS || next == WorkbenchTool.EVENT
+
     fun openTool(next: WorkbenchTool) {
         toolName = next.name
         supportingOpen = true
-        openSurfaceNames = openSurfaceNames + next.name
-        surfacesTemporarilyHidden = false
-        surfaceController.bringToFront(next.name)
+        if (!isInlineOwner(next)) {
+            openSurfaceNames = openSurfaceNames + next.name
+            surfacesTemporarilyHidden = false
+            surfaceController.bringToFront(next.name)
+        }
     }
 
     fun toggleTool(next: WorkbenchTool) {
         toolName = next.name
         supportingOpen = true
+        if (isInlineOwner(next)) {
+            return
+        }
         openSurfaceNames = if (next.name in openSurfaceNames) {
             openSurfaceNames - next.name
         } else {
@@ -316,6 +324,7 @@ fun ModernEditorScreen(
 
             WorkbenchToolStrip(
                 openTools = openSurfaces,
+                activeInlineTool = tool,
                 onToolToggle = ::toggleTool,
                 previewVisible = previewVisible,
                 onPreviewToggle = { previewVisible = !previewVisible },
@@ -492,7 +501,12 @@ fun ModernEditorScreen(
         }
 
         WorkbenchTool.entries.forEachIndexed { index, surfaceTool ->
-            val visible = !surfacesTemporarilyHidden && surfaceTool in openSurfaces
+            val floatingEligible = surfaceTool !in setOf(
+                WorkbenchTool.TEXT,
+                WorkbenchTool.EFFECTS,
+                WorkbenchTool.EVENT,
+            )
+            val visible = floatingEligible && !surfacesTemporarilyHidden && surfaceTool in openSurfaces
             FloatingWorkbenchSurface(
                 id = surfaceTool.name,
                 title = surfaceTool.title,
@@ -532,6 +546,7 @@ fun ModernEditorScreen(
 @Composable
 private fun WorkbenchToolStrip(
     openTools: Set<WorkbenchTool>,
+    activeInlineTool: WorkbenchTool,
     onToolToggle: (WorkbenchTool) -> Unit,
     previewVisible: Boolean,
     onPreviewToggle: () -> Unit,
@@ -551,7 +566,11 @@ private fun WorkbenchToolStrip(
             ) {
                 WorkbenchTool.entries.forEach { entry ->
                     FilterChip(
-                        selected = entry in openTools && !surfacesHidden,
+                        selected = (
+                            entry in openTools ||
+                                (entry == activeInlineTool &&
+                                    entry in setOf(WorkbenchTool.TEXT, WorkbenchTool.EFFECTS, WorkbenchTool.EVENT))
+                        ) && !surfacesHidden,
                         onClick = { onToolToggle(entry) },
                         modifier = Modifier.testTag("tool-${entry.name}"),
                         label = { Text(entry.title) },
