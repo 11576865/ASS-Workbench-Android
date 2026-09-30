@@ -24,6 +24,7 @@ android {
         targetSdk = 35
         versionCode = 28
         versionName = if (rendererExperimental) "$baseVersionName-fontconfig" else baseVersionName
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         manifestPlaceholders["appLabel"] = if (rendererExperimental) "ASS Workbench FC" else "ASS Workbench"
         buildConfigField("String", "ASSWB_RENDERER_FONT_PROVIDER", "\"$rendererProvider\"")
         buildConfigField("String", "ASSWB_RENDERER_VERSION", "\"$rendererVersion\"")
@@ -66,5 +67,13 @@ dependencies {
 
     implementation("io.github.yuroyami:libmpvkt-compose:$rendererVersion")
 
+    androidTestImplementation("junit:junit:4.13.2")
+    androidTestImplementation("androidx.test:core-ktx:1.6.1")
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
+    androidTestImplementation("androidx.test:runner:1.6.2")
+    androidTestImplementation(platform("androidx.compose:compose-bom:2026.04.01"))
+    androidTestImplementation("androidx.compose.ui:ui-test-junit4")
+
     debugImplementation("androidx.compose.ui:ui-tooling")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
 }
