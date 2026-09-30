@@ -789,8 +789,20 @@ private fun FloatingToolContent(
             }
         }
         WorkbenchTool.TIMELINE -> ModernTimelinePane(state, viewModel, Modifier.fillMaxSize())
-        WorkbenchTool.STYLE -> StylePane(state, viewModel, Modifier.fillMaxSize())
-        WorkbenchTool.POSITION -> PositionPane(state, viewModel, Modifier.fillMaxSize())
+        WorkbenchTool.STYLE -> StylePane(
+            state = state,
+            viewModel = viewModel,
+            modifier = Modifier.fillMaxSize(),
+            targetEventId = boundEventId,
+            unresolvedPinnedEventId = unresolvedPinnedEventId,
+        )
+        WorkbenchTool.POSITION -> PositionPane(
+            state = state,
+            viewModel = viewModel,
+            modifier = Modifier.fillMaxSize(),
+            targetEventId = boundEventId,
+            unresolvedPinnedEventId = unresolvedPinnedEventId,
+        )
         WorkbenchTool.FONTS -> FontManagerPane(state, viewModel, onImportFont, Modifier.fillMaxSize())
         WorkbenchTool.QC -> QcPane(state, viewModel, issues, Modifier.fillMaxSize())
         WorkbenchTool.BATCH -> BatchPane(state, viewModel, Modifier.fillMaxSize())
@@ -2965,16 +2977,51 @@ private fun ModernTimelineEventRow(
 }
 
 @Composable
-private fun StylePane(state: EditorState, viewModel: EditorViewModel, modifier: Modifier = Modifier) {
-    val focused = state.document.events.firstOrNull { it.id == state.focusedEventId }
-    val style = focused?.let { e -> state.document.styles.firstOrNull { it.name == e.style } } ?: state.document.styles.firstOrNull()
-    if (style == null) Box(modifier, contentAlignment = Alignment.Center) { Text("没有 Style") }
-    else TypesettingPanel(state, viewModel, style, modifier)
+private fun StylePane(
+    state: EditorState,
+    viewModel: EditorViewModel,
+    modifier: Modifier = Modifier,
+    targetEventId: Long? = state.focusedEventId,
+    unresolvedPinnedEventId: Long? = null,
+) {
+    if (unresolvedPinnedEventId != null) {
+        Box(modifier, contentAlignment = Alignment.Center) {
+            Text("固定目标 #$unresolvedPinnedEventId 已不存在。请解除固定或重新绑定。")
+        }
+        return
+    }
+    val contextualEvent = state.document.events.firstOrNull { it.id == targetEventId }
+    val style = contextualEvent
+        ?.let { event -> state.document.styles.firstOrNull { it.name == event.style } }
+        ?: state.document.styles.firstOrNull()
+    if (style == null) {
+        Box(modifier, contentAlignment = Alignment.Center) { Text("没有 Style") }
+    } else {
+        TypesettingPanel(
+            state = state,
+            viewModel = viewModel,
+            style = style,
+            modifier = modifier,
+            contextEventId = targetEventId,
+        )
+    }
 }
 
 @Composable
-private fun PositionPane(state: EditorState, viewModel: EditorViewModel, modifier: Modifier = Modifier) {
-    val event = state.document.events.firstOrNull { it.id == state.focusedEventId }
+private fun PositionPane(
+    state: EditorState,
+    viewModel: EditorViewModel,
+    modifier: Modifier = Modifier,
+    targetEventId: Long? = state.focusedEventId,
+    unresolvedPinnedEventId: Long? = null,
+) {
+    if (unresolvedPinnedEventId != null) {
+        Box(modifier, contentAlignment = Alignment.Center) {
+            Text("固定目标 #$unresolvedPinnedEventId 已不存在。请解除固定或重新绑定。")
+        }
+        return
+    }
+    val event = state.document.events.firstOrNull { it.id == targetEventId }
     if (event == null) {
         Box(modifier, contentAlignment = Alignment.Center) { Text("先选择一条字幕") }
         return
@@ -3035,9 +3082,9 @@ private fun PositionPane(state: EditorState, viewModel: EditorViewModel, modifie
     LaunchedEffect(event.id, rotationText, rotationGestureActive, rotationDraftChanged) {
         if (!rotationDraftChanged || rotationGestureActive) return@LaunchedEffect
         val value = rotationText.toDoubleOrNull() ?: return@LaunchedEffect
-        viewModel.previewFocusedRotationZ(value)
+        viewModel.previewEventRotationZ(event.id, value)
         kotlinx.coroutines.delay(320)
-        viewModel.setFocusedRotationZ(value)
+        viewModel.setEventRotationZ(event.id, value)
         rotationDraftChanged = false
     }
     LaunchedEffect(event.id, scaleXText, scaleYText, scaleGestureActive, scaleDraftChanged) {
@@ -3046,9 +3093,9 @@ private fun PositionPane(state: EditorState, viewModel: EditorViewModel, modifie
         val sy = scaleYText.toDoubleOrNull() ?: return@LaunchedEffect
         scalePreviewX = sx
         scalePreviewY = sy
-        viewModel.previewFocusedScale(sx, sy)
+        viewModel.previewEventScale(event.id, sx, sy)
         kotlinx.coroutines.delay(320)
-        viewModel.setFocusedScale(sx, sy)
+        viewModel.setEventScale(event.id, sx, sy)
         scaleDraftChanged = false
     }
     LaunchedEffect(event.id, shearXText, shearYText, shearGestureActive, shearDraftChanged) {
@@ -3057,9 +3104,9 @@ private fun PositionPane(state: EditorState, viewModel: EditorViewModel, modifie
         val fy = shearYText.toDoubleOrNull() ?: return@LaunchedEffect
         shearPreviewX = fx
         shearPreviewY = fy
-        viewModel.previewFocusedShear(fx, fy)
+        viewModel.previewEventShear(event.id, fx, fy)
         kotlinx.coroutines.delay(320)
-        viewModel.setFocusedShear(fx, fy)
+        viewModel.setEventShear(event.id, fx, fy)
         shearDraftChanged = false
     }
     LaunchedEffect(event.id, clipLeftText, clipTopText, clipRightText, clipBottomText, clipDraftChanged) {
@@ -3069,9 +3116,9 @@ private fun PositionPane(state: EditorState, viewModel: EditorViewModel, modifie
         val top = clipTopText.toDoubleOrNull() ?: return@LaunchedEffect
         val right = clipRightText.toDoubleOrNull() ?: return@LaunchedEffect
         val bottom = clipBottomText.toDoubleOrNull() ?: return@LaunchedEffect
-        viewModel.previewFocusedRectClip(left, top, right, bottom, geometry.clipInverted)
+        viewModel.previewEventRectClip(event.id, left, top, right, bottom, geometry.clipInverted)
         kotlinx.coroutines.delay(320)
-        viewModel.setFocusedRectClip(left, top, right, bottom, geometry.clipInverted)
+        viewModel.setEventRectClip(event.id, left, top, right, bottom, geometry.clipInverted)
         clipDraftChanged = false
     }
 
@@ -3098,7 +3145,7 @@ private fun PositionPane(state: EditorState, viewModel: EditorViewModel, modifie
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro)) {
                         row.forEach { value ->
                             OutlinedButton(
-                                onClick = { viewModel.setFocusedAlignment(value) },
+                                onClick = { viewModel.setEventAlignment(event.id, value) },
                                 modifier = Modifier.weight(1f),
                             ) { Text(value.toString()) }
                         }
@@ -3137,7 +3184,7 @@ private fun PositionPane(state: EditorState, viewModel: EditorViewModel, modifie
                         val ex = moveEndX.toDoubleOrNull()
                         val ey = moveEndY.toDoubleOrNull()
                         if (sx != null && sy != null && ex != null && ey != null) {
-                            viewModel.setFocusedMove(sx, sy, ex, ey)
+                            viewModel.setEventMove(event.id, sx, sy, ex, ey)
                         }
                     }) { Text("应用路径") }
                 }
@@ -3158,11 +3205,11 @@ private fun PositionPane(state: EditorState, viewModel: EditorViewModel, modifie
                     OutlinedTextField(originY, { originY = it }, label = { Text("Origin Y") }, singleLine = true, modifier = Modifier.weight(1f))
                 }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                    TextButton(onClick = viewModel::clearFocusedOrigin) { Text("移除 \\org") }
+                    TextButton(onClick = { viewModel.clearEventOrigin(event.id) }) { Text("移除 \\org") }
                     Button(onClick = {
                         val ox = originX.toDoubleOrNull()
                         val oy = originY.toDoubleOrNull()
-                        if (ox != null && oy != null) viewModel.setFocusedOrigin(ox, oy)
+                        if (ox != null && oy != null) viewModel.setEventOrigin(event.id, ox, oy)
                     }) { Text("应用原点") }
                 }
                 Text(
@@ -3177,7 +3224,7 @@ private fun PositionPane(state: EditorState, viewModel: EditorViewModel, modifie
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Button(onClick = {
-                    viewModel.setFocusedOrigin(
+                    viewModel.setEventOrigin(event.id, 
                         state.document.playResX / 2.0,
                         state.document.playResY / 2.0,
                     )
@@ -3207,16 +3254,16 @@ private fun PositionPane(state: EditorState, viewModel: EditorViewModel, modifie
                     rotationDraftChanged = false
                     rotationGestureActive = false
                     rotationText = (style?.angle ?: 0.0).toString()
-                    viewModel.clearFocusedRotationZ()
+                    viewModel.clearEventRotationZ(event.id)
                 }) else null,
                 onPreview = { value ->
                     rotationPreviewValue = value
-                    viewModel.previewFocusedRotationZ(value)
+                    viewModel.previewEventRotationZ(event.id, value)
                 },
                 onGestureActive = { active ->
                     rotationGestureActive = active
                     if (!active) {
-                        viewModel.setFocusedRotationZ(rotationPreviewValue)
+                        viewModel.setEventRotationZ(event.id, rotationPreviewValue)
                         rotationDraftChanged = false
                     }
                 },
@@ -3267,12 +3314,12 @@ private fun PositionPane(state: EditorState, viewModel: EditorViewModel, modifie
                     if (state.geometryScaleLocked) scaleYText = formatScale(sy)
                     scalePreviewX = sx
                     scalePreviewY = sy
-                    viewModel.previewFocusedScale(sx, sy)
+                    viewModel.previewEventScale(event.id, sx, sy)
                 },
                 onGestureActive = { active ->
                     scaleGestureActive = active
                     if (!active) {
-                        viewModel.setFocusedScale(scalePreviewX, scalePreviewY)
+                        viewModel.setEventScale(event.id, scalePreviewX, scalePreviewY)
                         scaleDraftChanged = false
                     }
                 },
@@ -3296,12 +3343,12 @@ private fun PositionPane(state: EditorState, viewModel: EditorViewModel, modifie
                     if (state.geometryScaleLocked) scaleXText = formatScale(sx)
                     scalePreviewX = sx
                     scalePreviewY = sy
-                    viewModel.previewFocusedScale(sx, sy)
+                    viewModel.previewEventScale(event.id, sx, sy)
                 },
                 onGestureActive = { active ->
                     scaleGestureActive = active
                     if (!active) {
-                        viewModel.setFocusedScale(scalePreviewX, scalePreviewY)
+                        viewModel.setEventScale(event.id, scalePreviewX, scalePreviewY)
                         scaleDraftChanged = false
                     }
                 },
@@ -3314,7 +3361,7 @@ private fun PositionPane(state: EditorState, viewModel: EditorViewModel, modifie
                     scaleYText = (style?.scaleY ?: 100.0).toString()
                     scalePreviewX = style?.scaleX ?: 100.0
                     scalePreviewY = style?.scaleY ?: 100.0
-                    viewModel.clearFocusedScale()
+                    viewModel.clearEventScale(event.id)
                 }) { Text("继承 Style Scale") }
             }
             Text(
@@ -3349,12 +3396,12 @@ private fun PositionPane(state: EditorState, viewModel: EditorViewModel, modifie
                     val fy = shearYText.toDoubleOrNull() ?: 0.0
                     shearPreviewX = fx
                     shearPreviewY = fy
-                    viewModel.previewFocusedShear(fx, fy)
+                    viewModel.previewEventShear(event.id, fx, fy)
                 },
                 onGestureActive = { active ->
                     shearGestureActive = active
                     if (!active) {
-                        viewModel.setFocusedShear(shearPreviewX, shearPreviewY)
+                        viewModel.setEventShear(event.id, shearPreviewX, shearPreviewY)
                         shearDraftChanged = false
                     }
                 },
@@ -3373,12 +3420,12 @@ private fun PositionPane(state: EditorState, viewModel: EditorViewModel, modifie
                     val fx = shearXText.toDoubleOrNull() ?: 0.0
                     shearPreviewX = fx
                     shearPreviewY = fy
-                    viewModel.previewFocusedShear(fx, fy)
+                    viewModel.previewEventShear(event.id, fx, fy)
                 },
                 onGestureActive = { active ->
                     shearGestureActive = active
                     if (!active) {
-                        viewModel.setFocusedShear(shearPreviewX, shearPreviewY)
+                        viewModel.setEventShear(event.id, shearPreviewX, shearPreviewY)
                         shearDraftChanged = false
                     }
                 },
@@ -3391,7 +3438,7 @@ private fun PositionPane(state: EditorState, viewModel: EditorViewModel, modifie
                     shearYText = "0"
                     shearPreviewX = 0.0
                     shearPreviewY = 0.0
-                    viewModel.clearFocusedShear()
+                    viewModel.clearEventShear(event.id)
                 }) { Text("清除 Shear override") }
             }
             Text(
@@ -3422,7 +3469,7 @@ private fun PositionPane(state: EditorState, viewModel: EditorViewModel, modifie
                     Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small)) {
                         OutlinedButton(onClick = viewModel::clearFocusedClip) { Text("移除现有 clip") }
                         Button(onClick = {
-                            viewModel.setFocusedRectClip(
+                            viewModel.setEventRectClip(event.id, 
                                 state.document.playResX * 0.1,
                                 state.document.playResY * 0.1,
                                 state.document.playResX * 0.9,
@@ -3438,14 +3485,14 @@ private fun PositionPane(state: EditorState, viewModel: EditorViewModel, modifie
                         FilterChip(
                             selected = !geometry.clipInverted,
                             onClick = {
-                                viewModel.setFocusedRectClip(clipRect.left, clipRect.top, clipRect.right, clipRect.bottom, false)
+                                viewModel.setEventRectClip(event.id, clipRect.left, clipRect.top, clipRect.right, clipRect.bottom, false)
                             },
                             label = { Text("\\clip · 内部显示") },
                         )
                         FilterChip(
                             selected = geometry.clipInverted,
                             onClick = {
-                                viewModel.setFocusedRectClip(clipRect.left, clipRect.top, clipRect.right, clipRect.bottom, true)
+                                viewModel.setEventRectClip(event.id, clipRect.left, clipRect.top, clipRect.right, clipRect.bottom, true)
                             },
                             label = { Text("\\iclip · 内部隐藏") },
                         )
@@ -3467,7 +3514,7 @@ private fun PositionPane(state: EditorState, viewModel: EditorViewModel, modifie
                             val bottom = clipBottomText.toDoubleOrNull()
                             if (left != null && top != null && right != null && bottom != null) {
                                 clipDraftChanged = false
-                                viewModel.setFocusedRectClip(left, top, right, bottom, geometry.clipInverted)
+                                viewModel.setEventRectClip(event.id, left, top, right, bottom, geometry.clipInverted)
                             }
                         }) { Text("应用矩形") }
                     }
@@ -3485,7 +3532,7 @@ private fun PositionPane(state: EditorState, viewModel: EditorViewModel, modifie
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small)) {
                         Button(onClick = {
-                            viewModel.setFocusedRectClip(
+                            viewModel.setEventRectClip(event.id, 
                                 state.document.playResX * 0.1,
                                 state.document.playResY * 0.1,
                                 state.document.playResX * 0.9,
@@ -3494,7 +3541,7 @@ private fun PositionPane(state: EditorState, viewModel: EditorViewModel, modifie
                             )
                         }) { Text("添加 \\clip") }
                         OutlinedButton(onClick = {
-                            viewModel.setFocusedRectClip(
+                            viewModel.setEventRectClip(event.id, 
                                 state.document.playResX * 0.1,
                                 state.document.playResY * 0.1,
                                 state.document.playResX * 0.9,
@@ -3515,7 +3562,7 @@ private fun PositionPane(state: EditorState, viewModel: EditorViewModel, modifie
                     onClick = {
                         val px = x.toDoubleOrNull()
                         val py = y.toDoubleOrNull()
-                        if (px != null && py != null) viewModel.setFocusedPosition(px, py)
+                        if (px != null && py != null) viewModel.setEventPosition(event.id, px, py)
                     },
                     enabled = geometry.positionMode != AssPositionMode.MOVE &&
                         geometry.positionMode != AssPositionMode.CONFLICT,
