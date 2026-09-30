@@ -206,7 +206,13 @@ jobs:
           mkdir -p fontconfig-production-apk
           APK="ASS-Workbench-Android-$VERSION-$SHORT_SHA-debug.apk"
           IDENTITY="ASS-Workbench-Android-$VERSION-$SHORT_SHA-build-identity.txt"
+          FIXTURES="ASS-Workbench-Android-$VERSION-$SHORT_SHA-device-fixtures.zip"
           cp app/build/outputs/apk/debug/app-debug.apk "fontconfig-production-apk/$APK"
+          python3 tools/generate_device_fixtures.py fontconfig-production-apk/device-fixtures-0.27
+          (
+            cd fontconfig-production-apk
+            zip -qr "$FIXTURES" device-fixtures-0.27
+          )
           {
             echo "schema=1"
             echo "version_name=$VERSION"
@@ -220,6 +226,9 @@ jobs:
             echo "renderer_version=0.3.0-asswb-fontconfig"
             echo "apk_name=$APK"
             echo "apk_sha256=$(sha256sum "fontconfig-production-apk/$APK" | awk '{print $1}')"
+            echo "device_fixtures_name=$FIXTURES"
+            echo "device_fixtures_sha256=$(sha256sum "fontconfig-production-apk/$FIXTURES" | awk '{print $1}')"
+            echo "device_fixture_manifest_sha256=$(sha256sum fontconfig-production-apk/device-fixtures-0.27/manifest.txt | awk '{print $1}')"
             echo "renderer_manifest_sha256=$(sha256sum fontconfig-native-probe/renderer-manifest.txt | awk '{print $1}')"
           } > "fontconfig-production-apk/$IDENTITY"
 
@@ -248,20 +257,21 @@ jobs:
           TAG="v$VERSION"
           APK="fontconfig-production-apk/ASS-Workbench-Android-$VERSION-$SHORT_SHA-debug.apk"
           IDENTITY="fontconfig-production-apk/ASS-Workbench-Android-$VERSION-$SHORT_SHA-build-identity.txt"
-          NOTES="Rolling $VERSION construction prerelease. Canonical device-test APK built from commit $GITHUB_SHA (Actions run #$GITHUB_RUN_NUMBER). The version tag marks the construction milestone and may predate the rolling APK assets; exact provenance is carried by the SHA-bearing APK filename, the in-app Diagnostics identity, and the accompanying build-identity manifest."
+          FIXTURES="fontconfig-production-apk/ASS-Workbench-Android-$VERSION-$SHORT_SHA-device-fixtures.zip"
+          NOTES="Rolling $VERSION construction prerelease. Canonical device-test APK built from commit $GITHUB_SHA (Actions run #$GITHUB_RUN_NUMBER). The version tag marks the construction milestone and may predate the rolling APK assets; exact provenance is carried by the SHA-bearing APK filename, the in-app Diagnostics identity, the build-identity manifest, and the deterministic device-fixture bundle."
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release view "$TAG" --json assets --jq '.assets[].name' | \
-              grep -E "^ASS-Workbench-Android-$VERSION-[0-9a-f]{12}-(debug\\.apk|build-identity\\.txt)$" | \
+              grep -E "^ASS-Workbench-Android-$VERSION-[0-9a-f]{12}-(debug\\.apk|build-identity\\.txt|device-fixtures\\.zip)$" | \
               while IFS= read -r asset; do
                 gh release delete-asset "$TAG" "$asset" -y
               done
-            gh release upload "$TAG" "$APK" "$IDENTITY"
+            gh release upload "$TAG" "$APK" "$IDENTITY" "$FIXTURES"
             gh release edit "$TAG" \
               --title "ASS Workbench Android $VERSION" \
               --prerelease \
               --notes "$NOTES"
           else
-            gh release create "$TAG" "$APK" "$IDENTITY" \
+            gh release create "$TAG" "$APK" "$IDENTITY" "$FIXTURES" \
               --target "$GITHUB_SHA" \
               --title "ASS Workbench Android $VERSION" \
               --prerelease \
@@ -272,3 +282,5 @@ jobs:
             grep -Fxq "ASS-Workbench-Android-$VERSION-$SHORT_SHA-debug.apk"
           gh release view "$TAG" --json assets --jq '.assets[].name' | \
             grep -Fxq "ASS-Workbench-Android-$VERSION-$SHORT_SHA-build-identity.txt"
+          gh release view "$TAG" --json assets --jq '.assets[].name' | \
+            grep -Fxq "ASS-Workbench-Android-$VERSION-$SHORT_SHA-device-fixtures.zip"

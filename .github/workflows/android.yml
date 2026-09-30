@@ -84,6 +84,205 @@ jobs:
       - name: Build debug APK
         run: gradle :app:assembleDebug --stacktrace
 
+      - name: Validate deterministic device fixtures
+        shell: bash
+        run: |
+          set -euxo pipefail
+          python3 tools/generate_device_fixtures.py build/device-fixtures-0.27 | tee build/device-fixtures-0.27.log
+          test -f build/device-fixtures-0.27/manifest.txt
+          grep -q '^fixture=renderer-risk-extreme-numeric.ass        shell: bash
+        run: |
+          set -euxo pipefail
+          APK="app/build/outputs/apk/debug/app-debug.apk"
+          unzip -l "$APK" | grep -q 'res/mipmap-anydpi-v26/ic_launcher.xml'
+          unzip -l "$APK" | grep -q 'res/mipmap-anydpi-v26/ic_launcher_round.xml'
+          unzip -l "$APK" | grep -q 'res/drawable/ic_launcher_foreground.xml'
+          if unzip -l "$APK" | grep -q 'drawable-nodpi-v4/ic_launcher.png'; then
+            echo "Legacy launcher PNG unexpectedly packaged" >&2
+            exit 1
+          fi
+
+      - name: Verify and record build identity
+        id: version
+        shell: bash
+        run: |
+          set -euxo pipefail
+          VERSION="$(sed -nE 's/^val baseVersionName = "([^"]+)"/\1/p' app/build.gradle.kts | head -1)"
+          VERSION_CODE="$(sed -nE 's/^[[:space:]]*versionCode = ([0-9]+)/\1/p' app/build.gradle.kts | head -1)"
+          test -n "$VERSION"
+          test -n "$VERSION_CODE"
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9._-]+)?$ ]]
+          SHORT_SHA="$(printf '%s' "$GITHUB_SHA" | cut -c1-12)"
+          BUILD_CONFIG="app/build/generated/source/buildConfig/debug/io/github/assworkbench/app/BuildConfig.java"
+          test -f "$BUILD_CONFIG"
+          grep -Fq "VERSION_CODE = $VERSION_CODE" "$BUILD_CONFIG"
+          grep -Fq "VERSION_NAME = \"$VERSION\"" "$BUILD_CONFIG"
+          grep -Fq "ASSWB_BUILD_COMMIT = \"$SHORT_SHA\"" "$BUILD_CONFIG"
+          grep -Fq "ASSWB_BUILD_NUMBER = \"$GITHUB_RUN_NUMBER\"" "$BUILD_CONFIG"
+
+          APK="ASS-Workbench-Android-$VERSION-$SHORT_SHA-debug.apk"
+          IDENTITY="ASS-Workbench-Android-$VERSION-$SHORT_SHA-build-identity.txt"
+          cp app/build/outputs/apk/debug/app-debug.apk "$APK"
+          {
+            echo "schema=1"
+            echo "version_name=$VERSION"
+            echo "version_code=$VERSION_CODE"
+            echo "commit=$GITHUB_SHA"
+            echo "short_commit=$SHORT_SHA"
+            echo "workflow=Android CI"
+            echo "run_number=$GITHUB_RUN_NUMBER"
+            echo "run_id=$GITHUB_RUN_ID"
+            echo "renderer_provider=none"
+            echo "renderer_version=0.3.0"
+            echo "apk_name=$APK"
+            echo "apk_sha256=$(sha256sum "$APK" | awk '{print $1}')"
+          } > "$IDENTITY"
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "short_sha=$SHORT_SHA" >> "$GITHUB_OUTPUT"
+          echo "apk=$APK" >> "$GITHUB_OUTPUT"
+          echo "identity=$IDENTITY" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ASS-Workbench-Android-${{ steps.version.outputs.version }}-${{ steps.version.outputs.short_sha }}-debug
+          path: |
+            ${{ steps.version.outputs.apk }}
+            ${{ steps.version.outputs.identity }}
+          if-no-files-found: error
+
+      # Release publication is owned by the Fontconfig renderer workflow.
+      # This fast workflow remains the compile/unit-test gate and uploads a diagnostic APK artifact.
+ build/device-fixtures-0.27/manifest.txt
+          grep -q '^fixture=renderer-performance-heavy-move.ass        shell: bash
+        run: |
+          set -euxo pipefail
+          APK="app/build/outputs/apk/debug/app-debug.apk"
+          unzip -l "$APK" | grep -q 'res/mipmap-anydpi-v26/ic_launcher.xml'
+          unzip -l "$APK" | grep -q 'res/mipmap-anydpi-v26/ic_launcher_round.xml'
+          unzip -l "$APK" | grep -q 'res/drawable/ic_launcher_foreground.xml'
+          if unzip -l "$APK" | grep -q 'drawable-nodpi-v4/ic_launcher.png'; then
+            echo "Legacy launcher PNG unexpectedly packaged" >&2
+            exit 1
+          fi
+
+      - name: Verify and record build identity
+        id: version
+        shell: bash
+        run: |
+          set -euxo pipefail
+          VERSION="$(sed -nE 's/^val baseVersionName = "([^"]+)"/\1/p' app/build.gradle.kts | head -1)"
+          VERSION_CODE="$(sed -nE 's/^[[:space:]]*versionCode = ([0-9]+)/\1/p' app/build.gradle.kts | head -1)"
+          test -n "$VERSION"
+          test -n "$VERSION_CODE"
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9._-]+)?$ ]]
+          SHORT_SHA="$(printf '%s' "$GITHUB_SHA" | cut -c1-12)"
+          BUILD_CONFIG="app/build/generated/source/buildConfig/debug/io/github/assworkbench/app/BuildConfig.java"
+          test -f "$BUILD_CONFIG"
+          grep -Fq "VERSION_CODE = $VERSION_CODE" "$BUILD_CONFIG"
+          grep -Fq "VERSION_NAME = \"$VERSION\"" "$BUILD_CONFIG"
+          grep -Fq "ASSWB_BUILD_COMMIT = \"$SHORT_SHA\"" "$BUILD_CONFIG"
+          grep -Fq "ASSWB_BUILD_NUMBER = \"$GITHUB_RUN_NUMBER\"" "$BUILD_CONFIG"
+
+          APK="ASS-Workbench-Android-$VERSION-$SHORT_SHA-debug.apk"
+          IDENTITY="ASS-Workbench-Android-$VERSION-$SHORT_SHA-build-identity.txt"
+          cp app/build/outputs/apk/debug/app-debug.apk "$APK"
+          {
+            echo "schema=1"
+            echo "version_name=$VERSION"
+            echo "version_code=$VERSION_CODE"
+            echo "commit=$GITHUB_SHA"
+            echo "short_commit=$SHORT_SHA"
+            echo "workflow=Android CI"
+            echo "run_number=$GITHUB_RUN_NUMBER"
+            echo "run_id=$GITHUB_RUN_ID"
+            echo "renderer_provider=none"
+            echo "renderer_version=0.3.0"
+            echo "apk_name=$APK"
+            echo "apk_sha256=$(sha256sum "$APK" | awk '{print $1}')"
+          } > "$IDENTITY"
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "short_sha=$SHORT_SHA" >> "$GITHUB_OUTPUT"
+          echo "apk=$APK" >> "$GITHUB_OUTPUT"
+          echo "identity=$IDENTITY" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ASS-Workbench-Android-${{ steps.version.outputs.version }}-${{ steps.version.outputs.short_sha }}-debug
+          path: |
+            ${{ steps.version.outputs.apk }}
+            ${{ steps.version.outputs.identity }}
+          if-no-files-found: error
+
+      # Release publication is owned by the Fontconfig renderer workflow.
+      # This fast workflow remains the compile/unit-test gate and uploads a diagnostic APK artifact.
+ build/device-fixtures-0.27/manifest.txt
+          grep -q '^fixture=compose-long-event-list.ass        shell: bash
+        run: |
+          set -euxo pipefail
+          APK="app/build/outputs/apk/debug/app-debug.apk"
+          unzip -l "$APK" | grep -q 'res/mipmap-anydpi-v26/ic_launcher.xml'
+          unzip -l "$APK" | grep -q 'res/mipmap-anydpi-v26/ic_launcher_round.xml'
+          unzip -l "$APK" | grep -q 'res/drawable/ic_launcher_foreground.xml'
+          if unzip -l "$APK" | grep -q 'drawable-nodpi-v4/ic_launcher.png'; then
+            echo "Legacy launcher PNG unexpectedly packaged" >&2
+            exit 1
+          fi
+
+      - name: Verify and record build identity
+        id: version
+        shell: bash
+        run: |
+          set -euxo pipefail
+          VERSION="$(sed -nE 's/^val baseVersionName = "([^"]+)"/\1/p' app/build.gradle.kts | head -1)"
+          VERSION_CODE="$(sed -nE 's/^[[:space:]]*versionCode = ([0-9]+)/\1/p' app/build.gradle.kts | head -1)"
+          test -n "$VERSION"
+          test -n "$VERSION_CODE"
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9._-]+)?$ ]]
+          SHORT_SHA="$(printf '%s' "$GITHUB_SHA" | cut -c1-12)"
+          BUILD_CONFIG="app/build/generated/source/buildConfig/debug/io/github/assworkbench/app/BuildConfig.java"
+          test -f "$BUILD_CONFIG"
+          grep -Fq "VERSION_CODE = $VERSION_CODE" "$BUILD_CONFIG"
+          grep -Fq "VERSION_NAME = \"$VERSION\"" "$BUILD_CONFIG"
+          grep -Fq "ASSWB_BUILD_COMMIT = \"$SHORT_SHA\"" "$BUILD_CONFIG"
+          grep -Fq "ASSWB_BUILD_NUMBER = \"$GITHUB_RUN_NUMBER\"" "$BUILD_CONFIG"
+
+          APK="ASS-Workbench-Android-$VERSION-$SHORT_SHA-debug.apk"
+          IDENTITY="ASS-Workbench-Android-$VERSION-$SHORT_SHA-build-identity.txt"
+          cp app/build/outputs/apk/debug/app-debug.apk "$APK"
+          {
+            echo "schema=1"
+            echo "version_name=$VERSION"
+            echo "version_code=$VERSION_CODE"
+            echo "commit=$GITHUB_SHA"
+            echo "short_commit=$SHORT_SHA"
+            echo "workflow=Android CI"
+            echo "run_number=$GITHUB_RUN_NUMBER"
+            echo "run_id=$GITHUB_RUN_ID"
+            echo "renderer_provider=none"
+            echo "renderer_version=0.3.0"
+            echo "apk_name=$APK"
+            echo "apk_sha256=$(sha256sum "$APK" | awk '{print $1}')"
+          } > "$IDENTITY"
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "short_sha=$SHORT_SHA" >> "$GITHUB_OUTPUT"
+          echo "apk=$APK" >> "$GITHUB_OUTPUT"
+          echo "identity=$IDENTITY" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ASS-Workbench-Android-${{ steps.version.outputs.version }}-${{ steps.version.outputs.short_sha }}-debug
+          path: |
+            ${{ steps.version.outputs.apk }}
+            ${{ steps.version.outputs.identity }}
+          if-no-files-found: error
+
+      # Release publication is owned by the Fontconfig renderer workflow.
+      # This fast workflow remains the compile/unit-test gate and uploads a diagnostic APK artifact.
+ build/device-fixtures-0.27/manifest.txt
+
       - name: Validate launcher icon packaging
         shell: bash
         run: |

@@ -23,7 +23,7 @@ Generate the checked-in test corpus locally before the device pass:
 python3 tools/generate_device_fixtures.py
 ```
 
-The default output is `build/device-fixtures-0.27/` and contains a SHA-256 manifest. Use these files where applicable:
+The default output is `build/device-fixtures-0.27/` and contains a SHA-256 manifest. The production Fontconfig workflow also publishes the same deterministic corpus as a SHA-bearing `device-fixtures.zip` beside the APK and build-identity manifest. Use these files where applicable:
 
 - `baseline.ass` → D02;
 - `renderer-risk-extreme-numeric.ass` → D03;
