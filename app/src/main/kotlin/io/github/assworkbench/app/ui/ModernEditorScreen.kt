@@ -35,6 +35,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
@@ -85,6 +86,14 @@ fun ModernEditorScreen(
     val darkTheme = when (themeMode) { "dark" -> true; "light" -> false; else -> isSystemInDarkTheme() }
     var toolName by rememberSaveable { mutableStateOf(WorkbenchTool.TEXT.name) }
     var supportingOpen by rememberSaveable { mutableStateOf(false) }
+    var openSurfaceNames by rememberSaveable {
+        mutableStateOf(setOf(WorkbenchTool.POSITION.name, WorkbenchTool.STYLE.name))
+    }
+    var surfacesTemporarilyHidden by rememberSaveable { mutableStateOf(false) }
+    var hiddenSurfaceSnapshot by rememberSaveable { mutableStateOf(emptySet<String>()) }
+    var previewModeName by rememberSaveable { mutableStateOf(PreviewWorkspaceMode.NORMAL.name) }
+    val surfaceController = rememberWorkbenchSurfaceController()
+    val interactionRegistry = rememberInteractionOverlayRegistry()
     var expandedEventId by rememberSaveable { mutableStateOf<Long?>(null) }
     val eventEditorStateHolder = rememberSaveableStateHolder()
     var previewVisible by rememberSaveable { mutableStateOf(true) }
@@ -105,6 +114,9 @@ fun ModernEditorScreen(
     var destructiveWorkspaceAction by remember { mutableStateOf<DestructiveWorkspaceAction?>(null) }
 
     val tool = WorkbenchTool.entries.firstOrNull { it.name == toolName } ?: WorkbenchTool.TIMELINE
+    val openSurfaces = WorkbenchTool.entries.filter { it.name in openSurfaceNames }.toSet()
+    val previewMode = PreviewWorkspaceMode.entries.firstOrNull { it.name == previewModeName }
+        ?: PreviewWorkspaceMode.NORMAL
     val issues by produceState<List<AssQcIssue>>(initialValue = emptyList(), state.document) {
         value = withContext(Dispatchers.Default) {
             AssQualityCheck.inspect(state.document)
@@ -115,14 +127,30 @@ fun ModernEditorScreen(
     fun openTool(next: WorkbenchTool) {
         toolName = next.name
         supportingOpen = true
+        openSurfaceNames = openSurfaceNames + next.name
+        surfacesTemporarilyHidden = false
+        surfaceController.bringToFront(next.name)
     }
 
     fun toggleTool(next: WorkbenchTool) {
-        if (supportingOpen && tool == next) {
-            supportingOpen = false
+        toolName = next.name
+        supportingOpen = true
+        openSurfaceNames = if (next.name in openSurfaceNames) {
+            openSurfaceNames - next.name
         } else {
-            toolName = next.name
-            supportingOpen = true
+            surfaceController.bringToFront(next.name)
+            openSurfaceNames + next.name
+        }
+        surfacesTemporarilyHidden = false
+    }
+
+    fun toggleAllSurfaces() {
+        if (!surfacesTemporarilyHidden) {
+            hiddenSurfaceSnapshot = openSurfaceNames
+            surfacesTemporarilyHidden = true
+        } else {
+            openSurfaceNames = hiddenSurfaceSnapshot
+            surfacesTemporarilyHidden = false
         }
     }
 
@@ -132,6 +160,7 @@ fun ModernEditorScreen(
         color = MaterialTheme.colorScheme.background,
         contentColor = MaterialTheme.colorScheme.onBackground,
     ) {
+        Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
             ModernAppBar(
                 state = state,
@@ -283,8 +312,17 @@ fun ModernEditorScreen(
                 )
             }
 
-            WorkbenchToolStrip(tool, ::openTool, previewVisible,
-                { previewVisible = !previewVisible }, themeMode) {
+            WorkbenchToolStrip(
+                openTools = openSurfaces,
+                onToolToggle = ::toggleTool,
+                previewVisible = previewVisible,
+                onPreviewToggle = { previewVisible = !previewVisible },
+                previewMode = previewMode,
+                onPreviewMode = { previewModeName = it.name },
+                surfacesHidden = surfacesTemporarilyHidden,
+                onToggleAllSurfaces = ::toggleAllSurfaces,
+                themeMode = themeMode,
+            ) {
                 themeMode = when (themeMode) { "system" -> "dark"; "dark" -> "light"; else -> "system" }
                 preferences.edit().putString("theme", themeMode).apply()
             }
@@ -338,61 +376,140 @@ fun ModernEditorScreen(
                         )
                     }
                 }
-                if (landscape) {
-                    Row(
-                        Modifier.fillMaxSize().padding(8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(paneGap),
-                    ) {
-                        if (previewVisible) {
-                            preview(
-                                Modifier
-                                    .width(previewWidth)
-                                    .fillMaxHeight()
-                                    .testTag("preview-workspace"),
-                            )
-                            Box(
-                                Modifier
-                                    .width(splitHandleWidth)
-                                    .fillMaxHeight()
-                                    .testTag("preview-divider")
-                                    .pointerInput(minPreviewWidth, maxPreviewWidth) {
-                                        detectHorizontalDragGestures(
-                                            onHorizontalDrag = { change, dragAmount ->
-                                                change.consume()
-                                                val currentWidth = landscapePreviewWidthDp?.dp ?: previewWidth
-                                                val delta = with(density) { dragAmount.toDp() }
-                                                landscapePreviewWidthDp = (currentWidth + delta)
-                                                    .coerceIn(minPreviewWidth, maxPreviewWidth)
-                                                    .value
-                                            },
-                                            onDragEnd = {
-                                                landscapePreviewWidthDp?.let { value ->
-                                                    preferences.edit()
-                                                        .putFloat("landscape-preview-width-dp", value)
-                                                        .apply()
-                                                }
-                                            },
-                                        )
-                                    },
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                VerticalDivider(
+                when (previewMode) {
+                    PreviewWorkspaceMode.FOCUS, PreviewWorkspaceMode.MANIPULATION -> {
+                        Box(Modifier.fillMaxSize().padding(8.dp)) {
+                            if (previewVisible) {
+                                preview(
                                     Modifier
-                                        .width(1.dp)
-                                        .fillMaxHeight(0.18f),
-                                    color = MaterialTheme.colorScheme.outlineVariant,
+                                        .fillMaxSize()
+                                        .testTag("preview-workspace"),
                                 )
                             }
                         }
-                        editor(Modifier.weight(1f).fillMaxHeight())
                     }
-                } else {
-                    Column(Modifier.fillMaxSize().padding(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        if (previewVisible) preview(Modifier.fillMaxWidth().height(previewHeight).testTag("preview-workspace"))
-                        editor(Modifier.weight(1f).fillMaxWidth())
+                    PreviewWorkspaceMode.FLOATING -> {
+                        Box(Modifier.fillMaxSize().padding(8.dp)) {
+                            editor(Modifier.fillMaxSize())
+                        }
+                    }
+                    PreviewWorkspaceMode.NORMAL -> {
+                        if (landscape) {
+                            Row(
+                                Modifier.fillMaxSize().padding(8.dp),
+                                horizontalArrangement = Arrangement.spacedBy(paneGap),
+                            ) {
+                                if (previewVisible) {
+                                    preview(
+                                        Modifier
+                                            .width(previewWidth)
+                                            .fillMaxHeight()
+                                            .testTag("preview-workspace"),
+                                    )
+                                    Box(
+                                        Modifier
+                                            .width(splitHandleWidth)
+                                            .fillMaxHeight()
+                                            .testTag("preview-divider")
+                                            .pointerInput(minPreviewWidth, maxPreviewWidth) {
+                                                detectHorizontalDragGestures(
+                                                    onHorizontalDrag = { change, dragAmount ->
+                                                        change.consume()
+                                                        val currentWidth = landscapePreviewWidthDp?.dp ?: previewWidth
+                                                        val delta = with(density) { dragAmount.toDp() }
+                                                        landscapePreviewWidthDp = (currentWidth + delta)
+                                                            .coerceIn(minPreviewWidth, maxPreviewWidth)
+                                                            .value
+                                                    },
+                                                    onDragEnd = {
+                                                        landscapePreviewWidthDp?.let { value ->
+                                                            preferences.edit()
+                                                                .putFloat("landscape-preview-width-dp", value)
+                                                                .apply()
+                                                        }
+                                                    },
+                                                )
+                                            },
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        VerticalDivider(
+                                            Modifier
+                                                .width(1.dp)
+                                                .fillMaxHeight(0.18f),
+                                            color = MaterialTheme.colorScheme.outlineVariant,
+                                        )
+                                    }
+                                }
+                                editor(Modifier.weight(1f).fillMaxHeight())
+                            }
+                        } else {
+                            Column(Modifier.fillMaxSize().padding(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                if (previewVisible) preview(Modifier.fillMaxWidth().height(previewHeight).testTag("preview-workspace"))
+                                editor(Modifier.weight(1f).fillMaxWidth())
+                            }
+                        }
                     }
                 }
             }
+        }
+
+        if (previewMode == PreviewWorkspaceMode.FLOATING && previewVisible) {
+            FloatingWorkbenchSurface(
+                id = "preview",
+                title = "视频预览 · 浮窗",
+                visible = true,
+                controller = surfaceController,
+                initialOffset = Offset(48f, 120f),
+                onClose = { previewVisible = false },
+                modifier = Modifier.fillMaxSize().testTag("floating-preview"),
+            ) {
+                WorkbenchPreview(
+                    state, viewModel, previewMode == PreviewWorkspaceMode.MANIPULATION ||
+                        WorkbenchTool.POSITION in openSurfaces,
+                    onOpenReferenceVideo, { openTool(WorkbenchTool.TIMELINE) },
+                    rendererEnabled, onEnableRenderer,
+                    onVideoAspectRatio = { reported ->
+                        if (reported.isFinite() && reported in 0.25f..4.0f) videoAspectRatio = reported
+                    },
+                    interactionRegistry = interactionRegistry,
+                    viewportGesturesEnabled = true,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+        }
+
+        WorkbenchTool.entries.forEachIndexed { index, surfaceTool ->
+            val visible = !surfacesTemporarilyHidden && surfaceTool in openSurfaces
+            FloatingWorkbenchSurface(
+                id = surfaceTool.name,
+                title = surfaceTool.title,
+                visible = visible,
+                controller = surfaceController,
+                initialOffset = Offset(
+                    28f + (index % 4) * 42f,
+                    92f + (index % 5) * 46f,
+                ),
+                onClose = { openSurfaceNames = openSurfaceNames - surfaceTool.name },
+                modifier = Modifier.fillMaxSize().testTag("surface-${surfaceTool.name}"),
+            ) {
+                FloatingToolContent(
+                    tool = surfaceTool,
+                    state = state,
+                    viewModel = viewModel,
+                    issues = issues,
+                    expandedEventId = expandedEventId,
+                    onExpandedChange = { expandedEventId = it },
+                    onImportFont = onImportFont,
+                    onSaveMkv = onSaveMkv,
+                    eventEditorStateHolder = eventEditorStateHolder,
+                )
+            }
+        }
+
+        WindowInteractionOverlay(
+            registry = interactionRegistry,
+            modifier = Modifier.fillMaxSize().testTag("interaction-overlay"),
+        )
         }
     }
 }
