@@ -6,7 +6,7 @@ import androidx.activity.ComponentActivity
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.assertTextContains
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -99,10 +99,16 @@ class EditorRegressionInstrumentedTest {
 
         composeRule.onNodeWithTag("event-raw-1")
             .assertIsDisplayed()
-            .assertTextContains("DRAFT")
 
-        // The draft is still local UI state because "应用正文" was never pressed.
+        // The canonical Event is still untouched after collapse/re-open. Applying
+        // the visible editor now must commit the draft that survived disposal.
         assertFalse(viewModel.state.value.document.events.single().text.contains("DRAFT"))
+        composeRule.onNodeWithText("应用正文")
+            .assertIsDisplayed()
+            .performClick()
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            viewModel.state.value.document.events.single().text == "Recovered line DRAFT"
+        }
     }
 
     @Test
