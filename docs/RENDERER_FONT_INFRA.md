@@ -10,10 +10,14 @@ That release deliberately builds libass without a required system font provider:
 --enable-libunibreak --disable-require-system-font-provider
 ```
 
-The app therefore supplies project fonts through mpv's config directory and `subfont.ttf`. This is a valid lightweight configuration, but it has two important consequences:
+The compatibility/direct-provider path supplies fonts through mpv's config directory, a stable `renderer-fonts` union directory, and `subfont.ttf`. The rolling production APK additionally uses the pinned Fontconfig native bundle. The direct path remains relevant for CI/compatibility and safe fallback.
+
+This lightweight direct configuration has two important consequences:
 
 1. Android system fonts are not available to libass as a general fallback catalog.
 2. font-name matching for project fonts is much less forgiving than in a Fontconfig-backed build.
+
+mpv/libass accepts one non-recursive subtitle-font directory. ASS Workbench therefore never switches `sub-fonts-dir` between manual and MKV sources. `renderer-fonts` is a stable publication directory containing the union of persistent manual fonts and current-project attachment fonts; source ownership remains separate so project cleanup does not delete manual imports.
 
 ## Font identity model
 

@@ -165,6 +165,20 @@ Implemented invalidation-boundary hardening:
 - preview uses the current playhead value as resume input without observing it through the root workbench;
 - explicit seek requests still update canonical seek request/nonce state, because those are commands rather than passive high-frequency telemetry.
 
+### H7 — mpv direct-font mode accepts only one non-recursive subtitle font directory
+
+mpv documents `--sub-fonts-dir` as a single directory, and libass does not recursively scan arbitrary sibling font directories. ASS Workbench previously switched the option between the persistent manual-font directory and the project MKV-font directory. Once an MKV contributed any attachment font, manually imported fonts could therefore disappear from the direct-font renderer's visible set.
+
+Implemented hardening:
+
+- renderer font publication now uses one stable `renderer-fonts` directory;
+- that directory is the tested union of persistent manual fonts and current-project MKV attachment fonts;
+- project changes remove only project-scoped publications while manual fonts remain available;
+- filename collision policy is deterministic, with the current project source taking priority;
+- the `sub-fonts-dir` path no longer changes when the first MKV attachment font arrives, avoiding an unnecessary mpv option/renderer identity change.
+
+The Fontconfig production path continues to use its explicit manual/project/system directories; this union directory primarily closes the compatibility/direct-provider path and keeps both renderer modes semantically aligned.
+
 ## Destructive / combination failure matrix
 
 Status values: **AUTO** = current automated coverage exists; **ADD** = add automated coverage; **DEVICE** = physical Android validation required; **RESEARCH** = policy/compatibility decision still needed.
@@ -193,7 +207,7 @@ Status values: **AUTO** = current automated coverage exists; **ADD** = add autom
 | F1 | Fonts | unused Style definitions | no false required-font request | AUTO |
 | F2 | Fonts | inline `\\rStyle` + `\\fn` | effective request inventory includes both | AUTO |
 | F3 | Fonts | missing glyph / fallback | diagnostic and renderer evidence agree or disagreement is visible | DEVICE |
-| F4 | Fonts | imported font added while renderer active | no unsafe live native cache mutation | DEVICE |
+| F4 | Fonts | imported font added while renderer active | stable renderer-font directory keeps manual + project fonts visible without changing sub-fonts-dir path | AUTO union + DEVICE renderer |
 | M1 | MKV | multiple ASS tracks; edit one | selected TrackNumber/UID/order/metadata retained | AUTO bridge |
 | M2 | MKV | chapters/tags/existing attachments + ASS replacement | all preservation families retained | AUTO bridge |
 | M3 | MKV | selected TTF/OTF packaged during replacement | original attachments retained; selected font appended once | AUTO bridge |

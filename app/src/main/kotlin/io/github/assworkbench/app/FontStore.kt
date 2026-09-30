@@ -11,6 +11,7 @@ import io.github.assworkbench.fonts.FontOrigin
 import io.github.assworkbench.fonts.FontconfigPrepared
 import io.github.assworkbench.fonts.OpenTypeCmap
 import io.github.assworkbench.fonts.OpenTypeNameReader
+import io.github.assworkbench.fonts.RendererFontDirectory
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 
@@ -26,6 +27,7 @@ class FontStore(private val context: Context) {
     // Keep imported project fonts here so the UI registry and renderer consume the same files.
     val importedDir: File = File(mpvConfigDir, "fonts").apply { mkdirs() }
     val projectFontDir: File = File(mpvConfigDir, "project-fonts").apply { mkdirs() }
+    private val rendererFontsDir: File = File(mpvConfigDir, "renderer-fonts").apply { mkdirs() }
 
     private val fontconfigCacheRoot: File = File(context.cacheDir, "fontconfig").apply { mkdirs() }
 
@@ -41,7 +43,10 @@ class FontStore(private val context: Context) {
 
     init {
         // MKV attachment fonts are project-scoped, never process-persistent state.
-        synchronized(projectFontLock) { clearProjectFontsLocked() }
+        synchronized(projectFontLock) {
+            clearProjectFontsLocked()
+            syncRendererFontsLocked()
+        }
         refreshFontconfig(pruneOldCaches = false)
     }
 
@@ -111,6 +116,7 @@ class FontStore(private val context: Context) {
         if (!target.exists()) atomicWrite(target, bytes)
         fontBytesCache[target.absolutePath] = bytes
         invalidateImportedCache()
+        synchronized(projectFontLock) { syncRendererFontsLocked() }
 
         // Do not replace the live fallback file while libass is active.
         // Imported fonts are discovered through the stable fonts directory.
@@ -121,6 +127,7 @@ class FontStore(private val context: Context) {
         synchronized(projectFontLock) {
             projectFontSessionId = sessionId
             clearProjectFontsLocked()
+            syncRendererFontsLocked()
         }
         if (refresh) refreshFontconfig(pruneOldCaches = true)
     }
@@ -137,6 +144,7 @@ class FontStore(private val context: Context) {
             if (!target.exists()) atomicWrite(target, bytes)
             fontBytesCache[target.absolutePath] = bytes
             invalidateImportedCache()
+            syncRendererFontsLocked()
             // Keep the fallback file immutable during an active renderer session.
             FontAsset(target.name, sha, metadata, FontOrigin.MKV_ATTACHMENT)
         }
@@ -205,7 +213,10 @@ class FontStore(private val context: Context) {
     }
 
     fun clearProjectFonts(refresh: Boolean = true) {
-        synchronized(projectFontLock) { clearProjectFontsLocked() }
+        synchronized(projectFontLock) {
+            clearProjectFontsLocked()
+            syncRendererFontsLocked()
+        }
         if (refresh) refreshFontconfig(pruneOldCaches = true)
     }
 
@@ -215,8 +226,14 @@ class FontStore(private val context: Context) {
         invalidateImportedCache()
     }
 
-    fun activeRendererFontsDir(): File =
-        if (projectFontDir.listFiles().orEmpty().any { it.isFile }) projectFontDir else importedDir
+    fun activeRendererFontsDir(): File = rendererFontsDir
+
+    private fun syncRendererFontsLocked() {
+        RendererFontDirectory.sync(
+            targetDir = rendererFontsDir,
+            sourceDirs = listOf(importedDir, projectFontDir),
+        )
+    }
 
     fun ensureFallbackFont(): FontMetadata? {
         val target = File(mpvConfigDir, "subfont.ttf")
