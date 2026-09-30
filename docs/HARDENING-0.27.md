@@ -126,6 +126,15 @@ ASS Workbench impact:
 - a waveform failure must not alter video, subtitle, MKV or recovery state;
 - vendor-specific decoder failure belongs in the test matrix.
 
+Implemented lifecycle hardening:
+
+- destructive workspace replacement explicitly cancels the active waveform Job;
+- decode loops check coroutine cancellation both between codec dequeues and inside large PCM output buffers;
+- cancellation is rethrown as cancellation rather than being surfaced as a codec failure;
+- `MediaCodec` and `MediaExtractor` release remain in `finally`;
+- cancellation is checked again before cache publication, so a waveform belonging to an abandoned project is not published after decode completes;
+- cache writes use unique temporary files and delete partial output on cancellation/failure.
+
 ### H6 — Compose performance work should focus on invalidation boundaries
 
 Android's current Compose guidance emphasizes caching expensive calculations with `remember`, stable keys for lazy layouts, `derivedStateOf` for rapidly changing state, and deferring state reads when possible.
@@ -160,8 +169,8 @@ Status values: **AUTO** = current automated coverage exists; **ADD** = add autom
 | A2 | Animation | scrub long/high-cost moving subtitle | no document commit and no unrelated workbench invalidation | DEVICE |
 | T1 | Timeline | pan/zoom while playback advances | viewport does not snap back unless follow-playhead is enabled | ADD |
 | T2 | Timeline | overlap frontier with nested long/short Events | later overlap not hidden | AUTO |
-| W1 | Waveform | project switch during analysis | stale result ignored; codec/extractor released | ADD + DEVICE |
-| W2 | Waveform | unsupported/vendor-failing codec | waveform becomes unavailable only; editing remains usable | DEVICE |
+| W1 | Waveform | project switch during analysis | stale result ignored; codec/extractor released; cancelled result not cached | code-hardened + DEVICE |
+| W2 | Waveform | unsupported/vendor-failing codec | waveform becomes unavailable only; editing remains usable | code-path guarded + DEVICE |
 | W3 | Waveform | media shorter than timeline viewport | post-audio region renders silence | AUTO |
 | F1 | Fonts | unused Style definitions | no false required-font request | AUTO |
 | F2 | Fonts | inline `\\rStyle` + `\\fn` | effective request inventory includes both | AUTO |

@@ -7,6 +7,7 @@ import android.media.MediaExtractor
 import android.media.MediaFormat
 import android.net.Uri
 import io.github.assworkbench.domain.WaveformEnvelope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import java.io.DataInputStream
@@ -24,6 +25,7 @@ internal object WaveformLiteAnalyzer {
         val key = cacheKey(context, uri)
         readCache(context, key)?.let { return it }
         val result = analyze(context, uri)
+        currentCoroutineContext().ensureActive()
         writeCache(context, key, result)
         return result
     }
@@ -93,6 +95,9 @@ internal object WaveformLiteAnalyzer {
                             val frameBytes = bytesPerSample * channels.coerceAtLeast(1)
                             val frames = pcm.remaining() / frameBytes
                             repeat(frames) { frame ->
+                                if (frame and 0x3FFF == 0) {
+                                    currentCoroutineContext().ensureActive()
+                                }
                                 var low = Short.MAX_VALUE
                                 var high = Short.MIN_VALUE
                                 repeat(channels.coerceAtLeast(1)) {
@@ -113,10 +118,14 @@ internal object WaveformLiteAnalyzer {
                 }
             }
             return peaks.finish()
+        } catch (cancelled: CancellationException) {
+            // Cancellation is expected when the user changes media/project.
+            // Drop the decoder promptly; never translate this into "waveform unavailable".
+            throw cancelled
         } finally {
             runCatching { codec?.stop() }
             runCatching { codec?.release() }
-            extractor.release()
+            runCatching { extractor.release() }
         }
     }
 
@@ -151,29 +160,35 @@ internal object WaveformLiteAnalyzer {
         }.getOrNull()
     }
 
-    private fun writeCache(context: Context, key: String, data: WaveformEnvelope) {
-        runCatching {
-            val dir = cacheDir(context)
-            val tmp = File(dir, "$key.tmp")
+    private suspend fun writeCache(context: Context, key: String, data: WaveformEnvelope) {
+        val dir = cacheDir(context)
+        val tmp = File(dir, "$key.tmp-" + System.nanoTime())
+        try {
+            currentCoroutineContext().ensureActive()
             DataOutputStream(tmp.outputStream().buffered()).use { output ->
                 output.writeInt(MAGIC)
                 output.writeInt(data.bucketDurationMs)
                 output.writeLong(data.durationMs)
                 output.writeInt(data.bucketCount)
                 repeat(data.bucketCount) { i ->
+                    if (i and 0x3FFF == 0) currentCoroutineContext().ensureActive()
                     output.writeShort(data.minimums[i].toInt())
                     output.writeShort(data.maximums[i].toInt())
                 }
             }
+            currentCoroutineContext().ensureActive()
             val dst = File(dir, "$key.awf")
-            if (dst.exists()) dst.delete()
-            if (!tmp.renameTo(dst)) { tmp.copyTo(dst, overwrite = true); tmp.delete() }
+            if (!tmp.renameTo(dst)) {
+                tmp.copyTo(dst, overwrite = true)
+            }
             dst.setLastModified(System.currentTimeMillis())
             dir.listFiles()
                 ?.filter { it.extension == "awf" }
                 ?.sortedByDescending { it.lastModified() }
                 ?.drop(6)
                 ?.forEach(File::delete)
+        } finally {
+            if (tmp.exists()) tmp.delete()
         }
     }
 
