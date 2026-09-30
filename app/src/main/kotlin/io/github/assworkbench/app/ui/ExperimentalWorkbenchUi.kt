@@ -23,6 +23,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.DragIndicator
 import androidx.compose.material.icons.filled.OpenInFull
 import androidx.compose.material.icons.filled.UnfoldLess
@@ -55,6 +58,7 @@ import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.zIndex
 import kotlin.math.roundToInt
 
@@ -131,6 +135,12 @@ internal fun FloatingWorkbenchSurface(
     initialOffset: Offset,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
+    testTagId: String = id,
+    bindingLabel: String? = null,
+    bindingPinned: Boolean = false,
+    onActivate: () -> Unit = {},
+    onToggleBinding: (() -> Unit)? = null,
+    onDuplicate: (() -> Unit)? = null,
     content: @Composable () -> Unit,
 ) {
     BoxWithConstraints(modifier.fillMaxSize()) {
@@ -174,6 +184,7 @@ internal fun FloatingWorkbenchSurface(
                                 )
                                 // Raise once per gesture, not on every pointer event.
                                 controller.bringToFront(id)
+                                onActivate()
                                 do {
                                     val event = awaitPointerEvent(PointerEventPass.Initial)
                                 } while (event.changes.any { it.pressed })
@@ -191,11 +202,14 @@ internal fun FloatingWorkbenchSurface(
                 Column {
                     Row(
                         Modifier
-                            .testTag("surface-drag-$id")
+                            .testTag("surface-drag-$testTagId")
                             .background(MaterialTheme.colorScheme.surfaceContainerHighest)
                             .pointerInput(id) {
                                 detectDragGestures(
-                                    onDragStart = { controller.bringToFront(id) },
+                                    onDragStart = {
+                                        controller.bringToFront(id)
+                                        onActivate()
+                                    },
                                     onDrag = { change, dragAmount ->
                                         change.consume()
                                         controller.moveBy(id, dragAmount, fallback)
@@ -214,7 +228,31 @@ internal fun FloatingWorkbenchSurface(
                             title,
                             style = MaterialTheme.typography.labelLarge,
                             modifier = Modifier.weight(1f).padding(horizontal = 6.dp),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                         )
+                        if (bindingLabel != null) {
+                            Text(
+                                bindingLabel,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                        if (onToggleBinding != null) {
+                            IconButton(onClick = onToggleBinding) {
+                                Icon(
+                                    if (bindingPinned) Icons.Filled.PushPin else Icons.Filled.Link,
+                                    contentDescription = if (bindingPinned) "解除对象固定" else "固定到当前字幕",
+                                )
+                            }
+                        }
+                        if (onDuplicate != null) {
+                            IconButton(onClick = onDuplicate) {
+                                Icon(Icons.Filled.ContentCopy, contentDescription = "复制工具实例")
+                            }
+                        }
                         IconButton(onClick = { controller.cycleSize(id) }) {
                             Icon(
                                 when (surfaceSize) {
