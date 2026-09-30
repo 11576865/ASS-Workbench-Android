@@ -67,6 +67,7 @@ dependencies {
 
     implementation("io.github.yuroyami:libmpvkt-compose:$rendererVersion")
 
+    testImplementation("junit:junit:4.13.2")
     androidTestImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test:core-ktx:1.6.1")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
