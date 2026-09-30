@@ -32,6 +32,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.SaveableStateHolder
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -51,6 +52,11 @@ import io.github.assworkbench.app.EditorState
 import io.github.assworkbench.app.EditorViewModel
 import io.github.assworkbench.app.WaveformLiteState
 import io.github.assworkbench.app.WaveformLiteStatus
+import io.github.assworkbench.app.ui.workspace.WorkspaceBinding
+import io.github.assworkbench.app.ui.workspace.WorkspaceBindingResolution
+import io.github.assworkbench.app.ui.workspace.WorkspaceState
+import io.github.assworkbench.app.ui.workspace.WorkspaceToolInstance
+import io.github.assworkbench.app.ui.workspace.resolve
 import io.github.assworkbench.domain.*
 import io.github.assworkbench.fonts.FontDiagnostics
 import io.github.assworkbench.fonts.FontOrigin
@@ -88,11 +94,12 @@ fun ModernEditorScreen(
     val darkTheme = when (themeMode) { "dark" -> true; "light" -> false; else -> isSystemInDarkTheme() }
     var toolName by rememberSaveable { mutableStateOf(WorkbenchTool.TEXT.name) }
     var supportingOpen by rememberSaveable { mutableStateOf(false) }
-    var openSurfaceNames by rememberSaveable {
-        mutableStateOf(emptySet<String>())
-    }
-    var surfacesTemporarilyHidden by rememberSaveable { mutableStateOf(false) }
-    var hiddenSurfaceSnapshot by rememberSaveable { mutableStateOf(emptySet<String>()) }
+    var workspaceState by rememberSaveable(
+        stateSaver = listSaver(
+            save = { it.toSaveableList() },
+            restore = { WorkspaceState.fromSaveableList(it) },
+        ),
+    ) { mutableStateOf(WorkspaceState()) }
     var previewModeName by rememberSaveable { mutableStateOf(PreviewWorkspaceMode.NORMAL.name) }
     val surfaceController = rememberWorkbenchSurfaceController()
     val interactionRegistry = rememberInteractionOverlayRegistry()
@@ -116,9 +123,12 @@ fun ModernEditorScreen(
     var destructiveWorkspaceAction by remember { mutableStateOf<DestructiveWorkspaceAction?>(null) }
 
     val tool = WorkbenchTool.entries.firstOrNull { it.name == toolName } ?: WorkbenchTool.TIMELINE
-    val openSurfaces = WorkbenchTool.entries.filter { it.name in openSurfaceNames }.toSet()
+    val openSurfaces = WorkbenchTool.entries.filter { workspaceState.hasTool(it.name) }.toSet()
     val previewMode = PreviewWorkspaceMode.entries.firstOrNull { it.name == previewModeName }
         ?: PreviewWorkspaceMode.NORMAL
+    val existingEventIds = remember(state.document.events) {
+        state.document.events.asSequence().map { it.id }.toSet()
+    }
     val issues by produceState<List<AssQcIssue>>(initialValue = emptyList(), state.document) {
         value = withContext(Dispatchers.Default) {
             AssQualityCheck.inspect(state.document)
@@ -135,9 +145,8 @@ fun ModernEditorScreen(
             supportingOpen = true
             return
         }
-        openSurfaceNames = openSurfaceNames + next.name
-        surfacesTemporarilyHidden = false
-        surfaceController.bringToFront(next.name)
+        workspaceState = workspaceState.openPrimary(next.name).withSurfacesHidden(false)
+        surfaceController.bringToFront(WorkspaceState.primaryInstanceId(next.name))
     }
 
     fun toggleTool(next: WorkbenchTool) {
@@ -146,23 +155,19 @@ fun ModernEditorScreen(
             supportingOpen = true
             return
         }
-        openSurfaceNames = if (next.name in openSurfaceNames) {
-            openSurfaceNames - next.name
+        val primary = workspaceState.primary(next.name)
+        workspaceState = if (primary != null) {
+            workspaceState.closeInstance(primary.id)
         } else {
-            surfaceController.bringToFront(next.name)
-            openSurfaceNames + next.name
+            workspaceState.openPrimary(next.name)
+        }.withSurfacesHidden(false)
+        if (primary == null) {
+            surfaceController.bringToFront(WorkspaceState.primaryInstanceId(next.name))
         }
-        surfacesTemporarilyHidden = false
     }
 
     fun toggleAllSurfaces() {
-        if (!surfacesTemporarilyHidden) {
-            hiddenSurfaceSnapshot = openSurfaceNames
-            surfacesTemporarilyHidden = true
-        } else {
-            openSurfaceNames = hiddenSurfaceSnapshot
-            surfacesTemporarilyHidden = false
-        }
+        workspaceState = workspaceState.withSurfacesHidden(!workspaceState.surfacesHidden)
     }
 
     MaterialTheme(colorScheme = workbenchColors(darkTheme)) {
@@ -331,7 +336,7 @@ fun ModernEditorScreen(
                 onPreviewToggle = { previewVisible = !previewVisible },
                 previewMode = previewMode,
                 onPreviewMode = { previewModeName = it.name },
-                surfacesHidden = surfacesTemporarilyHidden,
+                surfacesHidden = workspaceState.surfacesHidden,
                 onToggleAllSurfaces = ::toggleAllSurfaces,
                 themeMode = themeMode,
             ) {
@@ -501,26 +506,91 @@ fun ModernEditorScreen(
             }
         }
 
-        WorkbenchTool.entries.forEachIndexed { index, surfaceTool ->
+        workspaceState.tools.forEachIndexed { index, instance ->
+            val surfaceTool = WorkbenchTool.entries.firstOrNull { it.name == instance.toolKey }
+                ?: return@forEachIndexed
             val floatingEligible = surfaceTool !in setOf(
                 WorkbenchTool.TEXT,
                 WorkbenchTool.EFFECTS,
                 WorkbenchTool.EVENT,
             )
-            val visible = floatingEligible && !surfacesTemporarilyHidden && surfaceTool in openSurfaces
+            val visible = floatingEligible && !workspaceState.surfacesHidden
+            val eventBound = surfaceTool == WorkbenchTool.STYLE ||
+                surfaceTool == WorkbenchTool.POSITION
+            val bindingResolution = instance.binding.resolve(
+                focusedEventId = state.focusedEventId,
+                selectedEventIds = state.selectedEventIds,
+                existingEventIds = existingEventIds,
+            )
+            val bindingLabel = if (eventBound) {
+                when (val binding = instance.binding) {
+                    WorkspaceBinding.FollowFocus ->
+                        state.focusedEventId?.let { "跟随 #$it" } ?: "跟随焦点"
+                    WorkspaceBinding.FollowSelection -> "跟随选择"
+                    is WorkspaceBinding.PinnedEvent -> when (bindingResolution) {
+                        is WorkspaceBindingResolution.UnresolvedPinnedEvent ->
+                            "固定 #${binding.eventId} · 已失效"
+                        else -> "固定 #${binding.eventId}"
+                    }
+                }
+            } else {
+                null
+            }
+            val isPrimary = instance.id == WorkspaceState.primaryInstanceId(surfaceTool.name)
+            val tagId = if (isPrimary) surfaceTool.name else instance.id.replace(':', '-')
+
             FloatingWorkbenchSurface(
-                id = surfaceTool.name,
+                id = instance.id,
+                testTagId = tagId,
                 title = surfaceTool.title,
+                bindingLabel = bindingLabel,
+                bindingPinned = instance.binding is WorkspaceBinding.PinnedEvent,
                 visible = visible,
                 controller = surfaceController,
                 initialOffset = Offset(
                     28f + (index % 4) * 42f,
                     92f + (index % 5) * 46f,
                 ),
-                onClose = { openSurfaceNames = openSurfaceNames - surfaceTool.name },
-                modifier = Modifier.fillMaxSize().testTag("surface-${surfaceTool.name}"),
+                onActivate = {
+                    workspaceState = workspaceState.activate(instance.id)
+                },
+                onToggleBinding = if (eventBound) {
+                    {
+                        val next = when (instance.binding) {
+                            is WorkspaceBinding.PinnedEvent -> WorkspaceBinding.FollowFocus
+                            else -> state.focusedEventId
+                                ?.let { WorkspaceBinding.PinnedEvent(it) }
+                                ?: instance.binding
+                        }
+                        workspaceState = workspaceState
+                            .updateBinding(instance.id, next)
+                            .activate(instance.id)
+                    }
+                } else {
+                    null
+                },
+                onDuplicate = if (eventBound) {
+                    {
+                        workspaceState.newSibling(instance.id)?.let { sibling ->
+                            workspaceState = workspaceState
+                                .addInstance(sibling)
+                                .activate(sibling.id)
+                                .withSurfacesHidden(false)
+                            surfaceController.bringToFront(sibling.id)
+                        }
+                    }
+                } else {
+                    null
+                },
+                onClose = {
+                    workspaceState = workspaceState.closeInstance(instance.id)
+                },
+                modifier = Modifier
+                    .fillMaxSize()
+                    .testTag(if (isPrimary) "surface-${surfaceTool.name}" else "surface-$tagId"),
             ) {
                 FloatingToolContent(
+                    instance = instance,
                     tool = surfaceTool,
                     state = state,
                     viewModel = viewModel,
@@ -668,6 +738,7 @@ private fun WorkbenchPreview(
 
 @Composable
 private fun FloatingToolContent(
+    instance: WorkspaceToolInstance,
     tool: WorkbenchTool,
     state: EditorState,
     viewModel: EditorViewModel,
@@ -678,7 +749,20 @@ private fun FloatingToolContent(
     onSaveMkv: () -> Unit,
     eventEditorStateHolder: SaveableStateHolder,
 ) {
-    val event = state.document.events.firstOrNull { it.id == (expandedEventId ?: state.focusedEventId) }
+    val resolvedBinding = instance.binding.resolve(
+        focusedEventId = state.focusedEventId,
+        selectedEventIds = state.selectedEventIds,
+        existingEventIds = state.document.events.asSequence().map { it.id }.toSet(),
+    )
+    val boundEventId = (resolvedBinding as? WorkspaceBindingResolution.Event)?.eventId
+    val unresolvedPinnedEventId =
+        (resolvedBinding as? WorkspaceBindingResolution.UnresolvedPinnedEvent)?.eventId
+    val contextualEventId = if (unresolvedPinnedEventId != null) {
+        null
+    } else {
+        boundEventId ?: expandedEventId ?: state.focusedEventId
+    }
+    val event = state.document.events.firstOrNull { it.id == contextualEventId }
     when (tool) {
         WorkbenchTool.TEXT, WorkbenchTool.EFFECTS, WorkbenchTool.EVENT -> {
             if (event == null) {
