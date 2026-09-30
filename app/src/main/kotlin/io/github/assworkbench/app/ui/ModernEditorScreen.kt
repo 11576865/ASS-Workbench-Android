@@ -1,5 +1,7 @@
 package io.github.assworkbench.app.ui
 
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -15,6 +17,7 @@ import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.scrollBy
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -53,39 +56,12 @@ import kotlinx.coroutines.withContext
 import kotlin.math.abs
 
 private enum class WorkbenchTool(val title: String) {
-    TIMELINE("时间轴"), STYLE("Style"), POSITION("位置"),
-    FONTS("字体"), QC("质量检查"), BATCH("批量"), PROJECT("项目"), DIAGNOSTICS("诊断"),
+    TEXT("正文"), TIMELINE("时间轴"), STYLE("样式"), POSITION("位置"),
+    EFFECTS("效果"), EVENT("事件"), FONTS("字体"), QC("检查"), BATCH("批量"),
+    PROJECT("项目"), DIAGNOSTICS("诊断"),
 }
 
-private enum class DestructiveWorkspaceAction {
-    OPEN_ASS,
-    NEW_ASS,
-}
-
-private enum class PreviewPriority(val landscapeFraction: Float) {
-    LOW(0.50f),
-    NORMAL(0.56f),
-    HIGH(0.62f),
-}
-
-private fun previewPriorityFor(tool: WorkbenchTool, supportingOpen: Boolean): PreviewPriority {
-    if (!supportingOpen) return PreviewPriority.NORMAL
-    return when (tool) {
-        WorkbenchTool.STYLE,
-        WorkbenchTool.POSITION,
-        WorkbenchTool.FONTS,
-        -> PreviewPriority.HIGH
-
-        WorkbenchTool.TIMELINE,
-        WorkbenchTool.QC,
-        -> PreviewPriority.NORMAL
-
-        WorkbenchTool.BATCH,
-        WorkbenchTool.PROJECT,
-        WorkbenchTool.DIAGNOSTICS,
-        -> PreviewPriority.LOW
-    }
-}
+private enum class DestructiveWorkspaceAction { OPEN_ASS, NEW_ASS }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -102,9 +78,15 @@ fun ModernEditorScreen(
     rendererEnabled: Boolean,
     onEnableRenderer: () -> Unit,
 ) {
-    var toolName by rememberSaveable { mutableStateOf(WorkbenchTool.TIMELINE.name) }
+    val context = LocalContext.current
+    val preferences = remember(context) { context.getSharedPreferences("workbench-ui", 0) }
+    var themeMode by rememberSaveable { mutableStateOf(preferences.getString("theme", "system") ?: "system") }
+    val darkTheme = when (themeMode) { "dark" -> true; "light" -> false; else -> isSystemInDarkTheme() }
+    var toolName by rememberSaveable { mutableStateOf(WorkbenchTool.TEXT.name) }
     var supportingOpen by rememberSaveable { mutableStateOf(false) }
     var expandedEventId by rememberSaveable { mutableStateOf<Long?>(null) }
+    val eventEditorStateHolder = rememberSaveableStateHolder()
+    var previewVisible by rememberSaveable { mutableStateOf(true) }
     var searchOpen by rememberSaveable { mutableStateOf(false) }
     var openMenu by remember { mutableStateOf(false) }
     var saveConfirmOpen by remember { mutableStateOf(false) }
@@ -133,6 +115,7 @@ fun ModernEditorScreen(
         }
     }
 
+    MaterialTheme(colorScheme = workbenchColors(darkTheme)) {
     Surface(
         modifier = Modifier.fillMaxSize(),
         color = MaterialTheme.colorScheme.background,
@@ -289,108 +272,89 @@ fun ModernEditorScreen(
                 )
             }
 
+            WorkbenchToolStrip(tool, ::openTool, previewVisible,
+                { previewVisible = !previewVisible }, themeMode) {
+                themeMode = when (themeMode) { "system" -> "dark"; "dark" -> "light"; else -> "system" }
+                preferences.edit().putString("theme", themeMode).apply()
+            }
             BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
-                val landscape = maxWidth > maxHeight && maxWidth >= WorkbenchDimens.CompactWidth
-                val previewPriority = previewPriorityFor(tool, supportingOpen)
-                val boundedPreviewWidth = minOf(maxWidth, WorkbenchDimens.PreviewMaxWidth)
-
-                if (landscape) {
-                    val maxPreviewByEditor = (maxWidth - WorkbenchDimens.PrecisionEditorMinWidth)
-                        .coerceAtLeast(0.dp)
-                    val previewWidth = minOf(
-                        maxWidth * previewPriority.landscapeFraction,
-                        WorkbenchDimens.PreviewMaxWidth,
-                        maxPreviewByEditor,
-                    )
-
-                    Row(Modifier.fillMaxSize()) {
-                        Box(
-                            Modifier
-                                .width(previewWidth)
-                                .fillMaxHeight()
-                                .background(Color.Black),
-                            contentAlignment = Alignment.TopCenter,
-                        ) {
+                val landscape = maxWidth > maxHeight && maxWidth >= 600.dp
+                val previewWidth = minOf(
+                    maxWidth * 0.43f,
+                    ((maxHeight * 0.56f - WorkbenchDimens.TransportHeight).coerceAtLeast(140.dp)) * (16f / 9f),
+                    maxWidth - 320.dp,
+                ).coerceAtLeast(minOf(280.dp, maxWidth - 320.dp))
+                val previewHeight = (maxHeight * 0.28f).coerceAtMost(220.dp)
+                val preview: @Composable (Modifier) -> Unit = { paneModifier ->
+                    Surface(paneModifier, shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
+                        Column(Modifier.fillMaxSize()) {
                             WorkbenchPreview(
-                                state = state,
-                                viewModel = viewModel,
-                                positionEditing = supportingOpen && tool == WorkbenchTool.POSITION,
-                                onOpenVideo = onOpenReferenceVideo,
-                                onOpenTimeline = { toggleTool(WorkbenchTool.TIMELINE) },
-                                rendererEnabled = rendererEnabled,
-                                onEnableRenderer = onEnableRenderer,
-                                modifier = Modifier.width(previewWidth),
+                                state, viewModel, supportingOpen && tool == WorkbenchTool.POSITION,
+                                onOpenReferenceVideo, { openTool(WorkbenchTool.TIMELINE) },
+                                rendererEnabled, onEnableRenderer,
+                                Modifier.fillMaxWidth().then(if (landscape) Modifier.weight(0.56f) else Modifier.fillMaxHeight()),
                             )
-                        }
-                        VerticalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                        Column(Modifier.weight(1f).fillMaxHeight()) {
-                            if (searchOpen) {
-                                SearchStrip(state.query, viewModel::setQuery) {
-                                    viewModel.setQuery("")
-                                    searchOpen = false
-                                }
+                            if (landscape) {
+                                HorizontalDivider()
+                                ModernTimelinePane(state, viewModel, Modifier.weight(0.44f).fillMaxWidth(), compact = true)
                             }
-                            WorkbenchEventArea(
-                                state = state,
-                                viewModel = viewModel,
-                                issues = issues,
-                                issuesByEvent = issuesByEvent,
-                                expandedEventId = expandedEventId,
-                                onExpandedChange = { expandedEventId = it },
-                                onTool = ::toggleTool,
-                                supportingOpen = supportingOpen,
-                                tool = tool,
-                                onCloseSupporting = { supportingOpen = false },
-                                onImportFont = onImportFont,
-                                onSaveMkv = onSaveMkv,
-                                forceOverlay = true,
-                                modifier = Modifier.weight(1f).fillMaxWidth(),
-                            )
                         }
                     }
-                } else {
-                    Column(Modifier.fillMaxSize()) {
-                        Box(
-                            Modifier.fillMaxWidth().background(Color.Black),
-                            contentAlignment = Alignment.TopCenter,
-                        ) {
-                            WorkbenchPreview(
-                                state = state,
-                                viewModel = viewModel,
-                                positionEditing = supportingOpen && tool == WorkbenchTool.POSITION,
-                                onOpenVideo = onOpenReferenceVideo,
-                                onOpenTimeline = { toggleTool(WorkbenchTool.TIMELINE) },
-                                rendererEnabled = rendererEnabled,
-                                onEnableRenderer = onEnableRenderer,
-                                modifier = Modifier.width(boundedPreviewWidth),
-                            )
+                }
+                val editor: @Composable (Modifier) -> Unit = { paneModifier ->
+                    Column(paneModifier) {
+                        if (searchOpen) SearchStrip(state.query, viewModel::setQuery) {
+                            viewModel.setQuery(""); searchOpen = false
                         }
-
-                        if (searchOpen) {
-                            SearchStrip(state.query, viewModel::setQuery) {
-                                viewModel.setQuery("")
-                                searchOpen = false
-                            }
-                        }
-
                         WorkbenchEventArea(
-                            state = state,
-                            viewModel = viewModel,
-                            issues = issues,
-                            issuesByEvent = issuesByEvent,
-                            expandedEventId = expandedEventId,
-                            onExpandedChange = { expandedEventId = it },
-                            onTool = ::toggleTool,
-                            supportingOpen = supportingOpen,
-                            tool = tool,
-                            onCloseSupporting = { supportingOpen = false },
-                            onImportFont = onImportFont,
-                            onSaveMkv = onSaveMkv,
-                            forceOverlay = false,
-                            modifier = Modifier.weight(1f).fillMaxWidth(),
+                            state, viewModel, issues, issuesByEvent, expandedEventId,
+                            { expandedEventId = it }, ::openTool, supportingOpen, tool,
+                            { supportingOpen = false; toolName = WorkbenchTool.TEXT.name },
+                            onImportFont, onSaveMkv, landscape, eventEditorStateHolder,
+                            Modifier.weight(1f).fillMaxWidth(),
                         )
                     }
                 }
+                if (landscape) {
+                    Row(Modifier.fillMaxSize().padding(8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (previewVisible) preview(Modifier.width(previewWidth).fillMaxHeight().testTag("preview-workspace"))
+                        editor(Modifier.weight(1f).fillMaxHeight())
+                    }
+                } else {
+                    Column(Modifier.fillMaxSize().padding(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (previewVisible) preview(Modifier.fillMaxWidth().height(previewHeight).testTag("preview-workspace"))
+                        editor(Modifier.weight(1f).fillMaxWidth())
+                    }
+                }
+            }
+        }
+    }
+}
+
+}
+
+@Composable
+private fun WorkbenchToolStrip(
+    selected: WorkbenchTool, onTool: (WorkbenchTool) -> Unit,
+    previewVisible: Boolean, onPreviewToggle: () -> Unit,
+    themeMode: String, onThemeToggle: () -> Unit,
+) {
+    Surface(color = MaterialTheme.colorScheme.surface) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                WorkbenchTool.entries.forEach { entry ->
+                    FilterChip(selected = selected == entry, onClick = { onTool(entry) },
+                        modifier = Modifier.testTag("tool-${entry.name}"),
+                        label = { Text(entry.title) }, shape = RoundedCornerShape(8.dp))
+                }
+            }
+            TooltipIconButton("主题：" + when (themeMode) { "dark" -> "深色"; "light" -> "浅色"; else -> "跟随系统" }, onThemeToggle) {
+                Icon(when (themeMode) { "dark" -> Icons.Filled.DarkMode; "light" -> Icons.Filled.LightMode; else -> Icons.Filled.BrightnessAuto }, null)
+            }
+            TooltipIconButton(if (previewVisible) "收起预览" else "展开预览", onPreviewToggle) {
+                Icon(if (previewVisible) Icons.Filled.Visibility else Icons.Filled.VisibilityOff, null)
             }
         }
     }
@@ -443,103 +407,24 @@ private fun WorkbenchPreview(
         onOpenTimeline = onOpenTimeline,
         rendererEnabled = rendererEnabled,
         onEnableRenderer = onEnableRenderer,
+        fillViewport = true,
         modifier = modifier,
     )
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun WorkbenchEventArea(
-    state: EditorState,
-    viewModel: EditorViewModel,
-    issues: List<AssQcIssue>,
-    issuesByEvent: Map<Long, List<AssQcIssue>>,
-    expandedEventId: Long?,
-    onExpandedChange: (Long?) -> Unit,
-    onTool: (WorkbenchTool) -> Unit,
-    supportingOpen: Boolean,
-    tool: WorkbenchTool,
-    onCloseSupporting: () -> Unit,
-    onImportFont: () -> Unit,
-    onSaveMkv: () -> Unit,
-    forceOverlay: Boolean,
-    modifier: Modifier = Modifier,
+    state: EditorState, viewModel: EditorViewModel, issues: List<AssQcIssue>,
+    issuesByEvent: Map<Long, List<AssQcIssue>>, expandedEventId: Long?,
+    onExpandedChange: (Long?) -> Unit, onTool: (WorkbenchTool) -> Unit,
+    supportingOpen: Boolean, tool: WorkbenchTool, onCloseSupporting: () -> Unit,
+    onImportFont: () -> Unit, onSaveMkv: () -> Unit, forceOverlay: Boolean,
+    editorStateHolder: SaveableStateHolder, modifier: Modifier = Modifier,
 ) {
-    BoxWithConstraints(modifier) {
-        val compact = !forceOverlay && maxWidth < WorkbenchDimens.CompactWidth
-
-        EventWorkspace(
-            state = state,
-            viewModel = viewModel,
-            issuesByEvent = issuesByEvent,
-            expandedEventId = expandedEventId,
-            onExpandedChange = onExpandedChange,
-            onTool = onTool,
-            modifier = Modifier.fillMaxSize(),
-        )
-
-        if (supportingOpen) {
-            if (compact) {
-                val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
-                ModalBottomSheet(
-                    onDismissRequest = onCloseSupporting,
-                    sheetState = sheetState,
-                ) {
-                    SupportingWorkbench(
-                        state = state,
-                        viewModel = viewModel,
-                        tool = tool,
-                        issues = issues,
-                        onClose = onCloseSupporting,
-                        onImportFont = onImportFont,
-                        onSaveMkv = onSaveMkv,
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 224.dp, max = 640.dp),
-                    )
-                }
-            } else {
-                val overlayFraction = if (forceOverlay) 0.82f else 0.48f
-                val minOverlay = if (forceOverlay) 280.dp else 320.dp
-                val overlayWidth = (maxWidth * overlayFraction).coerceIn(minOverlay, 480.dp)
-                Surface(
-                    modifier = Modifier
-                        .align(Alignment.CenterEnd)
-                        .padding(vertical = WorkbenchDimens.Micro)
-                        .fillMaxHeight()
-                        .width(overlayWidth),
-                    shape = RoundedCornerShape(
-                        topStart = WorkbenchDimens.Large,
-                        bottomStart = WorkbenchDimens.Large,
-                    ),
-                    border = BorderStroke(
-                        1.dp,
-                        MaterialTheme.colorScheme.outline.copy(alpha = 0.72f),
-                    ),
-                    tonalElevation = 8.dp,
-                    shadowElevation = 18.dp,
-                    color = MaterialTheme.colorScheme.surface,
-                    contentColor = MaterialTheme.colorScheme.onSurface,
-                ) {
-                    Row(Modifier.fillMaxSize()) {
-                        Box(
-                            Modifier
-                                .width(2.dp)
-                                .fillMaxHeight()
-                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.72f))
-                        )
-                        SupportingWorkbench(
-                            state = state,
-                            viewModel = viewModel,
-                            tool = tool,
-                            issues = issues,
-                            onClose = onCloseSupporting,
-                            onImportFont = onImportFont,
-                            onSaveMkv = onSaveMkv,
-                            modifier = Modifier.weight(1f).fillMaxHeight(),
-                        )
-                    }
-                }
-            }
-        }
+    EventWorkspace(state, viewModel, issuesByEvent, expandedEventId, onExpandedChange,
+        onTool, editorStateHolder, tool, modifier) {
+        SupportingWorkbench(state, viewModel, tool, issues, onCloseSupporting,
+            onImportFont, onSaveMkv, Modifier.fillMaxSize())
     }
 }
 
@@ -576,7 +461,7 @@ private fun ModernAppBar(
                 TextButton(onClick = { onTool(WorkbenchTool.BATCH) }) { Text("批量") }
             } else {
                 Column(Modifier.weight(1f).padding(start = 4.dp)) {
-                    Text(state.project.title, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(state.project.title + if (state.dirty) " · 未保存" else "", style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Text(
                         when {
                             state.container.uri != null -> "MKV 工程 · ${state.document.events.size} events"
@@ -660,14 +545,16 @@ private fun EventWorkspace(
     expandedEventId: Long?,
     onExpandedChange: (Long?) -> Unit,
     onTool: (WorkbenchTool) -> Unit,
+    eventEditorStateHolder: SaveableStateHolder,
+    tool: WorkbenchTool,
     modifier: Modifier = Modifier,
+    supportingPane: @Composable () -> Unit,
 ) {
     val selectionMode = state.selectedEventIds.isNotEmpty()
     val listState = rememberLazyListState()
     // Expanded rows leave composition when they are collapsed or when focus moves.
     // Keep their uncommitted input buffers in a holder owned by the workspace so
     // collapse/switch/scroll does not destroy drafts before "应用正文".
-    val eventEditorStateHolder = rememberSaveableStateHolder()
     val rangeScrollScope = rememberCoroutineScope()
     LaunchedEffect(state.focusedEventId, state.filteredEvents) {
         val focusedId = state.focusedEventId
@@ -677,7 +564,8 @@ private fun EventWorkspace(
             onExpandedChange(focusedId)
         }
     }
-    Column(modifier.background(MaterialTheme.colorScheme.surface)) {
+    val listPane: @Composable (Modifier) -> Unit = { listModifier ->
+    Column(listModifier.background(MaterialTheme.colorScheme.surface).testTag("subtitle-navigation")) {
         Row(Modifier.fillMaxWidth().height(WorkbenchDimens.PaneHeaderHeight).padding(horizontal = WorkbenchDimens.Small), verticalAlignment = Alignment.CenterVertically) {
             Text(if (selectionMode) "选择模式" else "字幕", style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
             Text(if (state.query.isBlank()) "${state.document.events.size}" else "${state.filteredEvents.size}/${state.document.events.size}", style = MaterialTheme.typography.labelSmall)
@@ -748,7 +636,7 @@ private fun EventWorkspace(
         ) {
             items(state.filteredEvents, key = { it.id }) { event ->
                 ModernEventRow(
-                    event, event.id == state.focusedEventId, event.id == expandedEventId,
+                    event, event.id == state.focusedEventId, false,
                     event.id in state.selectedEventIds, selectionMode, issuesByEvent[event.id].orEmpty(),
                     state, viewModel, eventEditorStateHolder,
                     {
@@ -767,6 +655,58 @@ private fun EventWorkspace(
                     onTool,
                 )
                 Divider()
+            }
+        }
+    }
+    }
+    val inspector: @Composable (Modifier) -> Unit = { inspectorModifier ->
+        Surface(inspectorModifier.testTag("event-inspector"), shape = RoundedCornerShape(12.dp),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
+            if (tool in listOf(WorkbenchTool.TEXT, WorkbenchTool.EFFECTS, WorkbenchTool.EVENT)) {
+                val event = state.document.events.firstOrNull { it.id == expandedEventId }
+                Column(Modifier.fillMaxSize()) {
+                    Row(Modifier.fillMaxWidth().height(48.dp).padding(horizontal = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically) {
+                        Text(if (event == null) "事件检查器" else "${tool.title} · #${event.id}",
+                            style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
+                        if (event != null) IconButton(onClick = { onExpandedChange(null) },
+                            modifier = Modifier.testTag("event-collapse-${event.id}")) {
+                            Icon(Icons.Filled.Close, "收起")
+                        }
+                    }
+                    HorizontalDivider()
+                    if (event == null) {
+                        Column(Modifier.fillMaxSize().padding(24.dp),
+                            verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(Icons.Filled.Subtitles, null, tint = MaterialTheme.colorScheme.primary)
+                            Spacer(Modifier.height(12.dp))
+                            Text("选择一条字幕开始编辑", style = MaterialTheme.typography.titleSmall)
+                            Text("正文、样式、位置与效果在上方工具栏", style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    } else {
+                        Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            eventEditorStateHolder.SaveableStateProvider(event.id) {
+                                InlineEventEditor(event, event.style, state, viewModel, onTool, tool)
+                            }
+                        }
+                    }
+                }
+            } else supportingPane()
+        }
+    }
+    BoxWithConstraints(modifier) {
+        val paneWidth = maxWidth
+        if (paneWidth >= 680.dp) {
+            Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listPane(Modifier.width((paneWidth * 0.34f).coerceIn(224.dp, 320.dp)).fillMaxHeight())
+                inspector(Modifier.weight(1f).fillMaxHeight())
+            }
+        } else {
+            Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                listPane(Modifier.weight(if (expandedEventId == null && tool == WorkbenchTool.TEXT) 0.60f else 0.34f).fillMaxWidth())
+                inspector(Modifier.weight(if (expandedEventId == null && tool == WorkbenchTool.TEXT) 0.40f else 0.66f).fillMaxWidth())
             }
         }
     }
@@ -798,8 +738,8 @@ private fun ModernEventRow(
             .testTag("event-row-${event.id}")
             .background(
                 when {
-                    selected -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.22f)
-                    focused -> MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.20f)
+                    selected -> MaterialTheme.colorScheme.primaryContainer
+                    focused -> MaterialTheme.colorScheme.secondaryContainer
                     else -> Color.Transparent
                 }
             )
@@ -881,6 +821,7 @@ private fun InlineEventEditor(
     state: EditorState,
     viewModel: EditorViewModel,
     onTool: (WorkbenchTool) -> Unit,
+    activeSection: WorkbenchTool = WorkbenchTool.TEXT,
 ) {
     // Inline edit buffers are saveable so a configuration change does not
     // silently discard text that has not yet been committed to the canonical Event.
@@ -890,23 +831,10 @@ private fun InlineEventEditor(
         mutableStateOf(TextFieldValue(event.text, TextRange(event.text.length)))
     }
     var rawBaseText by rememberSaveable(event.id) { mutableStateOf(event.text) }
-    var inlinePanel by rememberSaveable(event.id) { mutableStateOf<String?>(null) }
     var layerText by rememberSaveable(event.id, event.layer) { mutableStateOf(event.layer.toString()) }
     var actorText by rememberSaveable(event.id, event.name) { mutableStateOf(event.name) }
     var comment by rememberSaveable(event.id, event.comment) { mutableStateOf(event.comment) }
     val playbackPositionMs by viewModel.playbackPositionMs.collectAsState()
-
-    val effective = remember(state.document, event) {
-        AssEffectiveInspector.inspect(state.document, event).associateBy { it.name }
-    }
-    val font = effective["Font"]?.effectiveValue ?: "?"
-    val size = effective["Size"]?.effectiveValue ?: "?"
-    val bold = effective["Bold"]?.effectiveValue?.let { if (it == "true") "1" else if (it == "false") "0" else it } ?: "?"
-    val italic = effective["Italic"]?.effectiveValue?.let { if (it == "true") "1" else if (it == "false") "0" else it } ?: "?"
-    val border = effective["Border"]?.effectiveValue ?: "?"
-    val alignment = effective["Alignment"]?.effectiveValue ?: "?"
-    val marginV = effective["Margin V"]?.effectiveValue ?: "?"
-    val pos = effective["Position"]?.effectiveValue ?: "alignment anchor"
 
     LaunchedEffect(event.text) {
         when {
@@ -920,6 +848,7 @@ private fun InlineEventEditor(
         }
     }
 
+    if (activeSection == WorkbenchTool.TEXT) {
     Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro)) {
         OutlinedTextField(startText, { startText = it }, label = { Text("Start") }, singleLine = true, modifier = Modifier.weight(1f))
         OutlinedTextField(endText, { endText = it }, label = { Text("End") }, singleLine = true, modifier = Modifier.weight(1f))
@@ -995,43 +924,11 @@ private fun InlineEventEditor(
         )
     }
 
-    Row(
-        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small),
-    ) {
-        // Stable feature-level entrances. The summaries follow familiar ASS override
-        // order without promoting every individual tag into its own button.
-        AssistChip(
-            onClick = { onTool(WorkbenchTool.FONTS) },
-            label = { Text("字体 · $font") },
-        )
-        AssistChip(
-            onClick = { onTool(WorkbenchTool.STYLE) },
-            label = { Text("Style · $styleName · fs$size · b$bold/i$italic · bord$border") },
-        )
-        AssistChip(
-            onClick = { onTool(WorkbenchTool.POSITION) },
-            label = { Text("位置 · an$alignment · V$marginV" + if (pos != "alignment anchor") " · pos" else "") },
-        )
-        AssistChip(
-            onClick = { inlinePanel = if (inlinePanel == "effects") null else "effects" },
-            label = { Text(if (inlinePanel == "effects") "收起效果" else "效果") },
-        )
-        AssistChip(
-            onClick = { inlinePanel = if (inlinePanel == "event") null else "event" },
-            label = {
-                Text(
-                    "Event · L${event.layer}" +
-                        (if (event.name.isNotBlank()) " · ${event.name}" else "") +
-                        (if (event.comment) " · Comment" else "")
-                )
-            },
-        )
     }
 
-    if (inlinePanel == "effects") InlineEffectsEditor(event, playbackPositionMs, viewModel)
+    if (activeSection == WorkbenchTool.EFFECTS) InlineEffectsEditor(event, playbackPositionMs, viewModel)
 
-    if (inlinePanel == "event") {
+    if (activeSection == WorkbenchTool.EVENT) {
         Surface(
             color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.38f),
             shape = MaterialTheme.shapes.small,
@@ -1048,7 +945,6 @@ private fun InlineEventEditor(
                         layerText = event.layer.toString()
                         actorText = event.name
                         comment = event.comment
-                        inlinePanel = null
                     }) { Text("取消") }
                     Button(onClick = {
                         viewModel.focusEvent(event.id, seek = false)
@@ -1057,7 +953,6 @@ private fun InlineEventEditor(
                             actor = actorText,
                             comment = comment,
                         )
-                        inlinePanel = null
                     }) { Text("应用") }
                 }
                 Divider()
@@ -2040,6 +1935,7 @@ private fun SupportingWorkbench(
             modifier = Modifier.weight(1f).fillMaxWidth(),
         ) { activeTool ->
             when (activeTool) {
+                WorkbenchTool.TEXT, WorkbenchTool.EFFECTS, WorkbenchTool.EVENT -> Unit
                 WorkbenchTool.TIMELINE -> ModernTimelinePane(state, viewModel, Modifier.fillMaxSize())
                 WorkbenchTool.STYLE -> StylePane(state, viewModel, Modifier.fillMaxSize())
                 WorkbenchTool.POSITION -> PositionPane(state, viewModel, Modifier.fillMaxSize())
@@ -2054,7 +1950,7 @@ private fun SupportingWorkbench(
 }
 
 @Composable
-private fun ModernTimelinePane(state: EditorState, viewModel: EditorViewModel, modifier: Modifier = Modifier) {
+private fun ModernTimelinePane(state: EditorState, viewModel: EditorViewModel, modifier: Modifier = Modifier, compact: Boolean = false) {
     val zoomSteps = listOf(5, 10, 30, 60, 120)
     var windowSeconds by rememberSaveable { mutableStateOf(30) }
     var viewportCenterMs by rememberSaveable { mutableLongStateOf(viewModel.playbackPositionMs.value) }
@@ -2191,7 +2087,7 @@ private fun ModernTimelinePane(state: EditorState, viewModel: EditorViewModel, m
         BoxWithConstraints(
             Modifier
                 .fillMaxWidth()
-                .height(34.dp)
+                .height(if (compact) 24.dp else 34.dp)
                 .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.38f))
                 .pointerInput(windowDurationMs, halfWindowMs) {
                     detectHorizontalDragGestures(
@@ -2252,8 +2148,10 @@ private fun ModernTimelinePane(state: EditorState, viewModel: EditorViewModel, m
             windowEndMs = windowEnd,
             playheadMs = playheadMs,
             onSeek = viewModel::seekPreviewTo,
+            compact = compact,
         )
 
+        if (!compact) {
         Text(
             "拖上方时间标尺平移视窗；关闭“跟随播放头”后，播放继续也不会把视窗拉回。Event：拖左右边缘调整 Start / End，拖主体整体平移。",
             style = MaterialTheme.typography.labelSmall,
@@ -2286,6 +2184,7 @@ private fun ModernTimelinePane(state: EditorState, viewModel: EditorViewModel, m
                     modifier = Modifier.weight(1f),
                 ) { Text("End ← 播放头") }
             }
+        }
         }
         Divider()
         if (visible.isEmpty()) {
@@ -2322,12 +2221,13 @@ private fun TimelineWaveformLite(
     windowEndMs: Long,
     playheadMs: Long,
     onSeek: (Long) -> Unit,
+    compact: Boolean = false,
 ) {
     when (waveform.status) {
         WaveformLiteStatus.IDLE -> Unit
         WaveformLiteStatus.ANALYZING -> {
             Surface(
-                modifier = Modifier.fillMaxWidth().height(52.dp),
+                modifier = Modifier.fillMaxWidth().height(if (compact) 28.dp else 52.dp),
                 color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.26f),
             ) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -2341,7 +2241,7 @@ private fun TimelineWaveformLite(
         }
         WaveformLiteStatus.UNAVAILABLE -> {
             Surface(
-                modifier = Modifier.fillMaxWidth().heightIn(min = 40.dp),
+                modifier = Modifier.fillMaxWidth().heightIn(min = if (compact) 28.dp else 40.dp),
                 color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.20f),
             ) {
                 Text(
@@ -2361,7 +2261,7 @@ private fun TimelineWaveformLite(
             BoxWithConstraints(
                 Modifier
                     .fillMaxWidth()
-                    .height(58.dp)
+                    .height(if (compact) 32.dp else 58.dp)
                     .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.24f))
                     .pointerInput(windowStartMs, windowEndMs) {
                         detectTapGestures { offset ->

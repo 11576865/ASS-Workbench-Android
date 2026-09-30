@@ -2,7 +2,7 @@
 
 A touch-first, raw-preserving ASS workbench for Android — evolving from subtitle editing into a professional mobile subtitle engineering environment.
 
-**Current release candidate: 0.27.0 / versionCode 29**
+**Current release candidate: 0.27.1 / versionCode 30**
 
 0.26 was the internal construction and hardening cycle. **0.27.0** is the first packaged product candidate. Physical-device validation follows the 0.27.0 publication; fixes found on real hardware will ship as **0.27.1, 0.27.2, ...** rather than holding the 0.27.0 version number open.
 
@@ -23,6 +23,17 @@ The editor follows several core rules:
 - structured tools should rewrite the smallest owned span rather than normalize whole Event text.
 - portrait is the primary workflow layout; landscape is the precision visual layout.
 - standalone ASS and MKV projects remain distinct workflows over the same ASS document core.
+
+## 0.27.1 adaptive workbench UI
+
+- Persistent tools: Text, Timeline, Style, Position, Effects, Event, Fonts, QC, Batch, Project and Diagnostics.
+- Landscape: preview and compact timeline on the left; navigation and a separate inspector on the right. Wide windows use three columns.
+- Portrait: bounded, collapsible preview above navigation and inspector; no editor expansion inside list rows.
+- Draft state belongs to the screen and survives tool changes, collapsed inspectors and orientation changes.
+- Explicit dark / light / system themes, readable panel borders and selected rows.
+- Video uses a fitted 16:9 editing canvas without stretching or cropping; remaining space belongs to transport and timeline.
+
+See [0.27.1 release notes](docs/RELEASE-0.27.1.md).
 
 ## 0.27 current capability
 

@@ -116,6 +116,7 @@ fun VideoPreview(
     onOpenTimeline: () -> Unit = {},
     rendererEnabled: Boolean = true,
     onEnableRenderer: () -> Unit = {},
+    fillViewport: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     if (!rendererEnabled) {
@@ -209,6 +210,7 @@ fun VideoPreview(
             onSetEventTiming = onSetEventTiming,
             onOpenVideo = onOpenVideo,
             onOpenTimeline = onOpenTimeline,
+            fillViewport = fillViewport,
             modifier = modifier,
         )
     }
@@ -503,6 +505,7 @@ private fun AuthoritativeMpvPreview(
     onSetEventTiming: (Long, Long, Long) -> Unit,
     onOpenVideo: () -> Unit,
     onOpenTimeline: () -> Unit,
+    fillViewport: Boolean,
     modifier: Modifier,
 ) {
     val context = LocalContext.current
@@ -701,10 +704,12 @@ private fun AuthoritativeMpvPreview(
     }
 
     Column(modifier.background(Color.Black)) {
-        Box(
-            Modifier.fillMaxWidth().aspectRatio(16f / 9f).clipToBounds(),
+        BoxWithConstraints(
+            if (fillViewport) Modifier.weight(1f).fillMaxWidth() else Modifier.fillMaxWidth().aspectRatio(16f / 9f),
             contentAlignment = Alignment.Center,
         ) {
+        val canvasWidth = if (fillViewport) minOf(maxWidth, maxHeight * (16f / 9f)) else maxWidth
+        Box(Modifier.width(canvasWidth).aspectRatio(16f / 9f).clipToBounds(), contentAlignment = Alignment.Center) {
             if (videoUri.isNullOrBlank()) {
                 Surface(
                     modifier = Modifier
@@ -811,6 +816,7 @@ private fun AuthoritativeMpvPreview(
                     )
                 }
             }
+        }
         }
         if (!videoUri.isNullOrBlank()) {
             PlaybackBar(
@@ -1578,6 +1584,9 @@ private fun PlaybackBar(
         }
     }
 
+    BoxWithConstraints {
+    val showMetrics = maxWidth >= 560.dp
+    val showClock = maxWidth >= 440.dp
     CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides WorkbenchDimens.MinTouchTarget) {
         Row(
             Modifier.fillMaxWidth()
@@ -1612,22 +1621,22 @@ private fun PlaybackBar(
             }) {
                 Text("+1帧", style = MaterialTheme.typography.labelSmall)
             }
-            Text(formatClock(displayPosition), style = MaterialTheme.typography.labelSmall)
-            estimatedFrameNumber?.takeIf { it >= 0L }?.let { frameNumber ->
+            if (showClock) Text(formatClock(displayPosition), style = MaterialTheme.typography.labelSmall)
+            estimatedFrameNumber?.takeIf { showMetrics && it >= 0L }?.let { frameNumber ->
                 Text(
                     "F$frameNumber",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            estimatedVideoFps?.takeIf { it.isFinite() && it > 0.0 }?.let { fps ->
+            estimatedVideoFps?.takeIf { showMetrics && it.isFinite() && it > 0.0 }?.let { fps ->
                 Text(
                     "%.3f".format(java.util.Locale.US, fps) + "fps",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            actionHint?.let {
+            actionHint?.takeIf { showMetrics }?.let {
                 Text(
                     it,
                     style = MaterialTheme.typography.labelSmall,
@@ -1651,8 +1660,9 @@ private fun PlaybackBar(
                 onOpenTimeline = onOpenTimeline,
                 modifier = Modifier.weight(1f).height(WorkbenchDimens.TransportHeight),
             )
-            Text(formatClock(duration), style = MaterialTheme.typography.labelSmall)
+            if (showClock) Text(formatClock(duration), style = MaterialTheme.typography.labelSmall)
         }
+    }
     }
 }
 
