@@ -181,6 +181,46 @@ class AssGeometrySemanticTest {
     }
 
     @Test
+    fun transientGeometryPreviewsDoNotConsumeUndoHistory() {
+        val original = AssDocument(
+            events = listOf(
+                AssEvent(
+                    id = 1,
+                    start = SubTime(0),
+                    end = SubTime(2_000),
+                    text = "{\\pos(100,200)}Text",
+                ),
+            ),
+        )
+        val history = UndoHistory(original)
+
+        fun preview(x: Double, y: Double): AssDocument =
+            original.copy(
+                events = original.events.map { event ->
+                    if (event.id == 1L) {
+                        event.copy(text = AssGeometrySemantic.patchPosition(event.text, x, y))
+                    } else {
+                        event
+                    }
+                },
+            )
+
+        val previewA = preview(240.0, 320.0)
+        val previewB = preview(360.0, 480.0)
+
+        assertEquals("{\\pos(240,320)}Text", previewA.events.single().text)
+        assertEquals("{\\pos(360,480)}Text", previewB.events.single().text)
+        assertEquals(original, history.current)
+        assertEquals(false, history.canUndo)
+
+        history.commit(previewB)
+        assertEquals(true, history.canUndo)
+        assertEquals(previewB, history.current)
+        assertEquals(original, history.undo())
+        assertEquals(previewB, history.redo())
+    }
+
+    @Test
     fun inheritedGeometryStaysExplicitlyEmpty() {
         val snapshot = AssGeometrySemantic.inspect("{\\bord2}Text")
         assertEquals(AssPositionMode.INHERITED, snapshot.positionMode)

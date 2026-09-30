@@ -171,7 +171,7 @@ Status values: **AUTO** = current automated coverage exists; **ADD** = add autom
 | E1 | Event ops | split → merge → Undo → Redo | document snapshots and boundary whitespace round-trip exactly; focus/selection still needs UI/device verification | AUTO document + DEVICE UI |
 | E2 | Event ops | multi-select batch time shift across t=0 | relative spacing retained; group clamp only | AUTO |
 | E3 | Clipboard | paste Position/Effects beside nested `\\t(...)` | nested transform payload untouched | AUTO |
-| G1 | Geometry | drag pos/move/org/rotation/scale/shear | transient preview only during gesture; one history commit at end | ADD UI/ViewModel test |
+| G1 | Geometry | drag pos/move/org/rotation/scale/shear | transient preview model leaves UndoHistory untouched; one canonical end-state commit is reversible | AUTO domain + DEVICE UI wiring |
 | G2 | Geometry | vector clip opened in rectangle editor | vector clip stays Raw-only and byte/text-equivalent | AUTO semantic |
 | A1 | Animation | multiple transforms + malformed sibling | selected transform only changes; malformed sibling preserved | AUTO |
 | A2 | Animation | scrub long/high-cost moving subtitle | no document commit and no unrelated workbench invalidation | DEVICE |
