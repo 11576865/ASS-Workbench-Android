@@ -168,7 +168,7 @@ Status values: **AUTO** = current automated coverage exists; **ADD** = add autom
 | R5 | Raw/native | extreme rotation/shear/position/scale literals | project remains editable; preview policy is safe and explicit | AUTO + DEVICE |
 | R6 | Drawing/native | extreme `\\p` / vector-clip coordinates | no silent rewrite; native failure does not destroy project data | AUTO + DEVICE |
 | R7 | Drawing/native | very large Drawing / vector-clip token stream | bounded preview behaviour; project state survives | AUTO + DEVICE |
-| E1 | Event ops | split → merge → Undo → Redo | text boundary whitespace and focus/selection remain valid | AUTO + ADD combinations |
+| E1 | Event ops | split → merge → Undo → Redo | document snapshots and boundary whitespace round-trip exactly; focus/selection still needs UI/device verification | AUTO document + DEVICE UI |
 | E2 | Event ops | multi-select batch time shift across t=0 | relative spacing retained; group clamp only | AUTO |
 | E3 | Clipboard | paste Position/Effects beside nested `\\t(...)` | nested transform payload untouched | AUTO |
 | G1 | Geometry | drag pos/move/org/rotation/scale/shear | transient preview only during gesture; one history commit at end | ADD UI/ViewModel test |

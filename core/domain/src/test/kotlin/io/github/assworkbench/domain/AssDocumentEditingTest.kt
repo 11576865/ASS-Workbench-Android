@@ -113,6 +113,34 @@ class AssDocumentEditingTest {
     }
 
     @Test
+    fun splitMergeUndoRedoRestoresExactSnapshots() {
+        val original = doc().copy(
+            events = listOf(
+                doc().events[0].copy(
+                    id = 1,
+                    start = SubTime(1_000),
+                    end = SubTime(4_000),
+                    text = "{\\fs56}left  right ",
+                ),
+            ),
+        )
+        val history = UndoHistory(original)
+        val splitIndex = original.events.single().text.indexOf("right")
+        val split = AssDocumentEditing.splitEvent(original, 1, 2_500, splitIndex).document
+        history.commit(split)
+
+        val splitIds = split.events.map { it.id }.toSet()
+        val merged = AssDocumentEditing.mergeEvents(split, splitIds, "").document
+        history.commit(merged)
+
+        assertEquals("{\\fs56}left  right ", merged.events.single().text)
+        assertEquals(split, history.undo())
+        assertEquals(original, history.undo())
+        assertEquals(split, history.redo())
+        assertEquals(merged, history.redo())
+    }
+
+    @Test
     fun mergeRejectsNonContiguousSelection() {
         val source = doc().copy(events = listOf(
             doc().events[0].copy(id = 1),
