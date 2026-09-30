@@ -192,6 +192,21 @@ Implemented hardening:
 
 The Fontconfig production path continues to use its explicit manual/project/system directories; this union directory primarily closes the compatibility/direct-provider path and keeps both renderer modes semantically aligned.
 
+### H9 — production APK must include the tested MKV write-back bridge
+
+The fast Android CI built and tested the pinned `mkvgo` bridge before assembling its APK, but the independent Fontconfig production workflow previously assembled the canonical Release APK without creating `app/src/main/jniLibs/arm64-v8a/libmkvgo.so`. That could produce a renderer-correct APK whose `MkvGoTool.isAvailable()` was false on device.
+
+Final release hardening:
+
+- the Fontconfig production workflow now checks out the same pinned `mkvgo` commit as Android CI;
+- the ASS replacement/font-attachment patch is injected and its Go tests run before packaging;
+- the arm64 PIE helper is built into `app/src/main/jniLibs/arm64-v8a/libmkvgo.so`;
+- production packaging fails unless the APK actually contains `lib/arm64-v8a/libmkvgo.so`;
+- the build-identity manifest records the helper SHA-256;
+- the production workflow also runs the core domain/font/container unit-test gate before it can publish the rolling prerelease.
+
+This closes a release-path asymmetry: the APK used for physical-device D12–D16 tests now contains the same tested write-back implementation that the fast CI validates.
+
 ## Destructive / combination failure matrix
 
 Status values: **AUTO** = current automated coverage exists; **ADD** = add automated coverage; **DEVICE** = physical Android validation required; **RESEARCH** = policy/compatibility decision still needed.
@@ -233,7 +248,7 @@ Status values: **AUTO** = current automated coverage exists; **ADD** = add autom
 | L2 | Lifecycle | process death/recovery after unsaved edit | recovery restores expected snapshot without inheriting stale MKV/container state | code-hardened + DEVICE |
 | S1 | Save | start MKV save, then edit/switch workspace | completed output is save-start snapshot; stale callback cannot mutate the later workspace | code-hardened + DEVICE |
 | B1 | Build | APK identity inspection | generated BuildConfig is checked against versionCode/version/commit/run; SHA-bearing APK ships with a hash manifest; Diagnostics exposes the same identity | AUTO + DEVICE spot-check |
-| B2 | Release | rolling 0.26 prerelease asset | release carries SHA-bearing APK + build-identity manifest + fixture bundle; empty old-asset matches cannot abort publication; legacy unsuffixed APK is removed | AUTO workflow |
+| B2 | Release | rolling 0.26 prerelease asset | production workflow runs core tests, packages/verifies the tested arm64 MKV bridge, and publishes SHA-bearing APK + identity + fixtures | AUTO workflow |
 
 ## Release provenance hardening
 
