@@ -945,6 +945,8 @@ private fun PositionDragOverlay(
     }
     var x by remember(event.id, event.text) { mutableStateOf(geometry.position?.x ?: baseX) }
     var y by remember(event.id, event.text) { mutableStateOf(geometry.position?.y ?: baseY) }
+    var positionProxyActive by remember(event.id) { mutableStateOf(false) }
+    var positionProxyOffsetDp by remember(event.id) { mutableStateOf(androidx.compose.ui.geometry.Offset(132f, 42f)) }
     var originX by remember(event.id, event.text) { mutableStateOf(geometry.origin?.x) }
     var originY by remember(event.id, event.text) { mutableStateOf(geometry.origin?.y) }
     var directRotation by remember(event.id, event.text) { mutableStateOf<Double?>(null) }
@@ -1229,7 +1231,17 @@ private fun PositionDragOverlay(
                         val dy = start.y - hy.toFloat()
                         return kotlin.math.sqrt((dx * dx + dy * dy).toDouble())
                     }
-                    val positionDistance = distanceTo(x, y)
+                    val targetPxX = (x / document.playResX.coerceAtLeast(1)) * size.width
+                    val targetPxY = (y / document.playResY.coerceAtLeast(1)) * size.height
+                    val proxyPxX = targetPxX + positionProxyOffsetDp.x.dp.toPx()
+                    val proxyPxY = targetPxY + positionProxyOffsetDp.y.dp.toPx()
+                    val targetDx = start.x - targetPxX.toFloat()
+                    val targetDy = start.y - targetPxY.toFloat()
+                    val targetDistance = kotlin.math.sqrt((targetDx * targetDx + targetDy * targetDy).toDouble())
+                    val proxyDx = start.x - proxyPxX.toFloat()
+                    val proxyDy = start.y - proxyPxY.toFloat()
+                    val proxyDistance = kotlin.math.sqrt((proxyDx * proxyDx + proxyDy * proxyDy).toDouble())
+                    val positionDistance = minOf(targetDistance, proxyDistance)
                     val originDistance = if (originX != null && originY != null) distanceTo(originX!!, originY!!) else Double.POSITIVE_INFINITY
                     val pivotX = originX ?: x
                     val pivotY = originY ?: y
@@ -1280,12 +1292,13 @@ private fun PositionDragOverlay(
                         positionDistance <= threshold -> 1
                         else -> 0
                     }
+                    positionProxyActive = activeHandle == 1
                     if (activeHandle == 4) {
                         scaleStartX = displayScaleX.coerceAtLeast(1.0)
                         scaleStartY = displayScaleY.coerceAtLeast(1.0)
                     }
                 },
-                onDrag = { change, _ ->
+                onDrag = { change, dragAmount ->
                     if (activeHandle != 0) {
                         change.consume()
                         val px = change.position.x.coerceIn(0f, size.width.toFloat())
@@ -1311,8 +1324,10 @@ private fun PositionDragOverlay(
                             if (kotlin.math.abs(ny - target) < yThreshold) ny = target.toFloat()
                         }
                         if (activeHandle == 1) {
-                            x = nx.toDouble()
-                            y = ny.toDouble()
+                            // Touch Proxy uses relative motion: the finger stays on the
+                            // offset control while the subtitle target remains visible.
+                            x += dragAmount.x / size.width.coerceAtLeast(1) * document.playResX
+                            y += dragAmount.y / size.height.coerceAtLeast(1) * document.playResY
                         } else if (activeHandle == 2) {
                             originX = nx.toDouble()
                             originY = ny.toDouble()
@@ -1390,6 +1405,7 @@ private fun PositionDragOverlay(
                     directScaleY = null
                     directShearX = null
                     directShearY = null
+                    positionProxyActive = false
                     activeHandle = 0
                 },
                 onDragCancel = {
@@ -1399,6 +1415,7 @@ private fun PositionDragOverlay(
                     directScaleY = null
                     directShearX = null
                     directShearY = null
+                    positionProxyActive = false
                     activeHandle = 0
                 },
             )
@@ -1407,11 +1424,40 @@ private fun PositionDragOverlay(
         Canvas(Modifier.fillMaxSize()) {
             val px = (x / document.playResX.coerceAtLeast(1)) * size.width
             val py = (y / document.playResY.coerceAtLeast(1)) * size.height
+            val targetPoint = androidx.compose.ui.geometry.Offset(px.toFloat(), py.toFloat())
+            val proxyPoint = targetPoint + androidx.compose.ui.geometry.Offset(
+                positionProxyOffsetDp.x.dp.toPx(),
+                positionProxyOffsetDp.y.dp.toPx(),
+            )
             drawCircle(
                 color = guideColor,
                 radius = 8.dp.toPx(),
-                center = androidx.compose.ui.geometry.Offset(px.toFloat(), py.toFloat()),
+                center = targetPoint,
                 style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2.dp.toPx()),
+            )
+            drawLine(
+                color = guideColor.copy(alpha = if (positionProxyActive) 0.82f else 0.48f),
+                start = targetPoint,
+                end = proxyPoint,
+                strokeWidth = if (positionProxyActive) 2.dp.toPx() else 1.dp.toPx(),
+            )
+            drawCircle(
+                color = guideColor.copy(alpha = 0.16f),
+                radius = if (positionProxyActive) 30.dp.toPx() else 24.dp.toPx(),
+                center = proxyPoint,
+            )
+            drawCircle(
+                color = guideColor,
+                radius = if (positionProxyActive) 17.dp.toPx() else 12.dp.toPx(),
+                center = proxyPoint,
+                style = androidx.compose.ui.graphics.drawscope.Stroke(
+                    width = if (positionProxyActive) 4.dp.toPx() else 2.5.dp.toPx(),
+                ),
+            )
+            drawCircle(
+                color = guideColor,
+                radius = if (positionProxyActive) 6.dp.toPx() else 4.dp.toPx(),
+                center = proxyPoint,
             )
             drawLine(
                 color = guideColor.copy(alpha = 0.5f),
@@ -1482,7 +1528,7 @@ private fun PositionDragOverlay(
             drawCircle(guideColor.copy(alpha = 0.9f), 5.dp.toPx(), fayHandle, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2.dp.toPx()))
         }
         Text(
-            "pos ${x.toInt()},${y.toInt()}" + (if (originX != null) " · org ${originX!!.toInt()},${originY!!.toInt()}" else "") + " · rot ${displayRotation.toInt()}° · scale ${displayScaleX.toInt()}×${displayScaleY.toInt()}% · shear ${"%.2f".format(java.util.Locale.US, displayShearX)},${"%.2f".format(java.util.Locale.US, displayShearY)} · 拖控制点",
+            "pos ${x.toInt()},${y.toInt()}" + (if (originX != null) " · org ${originX!!.toInt()},${originY!!.toInt()}" else "") + " · rot ${displayRotation.toInt()}° · scale ${displayScaleX.toInt()}×${displayScaleY.toInt()}% · shear ${"%.2f".format(java.util.Locale.US, displayShearX)},${"%.2f".format(java.util.Locale.US, displayShearY)} · 右下 Touch Proxy 拖动",
             modifier = Modifier
                 .align(Alignment.TopStart)
                 .background(Color.Black.copy(alpha = 0.55f))
