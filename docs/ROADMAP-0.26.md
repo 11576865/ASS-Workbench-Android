@@ -2,7 +2,7 @@
 
 0.26 is an internal construction milestone after the 0.25 workbench rearchitecture, not the user-facing handoff target.
 
-The first testable product handoff after this construction cycle is **0.27.0**. 0.26 remains the working version while the remaining bounded features, hardening, performance work, architecture cleanup, compatibility research, and failure-case fixes are completed. The app version must not be bumped to 0.27 merely because feature work is mostly present; the 0.27 bump is the final packaging step after the hardening gate is passed.
+The first packaged product candidate after this construction cycle is **0.27.0**. The 0.26 construction cycle is closed once the automated hardening/release gate is green. Physical-device validation happens on the published 0.27.0 build; reproducible device findings are repaired in the **0.27.x** patch line.
 
 The goal is not to add more permanent UI. The goal is to make existing contextual surfaces substantially more capable, visual, and precise while keeping Raw ASS lossless and observable.
 
@@ -16,7 +16,7 @@ The closing sequence is:
 4. convert those findings into targeted performance fixes, lifecycle hardening, semantic-integrity tests, structure cleanup, and UI direction adjustments;
 5. run destructive / combination testing across Raw ASS, structured editing, Undo/Redo, preview, MKV, fonts, waveform, orientation, recovery, and save/reopen;
 6. fix blockers and release-candidate regressions only;
-7. bump the finished handoff build to **0.27.0** and deliver that build for real-device user testing.
+7. bump the automated-gate-passing build to **0.27.0**, publish it, and use that exact build for real-device testing; subsequent fixes become **0.27.1, 0.27.2, ...**.
 
 Karaoke and full Drawing are not required for this handoff. They remain later expansion domains unless a small prerequisite is needed to protect current data integrity.
 
@@ -30,7 +30,7 @@ The bounded 0.26 capability pass is now closed at functional baseline `46057771a
 - testability, diagnostics and build/release provenance;
 - UI changes required to remove ambiguity or expose a failure safely.
 
-A failing renderer/native probe, destructive-combination test, or real-device check is a blocker to repair inside the freeze; it is not a reason to reopen unrelated feature work. Karaoke, full Drawing, general muxing, ASR/OCR/translation and other expansion remain outside the gate.
+A failing renderer/native probe or destructive-combination test is a blocker to 0.27.0 publication. A failing real-device check after publication is a blocker for the next 0.27.x patch; it is not a reason to reopen unrelated feature work. Karaoke, full Drawing, general muxing, ASR/OCR/translation and other expansion remain outside the gate.
 
 The hardening plan and destructive-combination matrix live in [HARDENING-0.27.md](HARDENING-0.27.md).
 
@@ -46,7 +46,7 @@ The first 0.26 runtime slice now establishes the generic render-only transient p
 - Event-level Blur uses the same transient preview path.
 - Slider drag is preview-only; gesture end performs one canonical commit.
 - Exact-value and non-continuous Style draft edits retain the short auto-commit path.
-- App version is now 0.26.0 / versionCode 28 on this branch.
+- The construction branch reached 0.26.0 / versionCode 28; the release candidate advances to 0.27.0 / versionCode 29 after the automated gate.
 
 The existing direct `\\pos` drag now uses the same ViewModel-owned `previewDocument` pipeline. `VideoPreview` keeps the canonical document separate from the render-only document so overlays, effective-value inspection, timeline behavior, and commit semantics do not accidentally bind to transient state. The first conservative geometry semantic layer is now present: leading top-level `\\pos`, `\\move`, `\\org`, `\\fr/\\frz`, `\\fscx`, and `\\fscy` can be inspected and minimally patched without rewriting unknown tags or nested `\\t(...)` payloads. `\\pos` drag now uses that patcher and refuses to silently convert an existing `\\move`. Editable `\\move` is now the first completed path editor: Start / End handles support direct drag, transient libass preview, and one canonical commit on gesture end; exact endpoint fields are available in Position & Geometry, and existing 6-argument `t1/t2` timing is preserved during spatial edits. `\\org`, the transform-origin marker is now directly editable with exact X/Y fields, transient drag preview, single-commit gesture semantics, add/remove actions, and conservative raw-text removal. Rotation Z (`\\fr` / `\\frz`) now has a unified exact-value + slider + canvas-handle workflow, transient libass preview, one-gesture-one-commit behavior, Style inheritance reset, alias-preserving patching, and conservative override removal. Scale X/Y (`\\fscx` / `\\fscy`) now has paired exact controls, sliders, a shared ratio-lock state, Style inheritance reset, transient preview, conservative semantic patch/remove support, and a static-position canvas Scale gizmo. The gizmo is explicitly a parameter-control frame rather than a claimed libass text bounding box. Shear (`\\fax` / `\\fay`) now has lossless semantic inspect/patch/remove support, paired exact controls and sliders, transient libass preview, reset-to-zero semantics, and a static-position two-axis shear gizmo integrated into the same parameter frame as Scale. Rectangular `\\clip` / `\\iclip` now has conservative semantic inspect/patch/remove support, explicit protection for vector/non-rectangular clips, exact Script Resolution coordinates, clip↔iclip switching, transient libass preview, and four independent corner handles on the preview. Vector clip remains losslessly preserved and is deferred to a later vector-path editor.
 
