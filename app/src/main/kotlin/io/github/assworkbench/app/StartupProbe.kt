@@ -6,6 +6,7 @@ import java.io.File
 object StartupProbe {
     private const val FILE_NAME = "startup-probe.txt"
     private const val MAX_HISTORY_CHARS = 32 * 1024
+    const val NORMAL_PREVIEW_CORE_STAGE = "normal_preview_core"
 
     fun mark(context: Context, stage: String, status: String, detail: String = "") {
         runCatching {
@@ -53,6 +54,26 @@ object StartupProbe {
                 .joinToString("\n\n---\n\n")
         }
     }.getOrDefault("无法读取最新启动记录")
+
+    fun rendererCoreCrashSuspected(context: Context): Boolean = runCatching {
+        val file = File(context.filesDir, FILE_NAME)
+        if (!file.isFile) return@runCatching false
+        val latest = file.readText(Charsets.UTF_8)
+            .split("\n---\n")
+            .map(String::trim)
+            .filter(String::isNotBlank)
+            .map { entry ->
+                val values = entry.lineSequence()
+                    .mapNotNull { line ->
+                        val split = line.indexOf('=')
+                        if (split <= 0) null else line.substring(0, split) to line.substring(split + 1)
+                    }
+                    .toMap()
+                values["stage"] to values["status"]
+            }
+            .lastOrNull { (stage, _) -> stage == NORMAL_PREVIEW_CORE_STAGE }
+        latest?.second == "starting"
+    }.getOrDefault(false)
 
     fun describe(t: Throwable, maxDepth: Int = 8): String {
         val seen = HashSet<Throwable>()

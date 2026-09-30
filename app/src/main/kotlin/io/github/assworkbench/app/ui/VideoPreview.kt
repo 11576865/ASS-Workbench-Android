@@ -54,6 +54,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import io.github.assworkbench.app.BuildConfig
+import io.github.assworkbench.app.StartupProbe
 import io.github.assworkbench.domain.AssCodec
 import io.github.assworkbench.domain.AssDocument
 import io.github.assworkbench.domain.AssEvent
@@ -109,8 +110,36 @@ fun VideoPreview(
     onSetEventTiming: (Long, Long, Long) -> Unit,
     onOpenVideo: () -> Unit,
     onOpenTimeline: () -> Unit = {},
+    rendererEnabled: Boolean = true,
+    onEnableRenderer: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
+    if (!rendererEnabled) {
+        Box(
+            modifier = modifier.background(Color.Black),
+            contentAlignment = Alignment.Center,
+        ) {
+            Column(
+                Modifier.padding(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    "Renderer 安全模式",
+                    color = Color.White,
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                Text(
+                    "上次启动记录显示 native 预览 core 在初始化完成前退出。编辑、Raw ASS、保存与 MKV 工作流仍可使用；当前不会加载 mpv/libass。",
+                    color = Color.White.copy(alpha = 0.78f),
+                    style = MaterialTheme.typography.labelSmall,
+                )
+                Button(onClick = onEnableRenderer) { Text("再次尝试启用预览") }
+            }
+        }
+        return
+    }
+
     var normalPreview by remember { mutableStateOf(!BuildConfig.ASSWB_RENDERER_EXPERIMENTAL) }
 
     if (BuildConfig.ASSWB_RENDERER_EXPERIMENTAL && !normalPreview) {
@@ -488,7 +517,25 @@ private fun AuthoritativeMpvPreview(
             ),
         )
     }
+    val rendererAttempt = remember(options) {
+        StartupProbe.mark(
+            context.applicationContext,
+            StartupProbe.NORMAL_PREVIEW_CORE_STAGE,
+            "starting",
+            "provider=" + BuildConfig.ASSWB_RENDERER_FONT_PROVIDER +
+                " fontsDir=" + fontsDir.absolutePath,
+        )
+        System.nanoTime()
+    }
     val mpv = rememberMpv(options)
+    LaunchedEffect(mpv, rendererAttempt) {
+        StartupProbe.mark(
+            context.applicationContext,
+            StartupProbe.NORMAL_PREVIEW_CORE_STAGE,
+            "success",
+            "client=" + mpv.clientName,
+        )
+    }
     val playback by mpv.playback.collectAsState()
     val estimatedFrameNumber by remember(mpv) {
         mpv.observe(MpvProperties.EstimatedFrameNumber)

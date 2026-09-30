@@ -200,8 +200,14 @@ Current race-hardening state:
 - native renderer crash/OOM exposure from hostile/extreme Raw ASS;
 - MKV write-back preservation and font-package collision semantics;
 - save/recovery/project-switch races;
-- renderer startup/provider failure;
+- renderer startup/provider failure (crash-loop safe mode implemented; physical-device provider validation still required);
 - any reproducible data loss, silent semantic rewrite, or process crash.
+
+Renderer startup crash-loop protection is now present:
+
+- normal preview writes a persistent `normal_preview_core=starting` breadcrumb immediately before `rememberMpv` and `success` only after the core returns;
+- if the previous app run ended between those markers, the next launch keeps the editor in **Renderer safe mode** and does not load mpv/libass automatically;
+- the user can explicitly retry native preview from the placeholder while all document/save/container workflows remain available without the renderer.
 
 ### P1 — before first serious device handoff if reproducible
 

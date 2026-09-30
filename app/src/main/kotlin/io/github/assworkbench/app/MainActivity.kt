@@ -24,6 +24,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -90,6 +91,9 @@ class MainActivity : ComponentActivity() {
         StartupProbe.mark(this, "activity_setContent", "starting")
         setContent {
             MaterialTheme(colorScheme = darkColorScheme()) {
+                var rendererEnabled by rememberSaveable {
+                    mutableStateOf(!StartupProbe.rendererCoreCrashSuspected(this@MainActivity))
+                }
                 var editorReady by remember {
                     mutableStateOf(!BuildConfig.ASSWB_RENDERER_EXPERIMENTAL)
                 }
@@ -158,6 +162,8 @@ class MainActivity : ComponentActivity() {
                         onSaveMkv = {
                             saveMkvAs.launch(defaultMkvFileName(state.container.name.ifBlank { state.project.title }))
                         },
+                        rendererEnabled = rendererEnabled,
+                        onEnableRenderer = { rendererEnabled = true },
                     )
                 }
             }

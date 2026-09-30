@@ -97,6 +97,8 @@ fun ModernEditorScreen(
     onSave: () -> Unit,
     onSaveAs: () -> Unit,
     onSaveMkv: () -> Unit,
+    rendererEnabled: Boolean,
+    onEnableRenderer: () -> Unit,
 ) {
     var toolName by rememberSaveable { mutableStateOf(WorkbenchTool.TIMELINE.name) }
     var supportingOpen by rememberSaveable { mutableStateOf(false) }
@@ -283,6 +285,8 @@ fun ModernEditorScreen(
                                 positionEditing = supportingOpen && tool == WorkbenchTool.POSITION,
                                 onOpenVideo = onOpenReferenceVideo,
                                 onOpenTimeline = { toggleTool(WorkbenchTool.TIMELINE) },
+                                rendererEnabled = rendererEnabled,
+                                onEnableRenderer = onEnableRenderer,
                                 modifier = Modifier.width(previewWidth),
                             )
                         }
@@ -324,6 +328,8 @@ fun ModernEditorScreen(
                                 positionEditing = supportingOpen && tool == WorkbenchTool.POSITION,
                                 onOpenVideo = onOpenReferenceVideo,
                                 onOpenTimeline = { toggleTool(WorkbenchTool.TIMELINE) },
+                                rendererEnabled = rendererEnabled,
+                                onEnableRenderer = onEnableRenderer,
                                 modifier = Modifier.width(boundedPreviewWidth),
                             )
                         }
@@ -365,6 +371,8 @@ private fun WorkbenchPreview(
     positionEditing: Boolean,
     onOpenVideo: () -> Unit,
     onOpenTimeline: () -> Unit,
+    rendererEnabled: Boolean,
+    onEnableRenderer: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     VideoPreview(
@@ -401,6 +409,8 @@ private fun WorkbenchPreview(
         onSetEventTiming = viewModel::setEventTiming,
         onOpenVideo = onOpenVideo,
         onOpenTimeline = onOpenTimeline,
+        rendererEnabled = rendererEnabled,
+        onEnableRenderer = onEnableRenderer,
         modifier = modifier,
     )
 }
