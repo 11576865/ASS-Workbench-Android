@@ -128,7 +128,7 @@ ASS Workbench impact:
 
 Implemented lifecycle hardening:
 
-- destructive workspace replacement explicitly cancels the active waveform Job;
+- media-source replacement explicitly cancels the active waveform Job; subtitle-only replacement keeps analysis alive when the reference video is unchanged;
 - decode loops check coroutine cancellation both between codec dequeues and inside large PCM output buffers;
 - cancellation is rethrown as cancellation rather than being surfaced as a codec failure;
 - `MediaCodec` and `MediaExtractor` release remain in `finally`;

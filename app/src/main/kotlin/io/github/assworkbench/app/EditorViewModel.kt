@@ -158,7 +158,6 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun newSubtitleProject() {
-        cancelWaveformAnalysis()
         clearPendingRecovery()
         beginWorkspaceBoundary()
         val document = AssDocument()
@@ -503,7 +502,6 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun openSubtitle(uri: Uri) {
-        cancelWaveformAnalysis()
         clearPendingRecovery()
         beginWorkspaceBoundary()
         val bytes = app.contentResolver.openInputStream(uri)?.use { it.readBytes() }
