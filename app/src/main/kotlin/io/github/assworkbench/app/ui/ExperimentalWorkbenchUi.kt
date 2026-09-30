@@ -46,6 +46,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
@@ -154,6 +155,16 @@ internal fun FloatingWorkbenchSurface(
             Surface(
                 modifier = Modifier
                     .offset { IntOffset(offset.x.roundToInt(), offset.y.roundToInt()) }
+                    .pointerInput(id) {
+                        awaitPointerEventScope {
+                            while (true) {
+                                val event = awaitPointerEvent(PointerEventPass.Initial)
+                                if (event.changes.any { it.pressed }) {
+                                    controller.bringToFront(id)
+                                }
+                            }
+                        }
+                    }
                     .widthIn(min = minOf(220.dp, actualWidth), max = actualWidth)
                     .heightIn(min = minOf(160.dp, actualHeight), max = actualHeight)
                     .animateContentSize(),
