@@ -3,7 +3,7 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
-val baseVersionName = "0.26.0"
+val baseVersionName = "0.27.0"
 val rendererVersion = providers.gradleProperty("asswb.rendererVersion").getOrElse("0.3.0")
 val rendererProvider = providers.gradleProperty("asswb.rendererProvider").getOrElse("none")
 val rendererExperimental = providers.gradleProperty("asswb.rendererExperimental").map(String::toBoolean).getOrElse(false)
@@ -22,7 +22,7 @@ android {
         }
         minSdk = 26
         targetSdk = 35
-        versionCode = 28
+        versionCode = 29
         versionName = if (rendererExperimental) "$baseVersionName-fontconfig" else baseVersionName
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         manifestPlaceholders["appLabel"] = if (rendererExperimental) "ASS Workbench FC" else "ASS Workbench"

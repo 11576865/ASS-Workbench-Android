@@ -8,8 +8,11 @@ on:
     branches: [ main ]
     paths:
       - 'tools/libmpvkt-fontconfig/**'
+      - 'tools/mkvgo/**'
       - '.github/workflows/fontconfig-native.yml'
+      - 'core/domain/**'
       - 'core/fonts/**'
+      - 'core/container/**'
       - 'settings.gradle.kts'
       - 'app/build.gradle.kts'
       - 'app/src/main/AndroidManifest.xml'

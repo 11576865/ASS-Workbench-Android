@@ -1,6 +1,6 @@
 # ASS Workbench Android 0.27 — Physical Device Validation
 
-This is the manual gate after automated hardening. It is intentionally a device checklist, not a feature roadmap.
+This is the post-publication physical-device validation checklist for 0.27.0 and subsequent 0.27.x patch candidates. It is intentionally a device checklist, not a feature roadmap.
 
 ## Build identity before testing
 
@@ -83,4 +83,4 @@ A failing case should record:
 - whether canonical ASS or source MKV was altered;
 - screenshot/log excerpt if available.
 
-P0 failures are: crash/process death, data loss, silent semantic rewrite, wrong-workspace mutation, corrupted output, or renderer crash-loop. Do not bump to 0.27 while any reproducible P0 failure remains unexplained.
+P0 failures are: crash/process death, data loss, silent semantic rewrite, wrong-workspace mutation, corrupted output, or renderer crash-loop. Record them against the exact published build and fix them in the next 0.27.x patch release before that patch is published.

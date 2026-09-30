@@ -2,9 +2,9 @@
 
 A touch-first, raw-preserving ASS workbench for Android — evolving from subtitle editing into a professional mobile subtitle engineering environment.
 
-**Current construction version: 0.26.0 / versionCode 28**
+**Current release candidate: 0.27.0 / versionCode 29**
 
-0.26 is an internal construction and hardening cycle. The first planned real-device product handoff after this cycle is **0.27.0**; the version will not be bumped merely because most feature work is present.
+0.26 was the internal construction and hardening cycle. **0.27.0** is the first packaged product candidate. Physical-device validation follows the 0.27.0 publication; fixes found on real hardware will ship as **0.27.1, 0.27.2, ...** rather than holding the 0.27.0 version number open.
 
 See [docs/ABOUT.md](docs/ABOUT.md) for the longer-term direction, [docs/ROADMAP-0.26.md](docs/ROADMAP-0.26.md) for release semantics, and [docs/HARDENING-0.27.md](docs/HARDENING-0.27.md) / [docs/DEVICE-TEST-0.27.md](docs/DEVICE-TEST-0.27.md) for the current handoff gate.
 
@@ -24,7 +24,7 @@ The editor follows several core rules:
 - portrait is the primary workflow layout; landscape is the precision visual layout.
 - standalone ASS and MKV projects remain distinct workflows over the same ASS document core.
 
-## 0.26 current capability
+## 0.27 current capability
 
 The current mainline includes:
 
@@ -47,7 +47,7 @@ The current mainline includes:
 - preservation of unknown sections, opaque lines and custom Format columns;
 - Review Sidecar stable identity and bilingual review infrastructure.
 
-The bounded 0.26 feature pass is now closed. Selected-font MKV packaging is implemented; the remaining gate is hardening, release provenance, and systematic physical-device validation. Karaoke and full Drawing remain deferred beyond the first 0.27 test handoff.
+The bounded 0.26 feature pass is closed and the automated 0.27 release gate now covers editor lifecycle, recovery, renderer-core recreation and MKV write-back on Android Emulator. 0.27.0 is published first for systematic physical-device validation; device-specific fixes remain inside the 0.27.x patch line. Karaoke and full Drawing remain deferred.
 
 ## Workbench ownership
 
@@ -60,9 +60,9 @@ The bounded 0.26 feature pass is now closed. Selected-font MKV packaging is impl
 - **QC** — diagnostics and deep links into the relevant owner.
 - **Raw ASS** — escape hatch and preservation boundary for syntax that structured tools do not own.
 
-## 0.27 handoff gate
+## 0.27 release gate
 
-Before 0.27.0 is produced, the project should pass a feature-freeze and hardening cycle covering:
+Before 0.27.0 is published, the project passes the automated feature-freeze and hardening gate covering:
 
 1. bounded remaining capability closure;
 2. current upstream/community failure-case research;
@@ -70,9 +70,9 @@ Before 0.27.0 is produced, the project should pass a feature-freeze and hardenin
 4. semantic-integrity and round-trip tests;
 5. destructive combination testing across Raw ASS, structured editing, Undo/Redo, preview, MKV, fonts, waveform, orientation, recovery and save/reopen;
 6. blocker/regression fixes only;
-7. final version/build identity update and first real-device test handoff.
+7. final version/build identity update and production packaging.
 
-0.27.0 is therefore a **testable product candidate**, not a claim that the project is finished.
+0.27.0 is therefore a **testable product candidate**, not a claim that the project is finished. Real-device findings are expected to feed 0.27.1/0.27.2 patch releases.
 
 ## Build identity
 
@@ -82,7 +82,7 @@ CI builds embed:
 - the source commit SHA;
 - the GitHub Actions run number.
 
-The same identity is visible in the in-app **Diagnostics** surface. Release APK filenames and manually requested temporary bundles carry the short commit SHA so a test APK can be traced back to its exact source even while 0.26 remains a rolling construction prerelease.
+The same identity is visible in the in-app **Diagnostics** surface. Release APK filenames and manually requested temporary bundles carry the short commit SHA so every 0.27.x test APK can be traced back to its exact source.
 
 ## Actions artifact policy
 

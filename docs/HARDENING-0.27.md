@@ -2,7 +2,7 @@
 
 Date: 2026-09-30  
 Functional freeze baseline: `46057771aea2f1d7437e6d919d35c9dbfbf5eda7`  
-Target: first systematic real-device handoff as 0.27.0
+Target: publish 0.27.0 after the automated release gate, then validate that exact build on real devices
 
 This document is the post-feature-freeze worklist. It is deliberately not a feature roadmap. A change belongs here only when it reduces crash risk, data-loss risk, semantic drift, lifecycle failure, performance regression, compatibility ambiguity, or release/build ambiguity.
 
@@ -236,20 +236,20 @@ Status values: **AUTO** = current automated coverage exists; **ADD** = add autom
 | F1 | Fonts | unused Style definitions | no false required-font request | AUTO |
 | F2 | Fonts | inline `\\rStyle` + `\\fn` | effective request inventory includes both | AUTO |
 | F3 | Fonts | missing glyph / fallback | diagnostic and renderer evidence agree or disagreement is visible | DEVICE |
-| F4 | Fonts | imported font added while renderer active | stable renderer-font directory keeps manual + project fonts visible; fontRevision recreates mpv/libass so discovery occurs from a fresh core | AUTO union + code-hardened + DEVICE renderer |
+| F4 | Fonts | imported font added while renderer active | stable renderer-font directory keeps manual + project fonts visible; fontRevision recreates mpv/libass so discovery occurs from a fresh core | AUTO lifecycle + DEVICE font-selection evidence |
 | M1 | MKV | multiple ASS tracks; edit one | selected TrackNumber/UID/order/metadata retained | AUTO bridge |
 | M2 | MKV | chapters/tags/existing attachments + ASS replacement | all preservation families retained | AUTO bridge |
-| M3 | MKV | selected TTF/OTF packaged during replacement | original attachments retained; selected font appended once | AUTO bridge |
+| M3 | MKV | selected TTF/OTF packaged during replacement | original attachments retained; selected font appended once | AUTO bridge + Android Emulator E2E |
 | M4 | MKV | same font already embedded | same SHA is not selected for repackaging even under a different filename | AUTO planner |
 | M5 | MKV | same attachment filename, different font bytes | source attachment not overwritten; selected font receives deterministic collision-safe name | AUTO bridge |
 | M6 | MKV | large source + many font attachments | streaming preservation remains bounded; no UI ANR | DEVICE |
 | P1 | Compose | fast playback-position updates with long Event list | root EditorState does not emit per playback tick; only timeline/focused timing consumers observe playhead flow | code-hardened + DEVICE/profile |
 | P2 | Renderer | long moving line / heavy transform fixture | no renderer recreation per gesture; transient ASS publication is generation-safe and capped to ~30 reloads/s | code-hardened + DEVICE/profile |
-| L1 | Lifecycle | rotate portrait↔landscape during active edit | canonical document/focus/selection live in ViewModel; inline timing/Event/raw draft buffers use saveable state across configuration recreation | code-hardened + DEVICE |
-| L2 | Lifecycle | process death/recovery after unsaved edit | recovery restores expected snapshot without inheriting stale MKV/container state | code-hardened + DEVICE |
+| L1 | Lifecycle | rotate portrait↔landscape during active edit | canonical document/focus/selection live in ViewModel; inline timing/Event/raw draft buffers use saveable state across configuration recreation | AUTO Activity recreation + DEVICE IME/gesture spot-check |
+| L2 | Lifecycle | process death/recovery after unsaved edit | recovery restores expected snapshot without inheriting stale MKV/container state | AUTO journal/fresh-ViewModel path + DEVICE process-death spot-check |
 | S1 | Save | start MKV save, then edit/switch workspace | completed output is save-start snapshot; stale callback cannot mutate the later workspace | code-hardened + DEVICE |
 | B1 | Build | APK identity inspection | generated BuildConfig is checked against versionCode/version/commit/run; SHA-bearing APK ships with a hash manifest; Diagnostics exposes the same identity | AUTO + DEVICE spot-check |
-| B2 | Release | rolling 0.26 prerelease asset | production workflow runs core tests, packages/verifies the tested arm64 MKV bridge, and publishes SHA-bearing APK + identity + fixtures | AUTO workflow |
+| B2 | Release | 0.27.x production asset | production workflow runs core tests, packages/verifies the tested arm64 MKV bridge, and publishes SHA-bearing APK + identity + fixtures | AUTO workflow |
 
 ## Release provenance hardening
 
@@ -268,9 +268,26 @@ The production workflow now treats release publication as part of the build gate
 - the historical unsuffixed `ASS-Workbench-Android-<version>-debug.apk` is removed because it cannot identify its source commit;
 - post-publication verification checks all required asset names and rejects the ambiguous legacy APK if it remains.
 
+## Automated Android emulator release gate
+
+The post-freeze Android regression layer now runs on an API 35 x86_64 Emulator and complements the JVM/domain suite.
+
+Verified on the Emulator:
+
+- crash-recovery entry, restore semantics and explicit discard;
+- recovered journal persistence until explicit save/discard;
+- uncommitted Raw Event draft retention across collapse/reopen and Event switching;
+- Activity recreation with saveable inline draft state;
+- ordinary ASS save failure remaining contained while dirty/recovery state survives;
+- fresh ViewModel recovery of the latest journaled edit;
+- native mpv/libass core recreation when `fontRevision` changes;
+- native `MkvGoTool.replaceAss` execution against a deterministic MKV fixture, followed by re-parse verifying the selected ASS TrackNumber, replacement text, preservation of the existing font attachment, and addition of the selected new font attachment.
+
+The current Emulator regression corpus is therefore an executable release gate rather than a compile-only check. It does not replace physical-device validation for OEM SAF behaviour, production arm64 renderer/font selection, GPU/native stability, touch/IME ergonomics, waveform codec variance, or large-media performance.
+
 ## Freeze priorities
 
-### P0 — before any 0.27 version bump
+### P0 — before publishing 0.27.0
 
 Current race-hardening state:
 
@@ -296,7 +313,7 @@ Renderer startup crash-loop protection is now present:
 - if the previous app run ended between those markers, the next launch keeps the editor in **Renderer safe mode** and does not load mpv/libass automatically;
 - the user can explicitly retry native preview from the placeholder while all document/save/container workflows remain available without the renderer.
 
-### P1 — before first serious device handoff if reproducible
+### P1 — physical-device validation for the 0.27.x patch line
 
 - waveform codec/resource lifecycle;
 - high-frequency Compose invalidation;
@@ -312,11 +329,12 @@ Renderer startup crash-loop protection is now present:
 
 ## Exit condition
 
-The 0.27 version bump is permitted only after:
+0.27.0 may be published once:
 
-1. P0 cases are either fixed or demonstrated not to affect the shipped path;
-2. Android CI and the Fontconfig production workflow are green on the release-candidate commit;
+1. P0 cases are either fixed or demonstrated not to affect the shipped path under automated coverage;
+2. Android CI, Android Emulator Regression, and the Fontconfig production workflow are green on the release-candidate commit;
 3. the destructive corpus has no unexplained preservation regression;
-4. a physical-device pass covers startup, open/save, MKV write-back, selected font packaging, preview, waveform failure behaviour, orientation, recovery and save/reopen, with results retained from `docs/DEVICE-TEST-RESULTS.template.md`;
-5. the build identity shown in Diagnostics matches the distributed APK and its SHA-bearing build-identity manifest;
-6. remaining limitations are documented rather than silently hidden.
+4. the build identity shown in Diagnostics matches the distributed APK and its SHA-bearing build-identity manifest;
+5. remaining limitations are documented rather than silently hidden.
+
+Physical-device validation then runs against the published 0.27.0 artifact using `docs/DEVICE-TEST-RESULTS.template.md`. Reproducible device failures are fixed in the 0.27.x patch line (0.27.1, 0.27.2, ...); P0 device failures block the next patch release, not the existence of 0.27.0 itself.
