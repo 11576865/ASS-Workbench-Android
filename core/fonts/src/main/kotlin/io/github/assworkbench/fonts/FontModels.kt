@@ -132,3 +132,29 @@ object FontDiagnostics {
         return names.any { it in requested }
     }
 }
+
+
+object FontPackagingPlanner {
+    fun packageableShas(assets: Collection<FontAsset>): Set<String> {
+        val embedded = assets.asSequence()
+            .filter { it.origin == FontOrigin.MKV_ATTACHMENT }
+            .map { it.sha256 }
+            .toSet()
+        return assets.asSequence()
+            .filter { it.origin == FontOrigin.MANUAL && it.sha256 !in embedded }
+            .map { it.sha256 }
+            .toSet()
+    }
+
+    fun selectRequested(
+        assets: Collection<FontAsset>,
+        requestedFamilies: Collection<String>,
+    ): Set<String> {
+        val packageable = packageableShas(assets)
+        return assets.asSequence()
+            .filter { it.sha256 in packageable }
+            .filter { FontDiagnostics.matchesRequestedFamily(it, requestedFamilies) }
+            .map { it.sha256 }
+            .toSet()
+    }
+}

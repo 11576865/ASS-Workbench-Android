@@ -53,3 +53,52 @@ class FontDiagnosticsTest {
         assertEquals(false, FontDiagnostics.matchesRequestedFamily(asset, listOf("Other Face")))
     }
 }
+
+
+class FontPackagingPlannerTest {
+    private fun asset(
+        sha: String,
+        family: String,
+        origin: FontOrigin,
+        fileName: String = family.replace(" ", "") + ".ttf",
+    ) = FontAsset(
+        fileName = fileName,
+        sha256 = sha,
+        metadata = FontMetadata(
+            family = family,
+            rendererFamily = family,
+            aliases = setOf(family),
+            rendererAliases = setOf(family),
+        ),
+        origin = origin,
+    )
+
+    @Test
+    fun identicalShaAlreadyEmbeddedIsNotPackageableEvenWithDifferentFilename() {
+        val assets = listOf(
+            asset("same-sha", "Demo Sans", FontOrigin.MKV_ATTACHMENT, "embedded.ttf"),
+            asset("same-sha", "Demo Sans", FontOrigin.MANUAL, "renamed-local.ttf"),
+        )
+        assertEquals(emptySet(), FontPackagingPlanner.packageableShas(assets))
+        assertEquals(emptySet(), FontPackagingPlanner.selectRequested(assets, listOf("Demo Sans")))
+    }
+
+    @Test
+    fun requestedManualFaceIsSelectedButUnrelatedManualFaceIsNot() {
+        val assets = listOf(
+            asset("wanted", "Wanted Sans", FontOrigin.MANUAL),
+            asset("other", "Other Sans", FontOrigin.MANUAL),
+        )
+        assertEquals(setOf("wanted"), FontPackagingPlanner.selectRequested(assets, listOf("Wanted Sans")))
+    }
+
+    @Test
+    fun embeddedDifferentShaDoesNotBlockManualRequestedFace() {
+        val assets = listOf(
+            asset("embedded-a", "Old Face", FontOrigin.MKV_ATTACHMENT, "Face.ttf"),
+            asset("manual-b", "Wanted Face", FontOrigin.MANUAL, "Face.ttf"),
+        )
+        assertEquals(setOf("manual-b"), FontPackagingPlanner.packageableShas(assets))
+        assertEquals(setOf("manual-b"), FontPackagingPlanner.selectRequested(assets, listOf("Wanted Face")))
+    }
+}

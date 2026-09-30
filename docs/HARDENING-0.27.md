@@ -187,8 +187,8 @@ Status values: **AUTO** = current automated coverage exists; **ADD** = add autom
 | M1 | MKV | multiple ASS tracks; edit one | selected TrackNumber/UID/order/metadata retained | AUTO bridge |
 | M2 | MKV | chapters/tags/existing attachments + ASS replacement | all preservation families retained | AUTO bridge |
 | M3 | MKV | selected TTF/OTF packaged during replacement | original attachments retained; selected font appended once | AUTO bridge |
-| M4 | MKV | same font already embedded | same SHA is not selected for repackaging | ADD planner/ViewModel |
-| M5 | MKV | same attachment filename, different font bytes | source attachment not overwritten; result policy explicit | ADD |
+| M4 | MKV | same font already embedded | same SHA is not selected for repackaging even under a different filename | AUTO planner |
+| M5 | MKV | same attachment filename, different font bytes | source attachment not overwritten; selected font receives deterministic collision-safe name | AUTO bridge |
 | M6 | MKV | large source + many font attachments | streaming preservation remains bounded; no UI ANR | DEVICE |
 | P1 | Compose | fast playback-position updates with long Event list | root EditorState does not emit per playback tick; only timeline/focused timing consumers observe playhead flow | code-hardened + DEVICE/profile |
 | P2 | Renderer | long moving line / heavy transform fixture | no renderer recreation per gesture; editor remains responsive enough to recover | DEVICE/profile |

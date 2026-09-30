@@ -24,6 +24,7 @@ import io.github.assworkbench.domain.FontBindingRewriter
 import io.github.assworkbench.domain.SubTime
 import io.github.assworkbench.domain.UndoHistory
 import io.github.assworkbench.fonts.FontDiagnostics
+import io.github.assworkbench.fonts.FontPackagingPlanner
 import io.github.assworkbench.fonts.FontOrigin
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -1481,15 +1482,10 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 return@update state.copy(status = "请先打开 MKV 工程，再选择需要随写回封入的字体。")
             }
             val requested = FontBindingRewriter.requestedFamilies(state.document)
-            val embeddedShas = state.importedFonts.asSequence()
-                .filter { it.origin == FontOrigin.MKV_ATTACHMENT }
-                .map { it.sha256 }
-                .toSet()
-            val selected = state.importedFonts.asSequence()
-                .filter { it.origin == FontOrigin.MANUAL && it.sha256 !in embeddedShas }
-                .filter { FontDiagnostics.matchesRequestedFamily(it, requested) }
-                .map { it.sha256 }
-                .toSet()
+            val selected = FontPackagingPlanner.selectRequested(
+                state.importedFonts,
+                requested,
+            )
             state.copy(
                 fontPackagingSelection = selected,
                 status = "已按当前 ASS 字体请求选择 " + selected.size + " 个可封入字体。",
@@ -2136,14 +2132,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         val fallback = fontStore.ensureFallbackFont()
         val imported = fontStore.listImported()
         _state.update {
-            val embeddedShas = imported.asSequence()
-                .filter { font -> font.origin == FontOrigin.MKV_ATTACHMENT }
-                .map { font -> font.sha256 }
-                .toSet()
-            val packageableShas = imported.asSequence()
-                .filter { font -> font.origin == FontOrigin.MANUAL && font.sha256 !in embeddedShas }
-                .map { font -> font.sha256 }
-                .toSet()
+            val packageableShas = FontPackagingPlanner.packageableShas(imported)
             it.copy(
                 importedFonts = imported,
                 fontPackagingSelection = it.fontPackagingSelection.intersect(packageableShas),
