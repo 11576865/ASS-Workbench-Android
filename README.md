@@ -119,5 +119,6 @@ OCR, ASR, general machine translation, and broad “support every subtitle forma
 - [0.27 hardening / destructive failure matrix](docs/HARDENING-0.27.md)
 - [0.27 physical-device validation](docs/DEVICE-TEST-0.27.md)
 - [Device-test results template](docs/DEVICE-TEST-RESULTS.template.md)
+- [Repository operations policy](docs/REPOSITORY-OPERATIONS-POLICY.md)
 - [1.0 product specification](docs/PRODUCT_SPEC_1_0.md)
 - [Third-party notices](THIRD_PARTY_NOTICES.md)
