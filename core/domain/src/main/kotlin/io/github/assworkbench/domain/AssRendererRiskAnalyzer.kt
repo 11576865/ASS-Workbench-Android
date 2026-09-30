@@ -29,7 +29,7 @@ object AssRendererRiskAnalyzer {
     internal const val MAX_DRAWING_TEXT_CHARS = 256_000
     internal const val MAX_DRAWING_NUMBERS = 50_000
 
-    private val overrideBlock = Regex("""\{[^}]*}""")
+    private val overrideBlock = Regex("""\{[^}]*\}""")
     private val number = """[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?"""
     private val scalarTag = Regex(
         """\\(frx|fry|frz|fr|fax|fay|fscx|fscy)\s*(?:\(\s*)?($number)""",
