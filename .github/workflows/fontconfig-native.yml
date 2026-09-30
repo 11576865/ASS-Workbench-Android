@@ -254,3 +254,8 @@ jobs:
               --prerelease \
               --notes "$NOTES"
           fi
+
+          gh release view "$TAG" --json assets --jq '.assets[].name' | \
+            grep -Fxq "ASS-Workbench-Android-$VERSION-$SHORT_SHA-debug.apk"
+          gh release view "$TAG" --json assets --jq '.assets[].name' | \
+            grep -Fxq "ASS-Workbench-Android-$VERSION-$SHORT_SHA-build-identity.txt"
