@@ -234,17 +234,24 @@ class EditorRegressionInstrumentedTest {
     fun experimentalSurfaceWorkspaceSupportsStackHideRestoreAndPreviewModes() {
         restoreRecovery()
 
+        fun waitForSurface(tag: String) {
+            composeRule.waitUntil(timeoutMillis = 10_000) {
+                runCatching {
+                    composeRule.onNodeWithTag(tag).assertIsDisplayed()
+                    true
+                }.getOrDefault(false)
+            }
+        }
+
         composeRule.onNodeWithTag("tool-POSITION").performScrollTo().performClick()
         composeRule.onNodeWithTag("tool-STYLE").performScrollTo().performClick()
-        composeRule.waitForIdle()
-        composeRule.onNodeWithTag("surface-POSITION").assertIsDisplayed()
-        composeRule.onNodeWithTag("surface-STYLE").assertIsDisplayed()
+        waitForSurface("surface-POSITION")
+        waitForSurface("surface-STYLE")
 
         composeRule.onNodeWithTag("tool-FONTS").performScrollTo().performClick()
         composeRule.onNodeWithTag("tool-QC").performScrollTo().performClick()
-        composeRule.waitForIdle()
-        composeRule.onNodeWithTag("surface-FONTS").assertIsDisplayed()
-        composeRule.onNodeWithTag("surface-QC").assertIsDisplayed()
+        waitForSurface("surface-FONTS")
+        waitForSurface("surface-QC")
 
         val dragHandle = composeRule.onNodeWithTag("surface-drag-POSITION")
         val before = dragHandle.fetchSemanticsNode().boundsInRoot
