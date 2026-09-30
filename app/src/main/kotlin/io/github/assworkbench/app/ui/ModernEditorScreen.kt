@@ -389,7 +389,7 @@ fun ModernEditorScreen(
                         }
                         WorkbenchEventArea(
                             state, viewModel, issues, issuesByEvent, expandedEventId,
-                            { expandedEventId = it }, ::openTool, supportingOpen, tool,
+                            { expandedEventId = it }, ::openTool, false, WorkbenchTool.TEXT,
                             { supportingOpen = false; toolName = WorkbenchTool.TEXT.name },
                             onImportFont, onSaveMkv, landscape, eventEditorStateHolder,
                             Modifier.weight(1f).fillMaxWidth(),
@@ -606,6 +606,298 @@ private fun WorkbenchToolStrip(
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+            }
+        }
+    }
+}
+
+
+@Composable
+private fun FloatingWorkbenchLayer(
+    state: EditorState,
+    viewModel: EditorViewModel,
+    issues: List<AssQcIssue>,
+    openTools: Set<WorkbenchTool>,
+    hidden: Boolean,
+    offsetsDp: Map<String, Offset>,
+    expanded: Map<String, Boolean>,
+    zOrder: Map<String, Float>,
+    onOffsetChange: (String, Offset) -> Unit,
+    onExpandedChange: (String, Boolean) -> Unit,
+    onRaise: (WorkbenchTool) -> Unit,
+    onClose: (WorkbenchTool) -> Unit,
+    onOpenTool: (WorkbenchTool) -> Unit,
+    onImportFont: () -> Unit,
+    onSaveMkv: () -> Unit,
+    eventEditorStateHolder: SaveableStateHolder,
+    modifier: Modifier = Modifier,
+) {
+    if (hidden || openTools.isEmpty()) return
+    BoxWithConstraints(modifier) {
+        val defaults = remember(maxWidth, maxHeight) {
+            WorkbenchTool.entries.associate { tool ->
+                val index = WorkbenchTool.entries.indexOf(tool)
+                tool.name to Offset(
+                    18f + (index % 4) * 38f,
+                    18f + (index % 5) * 34f,
+                )
+            }
+        }
+        openTools.sortedBy { zOrder[it.name] ?: 0f }.forEach { tool ->
+            key(tool.name) {
+                val offset = offsetsDp[tool.name] ?: defaults.getValue(tool.name)
+                val isExpanded = expanded[tool.name] == true
+                FloatingToolSurface(
+                    title = tool.title,
+                    offsetDp = offset,
+                    expanded = isExpanded,
+                    onOffsetChange = { onOffsetChange(tool.name, it) },
+                    onExpandedChange = { onExpandedChange(tool.name, it) },
+                    onRaise = { onRaise(tool) },
+                    onClose = { onClose(tool) },
+                    modifier = Modifier.zIndex(zOrder[tool.name] ?: 0f),
+                ) {
+                    FloatingToolContent(
+                        tool = tool,
+                        state = state,
+                        viewModel = viewModel,
+                        issues = issues,
+                        onOpenTool = onOpenTool,
+                        onImportFont = onImportFont,
+                        onSaveMkv = onSaveMkv,
+                        eventEditorStateHolder = eventEditorStateHolder,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun FloatingToolSurface(
+    title: String,
+    offsetDp: Offset,
+    expanded: Boolean,
+    onOffsetChange: (Offset) -> Unit,
+    onExpandedChange: (Boolean) -> Unit,
+    onRaise: () -> Unit,
+    onClose: () -> Unit,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
+    val width = if (expanded) 520.dp else 360.dp
+    val height = if (expanded) 500.dp else 300.dp
+    Surface(
+        modifier = modifier
+            .offset(x = offsetDp.x.dp, y = offsetDp.y.dp)
+            .width(width)
+            .height(height)
+            .pointerInput(title) {
+                detectTapGestures(onPress = {
+                    onRaise()
+                    tryAwaitRelease()
+                })
+            },
+        shape = RoundedCornerShape(18.dp),
+        tonalElevation = 8.dp,
+        shadowElevation = 12.dp,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.97f),
+    ) {
+        Column(Modifier.fillMaxSize()) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .height(42.dp)
+                    .background(MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.72f))
+                    .pointerInput(title, offsetDp) {
+                        detectDragGestures(
+                            onDragStart = { onRaise() },
+                            onDrag = { change, drag ->
+                                change.consume()
+                                onOffsetChange(
+                                    Offset(
+                                        offsetDp.x + drag.x / density,
+                                        offsetDp.y + drag.y / density,
+                                    ),
+                                )
+                            },
+                        )
+                    }
+                    .padding(start = 12.dp, end = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Icons.Filled.DragIndicator, null, Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Text(title, style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
+                IconButton(
+                    onClick = { onExpandedChange(!expanded) },
+                    modifier = Modifier.size(36.dp),
+                ) {
+                    Icon(if (expanded) Icons.Filled.CloseFullscreen else Icons.Filled.OpenInFull, if (expanded) "缩小" else "放大")
+                }
+                IconButton(onClick = onClose, modifier = Modifier.size(36.dp)) {
+                    Icon(Icons.Filled.Close, "收回")
+                }
+            }
+            Box(Modifier.weight(1f).fillMaxWidth()) { content() }
+        }
+    }
+}
+
+@Composable
+private fun FloatingToolContent(
+    tool: WorkbenchTool,
+    state: EditorState,
+    viewModel: EditorViewModel,
+    issues: List<AssQcIssue>,
+    onOpenTool: (WorkbenchTool) -> Unit,
+    onImportFont: () -> Unit,
+    onSaveMkv: () -> Unit,
+    eventEditorStateHolder: SaveableStateHolder,
+    modifier: Modifier = Modifier,
+) {
+    when (tool) {
+        WorkbenchTool.INVENTORY -> CapabilityInventoryPane(onOpenTool, modifier)
+        WorkbenchTool.TIMELINE -> ModernTimelinePane(state, viewModel, modifier)
+        WorkbenchTool.STYLE -> StylePane(state, viewModel, modifier)
+        WorkbenchTool.POSITION -> PositionPane(state, viewModel, modifier)
+        WorkbenchTool.FONTS -> FontManagerPane(state, viewModel, onImportFont, modifier)
+        WorkbenchTool.QC -> QcPane(state, viewModel, issues, modifier)
+        WorkbenchTool.BATCH -> BatchPane(state, viewModel, modifier)
+        WorkbenchTool.PROJECT -> ProjectPane(state, viewModel, onSaveMkv, modifier)
+        WorkbenchTool.DIAGNOSTICS -> DiagnosticsPane(state, viewModel, modifier)
+        WorkbenchTool.TEXT, WorkbenchTool.EFFECTS, WorkbenchTool.EVENT -> {
+            val event = state.document.events.firstOrNull { it.id == state.focusedEventId }
+            if (event == null) {
+                Box(modifier, contentAlignment = Alignment.Center) {
+                    Text("先选择一条字幕")
+                }
+            } else {
+                Column(
+                    modifier.verticalScroll(rememberScrollState()).padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    eventEditorStateHolder.SaveableStateProvider("floating-" + tool.name + "-" + event.id) {
+                        InlineEventEditor(
+                            event = event,
+                            styleName = event.style,
+                            state = state,
+                            viewModel = viewModel,
+                            onTool = onOpenTool,
+                            activeSection = tool,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CapabilityInventoryPane(
+    onOpenTool: (WorkbenchTool) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val groups = listOf(
+        "正文 / Raw" to listOf("Event Text", "Raw ASS", "Actor", "Effect", "Comment", "搜索", "拆分"),
+        "时间" to listOf("Start / End", "播放头设 Start/End", "逐帧", "Trim", "整体平移", "Snap", "Zoom / Pan", "Waveform", "Gap / Overlap"),
+        "样式" to listOf("字体", "字号", "粗体 / 斜体", "字距", "Primary / Outline / Shadow 色", "Border", "Shadow", "Blur", "Alpha"),
+        "位置 / 几何" to listOf("九宫格对齐", "Margins", "Position", "Move", "Origin", "Rotation", "Scale", "Shear", "Rect Clip / iClip"),
+        "效果 / 动画" to listOf("Blur", "Soft Entry", "fad", "fade", "Transform", "Transform 属性", "颜色 / Alpha / Rect Clip"),
+        "事件结构" to listOf("前插", "后插", "复制", "拆分", "合并上一条", "合并下一条", "删除"),
+        "字体管理" to listOf("导入字体", "MKV 字体", "Family 元数据", "Glyph coverage", "请求匹配", "替换"),
+        "检查 / 工程" to listOf("QC", "批量操作", "格式剪贴板", "MKV 写回", "保存 / 另存", "恢复", "Renderer / Build 诊断"),
+    )
+    Column(
+        modifier.verticalScroll(rememberScrollState()).padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Text("Capability Inventory", style = MaterialTheme.typography.titleMedium)
+        Text(
+            "实验性总览：先把已经存在的能力全部显式列出，再决定哪些常驻、浮动、短暂显示、替换或直接操控。",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        groups.forEach { (group, items) ->
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.34f),
+            ) {
+                Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(group, style = MaterialTheme.typography.labelLarge)
+                    Text(
+                        items.joinToString(" · "),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+        Text("快速呼出", style = MaterialTheme.typography.labelLarge)
+        Row(
+            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            WorkbenchTool.entries.filter { it != WorkbenchTool.INVENTORY }.forEach { tool ->
+                AssistChip(onClick = { onOpenTool(tool) }, label = { Text(tool.title) })
+            }
+        }
+    }
+}
+
+@Composable
+private fun FloatingPreviewSurface(
+    offsetDp: Offset,
+    expanded: Boolean,
+    onOffsetChange: (Offset) -> Unit,
+    onExpandedChange: (Boolean) -> Unit,
+    onDock: () -> Unit,
+    modifier: Modifier = Modifier,
+    content: @Composable (Modifier) -> Unit,
+) {
+    Box(modifier) {
+        Surface(
+            modifier = Modifier
+                .offset(x = offsetDp.x.dp, y = offsetDp.y.dp)
+                .width(if (expanded) 720.dp else 480.dp)
+                .height(if (expanded) 480.dp else 330.dp),
+            shape = RoundedCornerShape(18.dp),
+            tonalElevation = 10.dp,
+            shadowElevation = 16.dp,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+            color = Color.Black,
+        ) {
+            Column(Modifier.fillMaxSize()) {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(40.dp)
+                        .background(MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.94f))
+                        .pointerInput(offsetDp) {
+                            detectDragGestures { change, drag ->
+                                change.consume()
+                                onOffsetChange(
+                                    Offset(
+                                        offsetDp.x + drag.x / density,
+                                        offsetDp.y + drag.y / density,
+                                    ),
+                                )
+                            }
+                        }
+                        .padding(start = 10.dp, end = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(Icons.Filled.DragIndicator, null, Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("视频预览", style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
+                    IconButton(onClick = { onExpandedChange(!expanded) }, modifier = Modifier.size(36.dp)) {
+                        Icon(if (expanded) Icons.Filled.CloseFullscreen else Icons.Filled.OpenInFull, null)
+                    }
+                    TextButton(onClick = onDock) { Text("停靠") }
+                }
+                content(Modifier.weight(1f).fillMaxWidth())
             }
         }
     }
