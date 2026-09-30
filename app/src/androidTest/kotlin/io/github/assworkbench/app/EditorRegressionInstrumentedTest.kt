@@ -260,18 +260,20 @@ class EditorRegressionInstrumentedTest {
         assertTrue("Floating surface drag handle should move the surface", after.left > before.left || after.top > before.top)
 
         composeRule.onNodeWithContentDescription("隐藏全部浮层").performClick()
-        composeRule.waitUntil(timeoutMillis = 5_000) {
-            composeRule.onAllNodesWithTag("surface-drag-POSITION")
-                .fetchSemanticsNodes(atLeastOneRootRequired = false)
-                .isEmpty()
-        }
+        // The toggle state is synchronous; AnimatedVisibility may retain its
+        // semantics subtree while the exit transition is still resident.
+        // Assert the user-visible state switch first, then let the animation
+        // settle before checking that the actual surface content is hidden.
+        composeRule.onNodeWithContentDescription("呼回全部浮层").assertIsDisplayed()
+        composeRule.mainClock.advanceTimeBy(1_000L)
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("surface-drag-POSITION").assertIsNotDisplayed()
+        composeRule.onNodeWithTag("surface-drag-FONTS").assertIsNotDisplayed()
 
         composeRule.onNodeWithContentDescription("呼回全部浮层").performClick()
-        composeRule.waitUntil(timeoutMillis = 5_000) {
-            composeRule.onAllNodesWithTag("surface-drag-POSITION")
-                .fetchSemanticsNodes(atLeastOneRootRequired = false)
-                .isNotEmpty()
-        }
+        composeRule.onNodeWithContentDescription("隐藏全部浮层").assertIsDisplayed()
+        composeRule.mainClock.advanceTimeBy(1_000L)
+        composeRule.waitForIdle()
         composeRule.onNodeWithTag("surface-POSITION").assertIsDisplayed()
         composeRule.onNodeWithTag("surface-FONTS").assertIsDisplayed()
 
