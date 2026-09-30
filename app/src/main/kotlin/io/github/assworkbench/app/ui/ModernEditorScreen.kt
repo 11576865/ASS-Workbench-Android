@@ -279,7 +279,11 @@ fun ModernEditorScreen(
             }
             BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
                 val landscape = maxWidth > maxHeight && maxWidth >= 600.dp
-                val previewWidth = (maxWidth * 0.43f).coerceAtMost(maxWidth - 320.dp)
+                val previewWidth = minOf(
+                    maxWidth * 0.43f,
+                    ((maxHeight * 0.56f - WorkbenchDimens.TransportHeight).coerceAtLeast(140.dp)) * (16f / 9f),
+                    maxWidth - 320.dp,
+                )
                 val previewHeight = (maxHeight * 0.28f).coerceAtMost(220.dp)
                 val preview: @Composable (Modifier) -> Unit = { paneModifier ->
                     Surface(paneModifier, shape = RoundedCornerShape(12.dp),
@@ -693,9 +697,10 @@ private fun EventWorkspace(
         }
     }
     BoxWithConstraints(modifier) {
-        if (maxWidth >= 680.dp) {
+        val paneWidth = maxWidth
+        if (paneWidth >= 680.dp) {
             Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listPane(Modifier.width((maxWidth * 0.34f).coerceIn(224.dp, 320.dp)).fillMaxHeight())
+                listPane(Modifier.width((paneWidth * 0.34f).coerceIn(224.dp, 320.dp)).fillMaxHeight())
                 inspector(Modifier.weight(1f).fillMaxHeight())
             }
         } else {
@@ -2082,7 +2087,7 @@ private fun ModernTimelinePane(state: EditorState, viewModel: EditorViewModel, m
         BoxWithConstraints(
             Modifier
                 .fillMaxWidth()
-                .height(34.dp)
+                .height(if (compact) 24.dp else 34.dp)
                 .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.38f))
                 .pointerInput(windowDurationMs, halfWindowMs) {
                     detectHorizontalDragGestures(
@@ -2143,6 +2148,7 @@ private fun ModernTimelinePane(state: EditorState, viewModel: EditorViewModel, m
             windowEndMs = windowEnd,
             playheadMs = playheadMs,
             onSeek = viewModel::seekPreviewTo,
+            compact = compact,
         )
 
         if (!compact) {
@@ -2215,12 +2221,13 @@ private fun TimelineWaveformLite(
     windowEndMs: Long,
     playheadMs: Long,
     onSeek: (Long) -> Unit,
+    compact: Boolean = false,
 ) {
     when (waveform.status) {
         WaveformLiteStatus.IDLE -> Unit
         WaveformLiteStatus.ANALYZING -> {
             Surface(
-                modifier = Modifier.fillMaxWidth().height(52.dp),
+                modifier = Modifier.fillMaxWidth().height(if (compact) 28.dp else 52.dp),
                 color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.26f),
             ) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -2234,7 +2241,7 @@ private fun TimelineWaveformLite(
         }
         WaveformLiteStatus.UNAVAILABLE -> {
             Surface(
-                modifier = Modifier.fillMaxWidth().heightIn(min = 40.dp),
+                modifier = Modifier.fillMaxWidth().heightIn(min = if (compact) 28.dp else 40.dp),
                 color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.20f),
             ) {
                 Text(
@@ -2254,7 +2261,7 @@ private fun TimelineWaveformLite(
             BoxWithConstraints(
                 Modifier
                     .fillMaxWidth()
-                    .height(58.dp)
+                    .height(if (compact) 32.dp else 58.dp)
                     .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.24f))
                     .pointerInput(windowStartMs, windowEndMs) {
                         detectTapGestures { offset ->
