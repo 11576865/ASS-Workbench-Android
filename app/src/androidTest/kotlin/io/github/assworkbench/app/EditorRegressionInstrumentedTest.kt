@@ -13,10 +13,15 @@ import androidx.test.platform.app.InstrumentationRegistry
 import android.app.Application
 import android.net.Uri
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipe
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.test.core.app.ApplicationProvider
@@ -223,6 +228,64 @@ class EditorRegressionInstrumentedTest {
             Log.i("AsswbVisual", "UI_CAPTURE:$name:$index:$chunk")
         }
         Log.i("AsswbVisual", "UI_CAPTURE_END:$name")
+    }
+
+    @Test
+    fun experimentalSurfaceWorkspaceSupportsStackHideRestoreAndPreviewModes() {
+        restoreRecovery()
+
+        composeRule.onNodeWithTag("tool-POSITION").performScrollTo().performClick()
+        composeRule.onNodeWithTag("tool-STYLE").performScrollTo().performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("surface-POSITION").assertIsDisplayed()
+        composeRule.onNodeWithTag("surface-STYLE").assertIsDisplayed()
+
+        composeRule.onNodeWithTag("tool-FONTS").performScrollTo().performClick()
+        composeRule.onNodeWithTag("tool-QC").performScrollTo().performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("surface-FONTS").assertIsDisplayed()
+        composeRule.onNodeWithTag("surface-QC").assertIsDisplayed()
+
+        val dragHandle = composeRule.onNodeWithTag("surface-drag-POSITION")
+        val before = dragHandle.fetchSemanticsNode().boundsInRoot
+        dragHandle.performTouchInput {
+            swipe(
+                start = center,
+                end = center + androidx.compose.ui.geometry.Offset(140f, 90f),
+                durationMillis = 350,
+            )
+        }
+        composeRule.waitForIdle()
+        val after = dragHandle.fetchSemanticsNode().boundsInRoot
+        assertTrue("Floating surface drag handle should move the surface", after.left > before.left || after.top > before.top)
+
+        composeRule.onNodeWithContentDescription("隐藏全部浮层").performClick()
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithTag("surface-drag-POSITION")
+                .fetchSemanticsNodes(atLeastOneRootRequired = false)
+                .isEmpty()
+        }
+
+        composeRule.onNodeWithContentDescription("呼回全部浮层").performClick()
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithTag("surface-drag-POSITION")
+                .fetchSemanticsNodes(atLeastOneRootRequired = false)
+                .isNotEmpty()
+        }
+        composeRule.onNodeWithTag("surface-POSITION").assertIsDisplayed()
+        composeRule.onNodeWithTag("surface-FONTS").assertIsDisplayed()
+
+        composeRule.onNodeWithTag("preview-mode-FOCUS").performScrollTo().performClick()
+        composeRule.onNodeWithTag("preview-workspace").assertIsDisplayed()
+
+        composeRule.onNodeWithTag("preview-mode-FLOATING").performScrollTo().performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("floating-preview").assertIsDisplayed()
+        composeRule.onNodeWithTag("subtitle-navigation").assertIsDisplayed()
+
+        composeRule.onNodeWithTag("preview-mode-MANIPULATION").performScrollTo().performClick()
+        composeRule.onNodeWithTag("preview-workspace").assertIsDisplayed()
+        composeRule.onNodeWithTag("interaction-overlay").assertIsDisplayed()
     }
 
     @Test

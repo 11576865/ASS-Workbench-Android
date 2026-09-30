@@ -9,6 +9,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -48,15 +49,21 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.SideEffect
 import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.IntSize
 import io.github.assworkbench.app.BuildConfig
 import io.github.assworkbench.app.StartupProbe
 import io.github.assworkbench.domain.AssCodec
@@ -83,7 +90,7 @@ import java.io.File
 import java.util.concurrent.atomic.AtomicLong
 
 @Composable
-fun VideoPreview(
+internal fun VideoPreview(
     videoUri: String?,
     document: AssDocument,
     renderDocument: AssDocument = document,
@@ -121,6 +128,8 @@ fun VideoPreview(
     onEnableRenderer: () -> Unit = {},
     fillViewport: Boolean = false,
     onVideoAspectRatio: (Float) -> Unit = {},
+    interactionRegistry: InteractionOverlayRegistry? = null,
+    viewportGesturesEnabled: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     if (!rendererEnabled) {
@@ -216,6 +225,8 @@ fun VideoPreview(
             onOpenTimeline = onOpenTimeline,
             fillViewport = fillViewport,
             onVideoAspectRatio = onVideoAspectRatio,
+            interactionRegistry = interactionRegistry,
+            viewportGesturesEnabled = viewportGesturesEnabled,
             modifier = modifier,
         )
     }
@@ -512,6 +523,8 @@ private fun AuthoritativeMpvPreview(
     onOpenTimeline: () -> Unit,
     fillViewport: Boolean,
     onVideoAspectRatio: (Float) -> Unit,
+    interactionRegistry: InteractionOverlayRegistry?,
+    viewportGesturesEnabled: Boolean,
     modifier: Modifier,
 ) {
     val context = LocalContext.current
@@ -575,6 +588,8 @@ private fun AuthoritativeMpvPreview(
     var osdMarginLeft by remember(mpv, videoUri) { mutableIntStateOf(0) }
     var osdMarginRight by remember(mpv, videoUri) { mutableIntStateOf(0) }
     var playbackControlsVisible by remember(mpv, videoUri) { mutableStateOf(true) }
+    var viewportScale by remember(videoUri) { mutableStateOf(1f) }
+    var viewportPan by remember(videoUri) { mutableStateOf(Offset.Zero) }
     var lastReportedPositionMs by remember(mpv) { mutableLongStateOf(initialPositionMs.coerceAtLeast(0L)) }
     val previewFile = remember(mpv) { File(context.cacheDir, "ass-preview/current.ass").apply { parentFile?.mkdirs() } }
     val previewPublishGeneration = remember(mpv, videoUri) { AtomicLong(0L) }
@@ -739,11 +754,31 @@ private fun AuthoritativeMpvPreview(
             .width(canvasWidth)
             .aspectRatio(reportedAspect)
             .clipToBounds()
+            .graphicsLayer {
+                scaleX = viewportScale
+                scaleY = viewportScale
+                translationX = viewportPan.x
+                translationY = viewportPan.y
+            }
             .then(
-                if (!videoUri.isNullOrBlank() && positionEditEventId == null) {
-                    Modifier.pointerInput(videoUri, positionEditEventId) {
-                        detectTapGestures(onTap = { playbackControlsVisible = true })
-                    }
+                if (!videoUri.isNullOrBlank() && viewportGesturesEnabled && positionEditEventId == null) {
+                    Modifier
+                        .pointerInput(videoUri, viewportGesturesEnabled) {
+                            detectTransformGestures { _, pan, zoom, _ ->
+                                viewportScale = (viewportScale * zoom).coerceIn(1f, 4f)
+                                viewportPan += pan
+                            }
+                        }
+                        .pointerInput(videoUri, positionEditEventId) {
+                            detectTapGestures(
+                                onTap = { playbackControlsVisible = true },
+                                onDoubleTap = {
+                                    viewportScale = 1f
+                                    viewportPan = Offset.Zero
+                                    playbackControlsVisible = true
+                                },
+                            )
+                        }
                 } else {
                     Modifier
                 },
@@ -843,6 +878,7 @@ private fun AuthoritativeMpvPreview(
                         onPreviewShear = onPreviewEventShear,
                         onCommitShear = onSetEventShear,
                         onCancel = onCancelEventPositionPreview,
+                        interactionRegistry = interactionRegistry,
                         modifier = Modifier.fillMaxSize(),
                     )
                     RectClipOverlay(
@@ -851,6 +887,7 @@ private fun AuthoritativeMpvPreview(
                         onPreview = onPreviewEventClip,
                         onCommit = onSetEventClip,
                         onCancel = onCancelEventPositionPreview,
+                        interactionRegistry = interactionRegistry,
                         modifier = Modifier.fillMaxSize(),
                     )
                 }
@@ -917,6 +954,7 @@ private fun PositionDragOverlay(
     onPreviewShear: (Double, Double) -> Unit,
     onCommitShear: (Double, Double) -> Unit,
     onCancel: () -> Unit,
+    interactionRegistry: InteractionOverlayRegistry? = null,
     modifier: Modifier = Modifier,
 ) {
     val geometry = remember(event.text) { AssGeometrySemantic.inspect(event.text) }
@@ -1068,8 +1106,93 @@ private fun PositionDragOverlay(
             onDispose { onCancel() }
         }
 
+        val moveProxyOwner = "move-${event.id}"
+        ClearInteractionOwnerOnDispose(interactionRegistry, moveProxyOwner)
+        val moveProxyDensity = androidx.compose.ui.platform.LocalDensity.current
+        var moveOverlayOrigin by remember(event.id) { mutableStateOf(Offset.Zero) }
+        var moveOverlaySize by remember(event.id) { mutableStateOf(IntSize.Zero) }
+        SideEffect {
+            val registry = interactionRegistry
+            if (registry != null && moveOverlaySize.width > 0 && moveOverlaySize.height > 0) {
+                val w = moveOverlaySize.width.toFloat()
+                val h = moveOverlaySize.height.toFloat()
+                fun target(px: Double, py: Double): Offset =
+                    moveOverlayOrigin + Offset(
+                        (px / document.playResX.coerceAtLeast(1) * w).toFloat(),
+                        (py / document.playResY.coerceAtLeast(1) * h).toFloat(),
+                    )
+                fun docDelta(delta: Offset): Pair<Double, Double> =
+                    (delta.x / w * document.playResX.coerceAtLeast(1)).toDouble() to
+                        (delta.y / h * document.playResY.coerceAtLeast(1)).toDouble()
+                val baseOffset = with(moveProxyDensity) { Offset(118.dp.toPx(), 34.dp.toPx()) }
+                val handles = mutableListOf<InteractionProxySpec>()
+                handles += InteractionProxySpec(
+                    id = "$moveProxyOwner-start",
+                    label = "起点",
+                    targetInWindow = target(startX, startY),
+                    preferredOffsetPx = baseOffset,
+                    onDragDelta = { delta ->
+                        val (dx, dy) = docDelta(delta)
+                        startX += dx
+                        startY += dy
+                        onPreviewMove(startX, startY, endX, endY)
+                    },
+                    onCommit = { onCommitMove(startX, startY, endX, endY) },
+                    onCancel = onCancel,
+                )
+                handles += InteractionProxySpec(
+                    id = "$moveProxyOwner-end",
+                    label = "终点",
+                    targetInWindow = target(endX, endY),
+                    preferredOffsetPx = baseOffset + Offset(0f, with(moveProxyDensity) { 68.dp.toPx() }),
+                    onDragDelta = { delta ->
+                        val (dx, dy) = docDelta(delta)
+                        endX += dx
+                        endY += dy
+                        onPreviewMove(startX, startY, endX, endY)
+                    },
+                    onCommit = { onCommitMove(startX, startY, endX, endY) },
+                    onCancel = onCancel,
+                )
+                if (originX != null && originY != null) {
+                    handles += InteractionProxySpec(
+                        id = "$moveProxyOwner-org",
+                        label = "原点",
+                        targetInWindow = target(originX!!, originY!!),
+                        preferredOffsetPx = baseOffset + Offset(with(moveProxyDensity) { 76.dp.toPx() }, 0f),
+                        onDragDelta = { delta ->
+                            val (dx, dy) = docDelta(delta)
+                            originX = originX!! + dx
+                            originY = originY!! + dy
+                            onPreviewOrigin(originX!!, originY!!)
+                        },
+                        onCommit = { onCommitOrigin(originX!!, originY!!) },
+                        onCancel = onCancel,
+                    )
+                    handles += InteractionProxySpec(
+                        id = "$moveProxyOwner-rotation",
+                        label = "旋转",
+                        targetInWindow = target(originX!!, originY!!),
+                        preferredOffsetPx = baseOffset + Offset(with(moveProxyDensity) { 76.dp.toPx() }, with(moveProxyDensity) { 68.dp.toPx() }),
+                        onDragDelta = { delta ->
+                            directRotation = (displayRotation + delta.x * 0.35).coerceIn(-3600.0, 3600.0)
+                            onPreviewRotation(directRotation!!)
+                        },
+                        onCommit = { directRotation?.let(onCommitRotation) },
+                        onCancel = onCancel,
+                    )
+                }
+                registry.publish(moveProxyOwner, handles)
+            }
+        }
+
         BoxWithConstraints(
-            modifier.pointerInput(event.id, event.text, document.playResX, document.playResY) {
+            modifier
+                .onGloballyPositioned {
+                    moveOverlayOrigin = it.positionInWindow()
+                    moveOverlaySize = it.size
+                }
+                .pointerInput(event.id, event.text, document.playResX, document.playResY) {
                 var activeHandle = 0 // 1=start, 2=end, 3=origin, 4=rotation
                 var lastPreviewAt = 0L
                 fun distanceTo(px: Double, py: Double, touchX: Float, touchY: Float): Double {
@@ -1214,8 +1337,122 @@ private fun PositionDragOverlay(
         onDispose { onCancel() }
     }
 
+    val proxyOwner = "position-${event.id}"
+    ClearInteractionOwnerOnDispose(interactionRegistry, proxyOwner)
+    val proxyDensity = androidx.compose.ui.platform.LocalDensity.current
+    var overlayOriginInWindow by remember(event.id) { mutableStateOf(Offset.Zero) }
+    var overlaySizePx by remember(event.id) { mutableStateOf(IntSize.Zero) }
+    val playResXProxy = document.playResX.coerceAtLeast(1)
+    val playResYProxy = document.playResY.coerceAtLeast(1)
+    SideEffect {
+        val registry = interactionRegistry
+        if (registry != null && overlaySizePx.width > 0 && overlaySizePx.height > 0) {
+            val w = overlaySizePx.width.toFloat()
+            val h = overlaySizePx.height.toFloat()
+            fun target(px: Double, py: Double): Offset =
+                overlayOriginInWindow + Offset(
+                    (px / playResXProxy * w).toFloat(),
+                    (py / playResYProxy * h).toFloat(),
+                )
+            fun documentDelta(delta: Offset): Pair<Double, Double> =
+                (delta.x / w * playResXProxy).toDouble() to (delta.y / h * playResYProxy).toDouble()
+            val preferred = with(proxyDensity) { Offset(118.dp.toPx(), 34.dp.toPx()) }
+            val handles = mutableListOf<InteractionProxySpec>()
+            handles += InteractionProxySpec(
+                id = "$proxyOwner-pos",
+                label = "位置",
+                targetInWindow = target(x, y),
+                preferredOffsetPx = preferred,
+                onDragDelta = { delta ->
+                    val (dx, dy) = documentDelta(delta)
+                    x += dx
+                    y += dy
+                    onPreview(x, y)
+                },
+                onCommit = { onCommit(x, y) },
+                onCancel = onCancel,
+            )
+            if (originX != null && originY != null) {
+                handles += InteractionProxySpec(
+                    id = "$proxyOwner-org",
+                    label = "原点",
+                    targetInWindow = target(originX!!, originY!!),
+                    preferredOffsetPx = preferred + Offset(0f, with(proxyDensity) { 66.dp.toPx() }),
+                    onDragDelta = { delta ->
+                        val (dx, dy) = documentDelta(delta)
+                        originX = originX!! + dx
+                        originY = originY!! + dy
+                        onPreviewOrigin(originX!!, originY!!)
+                    },
+                    onCommit = { onCommitOrigin(originX!!, originY!!) },
+                    onCancel = onCancel,
+                )
+            }
+            handles += InteractionProxySpec(
+                id = "$proxyOwner-rotation",
+                label = "旋转",
+                targetInWindow = target(originX ?: x, originY ?: y),
+                preferredOffsetPx = preferred + Offset(0f, with(proxyDensity) { 132.dp.toPx() }),
+                onDragDelta = { delta ->
+                    directRotation = (displayRotation + delta.x * 0.35).coerceIn(-3600.0, 3600.0)
+                    onPreviewRotation(directRotation!!)
+                },
+                onCommit = { directRotation?.let(onCommitRotation) },
+                onCancel = onCancel,
+            )
+            handles += InteractionProxySpec(
+                id = "$proxyOwner-scale",
+                label = "缩放",
+                targetInWindow = target(x, y),
+                preferredOffsetPx = preferred + Offset(with(proxyDensity) { 78.dp.toPx() }, 0f),
+                onDragDelta = { delta ->
+                    val sx = (displayScaleX + delta.x * 0.45).coerceIn(1.0, 1000.0)
+                    val syCandidate = (displayScaleY - delta.y * 0.45).coerceIn(1.0, 1000.0)
+                    if (scaleLocked) {
+                        val merged = ((sx + syCandidate) / 2.0).coerceIn(1.0, 1000.0)
+                        directScaleX = merged
+                        directScaleY = merged
+                    } else {
+                        directScaleX = sx
+                        directScaleY = syCandidate
+                    }
+                    onPreviewScale(directScaleX!!, directScaleY!!)
+                },
+                onCommit = {
+                    if (directScaleX != null && directScaleY != null) {
+                        onCommitScale(directScaleX!!, directScaleY!!)
+                    }
+                },
+                onCancel = onCancel,
+            )
+            handles += InteractionProxySpec(
+                id = "$proxyOwner-shear",
+                label = "倾斜",
+                targetInWindow = target(x, y),
+                preferredOffsetPx = preferred + Offset(with(proxyDensity) { 78.dp.toPx() }, with(proxyDensity) { 66.dp.toPx() }),
+                onDragDelta = { delta ->
+                    directShearX = (displayShearX + delta.x / 260f).coerceIn(-10.0, 10.0)
+                    directShearY = (displayShearY + delta.y / 260f).coerceIn(-10.0, 10.0)
+                    onPreviewShear(directShearX!!, directShearY!!)
+                },
+                onCommit = {
+                    if (directShearX != null && directShearY != null) {
+                        onCommitShear(directShearX!!, directShearY!!)
+                    }
+                },
+                onCancel = onCancel,
+            )
+            registry.publish(proxyOwner, handles)
+        }
+    }
+
     BoxWithConstraints(
-        modifier.pointerInput(event.id, document.playResX, document.playResY, scaleLocked) {
+        modifier
+            .onGloballyPositioned {
+                overlayOriginInWindow = it.positionInWindow()
+                overlaySizePx = it.size
+            }
+            .pointerInput(event.id, document.playResX, document.playResY, scaleLocked) {
             var activeHandle = 0 // 1=position, 2=origin, 3=rotation, 4=scale, 5=fax, 6=fay
             var lastPreviewAt = 0L
             var scaleStartX = displayScaleX
@@ -1501,6 +1738,7 @@ private fun RectClipOverlay(
     onPreview: (Double, Double, Double, Double, Boolean) -> Unit,
     onCommit: (Double, Double, Double, Double, Boolean) -> Unit,
     onCancel: () -> Unit,
+    interactionRegistry: InteractionOverlayRegistry? = null,
     modifier: Modifier = Modifier,
 ) {
     val geometry = remember(event.text) { AssGeometrySemantic.inspect(event.text) }
@@ -1511,8 +1749,77 @@ private fun RectClipOverlay(
     var bottom by remember(event.id, event.text) { mutableStateOf(initial.bottom) }
     val inverted = geometry.clipInverted
     val guideColor = MaterialTheme.colorScheme.secondary
+    val clipProxyOwner = "clip-${event.id}"
+    ClearInteractionOwnerOnDispose(interactionRegistry, clipProxyOwner)
+    val clipProxyDensity = androidx.compose.ui.platform.LocalDensity.current
+    var clipOverlayOrigin by remember(event.id) { mutableStateOf(Offset.Zero) }
+    var clipOverlaySize by remember(event.id) { mutableStateOf(IntSize.Zero) }
+    SideEffect {
+        val registry = interactionRegistry
+        if (registry != null && clipOverlaySize.width > 0 && clipOverlaySize.height > 0) {
+            val w = clipOverlaySize.width.toFloat()
+            val h = clipOverlaySize.height.toFloat()
+            val playResX = document.playResX.coerceAtLeast(1)
+            val playResY = document.playResY.coerceAtLeast(1)
+            fun target(px: Double, py: Double): Offset =
+                clipOverlayOrigin + Offset(
+                    (px / playResX * w).toFloat(),
+                    (py / playResY * h).toFloat(),
+                )
+            fun docDelta(delta: Offset): Pair<Double, Double> =
+                (delta.x / w * playResX).toDouble() to (delta.y / h * playResY).toDouble()
+            val base = with(clipProxyDensity) { Offset(104.dp.toPx(), 34.dp.toPx()) }
+            fun handle(
+                index: Int,
+                label: String,
+                px: Double,
+                py: Double,
+                extra: Offset,
+                update: (Double, Double) -> Unit,
+            ) = InteractionProxySpec(
+                id = "$clipProxyOwner-$index",
+                label = label,
+                targetInWindow = target(px, py),
+                preferredOffsetPx = base + extra,
+                onDragDelta = { delta ->
+                    val (dx, dy) = docDelta(delta)
+                    update(dx, dy)
+                    onPreview(left, top, right, bottom, inverted)
+                },
+                onCommit = { onCommit(left, top, right, bottom, inverted) },
+                onCancel = onCancel,
+            )
+            val d = with(clipProxyDensity) { 64.dp.toPx() }
+            registry.publish(
+                clipProxyOwner,
+                listOf(
+                    handle(0, "左上", left, top, Offset.Zero) { dx, dy ->
+                        left = (left + dx).coerceIn(0.0, (right - 1.0).coerceAtLeast(0.0))
+                        top = (top + dy).coerceIn(0.0, (bottom - 1.0).coerceAtLeast(0.0))
+                    },
+                    handle(1, "右上", right, top, Offset(0f, d)) { dx, dy ->
+                        right = (right + dx).coerceIn((left + 1.0).coerceAtMost(playResX.toDouble()), playResX.toDouble())
+                        top = (top + dy).coerceIn(0.0, (bottom - 1.0).coerceAtLeast(0.0))
+                    },
+                    handle(2, "左下", left, bottom, Offset(d, 0f)) { dx, dy ->
+                        left = (left + dx).coerceIn(0.0, (right - 1.0).coerceAtLeast(0.0))
+                        bottom = (bottom + dy).coerceIn((top + 1.0).coerceAtMost(playResY.toDouble()), playResY.toDouble())
+                    },
+                    handle(3, "右下", right, bottom, Offset(d, d)) { dx, dy ->
+                        right = (right + dx).coerceIn((left + 1.0).coerceAtMost(playResX.toDouble()), playResX.toDouble())
+                        bottom = (bottom + dy).coerceIn((top + 1.0).coerceAtMost(playResY.toDouble()), playResY.toDouble())
+                    },
+                ),
+            )
+        }
+    }
 
-    BoxWithConstraints(modifier) {
+    BoxWithConstraints(
+        modifier.onGloballyPositioned {
+            clipOverlayOrigin = it.positionInWindow()
+            clipOverlaySize = it.size
+        },
+    ) {
         val parentWidthPx = constraints.maxWidth.coerceAtLeast(1)
         val parentHeightPx = constraints.maxHeight.coerceAtLeast(1)
         val playResX = document.playResX.coerceAtLeast(1)
