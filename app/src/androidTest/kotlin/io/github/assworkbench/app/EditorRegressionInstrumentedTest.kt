@@ -175,11 +175,17 @@ class EditorRegressionInstrumentedTest {
         try {
             automation.executeShellCommand("wm size 1920x1200").close()
             automation.executeShellCommand("wm density 160").close()
+            composeRule.activityRule.scenario.onActivity {
+                it.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+            }
             composeRule.waitUntil(10_000) {
-                composeRule.activity.resources.configuration.screenWidthDp >= 1200
+                val configuration = composeRule.activity.resources.configuration
+                configuration.screenWidthDp >= 1600 && configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
             }
             composeRule.waitForIdle()
+            val preview = composeRule.onNodeWithTag("preview-workspace").fetchSemanticsNode().boundsInRoot
             val navigation = composeRule.onNodeWithTag("subtitle-navigation").fetchSemanticsNode().boundsInRoot
+            assertTrue("Landscape preview must be beside navigation", preview.right <= navigation.left)
             val inspector = composeRule.onNodeWithTag("event-inspector").fetchSemanticsNode().boundsInRoot
             assertTrue("Expanded workbench must show navigation beside inspector", inspector.left >= navigation.right)
             captureLayout("tablet-landscape")
