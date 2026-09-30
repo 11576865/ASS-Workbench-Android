@@ -814,9 +814,13 @@ private fun CapabilityInventoryPane(
         modifier.verticalScroll(rememberScrollState()).padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Text("Capability Inventory", style = MaterialTheme.typography.titleMedium)
+        val capabilityCount = groups.sumOf { it.second.size }
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text("Capability Inventory", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+            AssistChip(onClick = {}, label = { Text("$capabilityCount 项") })
+        }
         Text(
-            "实验性总览：先把已经存在的能力全部显式列出，再决定哪些常驻、浮动、短暂显示、替换或直接操控。",
+            "实验性总览：当前把 $capabilityCount 个可见能力入口显式列出。这里统计的是 UI capability entries，不等于内部函数数量；下一步布局优化以这张表为准。",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
