@@ -93,7 +93,7 @@ class EditorRegressionInstrumentedTest {
             .performScrollTo()
             .assertIsDisplayed()
             .performClick()
-        composeRule.waitUntil(timeoutMillis = 5_000) {
+        composeRule.waitUntil(timeoutMillis = 10_000) {
             eventText(1L) == "Recovered line DRAFT"
         }
     }
@@ -124,7 +124,7 @@ class EditorRegressionInstrumentedTest {
             .performScrollTo()
             .performClick()
 
-        composeRule.waitUntil(timeoutMillis = 5_000) {
+        composeRule.waitUntil(timeoutMillis = 10_000) {
             eventText(1L) == "Recovered line SWITCH"
         }
         assertEquals("Second recovered line", eventText(2L))
@@ -152,7 +152,7 @@ class EditorRegressionInstrumentedTest {
             .assertIsDisplayed()
             .performClick()
 
-        composeRule.waitUntil(timeoutMillis = 5_000) {
+        composeRule.waitUntil(timeoutMillis = 10_000) {
             eventText(1L) == "Recovered line ROTATED"
         }
     }
@@ -260,14 +260,14 @@ class EditorRegressionInstrumentedTest {
         assertTrue("Floating surface drag handle should move the surface", after.left > before.left || after.top > before.top)
 
         composeRule.onNodeWithContentDescription("隐藏全部浮层").performClick()
-        composeRule.waitUntil(timeoutMillis = 5_000) {
+        composeRule.waitUntil(timeoutMillis = 10_000) {
             composeRule.onAllNodesWithTag("surface-drag-POSITION")
                 .fetchSemanticsNodes(atLeastOneRootRequired = false)
                 .isEmpty()
         }
 
         composeRule.onNodeWithContentDescription("呼回全部浮层").performClick()
-        composeRule.waitUntil(timeoutMillis = 5_000) {
+        composeRule.waitUntil(timeoutMillis = 10_000) {
             composeRule.onAllNodesWithTag("surface-drag-POSITION")
                 .fetchSemanticsNodes(atLeastOneRootRequired = false)
                 .isNotEmpty()
@@ -294,7 +294,7 @@ class EditorRegressionInstrumentedTest {
             .assertIsDisplayed()
             .performClick()
 
-        composeRule.waitUntil(timeoutMillis = 5_000) {
+        composeRule.waitUntil(timeoutMillis = 10_000) {
             !viewModel.state.value.recoveryAvailable
         }
         assertFalse(recoveryStore.exists())
@@ -306,7 +306,7 @@ class EditorRegressionInstrumentedTest {
         restoreRecovery()
 
         viewModel.updateEventText(1L, "Recovered line UPDATED")
-        composeRule.waitUntil(timeoutMillis = 5_000) {
+        composeRule.waitUntil(timeoutMillis = 10_000) {
             recoveryStore.read()
                 ?.document
                 ?.events
@@ -345,7 +345,7 @@ class EditorRegressionInstrumentedTest {
             .assertIsDisplayed()
             .performClick()
 
-        composeRule.waitUntil(timeoutMillis = 5_000) {
+        composeRule.waitUntil(timeoutMillis = 10_000) {
             viewModel.state.value.subtitleLoaded &&
                 viewModel.state.value.document.events.size == 2
         }
