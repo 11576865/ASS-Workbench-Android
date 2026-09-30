@@ -1295,6 +1295,15 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    fun clearEventClip(id: Long) {
+        editDocument("已移除字幕 #$id 的 clip override。") { doc ->
+            doc.copy(events = doc.events.map { event ->
+                if (event.id == id) event.copy(text = AssGeometrySemantic.removeClip(event.text))
+                else event
+            })
+        }
+    }
+
     fun setEventAlignment(id: Long, alignment: Int) {
         if (_state.value.document.events.none { it.id == id }) return
         editDocument("已设置字幕 #$id 对齐点。") { doc ->
