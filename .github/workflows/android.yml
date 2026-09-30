@@ -148,13 +148,17 @@ jobs:
           echo "apk=$APK" >> "$GITHUB_OUTPUT"
           echo "identity=$IDENTITY" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/upload-artifact@v4
+      - name: Upload one-day manual diagnostic bundle
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
         with:
-          name: ASS-Workbench-Android-${{ steps.version.outputs.version }}-${{ steps.version.outputs.short_sha }}-debug
+          name: ASS-Workbench-Android-${{ steps.version.outputs.version }}-${{ steps.version.outputs.short_sha }}-manual-debug
           path: |
             ${{ steps.version.outputs.apk }}
             ${{ steps.version.outputs.identity }}
           if-no-files-found: error
+          retention-days: 1
 
       # Release publication is owned by the Fontconfig renderer workflow.
-      # This fast workflow remains the compile/unit-test gate and uploads a diagnostic APK artifact.
+      # Push/PR runs retain no Actions artifact. workflow_dispatch may expose a
+      # one-day diagnostic bundle when a short-lived Workflow download is useful.
