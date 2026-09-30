@@ -9,6 +9,7 @@ import java.io.ByteArrayOutputStream
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.onRoot
+import androidx.test.platform.app.InstrumentationRegistry
 import android.app.Application
 import android.net.Uri
 import androidx.compose.ui.test.assertIsDisplayed
@@ -170,6 +171,25 @@ class EditorRegressionInstrumentedTest {
         composeRule.onNodeWithTag("subtitle-navigation").assertIsDisplayed()
         composeRule.onNodeWithTag("event-inspector").assertIsDisplayed()
         captureLayout("landscape")
+        val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
+        try {
+            automation.executeShellCommand("wm size 1920x1200").close()
+            automation.executeShellCommand("wm density 160").close()
+            composeRule.waitUntil(10_000) {
+                composeRule.activity.resources.configuration.screenWidthDp >= 1200
+            }
+            composeRule.waitForIdle()
+            val navigation = composeRule.onNodeWithTag("subtitle-navigation").fetchSemanticsNode().boundsInRoot
+            val inspector = composeRule.onNodeWithTag("event-inspector").fetchSemanticsNode().boundsInRoot
+            assertTrue("Expanded workbench must show navigation beside inspector", inspector.left >= navigation.right)
+            captureLayout("tablet-landscape")
+        } finally {
+            automation.executeShellCommand("wm size reset").close()
+            automation.executeShellCommand("wm density reset").close()
+        }
+        composeRule.waitUntil(10_000) {
+            composeRule.activity.resources.configuration.screenWidthDp < 1200
+        }
         composeRule.onNodeWithText("应用正文").performScrollTo().performClick()
         composeRule.waitUntil(5_000) { eventText(1L) == "Recovered line WORKBENCH" }
         composeRule.activityRule.scenario.onActivity {
