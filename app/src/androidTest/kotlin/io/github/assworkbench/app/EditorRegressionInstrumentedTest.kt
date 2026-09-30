@@ -233,6 +233,9 @@ class EditorRegressionInstrumentedTest {
     fun experimentalSurfaceWorkspaceSupportsStackHideRestoreAndPreviewModes() {
         restoreRecovery()
 
+        composeRule.onNodeWithTag("tool-POSITION").performScrollTo().performClick()
+        composeRule.onNodeWithTag("tool-STYLE").performScrollTo().performClick()
+        composeRule.waitForIdle()
         composeRule.onNodeWithTag("surface-POSITION").assertIsDisplayed()
         composeRule.onNodeWithTag("surface-STYLE").assertIsDisplayed()
 
