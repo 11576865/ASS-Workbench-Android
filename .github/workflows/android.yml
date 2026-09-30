@@ -88,11 +88,11 @@ jobs:
         shell: bash
         run: |
           set -euxo pipefail
-          python3 tools/generate_device_fixtures.py build/device-fixtures-0.27
+          python3 tools/generate_device_fixtures.py build/device-fixtures-0.27 | tee build/device-fixtures-0.27.log
           test -f build/device-fixtures-0.27/manifest.txt
-          grep -Fxq 'fixture=renderer-risk-extreme-numeric.ass' build/device-fixtures-0.27/manifest.txt
-          grep -Fxq 'fixture=renderer-performance-heavy-move.ass' build/device-fixtures-0.27/manifest.txt
-          grep -Fxq 'fixture=compose-long-event-list.ass' build/device-fixtures-0.27/manifest.txt
+          grep -q '^fixture=renderer-risk-extreme-numeric.ass$' build/device-fixtures-0.27/manifest.txt
+          grep -q '^fixture=renderer-performance-heavy-move.ass$' build/device-fixtures-0.27/manifest.txt
+          grep -q '^fixture=compose-long-event-list.ass$' build/device-fixtures-0.27/manifest.txt
 
       - name: Validate launcher icon packaging
         shell: bash
@@ -127,14 +127,7 @@ jobs:
 
           APK="ASS-Workbench-Android-$VERSION-$SHORT_SHA-debug.apk"
           IDENTITY="ASS-Workbench-Android-$VERSION-$SHORT_SHA-build-identity.txt"
-          FIXTURES="ASS-Workbench-Android-$VERSION-$SHORT_SHA-device-fixtures.zip"
-
           cp app/build/outputs/apk/debug/app-debug.apk "$APK"
-          (
-            cd build
-            zip -qr "$GITHUB_WORKSPACE/$FIXTURES" device-fixtures-0.27
-          )
-
           {
             echo "schema=1"
             echo "version_name=$VERSION"
@@ -148,16 +141,12 @@ jobs:
             echo "renderer_version=0.3.0"
             echo "apk_name=$APK"
             echo "apk_sha256=$(sha256sum "$APK" | awk '{print $1}')"
-            echo "device_fixtures_name=$FIXTURES"
-            echo "device_fixtures_sha256=$(sha256sum "$FIXTURES" | awk '{print $1}')"
-            echo "device_fixture_manifest_sha256=$(sha256sum build/device-fixtures-0.27/manifest.txt | awk '{print $1}')"
           } > "$IDENTITY"
 
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "short_sha=$SHORT_SHA" >> "$GITHUB_OUTPUT"
           echo "apk=$APK" >> "$GITHUB_OUTPUT"
           echo "identity=$IDENTITY" >> "$GITHUB_OUTPUT"
-          echo "fixtures=$FIXTURES" >> "$GITHUB_OUTPUT"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -165,7 +154,6 @@ jobs:
           path: |
             ${{ steps.version.outputs.apk }}
             ${{ steps.version.outputs.identity }}
-            ${{ steps.version.outputs.fixtures }}
           if-no-files-found: error
 
       # Release publication is owned by the Fontconfig renderer workflow.
