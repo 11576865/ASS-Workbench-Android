@@ -2,6 +2,7 @@ package io.github.assworkbench.app.ui
 
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -87,6 +88,16 @@ fun ModernEditorScreen(
     var expandedEventId by rememberSaveable { mutableStateOf<Long?>(null) }
     val eventEditorStateHolder = rememberSaveableStateHolder()
     var previewVisible by rememberSaveable { mutableStateOf(true) }
+    var videoAspectRatio by rememberSaveable(state.project.videoUri) { mutableStateOf(16f / 9f) }
+    var landscapePreviewWidthDp by rememberSaveable {
+        mutableStateOf(
+            if (preferences.contains("landscape-preview-width-dp")) {
+                preferences.getFloat("landscape-preview-width-dp", 0f).takeIf { it > 0f }
+            } else {
+                null
+            },
+        )
+    }
     var searchOpen by rememberSaveable { mutableStateOf(false) }
     var openMenu by remember { mutableStateOf(false) }
     var saveConfirmOpen by remember { mutableStateOf(false) }
@@ -279,27 +290,38 @@ fun ModernEditorScreen(
             }
             BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
                 val landscape = maxWidth > maxHeight && maxWidth >= 600.dp
-                val previewWidth = minOf(
-                    maxWidth * 0.43f,
-                    ((maxHeight * 0.56f - WorkbenchDimens.TransportHeight).coerceAtLeast(140.dp)) * (16f / 9f),
-                    maxWidth - 320.dp,
-                ).coerceAtLeast(minOf(280.dp, maxWidth - 320.dp))
+                val density = LocalDensity.current
+                val splitHandleWidth = 14.dp
+                val paneGap = 4.dp
+                val editorMinWidth = minOf(320.dp, maxWidth * 0.46f)
+                val maxPreviewWidth = (maxWidth - editorMinWidth - splitHandleWidth - paneGap * 2)
+                    .coerceAtLeast(minOf(220.dp, maxWidth))
+                val minPreviewWidth = minOf(280.dp, maxPreviewWidth)
+                val safeAspectRatio = videoAspectRatio.takeIf { it.isFinite() && it in 0.25f..4.0f } ?: (16f / 9f)
+                val aspectIdealWidth = (maxHeight * safeAspectRatio).coerceAtLeast(minPreviewWidth)
+                val automaticPreviewWidth = minOf(aspectIdealWidth, maxPreviewWidth).coerceAtLeast(minPreviewWidth)
+                val previewWidth = landscapePreviewWidthDp
+                    ?.dp
+                    ?.coerceIn(minPreviewWidth, maxPreviewWidth)
+                    ?: automaticPreviewWidth
                 val previewHeight = (maxHeight * 0.28f).coerceAtMost(220.dp)
                 val preview: @Composable (Modifier) -> Unit = { paneModifier ->
-                    Surface(paneModifier, shape = RoundedCornerShape(12.dp),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
-                        Column(Modifier.fillMaxSize()) {
-                            WorkbenchPreview(
-                                state, viewModel, supportingOpen && tool == WorkbenchTool.POSITION,
-                                onOpenReferenceVideo, { openTool(WorkbenchTool.TIMELINE) },
-                                rendererEnabled, onEnableRenderer,
-                                Modifier.fillMaxWidth().then(if (landscape) Modifier.weight(0.56f) else Modifier.fillMaxHeight()),
-                            )
-                            if (landscape) {
-                                HorizontalDivider()
-                                ModernTimelinePane(state, viewModel, Modifier.weight(0.44f).fillMaxWidth(), compact = true)
-                            }
-                        }
+                    Surface(
+                        paneModifier,
+                        shape = RoundedCornerShape(8.dp),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                    ) {
+                        WorkbenchPreview(
+                            state, viewModel, supportingOpen && tool == WorkbenchTool.POSITION,
+                            onOpenReferenceVideo, { openTool(WorkbenchTool.TIMELINE) },
+                            rendererEnabled, onEnableRenderer,
+                            onVideoAspectRatio = { reported ->
+                                if (reported.isFinite() && reported in 0.25f..4.0f) {
+                                    videoAspectRatio = reported
+                                }
+                            },
+                            modifier = Modifier.fillMaxSize(),
+                        )
                     }
                 }
                 val editor: @Composable (Modifier) -> Unit = { paneModifier ->
@@ -317,8 +339,51 @@ fun ModernEditorScreen(
                     }
                 }
                 if (landscape) {
-                    Row(Modifier.fillMaxSize().padding(8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        if (previewVisible) preview(Modifier.width(previewWidth).fillMaxHeight().testTag("preview-workspace"))
+                    Row(
+                        Modifier.fillMaxSize().padding(8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(paneGap),
+                    ) {
+                        if (previewVisible) {
+                            preview(
+                                Modifier
+                                    .width(previewWidth)
+                                    .fillMaxHeight()
+                                    .testTag("preview-workspace"),
+                            )
+                            Box(
+                                Modifier
+                                    .width(splitHandleWidth)
+                                    .fillMaxHeight()
+                                    .testTag("preview-divider")
+                                    .pointerInput(minPreviewWidth, maxPreviewWidth) {
+                                        detectHorizontalDragGestures(
+                                            onHorizontalDrag = { change, dragAmount ->
+                                                change.consume()
+                                                val currentWidth = landscapePreviewWidthDp?.dp ?: previewWidth
+                                                val delta = with(density) { dragAmount.toDp() }
+                                                landscapePreviewWidthDp = (currentWidth + delta)
+                                                    .coerceIn(minPreviewWidth, maxPreviewWidth)
+                                                    .value
+                                            },
+                                            onDragEnd = {
+                                                landscapePreviewWidthDp?.let { value ->
+                                                    preferences.edit()
+                                                        .putFloat("landscape-preview-width-dp", value)
+                                                        .apply()
+                                                }
+                                            },
+                                        )
+                                    },
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                VerticalDivider(
+                                    Modifier
+                                        .width(1.dp)
+                                        .fillMaxHeight(0.18f),
+                                    color = MaterialTheme.colorScheme.outlineVariant,
+                                )
+                            }
+                        }
                         editor(Modifier.weight(1f).fillMaxHeight())
                     }
                 } else {
@@ -369,6 +434,7 @@ private fun WorkbenchPreview(
     onOpenTimeline: () -> Unit,
     rendererEnabled: Boolean,
     onEnableRenderer: () -> Unit,
+    onVideoAspectRatio: (Float) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     VideoPreview(
@@ -408,6 +474,7 @@ private fun WorkbenchPreview(
         rendererEnabled = rendererEnabled,
         onEnableRenderer = onEnableRenderer,
         fillViewport = true,
+        onVideoAspectRatio = onVideoAspectRatio,
         modifier = modifier,
     )
 }

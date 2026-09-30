@@ -1,5 +1,8 @@
 package io.github.assworkbench.app.ui
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -117,6 +120,7 @@ fun VideoPreview(
     rendererEnabled: Boolean = true,
     onEnableRenderer: () -> Unit = {},
     fillViewport: Boolean = false,
+    onVideoAspectRatio: (Float) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     if (!rendererEnabled) {
@@ -211,6 +215,7 @@ fun VideoPreview(
             onOpenVideo = onOpenVideo,
             onOpenTimeline = onOpenTimeline,
             fillViewport = fillViewport,
+            onVideoAspectRatio = onVideoAspectRatio,
             modifier = modifier,
         )
     }
@@ -506,6 +511,7 @@ private fun AuthoritativeMpvPreview(
     onOpenVideo: () -> Unit,
     onOpenTimeline: () -> Unit,
     fillViewport: Boolean,
+    onVideoAspectRatio: (Float) -> Unit,
     modifier: Modifier,
 ) {
     val context = LocalContext.current
@@ -568,6 +574,7 @@ private fun AuthoritativeMpvPreview(
     var osdMarginBottom by remember(mpv, videoUri) { mutableIntStateOf(0) }
     var osdMarginLeft by remember(mpv, videoUri) { mutableIntStateOf(0) }
     var osdMarginRight by remember(mpv, videoUri) { mutableIntStateOf(0) }
+    var playbackControlsVisible by remember(mpv, videoUri) { mutableStateOf(true) }
     var lastReportedPositionMs by remember(mpv) { mutableLongStateOf(initialPositionMs.coerceAtLeast(0L)) }
     val previewFile = remember(mpv) { File(context.cacheDir, "ass-preview/current.ass").apply { parentFile?.mkdirs() } }
     val previewPublishGeneration = remember(mpv, videoUri) { AtomicLong(0L) }
@@ -612,7 +619,18 @@ private fun AuthoritativeMpvPreview(
             osdMarginBottom = osd.marginBottom.coerceAtLeast(0)
             osdMarginLeft = osd.marginLeft.coerceAtLeast(0)
             osdMarginRight = osd.marginRight.coerceAtLeast(0)
+            val videoWidth = (osd.width - osd.marginLeft - osd.marginRight).coerceAtLeast(0)
+            val videoHeight = (osd.height - osd.marginTop - osd.marginBottom).coerceAtLeast(0)
+            if (videoWidth > 0 && videoHeight > 0) {
+                onVideoAspectRatio(videoWidth.toFloat() / videoHeight.toFloat())
+            }
         }
+    }
+
+    LaunchedEffect(playbackControlsVisible, playback.status, positionEditEventId) {
+        if (!playbackControlsVisible || positionEditEventId != null) return@LaunchedEffect
+        delay(2_600)
+        playbackControlsVisible = false
     }
 
     LaunchedEffect(mpv, videoUri, renderDocument, protocolReady, fontRevision, blockingRendererRisks) {
@@ -703,13 +721,34 @@ private fun AuthoritativeMpvPreview(
         }
     }
 
-    Column(modifier.background(Color.Black)) {
-        BoxWithConstraints(
-            if (fillViewport) Modifier.weight(1f).fillMaxWidth() else Modifier.fillMaxWidth().aspectRatio(16f / 9f),
-            contentAlignment = Alignment.Center,
-        ) {
-        val canvasWidth = if (fillViewport) minOf(maxWidth, maxHeight * (16f / 9f)) else maxWidth
-        Box(Modifier.width(canvasWidth).aspectRatio(16f / 9f).clipToBounds(), contentAlignment = Alignment.Center) {
+    BoxWithConstraints(
+        modifier = modifier.background(Color.Black),
+        contentAlignment = Alignment.Center,
+    ) {
+        val reportedAspect = run {
+            val videoWidth = (osdWidth - osdMarginLeft - osdMarginRight).coerceAtLeast(0)
+            val videoHeight = (osdHeight - osdMarginTop - osdMarginBottom).coerceAtLeast(0)
+            if (videoWidth > 0 && videoHeight > 0) {
+                (videoWidth.toFloat() / videoHeight.toFloat()).coerceIn(0.25f, 4.0f)
+            } else {
+                16f / 9f
+            }
+        }
+        val canvasWidth = if (fillViewport) minOf(maxWidth, maxHeight * reportedAspect) else maxWidth
+        val canvasModifier = Modifier
+            .width(canvasWidth)
+            .aspectRatio(reportedAspect)
+            .clipToBounds()
+            .then(
+                if (!videoUri.isNullOrBlank() && positionEditEventId == null) {
+                    Modifier.pointerInput(videoUri, positionEditEventId) {
+                        detectTapGestures(onTap = { playbackControlsVisible = true })
+                    }
+                } else {
+                    Modifier
+                },
+            )
+        Box(canvasModifier, contentAlignment = Alignment.Center) {
             if (videoUri.isNullOrBlank()) {
                 Surface(
                     modifier = Modifier
@@ -816,27 +855,45 @@ private fun AuthoritativeMpvPreview(
                     )
                 }
             }
-        }
-        }
-        if (!videoUri.isNullOrBlank()) {
-            PlaybackBar(
-                playback = playback,
-                estimatedFrameNumber = estimatedFrameNumber,
-                estimatedVideoFps = estimatedVideoFps,
-                document = document,
-                focusedEventId = focusedEventId,
-                onFocusEvent = onFocusEvent,
-                onSetEventTiming = onSetEventTiming,
-                onPlayPause = {
-                    val shouldPause = playback.status == MpvPlaybackState.Status.Playing ||
-                        playback.status == MpvPlaybackState.Status.Buffering
-                    mpv[MpvProperties.Pause] = shouldPause
-                },
-                onFrameBack = { mpv.command("frame-back-step") },
-                onFrameForward = { mpv.command("frame-step") },
-                onSeek = { seconds -> mpv.command("seek", seconds.toString(), "absolute+exact") },
-                onOpenTimeline = onOpenTimeline,
-            )
+            if (!videoUri.isNullOrBlank() && positionEditEventId == null) {
+                AnimatedVisibility(
+                    visible = playbackControlsVisible,
+                    enter = fadeIn(),
+                    exit = fadeOut(),
+                    modifier = Modifier.align(Alignment.BottomCenter),
+                ) {
+                    Surface(color = Color.Black.copy(alpha = 0.62f)) {
+                        PlaybackBar(
+                            playback = playback,
+                            estimatedFrameNumber = estimatedFrameNumber,
+                            estimatedVideoFps = estimatedVideoFps,
+                            document = document,
+                            focusedEventId = focusedEventId,
+                            onFocusEvent = onFocusEvent,
+                            onSetEventTiming = onSetEventTiming,
+                            onPlayPause = {
+                                playbackControlsVisible = true
+                                val shouldPause = playback.status == MpvPlaybackState.Status.Playing ||
+                                    playback.status == MpvPlaybackState.Status.Buffering
+                                mpv[MpvProperties.Pause] = shouldPause
+                            },
+                            onFrameBack = {
+                                playbackControlsVisible = true
+                                mpv.command("frame-back-step")
+                            },
+                            onFrameForward = {
+                                playbackControlsVisible = true
+                                mpv.command("frame-step")
+                            },
+                            onSeek = { seconds ->
+                                playbackControlsVisible = true
+                                mpv.command("seek", seconds.toString(), "absolute+exact")
+                            },
+                            onOpenTimeline = onOpenTimeline,
+                        )
+                    }
+                }
+            }
         }
     }
 }
