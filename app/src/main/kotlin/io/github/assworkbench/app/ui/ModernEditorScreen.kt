@@ -380,76 +380,83 @@ fun ModernEditorScreen(
                         )
                     }
                 }
-                when (previewMode) {
-                    PreviewWorkspaceMode.FOCUS, PreviewWorkspaceMode.MANIPULATION -> {
-                        Box(Modifier.fillMaxSize().padding(8.dp)) {
-                            if (previewVisible) {
-                                preview(
-                                    Modifier
-                                        .fillMaxSize()
-                                        .testTag("preview-workspace"),
-                                )
-                            }
-                        }
-                    }
-                    PreviewWorkspaceMode.FLOATING -> {
-                        Box(Modifier.fillMaxSize().padding(8.dp)) {
-                            editor(Modifier.fillMaxSize())
-                        }
-                    }
-                    PreviewWorkspaceMode.NORMAL -> {
-                        if (landscape) {
-                            Row(
-                                Modifier.fillMaxSize().padding(8.dp),
-                                horizontalArrangement = Arrangement.spacedBy(paneGap),
-                            ) {
+                AnimatedContent(
+                    targetState = previewMode,
+                    transitionSpec = { fadeIn() togetherWith fadeOut() },
+                    label = "preview-workspace-mode",
+                    modifier = Modifier.fillMaxSize(),
+                ) { activePreviewMode ->
+                    when (activePreviewMode) {
+                        PreviewWorkspaceMode.FOCUS, PreviewWorkspaceMode.MANIPULATION -> {
+                            Box(Modifier.fillMaxSize().padding(8.dp)) {
                                 if (previewVisible) {
                                     preview(
                                         Modifier
-                                            .width(previewWidth)
-                                            .fillMaxHeight()
+                                            .fillMaxSize()
                                             .testTag("preview-workspace"),
                                     )
-                                    Box(
-                                        Modifier
-                                            .width(splitHandleWidth)
-                                            .fillMaxHeight()
-                                            .testTag("preview-divider")
-                                            .pointerInput(minPreviewWidth, maxPreviewWidth) {
-                                                detectHorizontalDragGestures(
-                                                    onHorizontalDrag = { change, dragAmount ->
-                                                        change.consume()
-                                                        val currentWidth = landscapePreviewWidthDp?.dp ?: previewWidth
-                                                        val delta = with(density) { dragAmount.toDp() }
-                                                        landscapePreviewWidthDp = (currentWidth + delta)
-                                                            .coerceIn(minPreviewWidth, maxPreviewWidth)
-                                                            .value
-                                                    },
-                                                    onDragEnd = {
-                                                        landscapePreviewWidthDp?.let { value ->
-                                                            preferences.edit()
-                                                                .putFloat("landscape-preview-width-dp", value)
-                                                                .apply()
-                                                        }
-                                                    },
-                                                )
-                                            },
-                                        contentAlignment = Alignment.Center,
-                                    ) {
-                                        VerticalDivider(
-                                            Modifier
-                                                .width(1.dp)
-                                                .fillMaxHeight(0.18f),
-                                            color = MaterialTheme.colorScheme.outlineVariant,
-                                        )
-                                    }
                                 }
-                                editor(Modifier.weight(1f).fillMaxHeight())
                             }
-                        } else {
-                            Column(Modifier.fillMaxSize().padding(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                if (previewVisible) preview(Modifier.fillMaxWidth().height(previewHeight).testTag("preview-workspace"))
-                                editor(Modifier.weight(1f).fillMaxWidth())
+                        }
+                        PreviewWorkspaceMode.FLOATING -> {
+                            Box(Modifier.fillMaxSize().padding(8.dp)) {
+                                editor(Modifier.fillMaxSize())
+                            }
+                        }
+                        PreviewWorkspaceMode.NORMAL -> {
+                            if (landscape) {
+                                Row(
+                                    Modifier.fillMaxSize().padding(8.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(paneGap),
+                                ) {
+                                    if (previewVisible) {
+                                        preview(
+                                            Modifier
+                                                .width(previewWidth)
+                                                .fillMaxHeight()
+                                                .testTag("preview-workspace"),
+                                        )
+                                        Box(
+                                            Modifier
+                                                .width(splitHandleWidth)
+                                                .fillMaxHeight()
+                                                .testTag("preview-divider")
+                                                .pointerInput(minPreviewWidth, maxPreviewWidth) {
+                                                    detectHorizontalDragGestures(
+                                                        onHorizontalDrag = { change, dragAmount ->
+                                                            change.consume()
+                                                            val currentWidth = landscapePreviewWidthDp?.dp ?: previewWidth
+                                                            val delta = with(density) { dragAmount.toDp() }
+                                                            landscapePreviewWidthDp = (currentWidth + delta)
+                                                                .coerceIn(minPreviewWidth, maxPreviewWidth)
+                                                                .value
+                                                        },
+                                                        onDragEnd = {
+                                                            landscapePreviewWidthDp?.let { value ->
+                                                                preferences.edit()
+                                                                    .putFloat("landscape-preview-width-dp", value)
+                                                                    .apply()
+                                                            }
+                                                        },
+                                                    )
+                                                },
+                                            contentAlignment = Alignment.Center,
+                                        ) {
+                                            VerticalDivider(
+                                                Modifier
+                                                    .width(1.dp)
+                                                    .fillMaxHeight(0.18f),
+                                                color = MaterialTheme.colorScheme.outlineVariant,
+                                            )
+                                        }
+                                    }
+                                    editor(Modifier.weight(1f).fillMaxHeight())
+                                }
+                            } else {
+                                Column(Modifier.fillMaxSize().padding(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    if (previewVisible) preview(Modifier.fillMaxWidth().height(previewHeight).testTag("preview-workspace"))
+                                    editor(Modifier.weight(1f).fillMaxWidth())
+                                }
                             }
                         }
                     }
