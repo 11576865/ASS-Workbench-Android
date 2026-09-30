@@ -69,6 +69,12 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     )
     val state: StateFlow<EditorState> = _state.asStateFlow()
 
+    // Playback is intentionally outside EditorState. mpv can report position at a
+    // high cadence; publishing each tick through the root editor state invalidates
+    // the whole workbench even though only timeline / focused-event timing UI needs it.
+    private val _playbackPositionMs = MutableStateFlow(0L)
+    val playbackPositionMs: StateFlow<Long> = _playbackPositionMs.asStateFlow()
+
     private fun clearPendingRecovery(clearStored: Boolean = true) {
         recoveryJob?.cancel()
         recoveryJob = null
@@ -182,6 +188,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun openMkvProject(uri: Uri) {
+        _playbackPositionMs.value = 0L
         cancelWaveformAnalysis()
         // MKV is a separate project workflow. The picker callback reaches here only
         // after the user actually chose a file, so cancelling the picker preserves
@@ -481,6 +488,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun attachVideo(uri: Uri) {
+        _playbackPositionMs.value = 0L
         _state.update {
             it.copy(
                 project = it.project.copy(videoUri = uri.toString()),
@@ -723,7 +731,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         if (ids.isEmpty()) return
         val selected = snapshot.document.events.filter { it.id in ids }
         val earliest = selected.minOfOrNull { it.start.millis } ?: return
-        val delta = snapshot.playbackPositionMs - earliest
+        val delta = _playbackPositionMs.value - earliest
         shiftSelected(delta)
     }
 
@@ -1107,7 +1115,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         val result = AssDocumentEditing.insertAtPlayback(
             document = snapshot.document,
             afterEventId = snapshot.focusedEventId,
-            positionMs = snapshot.playbackPositionMs,
+            positionMs = _playbackPositionMs.value,
         )
         editDocument("已在当前播放位置添加字幕。") { result.document }
         _state.update {
@@ -1189,7 +1197,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             AssDocumentEditing.splitEvent(
                 document = snapshot.document,
                 eventId = id,
-                splitTimeMs = snapshot.playbackPositionMs,
+                splitTimeMs = _playbackPositionMs.value,
                 textIndex = textIndex,
             )
         }.onSuccess { result ->
@@ -1266,7 +1274,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
 
     fun setFocusedStartToPlayback() {
         val id = _state.value.focusedEventId ?: return
-        val now = _state.value.playbackPositionMs
+        val now = _playbackPositionMs.value
         editDocument("开始时间已设为当前播放位置。") { doc ->
             doc.copy(events = doc.events.map { event ->
                 if (event.id != id) event else event.copy(start = SubTime(now.coerceAtMost(event.end.millis)))
@@ -1276,7 +1284,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
 
     fun setFocusedEndToPlayback() {
         val id = _state.value.focusedEventId ?: return
-        val now = _state.value.playbackPositionMs
+        val now = _playbackPositionMs.value
         editDocument("结束时间已设为当前播放位置。") { doc ->
             doc.copy(events = doc.events.map { event ->
                 if (event.id != id) event else event.copy(end = SubTime(now.coerceAtLeast(event.start.millis)))
@@ -1983,13 +1991,15 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         publishDocument(history.redo(), "已重做。")
     }
 
-    fun setPlaybackPosition(positionMs: Long) = _state.update { it.copy(playbackPositionMs = positionMs.coerceAtLeast(0)) }
+    fun setPlaybackPosition(positionMs: Long) {
+        _playbackPositionMs.value = positionMs.coerceAtLeast(0L)
+    }
 
     fun seekPreviewTo(positionMs: Long) {
         val target = positionMs.coerceAtLeast(0L)
+        _playbackPositionMs.value = target
         _state.update {
             it.copy(
-                playbackPositionMs = target,
                 seekRequestMs = target,
                 seekRequestNonce = it.seekRequestNonce + 1,
             )
@@ -2001,6 +2011,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             _state.update { it.copy(recoveryAvailable = false, recoveryLabel = "") }
             return
         }
+        _playbackPositionMs.value = 0L
         cancelWaveformAnalysis()
         beginWorkspaceBoundary()
         clearPendingRecovery()

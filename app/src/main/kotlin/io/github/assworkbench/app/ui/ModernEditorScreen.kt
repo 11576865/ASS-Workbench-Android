@@ -385,7 +385,7 @@ private fun WorkbenchPreview(
         configDir = viewModel.rendererConfigDir(),
         fontsDir = viewModel.rendererFontsDir(),
         fontRevision = state.fontRevision,
-        initialPositionMs = state.playbackPositionMs,
+        initialPositionMs = viewModel.playbackPositionMs.value,
         focusedEventId = state.focusedEventId,
         positionEditEventId = if (positionEditing) state.focusedEventId else null,
         onPreviewEventPosition = viewModel::previewFocusedPosition,
@@ -842,6 +842,7 @@ private fun InlineEventEditor(
     var layerText by remember(event.id, event.layer) { mutableStateOf(event.layer.toString()) }
     var actorText by remember(event.id, event.name) { mutableStateOf(event.name) }
     var comment by remember(event.id, event.comment) { mutableStateOf(event.comment) }
+    val playbackPositionMs by viewModel.playbackPositionMs.collectAsState()
 
     val effective = remember(state.document, event) {
         AssEffectiveInspector.inspect(state.document, event).associateBy { it.name }
@@ -895,11 +896,11 @@ private fun InlineEventEditor(
     val splitCursor = rawField.selection.start
     val splitReady = !rawDirty && rawField.selection.collapsed &&
         splitCursor in 1 until event.text.length &&
-        state.playbackPositionMs > event.start.millis && state.playbackPositionMs < event.end.millis
+        playbackPositionMs > event.start.millis && playbackPositionMs < event.end.millis
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
         if (!rawDirty) {
             Text(
-                "光标 $splitCursor · 播放头 ${formatMs(state.playbackPositionMs)}",
+                "光标 $splitCursor · 播放头 ${formatMs(playbackPositionMs)}",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.weight(1f),
@@ -968,7 +969,7 @@ private fun InlineEventEditor(
         )
     }
 
-    if (inlinePanel == "effects") InlineEffectsEditor(event, state.playbackPositionMs, viewModel)
+    if (inlinePanel == "effects") InlineEffectsEditor(event, playbackPositionMs, viewModel)
 
     if (inlinePanel == "event") {
         Surface(
@@ -2006,7 +2007,7 @@ private fun ModernTimelinePane(state: EditorState, viewModel: EditorViewModel, m
     var snapStrength by rememberSaveable { mutableStateOf(TimelineSnapStrength.NORMAL.name) }
     var settingsOpen by remember { mutableStateOf(false) }
 
-    val playheadMs = state.playbackPositionMs
+    val playheadMs by viewModel.playbackPositionMs.collectAsState()
     val focusedEvent = state.document.events.firstOrNull { it.id == state.focusedEventId }
     val windowDurationMs = windowSeconds * 1000L
     val halfWindowMs = windowDurationMs / 2L

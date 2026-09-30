@@ -30,7 +30,6 @@ data class EditorState(
     val selectionAnchorId: Long? = null,
     val focusedEventId: Long? = null,
     val query: String = "",
-    val playbackPositionMs: Long = 0L,
     val seekRequestMs: Long? = null,
     val seekRequestNonce: Long = 0L,
     val canUndo: Boolean = false,

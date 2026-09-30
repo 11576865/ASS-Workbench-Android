@@ -147,6 +147,14 @@ ASS Workbench impact:
 - playback position, waveform viewport and transient preview are the highest-frequency state streams and should not invalidate unrelated editor surfaces;
 - performance work must be measured as recomposition/frame cost, not guessed from code style.
 
+Implemented invalidation-boundary hardening:
+
+- live mpv playback position is now a dedicated `StateFlow<Long>` rather than a field in root `EditorState`;
+- normal playback ticks no longer publish a new root editor-state object, avoiding whole-workbench invalidation;
+- the timeline and expanded Event timing/effects editor collect the playhead locally;
+- preview uses the current playhead value as resume input without observing it through the root workbench;
+- explicit seek requests still update canonical seek request/nonce state, because those are commands rather than passive high-frequency telemetry.
+
 ## Destructive / combination failure matrix
 
 Status values: **AUTO** = current automated coverage exists; **ADD** = add automated coverage; **DEVICE** = physical Android validation required; **RESEARCH** = policy/compatibility decision still needed.
@@ -182,7 +190,7 @@ Status values: **AUTO** = current automated coverage exists; **ADD** = add autom
 | M4 | MKV | same font already embedded | same SHA is not selected for repackaging | ADD planner/ViewModel |
 | M5 | MKV | same attachment filename, different font bytes | source attachment not overwritten; result policy explicit | ADD |
 | M6 | MKV | large source + many font attachments | streaming preservation remains bounded; no UI ANR | DEVICE |
-| P1 | Compose | fast playback-position updates with long Event list | unrelated rows/tools avoid high-frequency recomposition | DEVICE/profile |
+| P1 | Compose | fast playback-position updates with long Event list | root EditorState does not emit per playback tick; only timeline/focused timing consumers observe playhead flow | code-hardened + DEVICE/profile |
 | P2 | Renderer | long moving line / heavy transform fixture | no renderer recreation per gesture; editor remains responsive enough to recover | DEVICE/profile |
 | L1 | Lifecycle | rotate portrait↔landscape during active edit | canonical document, focus, selection and draft semantics survive | DEVICE |
 | L2 | Lifecycle | process death/recovery after unsaved edit | recovery restores expected snapshot without inheriting stale MKV/container state | code-hardened + DEVICE |
