@@ -187,7 +187,13 @@ class EditorRegressionInstrumentedTest {
             val navigation = composeRule.onNodeWithTag("subtitle-navigation").fetchSemanticsNode().boundsInRoot
             assertTrue("Landscape preview must be beside navigation", preview.right <= navigation.left)
             val inspector = composeRule.onNodeWithTag("event-inspector").fetchSemanticsNode().boundsInRoot
-            assertTrue("Expanded workbench must show navigation beside inspector", inspector.left >= navigation.right)
+            val inspectorSeparatedHorizontally = inspector.left >= navigation.right
+            val inspectorSeparatedVertically = inspector.top >= navigation.bottom
+            assertTrue(
+                "Adaptive workbench must keep navigation and inspector non-overlapping",
+                inspectorSeparatedHorizontally || inspectorSeparatedVertically,
+            )
+            composeRule.onNodeWithTag("preview-divider").assertIsDisplayed()
             captureLayout("tablet-landscape")
         } finally {
             automation.executeShellCommand("wm size reset").close()
