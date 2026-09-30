@@ -2223,7 +2223,807 @@ private fun TimelineWaveformLite(
                 modifier = Modifier.fillMaxWidth().height(52.dp),
                 color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.26f),
             ) {
-                Box(Modifier.fillMaxSize(), cont…11967 tokens truncated…                      }) { Text("添加 \\iclip") }
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text(
+                        "Waveform Lite · 后台分析音轨…",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+        WaveformLiteStatus.UNAVAILABLE -> {
+            Surface(
+                modifier = Modifier.fillMaxWidth().heightIn(min = 40.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.20f),
+            ) {
+                Text(
+                    "Waveform unavailable" + waveform.error?.let { " · " + it }.orEmpty(),
+                    modifier = Modifier.padding(WorkbenchDimens.Small),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+        WaveformLiteStatus.READY -> {
+            val envelope = waveform.envelope ?: return
+            val waveformColor = MaterialTheme.colorScheme.onSurfaceVariant
+            val playheadColor = MaterialTheme.colorScheme.primary
+            BoxWithConstraints(
+                Modifier
+                    .fillMaxWidth()
+                    .height(58.dp)
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.24f))
+                    .pointerInput(windowStartMs, windowEndMs) {
+                        detectTapGestures { offset ->
+                            val width = size.width.coerceAtLeast(1)
+                            val fraction = (offset.x / width).coerceIn(0f, 1f)
+                            val target = windowStartMs +
+                                ((windowEndMs - windowStartMs) * fraction).toLong()
+                            onSeek(target.coerceAtLeast(0L))
+                        }
+                    },
+            ) {
+                val density = androidx.compose.ui.platform.LocalDensity.current
+                val columns = with(density) { maxWidth.roundToPx() }.coerceIn(1, 1200)
+                val samples = remember(envelope, windowStartMs, windowEndMs, columns) {
+                    WaveformViewportSampler.sample(
+                        envelope = envelope,
+                        startMs = windowStartMs,
+                        endMs = windowEndMs,
+                        columns = columns,
+                    )
+                }
+                Canvas(Modifier.fillMaxSize()) {
+                    if (samples.isNotEmpty()) {
+                        val centerY = size.height / 2f
+                        val amplitude = centerY * 0.88f
+                        val xStep = size.width / samples.size
+                        samples.forEachIndexed { index, bucket ->
+                            val x = (index + 0.5f) * xStep
+                            val high = bucket.maximum.toFloat() / Short.MAX_VALUE.toFloat()
+                            val lowMagnitude = -bucket.minimum.toFloat() / -Short.MIN_VALUE.toFloat()
+                            val top = centerY - high * amplitude
+                            val bottom = centerY + lowMagnitude * amplitude
+                            drawLine(
+                                color = waveformColor.copy(alpha = 0.72f),
+                                start = androidx.compose.ui.geometry.Offset(x, top),
+                                end = androidx.compose.ui.geometry.Offset(x, bottom),
+                                strokeWidth = maxOf(1f, xStep.coerceAtMost(2f)),
+                            )
+                        }
+                    }
+                }
+                Canvas(Modifier.fillMaxSize()) {
+                    if (playheadMs in windowStartMs..windowEndMs) {
+                        val span = (windowEndMs - windowStartMs).coerceAtLeast(1L)
+                        val fraction = (playheadMs - windowStartMs).toFloat() / span
+                        val x = size.width * fraction
+                        drawLine(
+                            color = playheadColor,
+                            start = androidx.compose.ui.geometry.Offset(x, 0f),
+                            end = androidx.compose.ui.geometry.Offset(x, size.height),
+                            strokeWidth = 2.dp.toPx(),
+                        )
+                    }
+                }
+                Text(
+                    "Waveform Lite · 点击定位",
+                    modifier = Modifier.align(Alignment.TopStart).padding(4.dp),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.82f),
+                )
+            }
+        }
+    }
+}
+
+private enum class TimelineSnapStrength(val label: String, val factor: Double) {
+    LIGHT("轻", 0.5),
+    NORMAL("标准", 1.0),
+    STRONG("强", 2.0),
+}
+
+private enum class ModernTimelineDragMode { START, MOVE, END }
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun ModernTimelineEventRow(
+    event: AssEvent,
+    relation: AssTimelineRelation?,
+    windowStartMs: Long,
+    windowEndMs: Long,
+    playheadMs: Long,
+    focused: Boolean,
+    snapTargets: List<Long>,
+    snapEnabled: Boolean,
+    snapGrid: Boolean,
+    snapGridMs: Long,
+    snapStrength: TimelineSnapStrength,
+    onFocus: () -> Unit,
+    onCommit: (Long, Long) -> Unit,
+) {
+    var previewStart by remember(event.id, event.start) { mutableLongStateOf(event.start.millis) }
+    var previewEnd by remember(event.id, event.end) { mutableLongStateOf(event.end.millis) }
+    var dragMode by remember { mutableStateOf<ModernTimelineDragMode?>(null) }
+    var baseStart by remember { mutableLongStateOf(previewStart) }
+    var baseEnd by remember { mutableLongStateOf(previewEnd) }
+    var dragPx by remember { mutableFloatStateOf(0f) }
+    val timelineColors = MaterialTheme.colorScheme
+
+    Row(
+        Modifier.fillMaxWidth().height(52.dp).combinedClickable(onClick = onFocus, onLongClick = onFocus),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small),
+    ) {
+        Column(Modifier.width(108.dp)) {
+            Text("#${event.id}", style = MaterialTheme.typography.labelSmall)
+            Text(AssInlineSyntax.visibleText(event.text), style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            relation?.let { timingRelation ->
+                when (timingRelation.kind) {
+                    AssTimelineRelationKind.OVERLAP -> Text(
+                        "Overlap ${timingRelation.durationMs}ms · #${timingRelation.previousEventId}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.error,
+                        maxLines = 1,
+                    )
+                    AssTimelineRelationKind.GAP -> Text(
+                        "Gap ${timingRelation.durationMs}ms",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                    )
+                    AssTimelineRelationKind.TOUCH -> Unit
+                }
+            }
+        }
+        BoxWithConstraints(
+            Modifier.weight(1f).height(24.dp)
+                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
+                .pointerInput(event.id, windowStartMs, windowEndMs, snapTargets, focused, snapEnabled, snapGrid, snapGridMs, snapStrength) {
+                    val span = (windowEndMs - windowStartMs).coerceAtLeast(1L)
+                    fun xFor(ms: Long): Float = ((ms - windowStartMs).toFloat() / span).coerceIn(0f, 1f) * size.width
+                    fun thresholdMs(): Long {
+                        val base = minOf(120L, maxOf(24L, span / 220L))
+                        return (base * snapStrength.factor).toLong().coerceIn(12L, 240L)
+                    }
+                    fun activeTargets(): List<Long> = snapTargets.toMutableList().apply {
+                        // Remove only this Event's own edges once; duplicate timestamps from
+                        // another Event or the playhead remain valid snap targets.
+                        remove(baseStart)
+                        remove(baseEnd)
+                    }
+                    fun snapPoint(candidate: Long): Long {
+                        if (!snapEnabled) return candidate
+                        return AssTimelineSnap.snapPoint(
+                            candidateMs = candidate,
+                            targets = activeTargets(),
+                            thresholdMs = thresholdMs(),
+                            gridMs = snapGridMs.takeIf { snapGrid },
+                        )
+                    }
+                    fun snapMove(start: Long, end: Long): AssTimelineSpan {
+                        if (!snapEnabled) return AssTimelineSpan(start, end)
+                        return AssTimelineSnap.snapSpan(
+                            startMs = start,
+                            endMs = end,
+                            targets = activeTargets(),
+                            thresholdMs = thresholdMs(),
+                            gridMs = snapGridMs.takeIf { snapGrid },
+                        )
+                    }
+                    detectDragGestures(
+                        onDragStart = { offset ->
+                            val sx = xFor(previewStart); val ex = xFor(previewEnd); val hit = 18.dp.toPx()
+                            dragMode = if (!focused) {
+                                null
+                            } else {
+                                when {
+                                    abs(offset.x - sx) <= hit -> ModernTimelineDragMode.START
+                                    abs(offset.x - ex) <= hit -> ModernTimelineDragMode.END
+                                    offset.x in sx..ex -> ModernTimelineDragMode.MOVE
+                                    else -> null
+                                }
+                            }
+                            baseStart = previewStart; baseEnd = previewEnd; dragPx = 0f
+                        },
+                        onDrag = { change, amount ->
+                            val mode = dragMode ?: return@detectDragGestures
+                            change.consume(); dragPx += amount.x
+                            val delta = (dragPx / size.width.coerceAtLeast(1) * span).toLong()
+                            when (mode) {
+                                ModernTimelineDragMode.START -> previewStart = snapPoint(baseStart + delta).coerceIn(0L, (previewEnd - 10L).coerceAtLeast(0L))
+                                ModernTimelineDragMode.END -> previewEnd = snapPoint(baseEnd + delta).coerceAtLeast(previewStart + 10L)
+                                ModernTimelineDragMode.MOVE -> {
+                                    val duration = (baseEnd - baseStart).coerceAtLeast(10L)
+                                    val rawStart = (baseStart + delta).coerceAtLeast(0L)
+                                    val snapped = snapMove(rawStart, rawStart + duration)
+                                    val clampedStart = snapped.startMs.coerceAtLeast(0L)
+                                    previewStart = clampedStart
+                                    previewEnd = clampedStart + duration
+                                }
+                            }
+                        },
+                        onDragEnd = { if (dragMode != null) onCommit(previewStart, previewEnd); dragMode = null },
+                        onDragCancel = { previewStart = event.start.millis; previewEnd = event.end.millis; dragMode = null },
+                    )
+                },
+        ) {
+            val span = (windowEndMs - windowStartMs).coerceAtLeast(1L).toFloat()
+            val leftFraction = ((previewStart - windowStartMs) / span).coerceIn(0f, 1f)
+            val rightFraction = ((previewEnd - windowStartMs) / span).coerceIn(0f, 1f)
+            Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
+                Spacer(Modifier.weight(leftFraction.coerceAtLeast(0.001f)))
+                Box(
+                    Modifier.weight((rightFraction - leftFraction).coerceAtLeast(0.015f)).fillMaxHeight()
+                        .background(if (focused) timelineColors.primary.copy(alpha = 0.72f) else timelineColors.secondary.copy(alpha = 0.44f))
+                )
+                Spacer(Modifier.weight((1f - rightFraction).coerceAtLeast(0.001f)))
+            }
+            Canvas(Modifier.fillMaxSize()) {
+                if (playheadMs in windowStartMs..windowEndMs) {
+                    val playFraction = (playheadMs - windowStartMs).toFloat() /
+                        (windowEndMs - windowStartMs).coerceAtLeast(1L)
+                    val playX = size.width * playFraction
+                    drawLine(
+                        color = timelineColors.onSurface,
+                        start = androidx.compose.ui.geometry.Offset(playX, 0f),
+                        end = androidx.compose.ui.geometry.Offset(playX, size.height),
+                        strokeWidth = 1.dp.toPx(),
+                    )
+                }
+                if (focused) {
+                    val sx = size.width * leftFraction
+                    val ex = size.width * rightFraction
+                    drawLine(timelineColors.onPrimary, androidx.compose.ui.geometry.Offset(sx, 0f), androidx.compose.ui.geometry.Offset(sx, size.height), 2.dp.toPx())
+                    drawLine(timelineColors.onPrimary, androidx.compose.ui.geometry.Offset(ex, 0f), androidx.compose.ui.geometry.Offset(ex, size.height), 2.dp.toPx())
+                }
+            }
+            Text("${formatMs(previewStart)}–${formatMs(previewEnd)}", Modifier.align(Alignment.Center), style = MaterialTheme.typography.labelSmall, maxLines = 1)
+        }
+    }
+}
+
+@Composable
+private fun StylePane(state: EditorState, viewModel: EditorViewModel, modifier: Modifier = Modifier) {
+    val focused = state.document.events.firstOrNull { it.id == state.focusedEventId }
+    val style = focused?.let { e -> state.document.styles.firstOrNull { it.name == e.style } } ?: state.document.styles.firstOrNull()
+    if (style == null) Box(modifier, contentAlignment = Alignment.Center) { Text("没有 Style") }
+    else TypesettingPanel(state, viewModel, style, modifier)
+}
+
+@Composable
+private fun PositionPane(state: EditorState, viewModel: EditorViewModel, modifier: Modifier = Modifier) {
+    val event = state.document.events.firstOrNull { it.id == state.focusedEventId }
+    if (event == null) {
+        Box(modifier, contentAlignment = Alignment.Center) { Text("先选择一条字幕") }
+        return
+    }
+    val style = state.document.styles.firstOrNull { it.name == event.style }
+    val geometry = remember(event.text) { AssGeometrySemantic.inspect(event.text) }
+    val effective = remember(state.document, event) {
+        AssEffectiveInspector.inspect(state.document, event).associateBy { it.name }
+    }
+
+    var x by remember(event.id, event.text) { mutableStateOf(geometry.position?.x?.toString().orEmpty()) }
+    var y by remember(event.id, event.text) { mutableStateOf(geometry.position?.y?.toString().orEmpty()) }
+    var moveStartX by remember(event.id, event.text) { mutableStateOf(geometry.move?.start?.x?.toString().orEmpty()) }
+    var moveStartY by remember(event.id, event.text) { mutableStateOf(geometry.move?.start?.y?.toString().orEmpty()) }
+    var moveEndX by remember(event.id, event.text) { mutableStateOf(geometry.move?.end?.x?.toString().orEmpty()) }
+    var moveEndY by remember(event.id, event.text) { mutableStateOf(geometry.move?.end?.y?.toString().orEmpty()) }
+    var originX by remember(event.id, event.text) { mutableStateOf(geometry.origin?.x?.toString().orEmpty()) }
+    var originY by remember(event.id, event.text) { mutableStateOf(geometry.origin?.y?.toString().orEmpty()) }
+    var rotationText by remember(event.id, event.text, style?.angle) {
+        mutableStateOf((geometry.rotationZ ?: style?.angle ?: 0.0).toString())
+    }
+    var rotationGestureActive by remember(event.id) { mutableStateOf(false) }
+    var rotationDraftChanged by remember(event.id) { mutableStateOf(false) }
+    var rotationPreviewValue by remember(event.id, event.text, style?.angle) {
+        mutableStateOf(geometry.rotationZ ?: style?.angle ?: 0.0)
+    }
+    val effectiveScaleX = geometry.scaleX ?: style?.scaleX ?: 100.0
+    val effectiveScaleY = geometry.scaleY ?: style?.scaleY ?: 100.0
+    var scaleXText by remember(event.id, event.text, style?.scaleX) { mutableStateOf(effectiveScaleX.toString()) }
+    var scaleYText by remember(event.id, event.text, style?.scaleY) { mutableStateOf(effectiveScaleY.toString()) }
+    var scaleGestureActive by remember(event.id) { mutableStateOf(false) }
+    var scaleDraftChanged by remember(event.id) { mutableStateOf(false) }
+    var scalePreviewX by remember(event.id, event.text, style?.scaleX) { mutableStateOf(effectiveScaleX) }
+    var scalePreviewY by remember(event.id, event.text, style?.scaleY) { mutableStateOf(effectiveScaleY) }
+    var shearXText by remember(event.id, event.text) { mutableStateOf((geometry.shearX ?: 0.0).toString()) }
+    var shearYText by remember(event.id, event.text) { mutableStateOf((geometry.shearY ?: 0.0).toString()) }
+    var shearGestureActive by remember(event.id) { mutableStateOf(false) }
+    var shearDraftChanged by remember(event.id) { mutableStateOf(false) }
+    var shearPreviewX by remember(event.id, event.text) { mutableStateOf(geometry.shearX ?: 0.0) }
+    var shearPreviewY by remember(event.id, event.text) { mutableStateOf(geometry.shearY ?: 0.0) }
+    var clipLeftText by remember(event.id, event.text) { mutableStateOf(geometry.clipRect?.left?.toString().orEmpty()) }
+    var clipTopText by remember(event.id, event.text) { mutableStateOf(geometry.clipRect?.top?.toString().orEmpty()) }
+    var clipRightText by remember(event.id, event.text) { mutableStateOf(geometry.clipRect?.right?.toString().orEmpty()) }
+    var clipBottomText by remember(event.id, event.text) { mutableStateOf(geometry.clipRect?.bottom?.toString().orEmpty()) }
+    var clipDraftChanged by remember(event.id) { mutableStateOf(false) }
+    val scaleRatioYPerX = remember(event.id, event.text, style?.scaleX, style?.scaleY) {
+        if (effectiveScaleX != 0.0) effectiveScaleY / effectiveScaleX else 1.0
+    }
+    fun formatScale(value: Double): String {
+        val rounded = kotlin.math.round(value * 100.0) / 100.0
+        return if (rounded % 1.0 == 0.0) rounded.toInt().toString() else rounded.toString()
+    }
+    var styleAlignment by remember(style?.name, style?.alignment) { mutableIntStateOf(style?.alignment ?: 2) }
+    var styleMarginL by remember(style?.name, style?.marginL) { mutableStateOf((style?.marginL ?: 0).toString()) }
+    var styleMarginR by remember(style?.name, style?.marginR) { mutableStateOf((style?.marginR ?: 0).toString()) }
+    var styleMarginV by remember(style?.name, style?.marginV) { mutableStateOf((style?.marginV ?: 0).toString()) }
+
+    LaunchedEffect(event.id, rotationText, rotationGestureActive, rotationDraftChanged) {
+        if (!rotationDraftChanged || rotationGestureActive) return@LaunchedEffect
+        val value = rotationText.toDoubleOrNull() ?: return@LaunchedEffect
+        viewModel.previewFocusedRotationZ(value)
+        kotlinx.coroutines.delay(320)
+        viewModel.setFocusedRotationZ(value)
+        rotationDraftChanged = false
+    }
+    LaunchedEffect(event.id, scaleXText, scaleYText, scaleGestureActive, scaleDraftChanged) {
+        if (!scaleDraftChanged || scaleGestureActive) return@LaunchedEffect
+        val sx = scaleXText.toDoubleOrNull() ?: return@LaunchedEffect
+        val sy = scaleYText.toDoubleOrNull() ?: return@LaunchedEffect
+        scalePreviewX = sx
+        scalePreviewY = sy
+        viewModel.previewFocusedScale(sx, sy)
+        kotlinx.coroutines.delay(320)
+        viewModel.setFocusedScale(sx, sy)
+        scaleDraftChanged = false
+    }
+    LaunchedEffect(event.id, shearXText, shearYText, shearGestureActive, shearDraftChanged) {
+        if (!shearDraftChanged || shearGestureActive) return@LaunchedEffect
+        val fx = shearXText.toDoubleOrNull() ?: return@LaunchedEffect
+        val fy = shearYText.toDoubleOrNull() ?: return@LaunchedEffect
+        shearPreviewX = fx
+        shearPreviewY = fy
+        viewModel.previewFocusedShear(fx, fy)
+        kotlinx.coroutines.delay(320)
+        viewModel.setFocusedShear(fx, fy)
+        shearDraftChanged = false
+    }
+    LaunchedEffect(event.id, clipLeftText, clipTopText, clipRightText, clipBottomText, clipDraftChanged) {
+        val rect = geometry.clipRect ?: return@LaunchedEffect
+        if (!clipDraftChanged) return@LaunchedEffect
+        val left = clipLeftText.toDoubleOrNull() ?: return@LaunchedEffect
+        val top = clipTopText.toDoubleOrNull() ?: return@LaunchedEffect
+        val right = clipRightText.toDoubleOrNull() ?: return@LaunchedEffect
+        val bottom = clipBottomText.toDoubleOrNull() ?: return@LaunchedEffect
+        viewModel.previewFocusedRectClip(left, top, right, bottom, geometry.clipInverted)
+        kotlinx.coroutines.delay(320)
+        viewModel.setFocusedRectClip(left, top, right, bottom, geometry.clipInverted)
+        clipDraftChanged = false
+    }
+
+    DisposableEffect(event.id) {
+        onDispose { viewModel.clearTransientPreview() }
+    }
+
+    LazyColumn(
+        modifier.padding(WorkbenchDimens.Small),
+        verticalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small),
+    ) {
+        item {
+            Text("当前 Event", style = MaterialTheme.typography.titleSmall)
+            Text(
+                "Effective: an${effective["Alignment"]?.effectiveValue} · V${effective["Margin V"]?.effectiveValue} · ${effective["Position"]?.effectiveValue}",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        item {
+            Text("Event 对齐覆盖")
+            Column(verticalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro)) {
+                listOf(listOf(7, 8, 9), listOf(4, 5, 6), listOf(1, 2, 3)).forEach { row ->
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro)) {
+                        row.forEach { value ->
+                            OutlinedButton(
+                                onClick = { viewModel.setFocusedAlignment(value) },
+                                modifier = Modifier.weight(1f),
+                            ) { Text(value.toString()) }
+                        }
+                    }
+                }
+            }
+        }
+        val moveGeometry = geometry.move
+        if (geometry.positionMode == AssPositionMode.MOVE && moveGeometry != null) {
+            item {
+                Text("运动路径 · \\move", style = MaterialTheme.typography.titleSmall)
+                Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small)) {
+                    OutlinedTextField(moveStartX, { moveStartX = it }, label = { Text("Start X") }, singleLine = true, modifier = Modifier.weight(1f))
+                    OutlinedTextField(moveStartY, { moveStartY = it }, label = { Text("Start Y") }, singleLine = true, modifier = Modifier.weight(1f))
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small)) {
+                    OutlinedTextField(moveEndX, { moveEndX = it }, label = { Text("End X") }, singleLine = true, modifier = Modifier.weight(1f))
+                    OutlinedTextField(moveEndY, { moveEndY = it }, label = { Text("End Y") }, singleLine = true, modifier = Modifier.weight(1f))
+                }
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    val moveStartMs = moveGeometry.startMs
+                    val moveEndMs = moveGeometry.endMs
+                    Text(
+                        if (moveStartMs != null && moveEndMs != null) {
+                            "Timing ${moveStartMs.toInt()}–${moveEndMs.toInt()} ms · 编辑端点时原样保留"
+                        } else {
+                            "Timing：整个 Event 时长 · 4 参数 move"
+                        },
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Button(onClick = {
+                        val sx = moveStartX.toDoubleOrNull()
+                        val sy = moveStartY.toDoubleOrNull()
+                        val ex = moveEndX.toDoubleOrNull()
+                        val ey = moveEndY.toDoubleOrNull()
+                        if (sx != null && sy != null && ex != null && ey != null) {
+                            viewModel.setFocusedMove(sx, sy, ex, ey)
+                        }
+                    }) { Text("应用路径") }
+                }
+                Text(
+                    "预览上的空心圆是 Start，实心圆是 End；拖任一端点都会实时走 libass transient preview。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+
+        item { Divider() }
+        item {
+            Text("变换原点 · \\org", style = MaterialTheme.typography.titleSmall)
+            if (geometry.origin != null) {
+                Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small)) {
+                    OutlinedTextField(originX, { originX = it }, label = { Text("Origin X") }, singleLine = true, modifier = Modifier.weight(1f))
+                    OutlinedTextField(originY, { originY = it }, label = { Text("Origin Y") }, singleLine = true, modifier = Modifier.weight(1f))
+                }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    TextButton(onClick = viewModel::clearFocusedOrigin) { Text("移除 \\org") }
+                    Button(onClick = {
+                        val ox = originX.toDoubleOrNull()
+                        val oy = originY.toDoubleOrNull()
+                        if (ox != null && oy != null) viewModel.setFocusedOrigin(ox, oy)
+                    }) { Text("应用原点") }
+                }
+                Text(
+                    "预览上的圆环叉标记是显式变换原点；可直接拖动。精确值允许超出画布范围。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                Text(
+                    "当前没有显式 \\org。ASS 将使用默认变换原点；工作台不会伪造一个可拖动标记。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Button(onClick = {
+                    viewModel.setFocusedOrigin(
+                        state.document.playResX / 2.0,
+                        state.document.playResY / 2.0,
+                    )
+                }) { Text("在画布中心添加 \\org") }
+            }
+        }
+        item { Divider() }
+        item {
+            Text("旋转 · \\frz", style = MaterialTheme.typography.titleSmall)
+            ContinuousParameterControl(
+                label = "Rotation Z",
+                valueText = rotationText,
+                onValueTextChange = {
+                    rotationText = it
+                    rotationDraftChanged = true
+                },
+                range = -180f..180f,
+                step = 1.0,
+                suffix = "°",
+                supportingText = if (geometry.rotationZ != null) {
+                    "Event override：${geometry.rotationZ}° · 画布旋转手柄和数值控制共享同一语义。"
+                } else {
+                    "继承 Style：${style?.angle ?: 0.0}° · 首次编辑会创建 \\frz。"
+                },
+                resetLabel = if (geometry.rotationZ != null) "继承 Style" else null,
+                onReset = if (geometry.rotationZ != null) ({
+                    rotationDraftChanged = false
+                    rotationGestureActive = false
+                    rotationText = (style?.angle ?: 0.0).toString()
+                    viewModel.clearFocusedRotationZ()
+                }) else null,
+                onPreview = { value ->
+                    rotationPreviewValue = value
+                    viewModel.previewFocusedRotationZ(value)
+                },
+                onGestureActive = { active ->
+                    rotationGestureActive = active
+                    if (!active) {
+                        viewModel.setFocusedRotationZ(rotationPreviewValue)
+                        rotationDraftChanged = false
+                    }
+                },
+            )
+            Text(
+                if (geometry.positionMode == AssPositionMode.MOVE && geometry.origin == null) {
+                    "当前是 \\move 且没有显式 \\org：数值/Slider 可用，但画布旋转手柄暂不显示，因为默认旋转中心随运动位置变化。"
+                } else {
+                    "画布上的旋转手柄围绕显式 \\org；没有 \\org 时，静态字幕围绕当前定位锚点。"
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        item { Divider() }
+        item {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("缩放 · \\fscx / \\fscy", style = MaterialTheme.typography.titleSmall)
+                    Text(
+                        "\\fs 是字号；\\fscx / \\fscy 是排版后的百分比缩放。100% 表示不额外缩放。",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                FilterChip(
+                    selected = state.geometryScaleLocked,
+                    onClick = { viewModel.setGeometryScaleLocked(!state.geometryScaleLocked) },
+                    label = { Text(if (state.geometryScaleLocked) "比例锁定" else "独立 X/Y") },
+                )
+            }
+            ContinuousParameterControl(
+                label = "Scale X",
+                valueText = scaleXText,
+                onValueTextChange = { raw ->
+                    scaleXText = raw
+                    raw.toDoubleOrNull()?.let { sx ->
+                        if (state.geometryScaleLocked) scaleYText = formatScale(sx * scaleRatioYPerX)
+                    }
+                    scaleDraftChanged = true
+                },
+                range = 10f..400f,
+                step = 1.0,
+                suffix = "%",
+                supportingText = if (geometry.scaleX != null) "Event override：${geometry.scaleX}%" else "继承 Style：${style?.scaleX ?: 100.0}%",
+                onPreview = { sx ->
+                    val sy = if (state.geometryScaleLocked) sx * scaleRatioYPerX else scaleYText.toDoubleOrNull() ?: effectiveScaleY
+                    if (state.geometryScaleLocked) scaleYText = formatScale(sy)
+                    scalePreviewX = sx
+                    scalePreviewY = sy
+                    viewModel.previewFocusedScale(sx, sy)
+                },
+                onGestureActive = { active ->
+                    scaleGestureActive = active
+                    if (!active) {
+                        viewModel.setFocusedScale(scalePreviewX, scalePreviewY)
+                        scaleDraftChanged = false
+                    }
+                },
+            )
+            ContinuousParameterControl(
+                label = "Scale Y",
+                valueText = scaleYText,
+                onValueTextChange = { raw ->
+                    scaleYText = raw
+                    raw.toDoubleOrNull()?.let { sy ->
+                        if (state.geometryScaleLocked && scaleRatioYPerX != 0.0) scaleXText = formatScale(sy / scaleRatioYPerX)
+                    }
+                    scaleDraftChanged = true
+                },
+                range = 10f..400f,
+                step = 1.0,
+                suffix = "%",
+                supportingText = if (geometry.scaleY != null) "Event override：${geometry.scaleY}%" else "继承 Style：${style?.scaleY ?: 100.0}%",
+                onPreview = { sy ->
+                    val sx = if (state.geometryScaleLocked && scaleRatioYPerX != 0.0) sy / scaleRatioYPerX else scaleXText.toDoubleOrNull() ?: effectiveScaleX
+                    if (state.geometryScaleLocked) scaleXText = formatScale(sx)
+                    scalePreviewX = sx
+                    scalePreviewY = sy
+                    viewModel.previewFocusedScale(sx, sy)
+                },
+                onGestureActive = { active ->
+                    scaleGestureActive = active
+                    if (!active) {
+                        viewModel.setFocusedScale(scalePreviewX, scalePreviewY)
+                        scaleDraftChanged = false
+                    }
+                },
+            )
+            if (geometry.scaleX != null || geometry.scaleY != null) {
+                TextButton(onClick = {
+                    scaleDraftChanged = false
+                    scaleGestureActive = false
+                    scaleXText = (style?.scaleX ?: 100.0).toString()
+                    scaleYText = (style?.scaleY ?: 100.0).toString()
+                    scalePreviewX = style?.scaleX ?: 100.0
+                    scalePreviewY = style?.scaleY ?: 100.0
+                    viewModel.clearFocusedScale()
+                }) { Text("继承 Style Scale") }
+            }
+            Text(
+                if (geometry.positionMode == AssPositionMode.MOVE || geometry.positionMode == AssPositionMode.CONFLICT) {
+                    "运动/冲突位置下仍可用数值与 Slider；画布 Scale gizmo 暂只用于静态位置，避免伪造随时间移动的锚点。"
+                } else {
+                    "画布上的 Scale gizmo 是参数控制框，不冒充 libass 的真实文字边界；拖右上角控制点可同时调 X/Y。"
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        item { Divider() }
+        item {
+            Text("错切 · \\fax / \\fay", style = MaterialTheme.typography.titleSmall)
+            Text(
+                "\\fax / \\fay 是几何错切因子，不是斜体。0 表示无错切；X 改变水平倾斜，Y 改变垂直倾斜。",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            ContinuousParameterControl(
+                label = "Shear X · \\fax",
+                valueText = shearXText,
+                onValueTextChange = {
+                    shearXText = it
+                    shearDraftChanged = true
+                },
+                range = -2f..2f,
+                step = 0.05,
+                supportingText = if (geometry.shearX != null) "Event override：${geometry.shearX}" else "无 override：0",
+                onPreview = { fx ->
+                    val fy = shearYText.toDoubleOrNull() ?: 0.0
+                    shearPreviewX = fx
+                    shearPreviewY = fy
+                    viewModel.previewFocusedShear(fx, fy)
+                },
+                onGestureActive = { active ->
+                    shearGestureActive = active
+                    if (!active) {
+                        viewModel.setFocusedShear(shearPreviewX, shearPreviewY)
+                        shearDraftChanged = false
+                    }
+                },
+            )
+            ContinuousParameterControl(
+                label = "Shear Y · \\fay",
+                valueText = shearYText,
+                onValueTextChange = {
+                    shearYText = it
+                    shearDraftChanged = true
+                },
+                range = -2f..2f,
+                step = 0.05,
+                supportingText = if (geometry.shearY != null) "Event override：${geometry.shearY}" else "无 override：0",
+                onPreview = { fy ->
+                    val fx = shearXText.toDoubleOrNull() ?: 0.0
+                    shearPreviewX = fx
+                    shearPreviewY = fy
+                    viewModel.previewFocusedShear(fx, fy)
+                },
+                onGestureActive = { active ->
+                    shearGestureActive = active
+                    if (!active) {
+                        viewModel.setFocusedShear(shearPreviewX, shearPreviewY)
+                        shearDraftChanged = false
+                    }
+                },
+            )
+            if (geometry.shearX != null || geometry.shearY != null) {
+                TextButton(onClick = {
+                    shearDraftChanged = false
+                    shearGestureActive = false
+                    shearXText = "0"
+                    shearYText = "0"
+                    shearPreviewX = 0.0
+                    shearPreviewY = 0.0
+                    viewModel.clearFocusedShear()
+                }) { Text("清除 Shear override") }
+            }
+            Text(
+                if (geometry.positionMode == AssPositionMode.MOVE || geometry.positionMode == AssPositionMode.CONFLICT) {
+                    "运动/冲突位置下保留精确值和 Slider；画布 Shear gizmo 暂只用于静态位置。"
+                } else {
+                    "静态位置下，参数框的上边控制点编辑 \\fax，右边控制点编辑 \\fay；它仍是参数示意，不是字形真实边界。"
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        item { Divider() }
+        item {
+            Text("矩形裁剪 · \\clip / \\iclip", style = MaterialTheme.typography.titleSmall)
+            Text(
+                "\\clip 只显示矩形内部；\\iclip 相反，会隐藏矩形内部。矩形坐标使用 ASS Script Resolution，不跟随字幕的旋转或移动坐标系。",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            when {
+                geometry.clipNonRectangular -> {
+                    Text(
+                        "当前 Event 使用非矩形 / vector ${if (geometry.clipInverted) "\\iclip" else "\\clip"}。0.26 的矩形编辑器不会自动重写它。",
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small)) {
+                        OutlinedButton(onClick = viewModel::clearFocusedClip) { Text("移除现有 clip") }
+                        Button(onClick = {
+                            viewModel.setFocusedRectClip(
+                                state.document.playResX * 0.1,
+                                state.document.playResY * 0.1,
+                                state.document.playResX * 0.9,
+                                state.document.playResY * 0.9,
+                                geometry.clipInverted,
+                            )
+                        }) { Text("明确替换为矩形") }
+                    }
+                }
+                geometry.clipRect != null -> {
+                    val clipRect = requireNotNull(geometry.clipRect)
+                    Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small)) {
+                        FilterChip(
+                            selected = !geometry.clipInverted,
+                            onClick = {
+                                viewModel.setFocusedRectClip(clipRect.left, clipRect.top, clipRect.right, clipRect.bottom, false)
+                            },
+                            label = { Text("\\clip · 内部显示") },
+                        )
+                        FilterChip(
+                            selected = geometry.clipInverted,
+                            onClick = {
+                                viewModel.setFocusedRectClip(clipRect.left, clipRect.top, clipRect.right, clipRect.bottom, true)
+                            },
+                            label = { Text("\\iclip · 内部隐藏") },
+                        )
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small)) {
+                        OutlinedTextField(clipLeftText, { clipLeftText = it; clipDraftChanged = true }, label = { Text("Left") }, singleLine = true, modifier = Modifier.weight(1f))
+                        OutlinedTextField(clipTopText, { clipTopText = it; clipDraftChanged = true }, label = { Text("Top") }, singleLine = true, modifier = Modifier.weight(1f))
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small)) {
+                        OutlinedTextField(clipRightText, { clipRightText = it; clipDraftChanged = true }, label = { Text("Right") }, singleLine = true, modifier = Modifier.weight(1f))
+                        OutlinedTextField(clipBottomText, { clipBottomText = it; clipDraftChanged = true }, label = { Text("Bottom") }, singleLine = true, modifier = Modifier.weight(1f))
+                    }
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                        TextButton(onClick = viewModel::clearFocusedClip) { Text("移除 clip") }
+                        Button(onClick = {
+                            val left = clipLeftText.toDoubleOrNull()
+                            val top = clipTopText.toDoubleOrNull()
+                            val right = clipRightText.toDoubleOrNull()
+                            val bottom = clipBottomText.toDoubleOrNull()
+                            if (left != null && top != null && right != null && bottom != null) {
+                                clipDraftChanged = false
+                                viewModel.setFocusedRectClip(left, top, right, bottom, geometry.clipInverted)
+                            }
+                        }) { Text("应用矩形") }
+                    }
+                    Text(
+                        "预览中四个角均可直接拖动；拖动只改矩形裁剪坐标，不会改字幕本身的位置、旋转或缩放。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                else -> {
+                    Text(
+                        "当前没有裁剪。新增矩形默认使用画布中央 80% 区域，随后可拖四角或输入精确坐标。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small)) {
+                        Button(onClick = {
+                            viewModel.setFocusedRectClip(
+                                state.document.playResX * 0.1,
+                                state.document.playResY * 0.1,
+                                state.document.playResX * 0.9,
+                                state.document.playResY * 0.9,
+                                false,
+                            )
+                        }) { Text("添加 \\clip") }
+                        OutlinedButton(onClick = {
+                            viewModel.setFocusedRectClip(
+                                state.document.playResX * 0.1,
+                                state.document.playResY * 0.1,
+                                state.document.playResX * 0.9,
+                                state.document.playResY * 0.9,
+                                true,
+                            )
+                        }) { Text("添加 \\iclip") }
                     }
                 }
             }
