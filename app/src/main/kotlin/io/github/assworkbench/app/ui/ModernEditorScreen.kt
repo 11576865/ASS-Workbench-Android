@@ -39,6 +39,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.TextFieldValue
@@ -87,7 +89,7 @@ fun ModernEditorScreen(
     var toolName by rememberSaveable { mutableStateOf(WorkbenchTool.TEXT.name) }
     var supportingOpen by rememberSaveable { mutableStateOf(false) }
     var openSurfaceNames by rememberSaveable {
-        mutableStateOf(setOf(WorkbenchTool.POSITION.name, WorkbenchTool.STYLE.name))
+        mutableStateOf(emptySet<String>())
     }
     var surfacesTemporarilyHidden by rememberSaveable { mutableStateOf(false) }
     var hiddenSurfaceSnapshot by rememberSaveable { mutableStateOf(emptySet<String>()) }
@@ -882,7 +884,11 @@ private fun TooltipIconButton(
         tooltip = { PlainTooltip { Text(label) } },
         state = rememberTooltipState(),
     ) {
-        IconButton(onClick = onClick, enabled = enabled) { content() }
+        IconButton(
+            onClick = onClick,
+            enabled = enabled,
+            modifier = Modifier.semantics { contentDescription = label },
+        ) { content() }
     }
 }
 
