@@ -261,16 +261,16 @@ class EditorRegressionInstrumentedTest {
 
         composeRule.onNodeWithContentDescription("隐藏全部浮层").performClick()
         composeRule.waitUntil(timeoutMillis = 5_000) {
-            !composeRule.onAllNodesWithTag("surface-POSITION")
+            composeRule.onAllNodesWithTag("surface-drag-POSITION")
                 .fetchSemanticsNodes(atLeastOneRootRequired = false)
-                .any { it.layoutInfo.isPlaced }
+                .isEmpty()
         }
 
         composeRule.onNodeWithContentDescription("呼回全部浮层").performClick()
         composeRule.waitUntil(timeoutMillis = 5_000) {
-            composeRule.onAllNodesWithTag("surface-POSITION")
+            composeRule.onAllNodesWithTag("surface-drag-POSITION")
                 .fetchSemanticsNodes(atLeastOneRootRequired = false)
-                .any { it.layoutInfo.isPlaced }
+                .isNotEmpty()
         }
         composeRule.onNodeWithTag("surface-POSITION").assertIsDisplayed()
         composeRule.onNodeWithTag("surface-FONTS").assertIsDisplayed()
