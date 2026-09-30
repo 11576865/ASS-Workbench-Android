@@ -9,6 +9,7 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -36,6 +37,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -45,6 +47,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -70,16 +73,20 @@ internal enum class FloatingSurfaceSize {
 
 @Stable
 internal class WorkbenchSurfaceController {
-    private val offsets = mutableStateMapOf<String, Offset>()
+    // Position lives in its own MutableState and is read from graphicsLayer.
+    // Drag frames therefore invalidate only the layer transform instead of
+    // recomposing / remeasuring the complete tool subtree.
+    private val offsets = mutableMapOf<String, MutableState<Offset>>()
     private val sizes = mutableStateMapOf<String, FloatingSurfaceSize>()
     private val zOrders = mutableStateMapOf<String, Int>()
     private var nextZ by mutableIntStateOf(10)
 
-    fun offset(id: String, fallback: Offset): Offset = offsets[id] ?: fallback
+    fun offsetState(id: String, fallback: Offset): MutableState<Offset> =
+        offsets.getOrPut(id) { mutableStateOf(fallback) }
 
     fun moveBy(id: String, delta: Offset, fallback: Offset) {
-        offsets[id] = offset(id, fallback) + delta
-        bringToFront(id)
+        val state = offsetState(id, fallback)
+        state.value += delta
     }
 
     fun resetOffset(id: String) {
@@ -149,18 +156,27 @@ internal fun FloatingWorkbenchSurface(
             val actualWidth = minOf(desiredWidth, (maxW - 16.dp).coerceAtLeast(220.dp))
             val actualHeight = minOf(desiredHeight, (maxH - 16.dp).coerceAtLeast(160.dp))
             val fallback = initialOffset
-            val offset = controller.offset(id, fallback)
+            val offsetState = remember(id, fallback) { controller.offsetState(id, fallback) }
 
             Surface(
                 modifier = Modifier
-                    .offset { IntOffset(offset.x.roundToInt(), offset.y.roundToInt()) }
+                    .graphicsLayer {
+                        val offset = offsetState.value
+                        translationX = offset.x
+                        translationY = offset.y
+                    }
                     .pointerInput(id) {
                         awaitPointerEventScope {
                             while (true) {
-                                val event = awaitPointerEvent(PointerEventPass.Initial)
-                                if (event.changes.any { it.pressed }) {
-                                    controller.bringToFront(id)
-                                }
+                                awaitFirstDown(
+                                    requireUnconsumed = false,
+                                    pass = PointerEventPass.Initial,
+                                )
+                                // Raise once per gesture, not on every pointer event.
+                                controller.bringToFront(id)
+                                do {
+                                    val event = awaitPointerEvent(PointerEventPass.Initial)
+                                } while (event.changes.any { it.pressed })
                             }
                         }
                     }
