@@ -283,7 +283,7 @@ fun ModernEditorScreen(
                     maxWidth * 0.43f,
                     ((maxHeight * 0.56f - WorkbenchDimens.TransportHeight).coerceAtLeast(140.dp)) * (16f / 9f),
                     maxWidth - 320.dp,
-                )
+                ).coerceAtLeast(minOf(280.dp, maxWidth - 320.dp))
                 val previewHeight = (maxHeight * 0.28f).coerceAtMost(220.dp)
                 val preview: @Composable (Modifier) -> Unit = { paneModifier ->
                     Surface(paneModifier, shape = RoundedCornerShape(12.dp),

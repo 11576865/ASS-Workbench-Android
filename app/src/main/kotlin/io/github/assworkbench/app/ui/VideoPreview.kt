@@ -1586,6 +1586,7 @@ private fun PlaybackBar(
 
     BoxWithConstraints {
     val showMetrics = maxWidth >= 560.dp
+    val showClock = maxWidth >= 440.dp
     CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides WorkbenchDimens.MinTouchTarget) {
         Row(
             Modifier.fillMaxWidth()
@@ -1620,7 +1621,7 @@ private fun PlaybackBar(
             }) {
                 Text("+1帧", style = MaterialTheme.typography.labelSmall)
             }
-            Text(formatClock(displayPosition), style = MaterialTheme.typography.labelSmall)
+            if (showClock) Text(formatClock(displayPosition), style = MaterialTheme.typography.labelSmall)
             estimatedFrameNumber?.takeIf { showMetrics && it >= 0L }?.let { frameNumber ->
                 Text(
                     "F$frameNumber",
@@ -1635,7 +1636,7 @@ private fun PlaybackBar(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            actionHint?.let {
+            actionHint?.takeIf { showMetrics }?.let {
                 Text(
                     it,
                     style = MaterialTheme.typography.labelSmall,
@@ -1659,7 +1660,7 @@ private fun PlaybackBar(
                 onOpenTimeline = onOpenTimeline,
                 modifier = Modifier.weight(1f).height(WorkbenchDimens.TransportHeight),
             )
-            Text(formatClock(duration), style = MaterialTheme.typography.labelSmall)
+            if (showClock) Text(formatClock(duration), style = MaterialTheme.typography.labelSmall)
         }
     }
     }
