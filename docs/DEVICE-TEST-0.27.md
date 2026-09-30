@@ -15,6 +15,26 @@ Compare them with the SHA-bearing `build-identity.txt` shipped beside the APK. A
 
 A result is not attributable if these identities do not match.
 
+## Deterministic ASS fixtures
+
+Generate the checked-in test corpus locally before the device pass:
+
+```text
+python3 tools/generate_device_fixtures.py
+```
+
+The default output is `build/device-fixtures-0.27/` and contains a SHA-256 manifest. Use these files where applicable:
+
+- `baseline.ass` → D02;
+- `renderer-risk-extreme-numeric.ass` → D03;
+- `renderer-risk-extreme-drawing.ass` and `renderer-risk-oversized-vector-clip.ass` → D04;
+- `renderer-performance-heavy-move.ass` → D19;
+- `compose-long-event-list.ass` → D20.
+
+The generator is deterministic: record the generated `manifest.txt` with test results. MKV/font/codec cases still require representative external media because those properties cannot be encoded in an ASS-only fixture.
+
+A results template is available at `docs/DEVICE-TEST-RESULTS.template.md`.
+
 ## Device pass
 
 | ID | Procedure | Pass condition |

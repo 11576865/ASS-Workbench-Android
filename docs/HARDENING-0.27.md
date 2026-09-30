@@ -247,6 +247,6 @@ The 0.27 version bump is permitted only after:
 1. P0 cases are either fixed or demonstrated not to affect the shipped path;
 2. Android CI and the Fontconfig production workflow are green on the release-candidate commit;
 3. the destructive corpus has no unexplained preservation regression;
-4. a physical-device pass covers startup, open/save, MKV write-back, selected font packaging, preview, waveform failure behaviour, orientation, recovery and save/reopen;
+4. a physical-device pass covers startup, open/save, MKV write-back, selected font packaging, preview, waveform failure behaviour, orientation, recovery and save/reopen, with results retained from `docs/DEVICE-TEST-RESULTS.template.md`;
 5. the build identity shown in Diagnostics matches the distributed APK and its SHA-bearing build-identity manifest;
 6. remaining limitations are documented rather than silently hidden.
