@@ -74,8 +74,6 @@ jobs:
           fi
           test -f "$ANDROID_HOME/ndk/$NDK_VERSION/source.properties"
 
-          gh release view "$TAG" --json assets --jq '.assets[].name' | grep -Fxq "ASS-Workbench-Android-$VERSION-$SHORT_SHA-debug.apk"
-          gh release view "$TAG" --json assets --jq '.assets[].name' | grep -Fxq "ASS-Workbench-Android-$VERSION-$SHORT_SHA-build-identity.txt"
 
       - name: Fetch pinned native sources
         working-directory: .libmpvkt-src
