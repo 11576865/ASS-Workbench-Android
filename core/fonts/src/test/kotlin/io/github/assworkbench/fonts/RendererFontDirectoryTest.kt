@@ -1,5 +1,6 @@
 package io.github.assworkbench.fonts
 
+import java.io.File
 import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
