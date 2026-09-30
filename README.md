@@ -82,7 +82,13 @@ CI builds embed:
 - the source commit SHA;
 - the GitHub Actions run number.
 
-The same identity is visible in the in-app **Diagnostics** surface. CI APK filenames also carry the short commit SHA so a test APK can be traced back to its exact source even while 0.26 remains a rolling construction prerelease.
+The same identity is visible in the in-app **Diagnostics** surface. Release APK filenames and manually requested temporary bundles carry the short commit SHA so a test APK can be traced back to its exact source even while 0.26 remains a rolling construction prerelease.
+
+## Actions artifact policy
+
+Routine push and pull-request workflows retain no GitHub Actions artifacts. Long-lived device-test APKs, build identity and deterministic fixture bundles belong to the canonical GitHub prerelease.
+
+`workflow_dispatch` is the only path that may expose short-lived Actions artifacts, and those bundles use a **1-day retention**. Dependency/build caches remain separate from this policy and are not disabled.
 
 ## Build stack
 
