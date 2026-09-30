@@ -49,6 +49,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
@@ -164,6 +165,7 @@ internal fun FloatingWorkbenchSurface(
                 Column {
                     Row(
                         Modifier
+                            .testTag("surface-drag-$id")
                             .background(MaterialTheme.colorScheme.surfaceContainerHighest)
                             .pointerInput(id) {
                                 detectDragGestures(
