@@ -90,7 +90,7 @@ import java.io.File
 import java.util.concurrent.atomic.AtomicLong
 
 @Composable
-fun VideoPreview(
+internal fun VideoPreview(
     videoUri: String?,
     document: AssDocument,
     renderDocument: AssDocument = document,
@@ -1122,8 +1122,8 @@ private fun PositionDragOverlay(
                         (py / document.playResY.coerceAtLeast(1) * h).toFloat(),
                     )
                 fun docDelta(delta: Offset): Pair<Double, Double> =
-                    (delta.x / w * document.playResX.coerceAtLeast(1)) to
-                        (delta.y / h * document.playResY.coerceAtLeast(1))
+                    (delta.x / w * document.playResX.coerceAtLeast(1)).toDouble() to
+                        (delta.y / h * document.playResY.coerceAtLeast(1)).toDouble()
                 val baseOffset = with(moveProxyDensity) { Offset(118.dp.toPx(), 34.dp.toPx()) }
                 val handles = mutableListOf<InteractionProxySpec>()
                 handles += InteractionProxySpec(
@@ -1355,7 +1355,7 @@ private fun PositionDragOverlay(
                     (py / playResYProxy * h).toFloat(),
                 )
             fun documentDelta(delta: Offset): Pair<Double, Double> =
-                (delta.x / w * playResXProxy) to (delta.y / h * playResYProxy)
+                (delta.x / w * playResXProxy).toDouble() to (delta.y / h * playResYProxy).toDouble()
             val preferred = with(proxyDensity) { Offset(118.dp.toPx(), 34.dp.toPx()) }
             val handles = mutableListOf<InteractionProxySpec>()
             handles += InteractionProxySpec(
@@ -1767,7 +1767,7 @@ private fun RectClipOverlay(
                     (py / playResY * h).toFloat(),
                 )
             fun docDelta(delta: Offset): Pair<Double, Double> =
-                (delta.x / w * playResX) to (delta.y / h * playResY)
+                (delta.x / w * playResX).toDouble() to (delta.y / h * playResY).toDouble()
             val base = with(clipProxyDensity) { Offset(104.dp.toPx(), 34.dp.toPx()) }
             fun handle(
                 index: Int,
