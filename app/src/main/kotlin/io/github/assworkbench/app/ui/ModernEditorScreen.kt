@@ -130,19 +130,20 @@ fun ModernEditorScreen(
         next == WorkbenchTool.TEXT || next == WorkbenchTool.EFFECTS || next == WorkbenchTool.EVENT
 
     fun openTool(next: WorkbenchTool) {
-        toolName = next.name
-        supportingOpen = true
-        if (!isInlineOwner(next)) {
-            openSurfaceNames = openSurfaceNames + next.name
-            surfacesTemporarilyHidden = false
-            surfaceController.bringToFront(next.name)
+        if (isInlineOwner(next)) {
+            toolName = next.name
+            supportingOpen = true
+            return
         }
+        openSurfaceNames = openSurfaceNames + next.name
+        surfacesTemporarilyHidden = false
+        surfaceController.bringToFront(next.name)
     }
 
     fun toggleTool(next: WorkbenchTool) {
-        toolName = next.name
-        supportingOpen = true
         if (isInlineOwner(next)) {
+            toolName = next.name
+            supportingOpen = true
             return
         }
         openSurfaceNames = if (next.name in openSurfaceNames) {
