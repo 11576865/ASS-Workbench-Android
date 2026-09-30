@@ -49,6 +49,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.SideEffect
 import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -62,6 +63,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.IntSize
 import io.github.assworkbench.app.BuildConfig
 import io.github.assworkbench.app.StartupProbe
 import io.github.assworkbench.domain.AssCodec
@@ -1250,8 +1252,122 @@ private fun PositionDragOverlay(
         onDispose { onCancel() }
     }
 
+    val proxyOwner = "position-${event.id}"
+    ClearInteractionOwnerOnDispose(interactionRegistry, proxyOwner)
+    val proxyDensity = androidx.compose.ui.platform.LocalDensity.current
+    var overlayOriginInWindow by remember(event.id) { mutableStateOf(Offset.Zero) }
+    var overlaySizePx by remember(event.id) { mutableStateOf(IntSize.Zero) }
+    val playResXProxy = document.playResX.coerceAtLeast(1)
+    val playResYProxy = document.playResY.coerceAtLeast(1)
+    SideEffect {
+        val registry = interactionRegistry
+        if (registry != null && overlaySizePx.width > 0 && overlaySizePx.height > 0) {
+            val w = overlaySizePx.width.toFloat()
+            val h = overlaySizePx.height.toFloat()
+            fun target(px: Double, py: Double): Offset =
+                overlayOriginInWindow + Offset(
+                    (px / playResXProxy * w).toFloat(),
+                    (py / playResYProxy * h).toFloat(),
+                )
+            fun documentDelta(delta: Offset): Pair<Double, Double> =
+                (delta.x / w * playResXProxy) to (delta.y / h * playResYProxy)
+            val preferred = with(proxyDensity) { Offset(118.dp.toPx(), 34.dp.toPx()) }
+            val handles = mutableListOf<InteractionProxySpec>()
+            handles += InteractionProxySpec(
+                id = "$proxyOwner-pos",
+                label = "位置",
+                targetInWindow = target(x, y),
+                preferredOffsetPx = preferred,
+                onDragDelta = { delta ->
+                    val (dx, dy) = documentDelta(delta)
+                    x += dx
+                    y += dy
+                    onPreview(x, y)
+                },
+                onCommit = { onCommit(x, y) },
+                onCancel = onCancel,
+            )
+            if (originX != null && originY != null) {
+                handles += InteractionProxySpec(
+                    id = "$proxyOwner-org",
+                    label = "原点",
+                    targetInWindow = target(originX!!, originY!!),
+                    preferredOffsetPx = preferred + Offset(0f, with(proxyDensity) { 66.dp.toPx() }),
+                    onDragDelta = { delta ->
+                        val (dx, dy) = documentDelta(delta)
+                        originX = originX!! + dx
+                        originY = originY!! + dy
+                        onPreviewOrigin(originX!!, originY!!)
+                    },
+                    onCommit = { onCommitOrigin(originX!!, originY!!) },
+                    onCancel = onCancel,
+                )
+            }
+            handles += InteractionProxySpec(
+                id = "$proxyOwner-rotation",
+                label = "旋转",
+                targetInWindow = target(originX ?: x, originY ?: y),
+                preferredOffsetPx = preferred + Offset(0f, with(proxyDensity) { 132.dp.toPx() }),
+                onDragDelta = { delta ->
+                    directRotation = (displayRotation + delta.x * 0.35).coerceIn(-3600.0, 3600.0)
+                    onPreviewRotation(directRotation!!)
+                },
+                onCommit = { directRotation?.let(onCommitRotation) },
+                onCancel = onCancel,
+            )
+            handles += InteractionProxySpec(
+                id = "$proxyOwner-scale",
+                label = "缩放",
+                targetInWindow = target(x, y),
+                preferredOffsetPx = preferred + Offset(with(proxyDensity) { 78.dp.toPx() }, 0f),
+                onDragDelta = { delta ->
+                    val sx = (displayScaleX + delta.x * 0.45).coerceIn(1.0, 1000.0)
+                    val syCandidate = (displayScaleY - delta.y * 0.45).coerceIn(1.0, 1000.0)
+                    if (scaleLocked) {
+                        val merged = ((sx + syCandidate) / 2.0).coerceIn(1.0, 1000.0)
+                        directScaleX = merged
+                        directScaleY = merged
+                    } else {
+                        directScaleX = sx
+                        directScaleY = syCandidate
+                    }
+                    onPreviewScale(directScaleX!!, directScaleY!!)
+                },
+                onCommit = {
+                    if (directScaleX != null && directScaleY != null) {
+                        onCommitScale(directScaleX!!, directScaleY!!)
+                    }
+                },
+                onCancel = onCancel,
+            )
+            handles += InteractionProxySpec(
+                id = "$proxyOwner-shear",
+                label = "倾斜",
+                targetInWindow = target(x, y),
+                preferredOffsetPx = preferred + Offset(with(proxyDensity) { 78.dp.toPx() }, with(proxyDensity) { 66.dp.toPx() }),
+                onDragDelta = { delta ->
+                    directShearX = (displayShearX + delta.x / 260f).coerceIn(-10.0, 10.0)
+                    directShearY = (displayShearY + delta.y / 260f).coerceIn(-10.0, 10.0)
+                    onPreviewShear(directShearX!!, directShearY!!)
+                },
+                onCommit = {
+                    if (directShearX != null && directShearY != null) {
+                        onCommitShear(directShearX!!, directShearY!!)
+                    }
+                },
+                onCancel = onCancel,
+            )
+            registry.publish(proxyOwner, handles)
+        }
+    }
+
     BoxWithConstraints(
-        modifier.pointerInput(event.id, document.playResX, document.playResY, scaleLocked) {
+        modifier
+            .onGloballyPositioned {
+                overlayOriginInWindow = it.positionInWindow()
+                overlaySizePx = it.size
+            }
+            .pointerInput(event.id, document.playResX, document.playResY, scaleLocked) {
             var activeHandle = 0 // 1=position, 2=origin, 3=rotation, 4=scale, 5=fax, 6=fay
             var lastPreviewAt = 0L
             var scaleStartX = displayScaleX
