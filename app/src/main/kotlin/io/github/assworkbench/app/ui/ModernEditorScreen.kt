@@ -3509,7 +3509,7 @@ private fun PositionPane(
                         style = MaterialTheme.typography.bodySmall,
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small)) {
-                        OutlinedButton(onClick = viewModel::clearFocusedClip) { Text("移除现有 clip") }
+                        OutlinedButton(onClick = { viewModel.clearEventClip(event.id) }) { Text("移除现有 clip") }
                         Button(onClick = {
                             viewModel.setEventRectClip(event.id, 
                                 state.document.playResX * 0.1,
@@ -3548,7 +3548,7 @@ private fun PositionPane(
                         OutlinedTextField(clipBottomText, { clipBottomText = it; clipDraftChanged = true }, label = { Text("Bottom") }, singleLine = true, modifier = Modifier.weight(1f))
                     }
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                        TextButton(onClick = viewModel::clearFocusedClip) { Text("移除 clip") }
+                        TextButton(onClick = { viewModel.clearEventClip(event.id) }) { Text("移除 clip") }
                         Button(onClick = {
                             val left = clipLeftText.toDoubleOrNull()
                             val top = clipTopText.toDoubleOrNull()
