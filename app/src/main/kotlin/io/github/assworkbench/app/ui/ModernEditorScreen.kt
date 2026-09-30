@@ -36,6 +36,8 @@ import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextRange
@@ -43,6 +45,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import kotlin.math.roundToInt
 import io.github.assworkbench.app.BuildConfig
 import io.github.assworkbench.app.EditorState
 import io.github.assworkbench.app.EditorViewModel
@@ -57,9 +60,17 @@ import kotlinx.coroutines.withContext
 import kotlin.math.abs
 
 private enum class WorkbenchTool(val title: String) {
+    INVENTORY("功能总览"),
     TEXT("正文"), TIMELINE("时间轴"), STYLE("样式"), POSITION("位置"),
     EFFECTS("效果"), EVENT("事件"), FONTS("字体"), QC("检查"), BATCH("批量"),
     PROJECT("项目"), DIAGNOSTICS("诊断"),
+}
+
+private enum class PreviewWorkspaceMode(val title: String) {
+    NORMAL("工作台"),
+    FOCUS("预览聚焦"),
+    MANIPULATION("操控"),
+    FLOATING("浮动视频"),
 }
 
 private enum class DestructiveWorkspaceAction { OPEN_ASS, NEW_ASS }
@@ -98,13 +109,29 @@ fun ModernEditorScreen(
             },
         )
     }
+    var previewModeName by rememberSaveable { mutableStateOf(PreviewWorkspaceMode.NORMAL.name) }
+    var openSurfaceNames by rememberSaveable { mutableStateOf(WorkbenchTool.INVENTORY.name) }
+    var floatingSurfacesHidden by rememberSaveable { mutableStateOf(false) }
+    val floatingSurfaceOffsetsDp = remember { mutableStateMapOf<String, Offset>() }
+    val floatingSurfaceExpanded = remember { mutableStateMapOf<String, Boolean>() }
+    val floatingSurfaceZ = remember { mutableStateMapOf<String, Float>() }
+    var nextFloatingSurfaceZ by remember { mutableStateOf(10f) }
+    var floatingVideoOffsetDp by remember { mutableStateOf(Offset(36f, 72f)) }
+    var floatingVideoExpanded by remember { mutableStateOf(false) }
     var searchOpen by rememberSaveable { mutableStateOf(false) }
     var openMenu by remember { mutableStateOf(false) }
     var saveConfirmOpen by remember { mutableStateOf(false) }
     var mkvConfirmOpen by remember { mutableStateOf(false) }
     var destructiveWorkspaceAction by remember { mutableStateOf<DestructiveWorkspaceAction?>(null) }
 
-    val tool = WorkbenchTool.entries.firstOrNull { it.name == toolName } ?: WorkbenchTool.TIMELINE
+    val tool = WorkbenchTool.entries.firstOrNull { it.name == toolName } ?: WorkbenchTool.TEXT
+    val previewMode = PreviewWorkspaceMode.entries.firstOrNull { it.name == previewModeName }
+        ?: PreviewWorkspaceMode.NORMAL
+    val openSurfaces = remember(openSurfaceNames) {
+        openSurfaceNames.split(';').mapNotNull { name ->
+            WorkbenchTool.entries.firstOrNull { it.name == name }
+        }.toSet()
+    }
     val issues by produceState<List<AssQcIssue>>(initialValue = emptyList(), state.document) {
         value = withContext(Dispatchers.Default) {
             AssQualityCheck.inspect(state.document)
@@ -112,18 +139,29 @@ fun ModernEditorScreen(
     }
     val issuesByEvent = remember(issues) { issues.groupBy { it.eventId } }
 
+    fun setOpenSurfaces(next: Set<WorkbenchTool>) {
+        openSurfaceNames = next.joinToString(";") { it.name }
+    }
+
+    fun raiseSurface(next: WorkbenchTool) {
+        nextFloatingSurfaceZ += 1f
+        floatingSurfaceZ[next.name] = nextFloatingSurfaceZ
+    }
+
     fun openTool(next: WorkbenchTool) {
         toolName = next.name
         supportingOpen = true
+        if (next !in openSurfaces) setOpenSurfaces(openSurfaces + next)
+        floatingSurfacesHidden = false
+        raiseSurface(next)
     }
 
     fun toggleTool(next: WorkbenchTool) {
-        if (supportingOpen && tool == next) {
-            supportingOpen = false
-        } else {
-            toolName = next.name
-            supportingOpen = true
-        }
+        toolName = next.name
+        supportingOpen = true
+        setOpenSurfaces(if (next in openSurfaces) openSurfaces - next else openSurfaces + next)
+        floatingSurfacesHidden = false
+        if (next !in openSurfaces) raiseSurface(next)
     }
 
     MaterialTheme(colorScheme = workbenchColors(darkTheme)) {
@@ -283,11 +321,28 @@ fun ModernEditorScreen(
                 )
             }
 
-            WorkbenchToolStrip(tool, ::openTool, previewVisible,
-                { previewVisible = !previewVisible }, themeMode) {
-                themeMode = when (themeMode) { "system" -> "dark"; "dark" -> "light"; else -> "system" }
-                preferences.edit().putString("theme", themeMode).apply()
-            }
+            WorkbenchToolStrip(
+                selected = tool,
+                openSurfaces = openSurfaces,
+                onTool = ::toggleTool,
+                previewVisible = previewVisible,
+                onPreviewToggle = { previewVisible = !previewVisible },
+                previewMode = previewMode,
+                onPreviewMode = { mode ->
+                    previewModeName = mode.name
+                    previewVisible = true
+                    if (mode == PreviewWorkspaceMode.MANIPULATION) {
+                        openTool(WorkbenchTool.POSITION)
+                    }
+                },
+                floatingSurfacesHidden = floatingSurfacesHidden,
+                onToggleAllSurfaces = { floatingSurfacesHidden = !floatingSurfacesHidden },
+                themeMode = themeMode,
+                onThemeToggle = {
+                    themeMode = when (themeMode) { "system" -> "dark"; "dark" -> "light"; else -> "system" }
+                    preferences.edit().putString("theme", themeMode).apply()
+                },
+            )
             BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
                 val landscape = maxWidth > maxHeight && maxWidth >= 600.dp
                 val density = LocalDensity.current
@@ -312,8 +367,11 @@ fun ModernEditorScreen(
                         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                     ) {
                         WorkbenchPreview(
-                            state, viewModel, supportingOpen && tool == WorkbenchTool.POSITION,
-                            onOpenReferenceVideo, { openTool(WorkbenchTool.TIMELINE) },
+                            state,
+                            viewModel,
+                            previewMode == PreviewWorkspaceMode.MANIPULATION || WorkbenchTool.POSITION in openSurfaces,
+                            onOpenReferenceVideo,
+                            { openTool(WorkbenchTool.TIMELINE) },
                             rendererEnabled, onEnableRenderer,
                             onVideoAspectRatio = { reported ->
                                 if (reported.isFinite() && reported in 0.25f..4.0f) {
@@ -338,58 +396,121 @@ fun ModernEditorScreen(
                         )
                     }
                 }
-                if (landscape) {
-                    Row(
-                        Modifier.fillMaxSize().padding(8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(paneGap),
-                    ) {
-                        if (previewVisible) {
-                            preview(
-                                Modifier
-                                    .width(previewWidth)
-                                    .fillMaxHeight()
-                                    .testTag("preview-workspace"),
-                            )
-                            Box(
-                                Modifier
-                                    .width(splitHandleWidth)
-                                    .fillMaxHeight()
-                                    .testTag("preview-divider")
-                                    .pointerInput(minPreviewWidth, maxPreviewWidth) {
-                                        detectHorizontalDragGestures(
-                                            onHorizontalDrag = { change, dragAmount ->
-                                                change.consume()
-                                                val currentWidth = landscapePreviewWidthDp?.dp ?: previewWidth
-                                                val delta = with(density) { dragAmount.toDp() }
-                                                landscapePreviewWidthDp = (currentWidth + delta)
-                                                    .coerceIn(minPreviewWidth, maxPreviewWidth)
-                                                    .value
-                                            },
-                                            onDragEnd = {
-                                                landscapePreviewWidthDp?.let { value ->
-                                                    preferences.edit()
-                                                        .putFloat("landscape-preview-width-dp", value)
-                                                        .apply()
-                                                }
-                                            },
+                AnimatedContent(
+                    targetState = previewMode,
+                    transitionSpec = { fadeIn() togetherWith fadeOut() },
+                    label = "preview-workspace-mode",
+                    modifier = Modifier.fillMaxSize(),
+                ) { mode ->
+                    when (mode) {
+                        PreviewWorkspaceMode.NORMAL -> {
+                            if (landscape) {
+                                Row(
+                                    Modifier.fillMaxSize().padding(8.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(paneGap),
+                                ) {
+                                    if (previewVisible) {
+                                        preview(
+                                            Modifier
+                                                .width(previewWidth)
+                                                .fillMaxHeight()
+                                                .testTag("preview-workspace"),
                                         )
-                                    },
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                VerticalDivider(
-                                    Modifier
-                                        .width(1.dp)
-                                        .fillMaxHeight(0.18f),
-                                    color = MaterialTheme.colorScheme.outlineVariant,
-                                )
+                                        Box(
+                                            Modifier
+                                                .width(splitHandleWidth)
+                                                .fillMaxHeight()
+                                                .testTag("preview-divider")
+                                                .pointerInput(minPreviewWidth, maxPreviewWidth) {
+                                                    detectHorizontalDragGestures(
+                                                        onHorizontalDrag = { change, dragAmount ->
+                                                            change.consume()
+                                                            val currentWidth = landscapePreviewWidthDp?.dp ?: previewWidth
+                                                            val delta = with(density) { dragAmount.toDp() }
+                                                            landscapePreviewWidthDp = (currentWidth + delta)
+                                                                .coerceIn(minPreviewWidth, maxPreviewWidth)
+                                                                .value
+                                                        },
+                                                        onDragEnd = {
+                                                            landscapePreviewWidthDp?.let { value ->
+                                                                preferences.edit()
+                                                                    .putFloat("landscape-preview-width-dp", value)
+                                                                    .apply()
+                                                            }
+                                                        },
+                                                    )
+                                                },
+                                            contentAlignment = Alignment.Center,
+                                        ) {
+                                            VerticalDivider(
+                                                Modifier.width(1.dp).fillMaxHeight(0.18f),
+                                                color = MaterialTheme.colorScheme.outlineVariant,
+                                            )
+                                        }
+                                    }
+                                    editor(Modifier.weight(1f).fillMaxHeight())
+                                }
+                            } else {
+                                Column(
+                                    Modifier.fillMaxSize().padding(8.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                                ) {
+                                    if (previewVisible) {
+                                        preview(
+                                            Modifier
+                                                .fillMaxWidth()
+                                                .height(previewHeight)
+                                                .testTag("preview-workspace"),
+                                        )
+                                    }
+                                    editor(Modifier.weight(1f).fillMaxWidth())
+                                }
                             }
                         }
-                        editor(Modifier.weight(1f).fillMaxHeight())
+                        PreviewWorkspaceMode.FOCUS,
+                        PreviewWorkspaceMode.MANIPULATION -> {
+                            Box(Modifier.fillMaxSize().padding(8.dp)) {
+                                if (previewVisible) {
+                                    preview(Modifier.fillMaxSize().testTag("preview-workspace"))
+                                }
+                            }
+                        }
+                        PreviewWorkspaceMode.FLOATING -> {
+                            editor(Modifier.fillMaxSize().padding(8.dp))
+                        }
                     }
-                } else {
-                    Column(Modifier.fillMaxSize().padding(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        if (previewVisible) preview(Modifier.fillMaxWidth().height(previewHeight).testTag("preview-workspace"))
-                        editor(Modifier.weight(1f).fillMaxWidth())
+                }
+
+                FloatingWorkbenchLayer(
+                    state = state,
+                    viewModel = viewModel,
+                    issues = issues,
+                    openTools = openSurfaces,
+                    hidden = floatingSurfacesHidden,
+                    offsetsDp = floatingSurfaceOffsetsDp,
+                    expanded = floatingSurfaceExpanded,
+                    zOrder = floatingSurfaceZ,
+                    onOffsetChange = { name, value -> floatingSurfaceOffsetsDp[name] = value },
+                    onExpandedChange = { name, value -> floatingSurfaceExpanded[name] = value },
+                    onRaise = { floatingSurfaceZ[it.name] = ++nextFloatingSurfaceZ },
+                    onClose = { setOpenSurfaces(openSurfaces - it) },
+                    onOpenTool = ::openTool,
+                    onImportFont = onImportFont,
+                    onSaveMkv = onSaveMkv,
+                    eventEditorStateHolder = eventEditorStateHolder,
+                    modifier = Modifier.fillMaxSize().zIndex(50f),
+                )
+
+                if (previewMode == PreviewWorkspaceMode.FLOATING && previewVisible) {
+                    FloatingPreviewSurface(
+                        offsetDp = floatingVideoOffsetDp,
+                        expanded = floatingVideoExpanded,
+                        onOffsetChange = { floatingVideoOffsetDp = it },
+                        onExpandedChange = { floatingVideoExpanded = it },
+                        onDock = { previewModeName = PreviewWorkspaceMode.NORMAL.name },
+                        modifier = Modifier.fillMaxSize().zIndex(40f),
+                    ) { previewModifier ->
+                        preview(previewModifier.testTag("preview-workspace"))
                     }
                 }
             }
@@ -401,25 +522,90 @@ fun ModernEditorScreen(
 
 @Composable
 private fun WorkbenchToolStrip(
-    selected: WorkbenchTool, onTool: (WorkbenchTool) -> Unit,
-    previewVisible: Boolean, onPreviewToggle: () -> Unit,
-    themeMode: String, onThemeToggle: () -> Unit,
+    selected: WorkbenchTool,
+    openSurfaces: Set<WorkbenchTool>,
+    onTool: (WorkbenchTool) -> Unit,
+    previewVisible: Boolean,
+    onPreviewToggle: () -> Unit,
+    previewMode: PreviewWorkspaceMode,
+    onPreviewMode: (PreviewWorkspaceMode) -> Unit,
+    floatingSurfacesHidden: Boolean,
+    onToggleAllSurfaces: () -> Unit,
+    themeMode: String,
+    onThemeToggle: () -> Unit,
 ) {
-    Surface(color = MaterialTheme.colorScheme.surface) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                WorkbenchTool.entries.forEach { entry ->
-                    FilterChip(selected = selected == entry, onClick = { onTool(entry) },
-                        modifier = Modifier.testTag("tool-${entry.name}"),
-                        label = { Text(entry.title) }, shape = RoundedCornerShape(8.dp))
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        tonalElevation = 3.dp,
+        shadowElevation = 2.dp,
+    ) {
+        Column(Modifier.fillMaxWidth()) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    Modifier.weight(1f)
+                        .horizontalScroll(rememberScrollState())
+                        .padding(horizontal = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    WorkbenchTool.entries.forEach { entry ->
+                        FilterChip(
+                            selected = entry in openSurfaces,
+                            onClick = { onTool(entry) },
+                            modifier = Modifier.testTag("tool-${entry.name}"),
+                            label = { Text(entry.title) },
+                            leadingIcon = if (entry in openSurfaces) {
+                                { Icon(Icons.Filled.Layers, null, Modifier.size(16.dp)) }
+                            } else null,
+                            shape = RoundedCornerShape(12.dp),
+                        )
+                    }
+                }
+                TooltipIconButton(
+                    if (floatingSurfacesHidden) "呼回所有浮层" else "隐藏所有浮层",
+                    onToggleAllSurfaces,
+                ) {
+                    Icon(if (floatingSurfacesHidden) Icons.Filled.Layers else Icons.Filled.LayersClear, null)
+                }
+                TooltipIconButton(
+                    "主题：" + when (themeMode) { "dark" -> "深色"; "light" -> "浅色"; else -> "跟随系统" },
+                    onThemeToggle,
+                ) {
+                    Icon(
+                        when (themeMode) {
+                            "dark" -> Icons.Filled.DarkMode
+                            "light" -> Icons.Filled.LightMode
+                            else -> Icons.Filled.BrightnessAuto
+                        },
+                        null,
+                    )
+                }
+                TooltipIconButton(if (previewVisible) "隐藏视频" else "呼回视频", onPreviewToggle) {
+                    Icon(if (previewVisible) Icons.Filled.Visibility else Icons.Filled.VisibilityOff, null)
                 }
             }
-            TooltipIconButton("主题：" + when (themeMode) { "dark" -> "深色"; "light" -> "浅色"; else -> "跟随系统" }, onThemeToggle) {
-                Icon(when (themeMode) { "dark" -> Icons.Filled.DarkMode; "light" -> Icons.Filled.LightMode; else -> Icons.Filled.BrightnessAuto }, null)
-            }
-            TooltipIconButton(if (previewVisible) "收起预览" else "展开预览", onPreviewToggle) {
-                Icon(if (previewVisible) Icons.Filled.Visibility else Icons.Filled.VisibilityOff, null)
+            Row(
+                Modifier.fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+                    .padding(horizontal = 8.dp, vertical = 2.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("视频", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                PreviewWorkspaceMode.entries.forEach { mode ->
+                    AssistChip(
+                        onClick = { onPreviewMode(mode) },
+                        label = { Text(mode.title) },
+                        leadingIcon = if (previewMode == mode) {
+                            { Icon(Icons.Filled.Check, null, Modifier.size(14.dp)) }
+                        } else null,
+                        shape = RoundedCornerShape(10.dp),
+                    )
+                }
+                Text(
+                    "· 浮层可并存 / 可拖动 / 再按收回",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
     }
@@ -2002,6 +2188,7 @@ private fun SupportingWorkbench(
             modifier = Modifier.weight(1f).fillMaxWidth(),
         ) { activeTool ->
             when (activeTool) {
+                WorkbenchTool.INVENTORY -> CapabilityInventoryPane(onOpenTool = {}, modifier = Modifier.fillMaxSize())
                 WorkbenchTool.TEXT, WorkbenchTool.EFFECTS, WorkbenchTool.EVENT -> Unit
                 WorkbenchTool.TIMELINE -> ModernTimelinePane(state, viewModel, Modifier.fillMaxSize())
                 WorkbenchTool.STYLE -> StylePane(state, viewModel, Modifier.fillMaxSize())
