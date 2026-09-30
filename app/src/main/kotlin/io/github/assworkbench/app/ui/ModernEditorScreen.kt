@@ -33,6 +33,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.TextFieldValue
@@ -245,10 +246,16 @@ fun ModernEditorScreen(
                         )
                     },
                     confirmButton = {
-                        Button(onClick = viewModel::restoreRecovery) { Text("恢复") }
+                        Button(
+                            onClick = viewModel::restoreRecovery,
+                            modifier = Modifier.testTag("recovery-restore"),
+                        ) { Text("恢复") }
                     },
                     dismissButton = {
-                        TextButton(onClick = viewModel::discardRecovery) { Text("丢弃") }
+                        TextButton(
+                            onClick = viewModel::discardRecovery,
+                            modifier = Modifier.testTag("recovery-discard"),
+                        ) { Text("丢弃") }
                     },
                 )
             }
@@ -788,6 +795,7 @@ private fun ModernEventRow(
 
     Column(
         Modifier.fillMaxWidth()
+            .testTag("event-row-${event.id}")
             .background(
                 when {
                     selected -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.22f)
@@ -849,7 +857,12 @@ private fun ModernEventRow(
                     }
                 }
             }
-            if (expanded) IconButton(onClick = onCollapse) { Icon(Icons.Filled.Close, "收起") }
+            if (expanded) {
+                IconButton(
+                    onClick = onCollapse,
+                    modifier = Modifier.testTag("event-collapse-${event.id}"),
+                ) { Icon(Icons.Filled.Close, "收起") }
+            }
         }
 
         if (expanded) {
@@ -928,7 +941,10 @@ private fun InlineEventEditor(
         label = { Text("字幕正文 · ASS Event Text") },
         textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
         visualTransformation = rememberAssSyntaxTransformation(),
-        modifier = Modifier.fillMaxWidth().heightIn(min = 104.dp, max = 220.dp),
+        modifier = Modifier
+            .testTag("event-raw-${event.id}")
+            .fillMaxWidth()
+            .heightIn(min = 104.dp, max = 220.dp),
     )
     val rawDraftState = RawEventDraftPolicy.classify(
         baseText = rawBaseText,

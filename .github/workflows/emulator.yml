@@ -1,0 +1,81 @@
+name: Android Emulator Regression
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  editor-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate Actions artifact policy
+        run: python3 tools/check_artifact_policy.py
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: android-actions/setup-android@v4
+
+      - name: Install Android SDK packages
+        shell: bash
+        run: |
+          set -euxo pipefail
+          sdkmanager "platforms;android-36" "platform-tools" >/dev/null
+          test -d "$ANDROID_HOME/platforms/android-36"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.7.1'
+
+      - name: Enable KVM
+        shell: bash
+        run: |
+          set -euxo pipefail
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm || true
+          ls -l /dev/kvm || true
+
+      - name: Run editor regression suite on Android Emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: >-
+            -no-window
+            -gpu swiftshader_indirect
+            -noaudio
+            -no-boot-anim
+            -camera-back none
+          script: bash tools/run_emulator_regression.sh
+
+      - name: Summarize instrumentation results
+        if: always()
+        shell: bash
+        run: |
+          set -euxo pipefail
+          RESULT_DIR="app/build/outputs/androidTest-results/connected"
+          if [ -d "$RESULT_DIR" ]; then
+            find "$RESULT_DIR" -maxdepth 3 -type f -print
+            grep -R "tests=" "$RESULT_DIR" || true
+          fi
