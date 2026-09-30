@@ -1997,7 +1997,7 @@ private fun SupportingWorkbench(
 private fun ModernTimelinePane(state: EditorState, viewModel: EditorViewModel, modifier: Modifier = Modifier) {
     val zoomSteps = listOf(5, 10, 30, 60, 120)
     var windowSeconds by rememberSaveable { mutableStateOf(30) }
-    var viewportCenterMs by rememberSaveable { mutableLongStateOf(state.playbackPositionMs) }
+    var viewportCenterMs by rememberSaveable { mutableLongStateOf(viewModel.playbackPositionMs.value) }
     var followPlayhead by rememberSaveable { mutableStateOf(true) }
     var snapEnabled by rememberSaveable { mutableStateOf(true) }
     var snapEvents by rememberSaveable { mutableStateOf(true) }
