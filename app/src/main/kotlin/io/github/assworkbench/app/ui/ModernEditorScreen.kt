@@ -129,6 +129,18 @@ fun ModernEditorScreen(
     val existingEventIds = remember(state.document.events) {
         state.document.events.asSequence().map { it.id }.toSet()
     }
+    val activePositionInstance = workspaceState.activeForTool(WorkbenchTool.POSITION.name)
+    val activePositionResolution = activePositionInstance?.binding?.resolve(
+        focusedEventId = state.focusedEventId,
+        selectedEventIds = state.selectedEventIds,
+        existingEventIds = existingEventIds,
+    )
+    val positionEditEventId = when {
+        activePositionInstance != null ->
+            (activePositionResolution as? WorkspaceBindingResolution.Event)?.eventId
+        previewMode == PreviewWorkspaceMode.MANIPULATION -> state.focusedEventId
+        else -> null
+    }
     val issues by produceState<List<AssQcIssue>>(initialValue = emptyList(), state.document) {
         value = withContext(Dispatchers.Default) {
             AssQualityCheck.inspect(state.document)
@@ -368,8 +380,7 @@ fun ModernEditorScreen(
                     ) {
                         WorkbenchPreview(
                             state, viewModel,
-                            previewMode == PreviewWorkspaceMode.MANIPULATION ||
-                                WorkbenchTool.POSITION in openSurfaces,
+                            positionEditEventId,
                             onOpenReferenceVideo, { openTool(WorkbenchTool.TIMELINE) },
                             rendererEnabled, onEnableRenderer,
                             onVideoAspectRatio = { reported ->
@@ -492,8 +503,7 @@ fun ModernEditorScreen(
                 modifier = Modifier.fillMaxSize().testTag("floating-preview"),
             ) {
                 WorkbenchPreview(
-                    state, viewModel, previewMode == PreviewWorkspaceMode.MANIPULATION ||
-                        WorkbenchTool.POSITION in openSurfaces,
+                    state, viewModel, positionEditEventId,
                     onOpenReferenceVideo, { openTool(WorkbenchTool.TIMELINE) },
                     rendererEnabled, onEnableRenderer,
                     onVideoAspectRatio = { reported ->
@@ -682,7 +692,7 @@ private fun WorkbenchToolStrip(
 private fun WorkbenchPreview(
     state: EditorState,
     viewModel: EditorViewModel,
-    positionEditing: Boolean,
+    positionEditEventId: Long?,
     onOpenVideo: () -> Unit,
     onOpenTimeline: () -> Unit,
     rendererEnabled: Boolean,
@@ -705,22 +715,54 @@ private fun WorkbenchPreview(
         fontRevision = state.fontRevision,
         initialPositionMs = viewModel.playbackPositionMs.value,
         focusedEventId = state.focusedEventId,
-        positionEditEventId = if (positionEditing) state.focusedEventId else null,
-        onPreviewEventPosition = viewModel::previewFocusedPosition,
-        onSetEventPosition = viewModel::setFocusedPosition,
-        onPreviewEventMove = viewModel::previewFocusedMove,
-        onSetEventMove = viewModel::setFocusedMove,
-        onPreviewEventOrigin = viewModel::previewFocusedOrigin,
-        onSetEventOrigin = viewModel::setFocusedOrigin,
-        onPreviewEventRotation = viewModel::previewFocusedRotationZ,
-        onSetEventRotation = viewModel::setFocusedRotationZ,
+        positionEditEventId = positionEditEventId,
+        onPreviewEventPosition = { x, y ->
+            positionEditEventId?.let { viewModel.previewEventPosition(it, x, y) }
+        },
+        onSetEventPosition = { x, y ->
+            positionEditEventId?.let { viewModel.setEventPosition(it, x, y) }
+        },
+        onPreviewEventMove = { sx, sy, ex, ey ->
+            positionEditEventId?.let { viewModel.previewEventMove(it, sx, sy, ex, ey) }
+        },
+        onSetEventMove = { sx, sy, ex, ey ->
+            positionEditEventId?.let { viewModel.setEventMove(it, sx, sy, ex, ey) }
+        },
+        onPreviewEventOrigin = { x, y ->
+            positionEditEventId?.let { viewModel.previewEventOrigin(it, x, y) }
+        },
+        onSetEventOrigin = { x, y ->
+            positionEditEventId?.let { viewModel.setEventOrigin(it, x, y) }
+        },
+        onPreviewEventRotation = { angle ->
+            positionEditEventId?.let { viewModel.previewEventRotationZ(it, angle) }
+        },
+        onSetEventRotation = { angle ->
+            positionEditEventId?.let { viewModel.setEventRotationZ(it, angle) }
+        },
         scaleLocked = state.geometryScaleLocked,
-        onPreviewEventScale = viewModel::previewFocusedScale,
-        onSetEventScale = viewModel::setFocusedScale,
-        onPreviewEventShear = viewModel::previewFocusedShear,
-        onSetEventShear = viewModel::setFocusedShear,
-        onPreviewEventClip = viewModel::previewFocusedRectClip,
-        onSetEventClip = viewModel::setFocusedRectClip,
+        onPreviewEventScale = { sx, sy ->
+            positionEditEventId?.let { viewModel.previewEventScale(it, sx, sy) }
+        },
+        onSetEventScale = { sx, sy ->
+            positionEditEventId?.let { viewModel.setEventScale(it, sx, sy) }
+        },
+        onPreviewEventShear = { fx, fy ->
+            positionEditEventId?.let { viewModel.previewEventShear(it, fx, fy) }
+        },
+        onSetEventShear = { fx, fy ->
+            positionEditEventId?.let { viewModel.setEventShear(it, fx, fy) }
+        },
+        onPreviewEventClip = { left, top, right, bottom, inverted ->
+            positionEditEventId?.let {
+                viewModel.previewEventRectClip(it, left, top, right, bottom, inverted)
+            }
+        },
+        onSetEventClip = { left, top, right, bottom, inverted ->
+            positionEditEventId?.let {
+                viewModel.setEventRectClip(it, left, top, right, bottom, inverted)
+            }
+        },
         onCancelEventPositionPreview = viewModel::clearTransientPreview,
         onFocusEvent = { viewModel.focusEvent(it, seek = false) },
         onSetEventTiming = viewModel::setEventTiming,
