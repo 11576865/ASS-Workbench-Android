@@ -164,7 +164,7 @@ Status values: **AUTO** = current automated coverage exists; **ADD** = add autom
 | R1 | Raw ASS | unknown section + one Event edit + save/reopen | opaque section remains | AUTO |
 | R2 | Raw ASS | custom Style/Event Format columns + edit | columns and values remain | AUTO |
 | R3 | Encoding | UTF-8 BOM / UTF-16LE standalone ASS save | original detected encoding retained | AUTO |
-| R4 | Raw draft | unsaved Event/project state while opening/replacing workspace | replacement requires explicit discard; Event-level draft conflict remains separately testable | UI guarded + ADD |
+| R4 | Raw draft | unsaved Event/project state while opening/replacing workspace | replacement requires explicit discard; Event draft vs canonical conflict has explicit tested policy | AUTO policy + DEVICE UI |
 | R5 | Raw/native | extreme rotation/shear/position/scale literals | project remains editable; preview policy is safe and explicit | AUTO + DEVICE |
 | R6 | Drawing/native | extreme `\\p` / vector-clip coordinates | no silent rewrite; native failure does not destroy project data | AUTO + DEVICE |
 | R7 | Drawing/native | very large Drawing / vector-clip token stream | bounded preview behaviour; project state survives | AUTO + DEVICE |

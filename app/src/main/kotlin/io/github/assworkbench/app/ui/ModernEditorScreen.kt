@@ -891,8 +891,13 @@ private fun InlineEventEditor(
         visualTransformation = rememberAssSyntaxTransformation(),
         modifier = Modifier.fillMaxWidth().heightIn(min = 104.dp, max = 220.dp),
     )
-    val rawDirty = rawField.text != event.text
-    val rawExternalConflict = rawDirty && event.text != rawBaseText
+    val rawDraftState = RawEventDraftPolicy.classify(
+        baseText = rawBaseText,
+        draftText = rawField.text,
+        canonicalText = event.text,
+    )
+    val rawDirty = rawDraftState != RawEventDraftState.CLEAN
+    val rawExternalConflict = rawDraftState == RawEventDraftState.EXTERNAL_CONFLICT
     val splitCursor = rawField.selection.start
     val splitReady = !rawDirty && rawField.selection.collapsed &&
         splitCursor in 1 until event.text.length &&
