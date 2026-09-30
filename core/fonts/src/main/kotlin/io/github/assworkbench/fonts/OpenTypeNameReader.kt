@@ -106,6 +106,24 @@ object OpenTypeNameReader {
         )
     }
 
+    /**
+     * Returns a safe extension only for single-face sfnt/OpenType payloads that
+     * this module can parse directly. TrueType/OpenType collections (ttcf) are
+     * deliberately excluded until collection face selection is implemented.
+     */
+    fun singleFaceExtension(bytes: ByteArray): String? {
+        if (bytes.size < 4) return null
+        val signature = ((bytes[0].toInt() and 0xFF) shl 24) or
+            ((bytes[1].toInt() and 0xFF) shl 16) or
+            ((bytes[2].toInt() and 0xFF) shl 8) or
+            (bytes[3].toInt() and 0xFF)
+        return when (signature) {
+            0x00010000, 0x74727565 -> "ttf" // TrueType 1.0 / 'true'
+            0x4F54544F -> "otf" // 'OTTO'
+            else -> null
+        }
+    }
+
     fun sha256(bytes: ByteArray): String = MessageDigest.getInstance("SHA-256")
         .digest(bytes)
         .joinToString("") { "%02x".format(it) }

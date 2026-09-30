@@ -25,6 +25,15 @@ class OpenTypeNameReaderTest {
         assertEquals("LegacyFamily-Regular", metadata.postScriptName)
     }
 
+    @Test
+    fun detectsSingleFaceSfntSignaturesAndRejectsCollections() {
+        assertEquals("ttf", OpenTypeNameReader.singleFaceExtension(byteArrayOf(0x00, 0x01, 0x00, 0x00)))
+        assertEquals("ttf", OpenTypeNameReader.singleFaceExtension("true".toByteArray(Charsets.US_ASCII)))
+        assertEquals("otf", OpenTypeNameReader.singleFaceExtension("OTTO".toByteArray(Charsets.US_ASCII)))
+        assertEquals(null, OpenTypeNameReader.singleFaceExtension("ttcf".toByteArray(Charsets.US_ASCII)))
+        assertEquals(null, OpenTypeNameReader.singleFaceExtension(byteArrayOf(1, 2, 3)))
+    }
+
     private fun fakeSfnt(vararg names: Pair<Int, String>): ByteArray {
         val encoded = names.map { (id, value) -> id to value.toByteArray(Charsets.UTF_16BE) }
         val nameHeaderSize = 6

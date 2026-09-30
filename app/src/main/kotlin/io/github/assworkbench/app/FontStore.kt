@@ -99,9 +99,11 @@ class FontStore(private val context: Context) {
     }
 
     private fun importOne(uri: Uri): FontAsset {
-        val originalName = queryName(uri) ?: "font.ttf"
-        val ext = originalName.substringAfterLast('.', "ttf").lowercase().takeIf { it in setOf("ttf", "otf") } ?: "ttf"
+        val originalName = queryName(uri) ?: "font"
         val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: error("无法读取字体")
+        val declaredExt = originalName.substringAfterLast('.', "").lowercase().takeIf { it in setOf("ttf", "otf") }
+        val ext = declaredExt ?: OpenTypeNameReader.singleFaceExtension(bytes)
+            ?: error("不支持的字体容器；当前仅接受单字体 TTF/OTF")
         val metadata = OpenTypeNameReader.read(bytes)
         val sha = OpenTypeNameReader.sha256(bytes)
         val safeStem = safeFileStem(metadata.family)
@@ -126,8 +128,8 @@ class FontStore(private val context: Context) {
     fun importEmbeddedFont(sessionId: Long, fileName: String, bytes: ByteArray): FontAsset? =
         synchronized(projectFontLock) {
             if (sessionId != projectFontSessionId) return@synchronized null
-            val ext = fileName.substringAfterLast('.', "").lowercase()
-            if (ext !in setOf("ttf", "otf")) return@synchronized null
+            val declaredExt = fileName.substringAfterLast('.', "").lowercase().takeIf { it in setOf("ttf", "otf") }
+            val ext = declaredExt ?: OpenTypeNameReader.singleFaceExtension(bytes) ?: return@synchronized null
             val metadata = OpenTypeNameReader.read(bytes)
             val sha = OpenTypeNameReader.sha256(bytes)
             val safeStem = safeFileStem(metadata.family)

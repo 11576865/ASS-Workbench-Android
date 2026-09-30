@@ -115,7 +115,8 @@ Source: https://www.matroska.org/technical/attachments.html
 ASS Workbench impact:
 
 - the new writer emits `font/ttf` and `font/otf`, which is aligned with the documented writer guidance;
-- incoming attachment recognition accepts RFC `font/sfnt` in addition to TTF/OTF and legacy media types, while actual import still validates readable font data;
+- incoming attachment recognition accepts RFC `font/sfnt` in addition to TTF/OTF and legacy media types; ambiguous filenames can be imported when the payload has a supported single-face sfnt signature;
+- TrueType/OpenType collections (`ttcf`, usually TTC/OTC) remain explicit unsupported input for 0.27 because the metadata/glyph layer does not yet model face selection;
 - attachments rejected by bounded reader limits are now counted explicitly instead of disappearing from MKV diagnostics;
 - unsupported attachment types are never a license to delete them during MKV write-back.
 
