@@ -33,6 +33,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.TextFieldValue
@@ -788,6 +789,7 @@ private fun ModernEventRow(
 
     Column(
         Modifier.fillMaxWidth()
+            .testTag("event-row-${event.id}")
             .background(
                 when {
                     selected -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.22f)
@@ -928,7 +930,10 @@ private fun InlineEventEditor(
         label = { Text("字幕正文 · ASS Event Text") },
         textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
         visualTransformation = rememberAssSyntaxTransformation(),
-        modifier = Modifier.fillMaxWidth().heightIn(min = 104.dp, max = 220.dp),
+        modifier = Modifier
+            .testTag("event-raw-${event.id}")
+            .fillMaxWidth()
+            .heightIn(min = 104.dp, max = 220.dp),
     )
     val rawDraftState = RawEventDraftPolicy.classify(
         baseText = rawBaseText,
