@@ -6,7 +6,7 @@ A touch-first, raw-preserving ASS workbench for Android — evolving from subtit
 
 0.26 is an internal construction and hardening cycle. The first planned real-device product handoff after this cycle is **0.27.0**; the version will not be bumped merely because most feature work is present.
 
-See [docs/ABOUT.md](docs/ABOUT.md) for the longer-term direction and [docs/ROADMAP-0.26.md](docs/ROADMAP-0.26.md) for the current handoff gate.
+See [docs/ABOUT.md](docs/ABOUT.md) for the longer-term direction, [docs/ROADMAP-0.26.md](docs/ROADMAP-0.26.md) for release semantics, and [docs/HARDENING-0.27.md](docs/HARDENING-0.27.md) / [docs/DEVICE-TEST-0.27.md](docs/DEVICE-TEST-0.27.md) for the current handoff gate.
 
 ## Product model
 
@@ -43,10 +43,11 @@ The current mainline includes:
 - font registry, OpenType metadata/glyph diagnostics, renderer evidence and effective font-request inventory;
 - quality checks tied to the same timeline/ASS semantic model;
 - MKV ASS-track replacement with preservation-oriented bridge logic;
+- selected manual TTF/OTF packaging into MKV in the same remux pass, with existing attachments preserved and SHA-based duplicate exclusion;
 - preservation of unknown sections, opaque lines and custom Format columns;
 - Review Sidecar stable identity and bilingual review infrastructure.
 
-The current 0.26 closing cycle still has one explicit Font Phase packaging item: **export / attach selected fonts to MKV**. Karaoke and full Drawing remain deferred beyond the first 0.27 test handoff.
+The bounded 0.26 feature pass is now closed. Selected-font MKV packaging is implemented; the remaining gate is hardening, release provenance, and systematic physical-device validation. Karaoke and full Drawing remain deferred beyond the first 0.27 test handoff.
 
 ## Workbench ownership
 
@@ -109,5 +110,8 @@ OCR, ASR, general machine translation, and broad “support every subtitle forma
 
 - [About / long-term direction](docs/ABOUT.md)
 - [0.26 → 0.27 roadmap and handoff gate](docs/ROADMAP-0.26.md)
+- [0.27 hardening / destructive failure matrix](docs/HARDENING-0.27.md)
+- [0.27 physical-device validation](docs/DEVICE-TEST-0.27.md)
+- [Device-test results template](docs/DEVICE-TEST-RESULTS.template.md)
 - [1.0 product specification](docs/PRODUCT_SPEC_1_0.md)
 - [Third-party notices](THIRD_PARTY_NOTICES.md)

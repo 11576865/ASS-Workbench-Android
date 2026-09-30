@@ -252,6 +252,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
+          set -euxo pipefail
           VERSION="$(sed -nE 's/^val baseVersionName = "([^"]+)"/\1/p' app/build.gradle.kts | head -1)"
           SHORT_SHA="$(printf '%s' "$GITHUB_SHA" | cut -c1-12)"
           TAG="v$VERSION"
@@ -260,11 +261,14 @@ jobs:
           FIXTURES="fontconfig-production-apk/ASS-Workbench-Android-$VERSION-$SHORT_SHA-device-fixtures.zip"
           NOTES="Rolling $VERSION construction prerelease. Canonical device-test APK built from commit $GITHUB_SHA (Actions run #$GITHUB_RUN_NUMBER). The version tag marks the construction milestone and may predate the rolling APK assets; exact provenance is carried by the SHA-bearing APK filename, the in-app Diagnostics identity, the build-identity manifest, and the deterministic device-fixture bundle."
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release view "$TAG" --json assets --jq '.assets[].name' | \
-              grep -E "^ASS-Workbench-Android-$VERSION-[0-9a-f]{12}-(debug\\.apk|build-identity\\.txt|device-fixtures\\.zip)$" | \
-              while IFS= read -r asset; do
-                gh release delete-asset "$TAG" "$asset" -y
-              done
+            # Do not let an empty previous-asset match abort the job under pipefail.
+            # Also retire the old unsuffixed APK because it cannot identify its source commit.
+            while IFS= read -r asset; do
+              gh release delete-asset "$TAG" "$asset" -y
+            done < <(
+              gh release view "$TAG" --json assets --jq '.assets[].name' | \
+                grep -E "^ASS-Workbench-Android-$VERSION-([0-9a-f]{12}-)?(debug\\.apk|build-identity\\.txt|device-fixtures\\.zip)$" || true
+            )
             gh release upload "$TAG" "$APK" "$IDENTITY" "$FIXTURES"
             gh release edit "$TAG" \
               --title "ASS Workbench Android $VERSION" \
@@ -278,9 +282,11 @@ jobs:
               --notes "$NOTES"
           fi
 
-          gh release view "$TAG" --json assets --jq '.assets[].name' | \
-            grep -Fxq "ASS-Workbench-Android-$VERSION-$SHORT_SHA-debug.apk"
-          gh release view "$TAG" --json assets --jq '.assets[].name' | \
-            grep -Fxq "ASS-Workbench-Android-$VERSION-$SHORT_SHA-build-identity.txt"
-          gh release view "$TAG" --json assets --jq '.assets[].name' | \
-            grep -Fxq "ASS-Workbench-Android-$VERSION-$SHORT_SHA-device-fixtures.zip"
+          ASSETS="$(gh release view "$TAG" --json assets --jq '.assets[].name')"
+          grep -Fxq "ASS-Workbench-Android-$VERSION-$SHORT_SHA-debug.apk" <<<"$ASSETS"
+          grep -Fxq "ASS-Workbench-Android-$VERSION-$SHORT_SHA-build-identity.txt" <<<"$ASSETS"
+          grep -Fxq "ASS-Workbench-Android-$VERSION-$SHORT_SHA-device-fixtures.zip" <<<"$ASSETS"
+          if grep -Fxq "ASS-Workbench-Android-$VERSION-debug.apk" <<<"$ASSETS"; then
+            echo "Legacy ambiguous release APK still present" >&2
+            exit 1
+          fi

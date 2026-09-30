@@ -196,7 +196,16 @@ Status values: **AUTO** = current automated coverage exists; **ADD** = add autom
 | L2 | Lifecycle | process death/recovery after unsaved edit | recovery restores expected snapshot without inheriting stale MKV/container state | code-hardened + DEVICE |
 | S1 | Save | start MKV save, then edit/switch workspace | completed output is save-start snapshot; stale callback cannot mutate the later workspace | code-hardened + DEVICE |
 | B1 | Build | APK identity inspection | generated BuildConfig is checked against versionCode/version/commit/run; SHA-bearing APK ships with a hash manifest; Diagnostics exposes the same identity | AUTO + DEVICE spot-check |
-| B2 | Release | rolling 0.26 prerelease asset | release carries SHA-bearing APK + build-identity manifest and verifies both asset names after publication | AUTO |
+| B2 | Release | rolling 0.26 prerelease asset | release carries SHA-bearing APK + build-identity manifest + fixture bundle; empty old-asset matches cannot abort publication; legacy unsuffixed APK is removed | AUTO workflow |
+
+## Release provenance hardening
+
+The production workflow now treats release publication as part of the build gate rather than a best-effort upload:
+
+- the SHA-bearing APK, build-identity manifest, and device-fixture bundle are all required assets;
+- replacing a rolling prerelease is safe even when no previous SHA-bearing asset exists, avoiding the `grep | while` + `pipefail` false failure found in Fontconfig run #294;
+- the historical unsuffixed `ASS-Workbench-Android-<version>-debug.apk` is removed because it cannot identify its source commit;
+- post-publication verification checks all required asset names and rejects the ambiguous legacy APK if it remains.
 
 ## Freeze priorities
 
