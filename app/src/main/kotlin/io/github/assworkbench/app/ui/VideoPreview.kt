@@ -72,8 +72,11 @@ import io.github.yuroyami.libmpvkt.compose.MpvSurface
 import io.github.yuroyami.libmpvkt.compose.rememberMpv
 import io.github.yuroyami.libmpvkt.stream.ContentResolverStreamProvider
 import io.github.yuroyami.libmpvkt.view.MpvOptions
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import java.io.File
+import java.util.concurrent.atomic.AtomicLong
 
 @Composable
 fun VideoPreview(
@@ -553,6 +556,8 @@ private fun AuthoritativeMpvPreview(
     var osdMarginRight by remember(mpv, videoUri) { mutableIntStateOf(0) }
     var lastReportedPositionMs by remember(mpv) { mutableLongStateOf(initialPositionMs.coerceAtLeast(0L)) }
     val previewFile = remember(mpv) { File(context.cacheDir, "ass-preview/current.ass").apply { parentFile?.mkdirs() } }
+    val previewPublishGeneration = remember(mpv, videoUri) { AtomicLong(0L) }
+    val lastTransientReloadNs = remember(mpv, videoUri) { longArrayOf(0L) }
     val blockingRendererRisks = remember(renderDocument) {
         AssRendererRiskAnalyzer.inspect(renderDocument)
     }
@@ -597,6 +602,7 @@ private fun AuthoritativeMpvPreview(
     }
 
     LaunchedEffect(mpv, videoUri, renderDocument, protocolReady, fontRevision, blockingRendererRisks) {
+        val generation = previewPublishGeneration.incrementAndGet()
         if (!protocolReady || videoUri.isNullOrBlank()) return@LaunchedEffect
         if (blockingRendererRisks.isNotEmpty()) {
             if (subtitleAttached) {
@@ -612,20 +618,49 @@ private fun AuthoritativeMpvPreview(
             return@LaunchedEffect
         }
         val transientRendering = renderDocument != document
-        if (!transientRendering) delay(120)
-        val tmp = File(previewFile.parentFile, "current.ass.tmp")
-        tmp.writeText(AssCodec.write(renderDocument), Charsets.UTF_8)
-        if (previewFile.exists()) previewFile.delete()
-        tmp.renameTo(previewFile)
+        if (transientRendering) {
+            val elapsedNs = System.nanoTime() - lastTransientReloadNs[0]
+            val remainingNs = 33_000_000L - elapsedNs
+            if (remainingNs > 0L) {
+                delay((remainingNs + 999_999L) / 1_000_000L)
+            }
+        } else {
+            delay(120)
+        }
+
+        val tmp = File(previewFile.parentFile, "current.ass.tmp-" + generation)
+        try {
+            withContext(Dispatchers.IO) {
+                tmp.writeText(AssCodec.write(renderDocument), Charsets.UTF_8)
+            }
+            if (previewPublishGeneration.get() != generation) return@LaunchedEffect
+
+            withContext(Dispatchers.IO) {
+                if (previewFile.exists() && !previewFile.delete()) {
+                    error("无法替换 ASS 预览缓存")
+                }
+                if (!tmp.renameTo(previewFile)) {
+                    tmp.copyTo(previewFile, overwrite = true)
+                }
+            }
+        } finally {
+            if (tmp.exists()) runCatching { tmp.delete() }
+        }
+        if (previewPublishGeneration.get() != generation) return@LaunchedEffect
         if (!subtitleAttached) {
             delay(120)
+            if (previewPublishGeneration.get() != generation) return@LaunchedEffect
             mpv.command(MpvCommands.subAdd(previewFile.absolutePath))
             subtitleAttached = true
         } else {
             mpv.command(MpvCommands.subReload())
         }
-        if (transientRendering) return@LaunchedEffect
+        if (transientRendering) {
+            lastTransientReloadNs[0] = System.nanoTime()
+            return@LaunchedEffect
+        }
         delay(300)
+        if (previewPublishGeneration.get() != generation) return@LaunchedEffect
         val previewSource = mpv.getString("current-tracks/sub/external-filename")
         val activeSid = mpv.getString("sid") ?: "unknown"
         onRendererDiagnostics(

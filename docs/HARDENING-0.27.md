@@ -78,7 +78,8 @@ Implemented hardening:
 
 - the renderer-risk corpus covers extreme Drawing coordinates and oversized vector-clip/Drawing payloads;
 - `\\p` Drawing text and vector `\\clip/\\iclip` payloads share the same conservative preflight;
-- risky payloads suspend native preview without rewriting the original Event text.
+- risky payloads suspend native preview without rewriting the original Event text;
+- the preflight itself stops tokenizing as soon as its cumulative character or numeric-token budget is exceeded, so the safety scanner does not reproduce the unbounded-work pattern it is meant to guard against.
 
 Still required:
 
@@ -97,6 +98,13 @@ ASS Workbench impact:
 - animation/geometry scrubbing must not add avoidable Compose or document-rebuild work on top of inherently expensive libass frames;
 - performance tests need at least one long `\\move` / animation fixture rather than only ordinary dialogue;
 - a slow renderer case must not create dozens of history commits or trigger renderer recreation per pointer movement.
+
+Transient preview publication hardening:
+
+- ASS serialization/file publication runs off the Compose main thread;
+- transient preview reloads are rate-limited to roughly 30 Hz instead of issuing one `sub-reload` per pointer event;
+- every render request receives a monotonic generation, so stale/cancelled requests cannot publish an older `current.ass` over a newer preview;
+- temporary files are unique per generation and cleaned after success/cancellation, avoiding cross-request `current.ass.tmp` collisions.
 
 ### H4 — Font attachment media types have a defined Matroska compatibility surface
 
@@ -191,7 +199,7 @@ Status values: **AUTO** = current automated coverage exists; **ADD** = add autom
 | M5 | MKV | same attachment filename, different font bytes | source attachment not overwritten; selected font receives deterministic collision-safe name | AUTO bridge |
 | M6 | MKV | large source + many font attachments | streaming preservation remains bounded; no UI ANR | DEVICE |
 | P1 | Compose | fast playback-position updates with long Event list | root EditorState does not emit per playback tick; only timeline/focused timing consumers observe playhead flow | code-hardened + DEVICE/profile |
-| P2 | Renderer | long moving line / heavy transform fixture | no renderer recreation per gesture; editor remains responsive enough to recover | DEVICE/profile |
+| P2 | Renderer | long moving line / heavy transform fixture | no renderer recreation per gesture; transient ASS publication is generation-safe and capped to ~30 reloads/s | code-hardened + DEVICE/profile |
 | L1 | Lifecycle | rotate portrait↔landscape during active edit | canonical document, focus, selection and draft semantics survive | DEVICE |
 | L2 | Lifecycle | process death/recovery after unsaved edit | recovery restores expected snapshot without inheriting stale MKV/container state | code-hardened + DEVICE |
 | S1 | Save | start MKV save, then edit/switch workspace | completed output is save-start snapshot; stale callback cannot mutate the later workspace | code-hardened + DEVICE |

@@ -92,43 +92,43 @@ object AssRendererRiskAnalyzer {
         }
 
         fun scanDrawingPayload(payload: String, label: String) {
-            if (!oversizedDrawingReported) {
-                drawingChars += payload.length
-                if (drawingChars > MAX_DRAWING_TEXT_CHARS) {
+            if (oversizedDrawingReported) return
+
+            drawingChars += payload.length
+            if (drawingChars > MAX_DRAWING_TEXT_CHARS) {
+                oversizedDrawingReported = true
+                out += AssRendererRisk(
+                    eventId = event.id,
+                    kind = AssRendererRiskKind.OVERSIZED_DRAWING,
+                    message = label + " 数据超过 " + MAX_DRAWING_TEXT_CHARS +
+                        " 字符；为避免 native renderer 内存失控，预览暂停",
+                )
+                // The document is already blocked. Avoid tokenizing an
+                // arbitrarily large remainder merely for a second diagnostic.
+                return
+            }
+
+            for (match in numberToken.findAll(payload)) {
+                val value = match.value.toDoubleOrNull() ?: continue
+                if (!drawingCoordinateReported && (!value.isFinite() || abs(value) >= EXTREME_COORDINATE_LIMIT)) {
+                    drawingCoordinateReported = true
+                    out += AssRendererRisk(
+                        eventId = event.id,
+                        kind = AssRendererRiskKind.EXTREME_DRAWING_COORDINATE,
+                        message = label + " 坐标 " + value + " 超出预览安全阈值；原始 Drawing 保留",
+                    )
+                }
+
+                drawingNumbers++
+                if (drawingNumbers > MAX_DRAWING_NUMBERS) {
                     oversizedDrawingReported = true
                     out += AssRendererRisk(
                         eventId = event.id,
                         kind = AssRendererRiskKind.OVERSIZED_DRAWING,
-                        message = label + " 数据超过 " + MAX_DRAWING_TEXT_CHARS +
-                            " 字符；为避免 native renderer 内存失控，预览暂停",
+                        message = label + " 数值 token 超过 " + MAX_DRAWING_NUMBERS +
+                            "；为避免 native renderer 内存失控，预览暂停",
                     )
-                }
-            }
-
-            if (!drawingCoordinateReported || !oversizedDrawingReported) {
-                for (match in numberToken.findAll(payload)) {
-                    val value = match.value.toDoubleOrNull() ?: continue
-                    if (!drawingCoordinateReported && (!value.isFinite() || abs(value) >= EXTREME_COORDINATE_LIMIT)) {
-                        drawingCoordinateReported = true
-                        out += AssRendererRisk(
-                            eventId = event.id,
-                            kind = AssRendererRiskKind.EXTREME_DRAWING_COORDINATE,
-                            message = label + " 坐标 " + value + " 超出预览安全阈值；原始 Drawing 保留",
-                        )
-                    }
-                    if (!oversizedDrawingReported) {
-                        drawingNumbers++
-                        if (drawingNumbers > MAX_DRAWING_NUMBERS) {
-                            oversizedDrawingReported = true
-                            out += AssRendererRisk(
-                                eventId = event.id,
-                                kind = AssRendererRiskKind.OVERSIZED_DRAWING,
-                                message = label + " 数值 token 超过 " + MAX_DRAWING_NUMBERS +
-                                    "；为避免 native renderer 内存失控，预览暂停",
-                            )
-                        }
-                    }
-                    if (drawingCoordinateReported && oversizedDrawingReported) break
+                    return
                 }
             }
         }

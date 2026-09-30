@@ -66,6 +66,32 @@ class AssRendererRiskAnalyzerTest {
     }
 
     @Test
+    fun oversized_drawing_stops_token_scan_after_size_budget() {
+        val payload = buildString {
+            append("m 0 0 ")
+            repeat(50_000) { append("l 1 1 ") }
+            append("l 1e309 1e309")
+        }
+        val risks = AssRendererRiskAnalyzer.inspect(document("{\\p1}" + payload + "{\\p0}"))
+
+        assertTrue(risks.any { it.kind == AssRendererRiskKind.OVERSIZED_DRAWING })
+        assertTrue(risks.none { it.kind == AssRendererRiskKind.EXTREME_DRAWING_COORDINATE })
+    }
+
+    @Test
+    fun number_budget_stops_before_later_extreme_coordinate() {
+        val payload = buildString {
+            append("m 0 0 ")
+            repeat(25_100) { append("l 1 1 ") }
+            append("l 1e309 1e309")
+        }
+        val risks = AssRendererRiskAnalyzer.inspect(document("{\\p1}" + payload + "{\\p0}"))
+
+        assertTrue(risks.any { it.kind == AssRendererRiskKind.OVERSIZED_DRAWING })
+        assertTrue(risks.none { it.kind == AssRendererRiskKind.EXTREME_DRAWING_COORDINATE })
+    }
+
+    @Test
     fun extreme_style_geometry_is_detected_on_used_style() {
         val style = AssStyle(name = "Danger", angle = 1_000_000.0)
         val risks = AssRendererRiskAnalyzer.inspect(document("Text", style))
