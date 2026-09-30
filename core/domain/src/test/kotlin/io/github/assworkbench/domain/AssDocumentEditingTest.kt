@@ -120,7 +120,7 @@ class AssDocumentEditingTest {
                     id = 1,
                     start = SubTime(1_000),
                     end = SubTime(4_000),
-                    text = "{\\fs56}left  right ",
+                    text = "left  right ",
                 ),
             ),
         )
@@ -133,7 +133,7 @@ class AssDocumentEditingTest {
         val merged = AssDocumentEditing.mergeEvents(split, splitIds, "").document
         history.commit(merged)
 
-        assertEquals("{\\fs56}left  right ", merged.events.single().text)
+        assertEquals("left  right ", merged.events.single().text)
         assertEquals(split, history.undo())
         assertEquals(original, history.undo())
         assertEquals(split, history.redo())

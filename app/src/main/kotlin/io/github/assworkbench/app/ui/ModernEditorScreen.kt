@@ -2013,11 +2013,12 @@ private fun ModernTimelinePane(state: EditorState, viewModel: EditorViewModel, m
     val halfWindowMs = windowDurationMs / 2L
 
     LaunchedEffect(playheadMs, followPlayhead, halfWindowMs) {
-        if (followPlayhead) {
-            viewportCenterMs = playheadMs.coerceAtLeast(halfWindowMs)
-        } else if (viewportCenterMs < halfWindowMs) {
-            viewportCenterMs = halfWindowMs
-        }
+        viewportCenterMs = TimelineViewportPolicy.resolveCenter(
+            playheadMs = playheadMs,
+            currentCenterMs = viewportCenterMs,
+            halfWindowMs = halfWindowMs,
+            followPlayhead = followPlayhead,
+        )
     }
 
     val windowStart = (viewportCenterMs - halfWindowMs).coerceAtLeast(0L)
@@ -2055,7 +2056,14 @@ private fun ModernTimelinePane(state: EditorState, viewModel: EditorViewModel, m
                 selected = followPlayhead,
                 onClick = {
                     followPlayhead = !followPlayhead
-                    if (followPlayhead) viewportCenterMs = playheadMs.coerceAtLeast(halfWindowMs)
+                    if (followPlayhead) {
+                        viewportCenterMs = TimelineViewportPolicy.resolveCenter(
+                            playheadMs = playheadMs,
+                            currentCenterMs = viewportCenterMs,
+                            halfWindowMs = halfWindowMs,
+                            followPlayhead = true,
+                        )
+                    }
                 },
                 label = { Text("跟随播放头") },
             )
@@ -2070,7 +2078,12 @@ private fun ModernTimelinePane(state: EditorState, viewModel: EditorViewModel, m
             Text("${windowSeconds}s", style = MaterialTheme.typography.labelMedium)
             if (!followPlayhead) {
                 TextButton(onClick = {
-                    viewportCenterMs = playheadMs.coerceAtLeast(halfWindowMs)
+                    viewportCenterMs = TimelineViewportPolicy.resolveCenter(
+                        playheadMs = playheadMs,
+                        currentCenterMs = viewportCenterMs,
+                        halfWindowMs = halfWindowMs,
+                        followPlayhead = true,
+                    )
                     followPlayhead = true
                 }) { Text("回到播放头") }
             }
@@ -2125,9 +2138,13 @@ private fun ModernTimelinePane(state: EditorState, viewModel: EditorViewModel, m
                         onDragStart = { followPlayhead = false },
                         onHorizontalDrag = { change, dragAmount ->
                             change.consume()
-                            val widthPx = size.width.coerceAtLeast(1)
-                            val deltaMs = (dragAmount / widthPx * windowDurationMs).toLong()
-                            viewportCenterMs = (viewportCenterMs - deltaMs).coerceAtLeast(halfWindowMs)
+                            viewportCenterMs = TimelineViewportPolicy.panCenter(
+                                currentCenterMs = viewportCenterMs,
+                                dragAmountPx = dragAmount,
+                                widthPx = size.width,
+                                windowDurationMs = windowDurationMs,
+                                halfWindowMs = halfWindowMs,
+                            )
                         },
                     )
                 },

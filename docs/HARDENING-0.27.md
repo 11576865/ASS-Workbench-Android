@@ -175,7 +175,7 @@ Status values: **AUTO** = current automated coverage exists; **ADD** = add autom
 | G2 | Geometry | vector clip opened in rectangle editor | vector clip stays Raw-only and byte/text-equivalent | AUTO semantic |
 | A1 | Animation | multiple transforms + malformed sibling | selected transform only changes; malformed sibling preserved | AUTO |
 | A2 | Animation | scrub long/high-cost moving subtitle | no document commit and no unrelated workbench invalidation | DEVICE |
-| T1 | Timeline | pan/zoom while playback advances | viewport does not snap back unless follow-playhead is enabled | ADD |
+| T1 | Timeline | pan/zoom while playback advances | viewport does not snap back unless follow-playhead is enabled; zoom only clamps to legal start | AUTO policy + DEVICE gesture |
 | T2 | Timeline | overlap frontier with nested long/short Events | later overlap not hidden | AUTO |
 | W1 | Waveform | project switch during analysis | stale result ignored; codec/extractor released; cancelled result not cached | code-hardened + DEVICE |
 | W2 | Waveform | unsupported/vendor-failing codec | waveform becomes unavailable only; editing remains usable | code-path guarded + DEVICE |
