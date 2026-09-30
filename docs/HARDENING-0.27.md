@@ -200,6 +200,14 @@ Status values: **AUTO** = current automated coverage exists; **ADD** = add autom
 
 ## Release provenance hardening
 
+Actions storage policy is intentionally narrow:
+
+- ordinary push/PR workflows retain **zero** Actions artifacts;
+- `workflow_dispatch` may expose diagnostic/native/production bundles for **1 day** only;
+- the canonical long-lived APK, build-identity manifest and device fixtures live in GitHub Release;
+- dependency/build caches are not treated as release assets and remain outside this artifact-retention policy;
+- historical Actions artifacts are removed as a one-time migration cleanup.
+
 The production workflow now treats release publication as part of the build gate rather than a best-effort upload:
 
 - the SHA-bearing APK, build-identity manifest, and device-fixture bundle are all required assets;
