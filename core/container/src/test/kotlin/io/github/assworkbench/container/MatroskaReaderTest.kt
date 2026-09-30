@@ -75,6 +75,41 @@ class MatroskaReaderTest {
         assertTrue(seen.single().data.contentEquals(byteArrayOf(9,8,7,6)))
     }
 
+    @Test
+    fun reportsAttachmentsRejectedByReaderLimits() {
+        val tooLarge = master(
+            0x61A7,
+            text(0x466E, "Huge.ttf") +
+                text(0x4660, "font/ttf") +
+                binary(0x465C, ByteArray(32) { 7 }),
+        )
+        val acceptable = master(
+            0x61A7,
+            text(0x466E, "Small.ttf") +
+                text(0x4660, "font/sfnt") +
+                binary(0x465C, byteArrayOf(1, 2, 3, 4)),
+        )
+        val segment = master(0x18538067, master(0x1941A469, tooLarge + acceptable))
+
+        val result = MatroskaReader(maxAttachmentBytes = 8).scan(ByteArrayInputStream(segment))
+
+        assertEquals(1, result.skippedAttachmentCount)
+        assertEquals(1, result.attachments.size)
+        assertTrue(result.attachments.single().isSupportedFont)
+    }
+
+    @Test
+    fun recognizesRfcSfntAttachmentMediaType() {
+        val attachment = MatroskaAttachment(
+            uid = 1,
+            fileName = "font.bin",
+            mimeType = "font/sfnt",
+            description = "",
+            data = byteArrayOf(1, 2, 3),
+        )
+        assertTrue(attachment.isSupportedFont)
+    }
+
     private fun master(id: Long, content: ByteArray) = id(id) + size(content.size.toLong()) + content
     private fun binary(id: Long, content: ByteArray) = master(id, content)
     private fun text(id: Long, value: String) = binary(id, value.toByteArray())

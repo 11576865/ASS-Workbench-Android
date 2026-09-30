@@ -83,6 +83,7 @@ data class MatroskaAttachment(
             return ext in setOf("ttf", "otf") ||
                 mimeType.equals("font/ttf", true) ||
                 mimeType.equals("font/otf", true) ||
+                mimeType.equals("font/sfnt", true) ||
                 mimeType.equals("application/x-truetype-font", true) ||
                 mimeType.equals("application/vnd.ms-opentype", true)
         }
@@ -92,4 +93,6 @@ data class MatroskaScanResult(
     val subtitleTracks: List<MatroskaSubtitleTrack>,
     val attachments: List<MatroskaAttachment>,
     val timecodeScaleNs: Long,
+    /** Attachments skipped by the bounded reader before they could be surfaced. */
+    val skippedAttachmentCount: Int = 0,
 )

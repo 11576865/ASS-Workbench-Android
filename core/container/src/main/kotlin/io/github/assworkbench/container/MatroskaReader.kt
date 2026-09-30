@@ -19,6 +19,7 @@ class MatroskaReader(
         val trackBuilders = linkedMapOf<Long, TrackBuilder>()
         val attachments = mutableListOf<MatroskaAttachment>()
         var totalAttachmentBytes = 0
+        var skippedAttachmentCount = 0
 
         while (true) {
             val h = reader.headerOrNull() ?: break
@@ -67,6 +68,8 @@ class MatroskaReader(
                                             totalAttachmentBytes += parsed.data.size
                                             onAttachment?.invoke(parsed)
                                             if (retainAttachments) attachments += parsed
+                                        } else {
+                                            skippedAttachmentCount++
                                         }
                                     } else {
                                         reader.skipFully(e.size)
@@ -93,6 +96,7 @@ class MatroskaReader(
                 .map { it.build() },
             attachments = attachments,
             timecodeScaleNs = timecodeScaleNs,
+            skippedAttachmentCount = skippedAttachmentCount,
         )
     }
 

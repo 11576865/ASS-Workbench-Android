@@ -249,6 +249,9 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                             },
                         )
                     }
+                    // Attachments rejected by the bounded reader (oversize, empty or
+                    // malformed) never reach onAttachment, so account for them here.
+                    skipped += scan.skippedAttachmentCount
                     // Project fonts are exposed to libass through sub-fonts-dir.
                     // Do not rebuild Fontconfig while an MKV is opening: live native cache
                     // mutation has caused process-level crashes on some Android devices.

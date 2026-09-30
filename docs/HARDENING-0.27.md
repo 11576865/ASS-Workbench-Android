@@ -115,7 +115,8 @@ Source: https://www.matroska.org/technical/attachments.html
 ASS Workbench impact:
 
 - the new writer emits `font/ttf` and `font/otf`, which is aligned with the documented writer guidance;
-- incoming attachment recognition must remain conservative and compatibility-oriented;
+- incoming attachment recognition accepts RFC `font/sfnt` in addition to TTF/OTF and legacy media types, while actual import still validates readable font data;
+- attachments rejected by bounded reader limits are now counted explicitly instead of disappearing from MKV diagnostics;
 - unsupported attachment types are never a license to delete them during MKV write-back.
 
 ### H5 — Waveform decoding must remain lifecycle-safe and optional
