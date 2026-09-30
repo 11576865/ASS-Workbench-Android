@@ -246,10 +246,16 @@ fun ModernEditorScreen(
                         )
                     },
                     confirmButton = {
-                        Button(onClick = viewModel::restoreRecovery) { Text("恢复") }
+                        Button(
+                            onClick = viewModel::restoreRecovery,
+                            modifier = Modifier.testTag("recovery-restore"),
+                        ) { Text("恢复") }
                     },
                     dismissButton = {
-                        TextButton(onClick = viewModel::discardRecovery) { Text("丢弃") }
+                        TextButton(
+                            onClick = viewModel::discardRecovery,
+                            modifier = Modifier.testTag("recovery-discard"),
+                        ) { Text("丢弃") }
                     },
                 )
             }
@@ -851,7 +857,12 @@ private fun ModernEventRow(
                     }
                 }
             }
-            if (expanded) IconButton(onClick = onCollapse) { Icon(Icons.Filled.Close, "收起") }
+            if (expanded) {
+                IconButton(
+                    onClick = onCollapse,
+                    modifier = Modifier.testTag("event-collapse-${event.id}"),
+                ) { Icon(Icons.Filled.Close, "收起") }
+            }
         }
 
         if (expanded) {
