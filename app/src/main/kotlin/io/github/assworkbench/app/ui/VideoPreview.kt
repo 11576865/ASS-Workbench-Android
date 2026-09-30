@@ -499,7 +499,10 @@ private fun AuthoritativeMpvPreview(
 ) {
     val context = LocalContext.current
     val rendererLogFile = remember(configDir) { File(configDir, "renderer-font.log") }
-    val options = remember(configDir, fontsDir, rendererLogFile) {
+    // Font discovery happens during mpv/libass initialization. A fontRevision
+    // therefore creates a fresh core after the new files have been published,
+    // rather than relying on sub-reload to rescan provider state in-place.
+    val options = remember(configDir, fontsDir, rendererLogFile, fontRevision) {
         rendererLogFile.parentFile?.mkdirs()
         if (rendererLogFile.exists()) rendererLogFile.delete()
         MpvOptions(

@@ -176,6 +176,7 @@ Implemented hardening:
 - project changes remove only project-scoped publications while manual fonts remain available;
 - filename collision policy is deterministic, with the current project source taking priority;
 - the `sub-fonts-dir` path no longer changes when the first MKV attachment font arrives, avoiding an unnecessary mpv option/renderer identity change.
+- `fontRevision` intentionally recreates the mpv/libass core after font publication; this is a rare font-management event, not a per-edit/per-gesture path, and avoids depending on undocumented live provider rescans.
 
 The Fontconfig production path continues to use its explicit manual/project/system directories; this union directory primarily closes the compatibility/direct-provider path and keeps both renderer modes semantically aligned.
 
@@ -207,7 +208,7 @@ Status values: **AUTO** = current automated coverage exists; **ADD** = add autom
 | F1 | Fonts | unused Style definitions | no false required-font request | AUTO |
 | F2 | Fonts | inline `\\rStyle` + `\\fn` | effective request inventory includes both | AUTO |
 | F3 | Fonts | missing glyph / fallback | diagnostic and renderer evidence agree or disagreement is visible | DEVICE |
-| F4 | Fonts | imported font added while renderer active | stable renderer-font directory keeps manual + project fonts visible without changing sub-fonts-dir path | AUTO union + DEVICE renderer |
+| F4 | Fonts | imported font added while renderer active | stable renderer-font directory keeps manual + project fonts visible; fontRevision recreates mpv/libass so discovery occurs from a fresh core | AUTO union + code-hardened + DEVICE renderer |
 | M1 | MKV | multiple ASS tracks; edit one | selected TrackNumber/UID/order/metadata retained | AUTO bridge |
 | M2 | MKV | chapters/tags/existing attachments + ASS replacement | all preservation families retained | AUTO bridge |
 | M3 | MKV | selected TTF/OTF packaged during replacement | original attachments retained; selected font appended once | AUTO bridge |

@@ -19,6 +19,8 @@ This lightweight direct configuration has two important consequences:
 
 mpv/libass accepts one non-recursive subtitle-font directory. ASS Workbench therefore never switches `sub-fonts-dir` between manual and MKV sources. `renderer-fonts` is a stable publication directory containing the union of persistent manual fonts and current-project attachment fonts; source ownership remains separate so project cleanup does not delete manual imports.
 
+A font inventory revision deliberately creates a fresh mpv/libass core after publication. Subtitle reload alone is not used as proof that a provider rescanned newly added files. The current playback position is carried across that rare renderer recreation.
+
 ## Font identity model
 
 OpenType fonts can expose several distinct names:
