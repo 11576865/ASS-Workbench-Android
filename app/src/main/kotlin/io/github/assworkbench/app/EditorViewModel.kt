@@ -1131,6 +1131,190 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    // Workspace-bound geometry mutations use explicit Event identity.
+    // A pinned ToolInstance must never mutate global focus only to reach its target.
+    fun previewEventPosition(id: Long, x: Double, y: Double) {
+        val state = _state.value
+        if (state.document.events.none { it.id == id }) return
+        val preview = withEventPosition(state.document, id, x, y)
+        _state.update { current ->
+            current.copy(previewDocument = if (preview == state.document) null else preview)
+        }
+    }
+
+    fun setEventPosition(id: Long, x: Double, y: Double) {
+        if (_state.value.document.events.none { it.id == id }) return
+        editDocument("已设置字幕 #$id 位置。") { doc ->
+            withEventPosition(doc, id, x, y)
+        }
+    }
+
+    fun previewEventMove(id: Long, sx: Double, sy: Double, ex: Double, ey: Double) {
+        val state = _state.value
+        if (state.document.events.none { it.id == id }) return
+        val preview = withEventMove(state.document, id, sx, sy, ex, ey)
+        _state.update { current ->
+            current.copy(previewDocument = if (preview == state.document) null else preview)
+        }
+    }
+
+    fun setEventMove(id: Long, sx: Double, sy: Double, ex: Double, ey: Double) {
+        if (_state.value.document.events.none { it.id == id }) return
+        editDocument("已更新字幕 #$id 的 \\move 路径。") { doc ->
+            withEventMove(doc, id, sx, sy, ex, ey)
+        }
+    }
+
+    fun previewEventOrigin(id: Long, x: Double, y: Double) {
+        val state = _state.value
+        if (state.document.events.none { it.id == id }) return
+        val preview = withEventOrigin(state.document, id, x, y)
+        _state.update { current ->
+            current.copy(previewDocument = if (preview == state.document) null else preview)
+        }
+    }
+
+    fun setEventOrigin(id: Long, x: Double, y: Double) {
+        if (_state.value.document.events.none { it.id == id }) return
+        editDocument("已更新字幕 #$id 的 \\org。") { doc ->
+            withEventOrigin(doc, id, x, y)
+        }
+    }
+
+    fun clearEventOrigin(id: Long) {
+        editDocument("已移除字幕 #$id 的 \\org。") { doc ->
+            doc.copy(events = doc.events.map { event ->
+                if (event.id == id) event.copy(text = AssGeometrySemantic.removeOrigin(event.text))
+                else event
+            })
+        }
+    }
+
+    fun previewEventRotationZ(id: Long, angle: Double) {
+        val state = _state.value
+        if (state.document.events.none { it.id == id }) return
+        val preview = withEventRotationZ(state.document, id, angle)
+        _state.update { current ->
+            current.copy(previewDocument = if (preview == state.document) null else preview)
+        }
+    }
+
+    fun setEventRotationZ(id: Long, angle: Double) {
+        if (_state.value.document.events.none { it.id == id }) return
+        editDocument("已更新字幕 #$id 的 Z 轴旋转。") { doc ->
+            withEventRotationZ(doc, id, angle)
+        }
+    }
+
+    fun clearEventRotationZ(id: Long) {
+        editDocument("已恢复字幕 #$id 的 Style 旋转。") { doc ->
+            doc.copy(events = doc.events.map { event ->
+                if (event.id == id) event.copy(text = AssGeometrySemantic.removeRotationZ(event.text))
+                else event
+            })
+        }
+    }
+
+    fun previewEventScale(id: Long, scaleX: Double, scaleY: Double) {
+        val state = _state.value
+        if (state.document.events.none { it.id == id }) return
+        val preview = withEventScale(state.document, id, scaleX, scaleY)
+        _state.update { current ->
+            current.copy(previewDocument = if (preview == state.document) null else preview)
+        }
+    }
+
+    fun setEventScale(id: Long, scaleX: Double, scaleY: Double) {
+        if (_state.value.document.events.none { it.id == id }) return
+        editDocument("已更新字幕 #$id 的 X / Y 缩放。") { doc ->
+            withEventScale(doc, id, scaleX, scaleY)
+        }
+    }
+
+    fun clearEventScale(id: Long) {
+        editDocument("已恢复字幕 #$id 的 Style 缩放。") { doc ->
+            doc.copy(events = doc.events.map { event ->
+                if (event.id == id) event.copy(text = AssGeometrySemantic.removeScale(event.text))
+                else event
+            })
+        }
+    }
+
+    fun previewEventShear(id: Long, shearX: Double, shearY: Double) {
+        val state = _state.value
+        if (state.document.events.none { it.id == id }) return
+        val preview = withEventShear(state.document, id, shearX, shearY)
+        _state.update { current ->
+            current.copy(previewDocument = if (preview == state.document) null else preview)
+        }
+    }
+
+    fun setEventShear(id: Long, shearX: Double, shearY: Double) {
+        if (_state.value.document.events.none { it.id == id }) return
+        editDocument("已更新字幕 #$id 的 X / Y 错切。") { doc ->
+            withEventShear(doc, id, shearX, shearY)
+        }
+    }
+
+    fun clearEventShear(id: Long) {
+        editDocument("已清除字幕 #$id 的 X / Y 错切。") { doc ->
+            doc.copy(events = doc.events.map { event ->
+                if (event.id == id) event.copy(text = AssGeometrySemantic.removeShear(event.text))
+                else event
+            })
+        }
+    }
+
+    fun previewEventRectClip(
+        id: Long,
+        left: Double,
+        top: Double,
+        right: Double,
+        bottom: Double,
+        inverted: Boolean,
+    ) {
+        val state = _state.value
+        if (state.document.events.none { it.id == id }) return
+        val preview = withEventRectClip(state.document, id, left, top, right, bottom, inverted)
+        _state.update { current ->
+            current.copy(previewDocument = if (preview == state.document) null else preview)
+        }
+    }
+
+    fun setEventRectClip(
+        id: Long,
+        left: Double,
+        top: Double,
+        right: Double,
+        bottom: Double,
+        inverted: Boolean,
+    ) {
+        if (_state.value.document.events.none { it.id == id }) return
+        editDocument(if (inverted) "已更新字幕 #$id 的矩形 \\iclip。" else "已更新字幕 #$id 的矩形 \\clip。") { doc ->
+            withEventRectClip(doc, id, left, top, right, bottom, inverted)
+        }
+    }
+
+    fun setEventAlignment(id: Long, alignment: Int) {
+        if (_state.value.document.events.none { it.id == id }) return
+        editDocument("已设置字幕 #$id 对齐点。") { doc ->
+            doc.copy(events = doc.events.map { event ->
+                if (event.id != id) {
+                    event
+                } else {
+                    val leading = Regex("""^(?:\{[^}]*\})*""").find(event.text)?.value.orEmpty()
+                    val body = event.text.removePrefix(leading)
+                    val cleaned = leading
+                        .replace(Regex("""\\an[1-9]"""), "")
+                        .replace(Regex("""\{\s*\}"""), "")
+                    event.copy(
+                        text = cleaned + "{\\an" + alignment.coerceIn(1, 9) + "}" + body
+                    )
+                }
+            })
+        }
+    }
+
     fun insertEventAtPlayback() {
         val snapshot = _state.value
         val result = AssDocumentEditing.insertAtPlayback(
