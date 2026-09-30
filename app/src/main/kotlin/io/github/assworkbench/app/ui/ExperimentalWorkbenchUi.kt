@@ -224,21 +224,26 @@ internal fun FloatingWorkbenchSurface(
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-                        Text(
-                            title,
-                            style = MaterialTheme.typography.labelLarge,
-                            modifier = Modifier.weight(1f).padding(horizontal = 6.dp),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        if (bindingLabel != null) {
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(horizontal = 6.dp),
+                        ) {
                             Text(
-                                bindingLabel,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                title,
+                                style = MaterialTheme.typography.labelLarge,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                             )
+                            if (bindingLabel != null) {
+                                Text(
+                                    bindingLabel,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
                         }
                         if (onToggleBinding != null) {
                             IconButton(onClick = onToggleBinding) {
