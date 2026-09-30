@@ -60,7 +60,7 @@ import kotlin.math.abs
 private enum class WorkbenchTool(val title: String) {
     TEXT("正文"), TIMELINE("时间轴"), STYLE("样式"), POSITION("位置"),
     EFFECTS("效果"), EVENT("事件"), FONTS("字体"), QC("检查"), BATCH("批量"),
-    PROJECT("项目"), DIAGNOSTICS("诊断"),
+    PROJECT("项目"), DIAGNOSTICS("诊断"), CAPABILITIES("功能地图"),
 }
 
 private enum class DestructiveWorkspaceAction { OPEN_ASS, NEW_ASS }
@@ -350,7 +350,9 @@ fun ModernEditorScreen(
                         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                     ) {
                         WorkbenchPreview(
-                            state, viewModel, supportingOpen && tool == WorkbenchTool.POSITION,
+                            state, viewModel,
+                            previewMode == PreviewWorkspaceMode.MANIPULATION ||
+                                WorkbenchTool.POSITION in openSurfaces,
                             onOpenReferenceVideo, { openTool(WorkbenchTool.TIMELINE) },
                             rendererEnabled, onEnableRenderer,
                             onVideoAspectRatio = { reported ->
@@ -681,6 +683,85 @@ private fun FloatingToolContent(
         WorkbenchTool.BATCH -> BatchPane(state, viewModel, Modifier.fillMaxSize())
         WorkbenchTool.PROJECT -> ProjectPane(state, viewModel, onSaveMkv, Modifier.fillMaxSize())
         WorkbenchTool.DIAGNOSTICS -> DiagnosticsPane(state, viewModel, Modifier.fillMaxSize())
+        WorkbenchTool.CAPABILITIES -> CapabilityInventoryPane(Modifier.fillMaxSize())
+    }
+}
+
+@Composable
+private fun CapabilityInventoryPane(modifier: Modifier = Modifier) {
+    val groups = listOf(
+        "正文 / Event Text" to listOf(
+            "原始 ASS Event Text", "Start / End", "播放头拆分", "Actor", "Layer", "Dialogue / Comment",
+        ),
+        "时间轴" to listOf(
+            "播放/暂停", "逐帧前后", "Seek / Scrub", "Start/End ← 播放头", "Trim", "整体移动",
+            "5/10/30/60/120s Zoom", "Pan", "Follow Playhead", "Event/Playhead/Grid Snap",
+            "Snap 强度", "Gap/Overlap", "Waveform Lite",
+        ),
+        "排版 / Style" to listOf(
+            "字体", "字号", "粗体", "斜体", "下划线", "删除线", "字距",
+            "主色", "次色", "描边色", "阴影色", "透明度", "Border", "Shadow", "Blur",
+            "ScaleX", "ScaleY", "Angle", "BorderStyle", "Encoding",
+        ),
+        "位置 / 几何" to listOf(
+            "九宫格 Alignment", "Margin L/R/V", "pos X/Y", "move Start/End", "move t1/t2",
+            "org", "Rotation Z", "Scale X/Y", "Ratio Lock", "Shear X/Y",
+            "Rect clip / iclip", "画面直接拖动", "Touch Proxy 偏移控制",
+        ),
+        "动画 / 效果" to listOf(
+            "blur", "Soft Entry", "fad", "fade", "t(...) Transform",
+            "Transform timing", "Transform accel", "Transform tags", "动画预览 Scrubber",
+        ),
+        "Event 结构" to listOf(
+            "前插", "后插", "复制", "拆分", "合并上一条", "合并下一条", "删除",
+            "多选", "范围选择", "批量 Style", "格式复制/粘贴", "批量时间移动",
+        ),
+        "字体资源" to listOf(
+            "导入 TTF/OTF", "MKV 附件字体", "Family 元数据", "Glyph Coverage",
+            "请求字体匹配", "Fallback 诊断", "字体替换", "Renderer Font 发布",
+        ),
+        "工程 / 容器" to listOf(
+            "打开独立 ASS", "打开参考视频", "打开 MKV 工程", "更换视频",
+            "覆盖保存 ASS", "另存为", "MKV 写回", "字体附件保留/打包",
+        ),
+        "安全 / 诊断" to listOf(
+            "Undo", "Redo", "Recovery Journal", "恢复/丢弃", "QC", "Renderer 风险分析",
+            "Fontconfig/libass 日志", "Build Identity", "项目诊断",
+        ),
+        "实验 UI" to listOf(
+            "多 Floating Surface", "Surface 拖动", "点击置顶", "Compact/Expanded/Precision",
+            "全部隐藏/全部呼回", "Normal Preview", "Preview Focus", "Manipulation Preview",
+            "Floating Preview", "视频 Pan/Zoom", "双击重置", "Window Interaction Overlay",
+        ),
+    )
+    val total = groups.sumOf { it.second.size }
+    LazyColumn(
+        modifier = modifier.padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        item {
+            Text("功能地图 · $total 个显式能力入口", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "这是实验 UI 的能力盘点，不代表最终分类。先把功能全部摆到明面上，再决定常驻、浮层、替换、短暂显示或直接操控。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        groups.forEach { (group, entries) ->
+            item {
+                Surface(
+                    shape = MaterialTheme.shapes.medium,
+                    color = MaterialTheme.colorScheme.surfaceContainer,
+                ) {
+                    Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                        Text("$group · ${entries.size}", style = MaterialTheme.typography.labelLarge)
+                        entries.forEach { capability ->
+                            Text("• $capability", style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -2216,6 +2297,7 @@ private fun SupportingWorkbench(
                 WorkbenchTool.BATCH -> BatchPane(state, viewModel, Modifier.fillMaxSize())
                 WorkbenchTool.PROJECT -> ProjectPane(state, viewModel, onSaveMkv, Modifier.fillMaxSize())
                 WorkbenchTool.DIAGNOSTICS -> DiagnosticsPane(state, viewModel, Modifier.fillMaxSize())
+                WorkbenchTool.CAPABILITIES -> CapabilityInventoryPane(Modifier.fillMaxSize())
             }
         }
     }
