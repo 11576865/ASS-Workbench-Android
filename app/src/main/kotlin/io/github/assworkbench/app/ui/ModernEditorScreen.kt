@@ -26,7 +26,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.SaveableStateHolder
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -223,6 +225,30 @@ fun ModernEditorScreen(
                     },
                     dismissButton = {
                         TextButton(onClick = { mkvConfirmOpen = false }) { Text("取消") }
+                    },
+                )
+            }
+
+            if (state.recoveryAvailable) {
+                AlertDialog(
+                    onDismissRequest = { /* Recovery requires an explicit choice. */ },
+                    title = { Text("发现未保存编辑") },
+                    text = {
+                        Text(
+                            buildString {
+                                append("检测到上次异常退出留下的恢复记录")
+                                if (state.recoveryLabel.isNotBlank()) {
+                                    append("：").append(state.recoveryLabel)
+                                }
+                                append("。恢复后可以继续编辑并正常保存；丢弃后该恢复记录会被删除。")
+                            }
+                        )
+                    },
+                    confirmButton = {
+                        Button(onClick = viewModel::restoreRecovery) { Text("恢复") }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = viewModel::discardRecovery) { Text("丢弃") }
                     },
                 )
             }
@@ -631,6 +657,10 @@ private fun EventWorkspace(
 ) {
     val selectionMode = state.selectedEventIds.isNotEmpty()
     val listState = rememberLazyListState()
+    // Expanded rows leave composition when they are collapsed or when focus moves.
+    // Keep their uncommitted input buffers in a holder owned by the workspace so
+    // collapse/switch/scroll does not destroy drafts before "应用正文".
+    val eventEditorStateHolder = rememberSaveableStateHolder()
     val rangeScrollScope = rememberCoroutineScope()
     LaunchedEffect(state.focusedEventId, state.filteredEvents) {
         val focusedId = state.focusedEventId
@@ -713,7 +743,7 @@ private fun EventWorkspace(
                 ModernEventRow(
                     event, event.id == state.focusedEventId, event.id == expandedEventId,
                     event.id in state.selectedEventIds, selectionMode, issuesByEvent[event.id].orEmpty(),
-                    state, viewModel,
+                    state, viewModel, eventEditorStateHolder,
                     {
                         if (selectionMode) viewModel.toggleSelected(event.id)
                         else {
@@ -746,6 +776,7 @@ private fun ModernEventRow(
     issues: List<AssQcIssue>,
     state: EditorState,
     viewModel: EditorViewModel,
+    editorStateHolder: SaveableStateHolder,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
     onCollapse: () -> Unit,
@@ -821,7 +852,11 @@ private fun ModernEventRow(
             if (expanded) IconButton(onClick = onCollapse) { Icon(Icons.Filled.Close, "收起") }
         }
 
-        if (expanded) InlineEventEditor(event, style?.name ?: event.style, state, viewModel, onTool)
+        if (expanded) {
+            editorStateHolder.SaveableStateProvider(event.id) {
+                InlineEventEditor(event, style?.name ?: event.style, state, viewModel, onTool)
+            }
+        }
     }
 }
 

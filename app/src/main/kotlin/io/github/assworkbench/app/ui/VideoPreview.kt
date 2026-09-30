@@ -40,6 +40,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -165,7 +166,13 @@ fun VideoPreview(
         }
     }
 
-    AuthoritativeMpvPreview(
+    // Recreate the entire native preview subtree when the published font set
+    // changes. Depending on MpvOptions as a rememberMpv argument is not a strong
+    // enough lifecycle guarantee: forcing a new composition identity disposes the
+    // old mpv/libass core and constructs a fresh one that rescans fonts. The
+    // playback position lives outside this key and is handed back in below.
+    key(fontRevision) {
+        AuthoritativeMpvPreview(
             videoUri = videoUri,
             document = document,
             renderDocument = renderDocument,
@@ -204,6 +211,7 @@ fun VideoPreview(
             onOpenTimeline = onOpenTimeline,
             modifier = modifier,
         )
+    }
 }
 
 @Composable

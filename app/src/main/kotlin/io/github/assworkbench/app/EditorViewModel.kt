@@ -594,27 +594,46 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    fun saveTo(uri: Uri) {
+    fun saveTo(uri: Uri): Boolean {
         val snapshot = _state.value
-        val text = AssCodec.write(snapshot.document)
-        val bytes = snapshot.subtitleTextEncoding.encode(text)
-        app.contentResolver.openOutputStream(uri, "wt")?.use { it.write(bytes) }
-            ?: error("无法写入字幕")
-        clearPendingRecovery()
-        _state.update {
-            it.copy(
-                project = it.project.copy(subtitleUri = uri.toString()),
-                dirty = false,
-                recoveryAvailable = false,
-                recoveryLabel = "",
-                status = "ASS 已保存。",
-            )
-        }
+        return runCatching {
+            val text = AssCodec.write(snapshot.document)
+            val bytes = snapshot.subtitleTextEncoding.encode(text)
+            app.contentResolver.openOutputStream(uri, "wt")?.use { it.write(bytes) }
+                ?: error("无法写入字幕")
+        }.fold(
+            onSuccess = {
+                clearPendingRecovery()
+                _state.update {
+                    it.copy(
+                        project = it.project.copy(subtitleUri = uri.toString()),
+                        dirty = false,
+                        recoveryAvailable = false,
+                        recoveryLabel = "",
+                        status = "ASS 已保存。",
+                    )
+                }
+                true
+            },
+            onFailure = { error ->
+                _state.update {
+                    it.copy(
+                        dirty = true,
+                        status = "字幕保存失败：" + (error.message ?: error::class.java.simpleName) +
+                            "；未保存状态与恢复记录已保留。",
+                    )
+                }
+                false
+            },
+        )
     }
 
     fun saveCurrent(): Boolean {
         val uri = _state.value.project.subtitleUri?.let(Uri::parse) ?: return false
         saveTo(uri)
+        // This return value means "there is a current destination", not "the write
+        // succeeded". A write failure is reported in editor state instead of
+        // unexpectedly opening Save As from the toolbar callback.
         return true
     }
 
@@ -2011,7 +2030,10 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         _playbackPositionMs.value = 0L
         cancelWaveformAnalysis()
         beginWorkspaceBoundary()
-        clearPendingRecovery()
+        // Keep the journal after Restore. If the process dies again before the
+        // user saves or explicitly discards the recovered edit, the same snapshot
+        // must still be available on the next launch.
+        clearPendingRecovery(clearStored = false)
         history.reset(snapshot.document)
         _state.update {
             it.copy(
@@ -2124,10 +2146,10 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             withContext(Dispatchers.IO) {
                 recoveryStore.write(project, document, textEncoding)
             }
-            _state.update { state ->
-                if (state.project != project || state.document != document) state
-                else state.copy(recoveryAvailable = true, recoveryLabel = project.title)
-            }
+            // The journal exists now, but do not surface the startup recovery
+            // prompt inside the same live editing session. On a subsequent process
+            // start, initial state derives recoveryAvailable from recoveryStore.exists().
+
         }
     }
 
