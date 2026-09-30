@@ -165,6 +165,18 @@ Implemented invalidation-boundary hardening:
 - preview uses the current playhead value as resume input without observing it through the root workbench;
 - explicit seek requests still update canonical seek request/nonce state, because those are commands rather than passive high-frequency telemetry.
 
+### H8 — configuration changes must not discard uncommitted inline edit buffers
+
+The canonical ASS document, focused Event and multi-selection live in `EditorViewModel`, but several expanded-Event fields were previously plain `remember` state. A portrait/landscape recreation could therefore keep the canonical document while silently resetting an uncommitted Raw Event draft or timing/metadata input.
+
+Implemented hardening:
+
+- Raw Event `TextFieldValue` (including cursor/selection), its conflict base text, Start/End text, Layer, Actor, Comment and the local inline-panel choice use `rememberSaveable`;
+- canonical changes still reset fields whose saveable key includes that canonical value;
+- Raw Event draft remains keyed only by Event ID so an external structured edit still produces the explicit draft/canonical conflict instead of silently replacing the draft.
+
+Physical-device rotation remains in the 0.27 gate because Compose restoration and keyboard/focus behaviour must still be verified on Android.
+
 ### H7 — mpv direct-font mode accepts only one non-recursive subtitle font directory
 
 mpv documents `--sub-fonts-dir` as a single directory, and libass does not recursively scan arbitrary sibling font directories. ASS Workbench previously switched the option between the persistent manual-font directory and the project MKV-font directory. Once an MKV contributed any attachment font, manually imported fonts could therefore disappear from the direct-font renderer's visible set.
@@ -217,7 +229,7 @@ Status values: **AUTO** = current automated coverage exists; **ADD** = add autom
 | M6 | MKV | large source + many font attachments | streaming preservation remains bounded; no UI ANR | DEVICE |
 | P1 | Compose | fast playback-position updates with long Event list | root EditorState does not emit per playback tick; only timeline/focused timing consumers observe playhead flow | code-hardened + DEVICE/profile |
 | P2 | Renderer | long moving line / heavy transform fixture | no renderer recreation per gesture; transient ASS publication is generation-safe and capped to ~30 reloads/s | code-hardened + DEVICE/profile |
-| L1 | Lifecycle | rotate portrait↔landscape during active edit | canonical document, focus, selection and draft semantics survive | DEVICE |
+| L1 | Lifecycle | rotate portrait↔landscape during active edit | canonical document/focus/selection live in ViewModel; inline timing/Event/raw draft buffers use saveable state across configuration recreation | code-hardened + DEVICE |
 | L2 | Lifecycle | process death/recovery after unsaved edit | recovery restores expected snapshot without inheriting stale MKV/container state | code-hardened + DEVICE |
 | S1 | Save | start MKV save, then edit/switch workspace | completed output is save-start snapshot; stale callback cannot mutate the later workspace | code-hardened + DEVICE |
 | B1 | Build | APK identity inspection | generated BuildConfig is checked against versionCode/version/commit/run; SHA-bearing APK ships with a hash manifest; Diagnostics exposes the same identity | AUTO + DEVICE spot-check |

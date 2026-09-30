@@ -834,14 +834,18 @@ private fun InlineEventEditor(
     viewModel: EditorViewModel,
     onTool: (WorkbenchTool) -> Unit,
 ) {
-    var startText by remember(event.id, event.start) { mutableStateOf(event.start.toAss()) }
-    var endText by remember(event.id, event.end) { mutableStateOf(event.end.toAss()) }
-    var rawField by remember(event.id) { mutableStateOf(TextFieldValue(event.text, TextRange(event.text.length))) }
-    var rawBaseText by remember(event.id) { mutableStateOf(event.text) }
-    var inlinePanel by remember(event.id) { mutableStateOf<String?>(null) }
-    var layerText by remember(event.id, event.layer) { mutableStateOf(event.layer.toString()) }
-    var actorText by remember(event.id, event.name) { mutableStateOf(event.name) }
-    var comment by remember(event.id, event.comment) { mutableStateOf(event.comment) }
+    // Inline edit buffers are saveable so a configuration change does not
+    // silently discard text that has not yet been committed to the canonical Event.
+    var startText by rememberSaveable(event.id, event.start.millis) { mutableStateOf(event.start.toAss()) }
+    var endText by rememberSaveable(event.id, event.end.millis) { mutableStateOf(event.end.toAss()) }
+    var rawField by rememberSaveable(event.id, stateSaver = TextFieldValue.Saver) {
+        mutableStateOf(TextFieldValue(event.text, TextRange(event.text.length)))
+    }
+    var rawBaseText by rememberSaveable(event.id) { mutableStateOf(event.text) }
+    var inlinePanel by rememberSaveable(event.id) { mutableStateOf<String?>(null) }
+    var layerText by rememberSaveable(event.id, event.layer) { mutableStateOf(event.layer.toString()) }
+    var actorText by rememberSaveable(event.id, event.name) { mutableStateOf(event.name) }
+    var comment by rememberSaveable(event.id, event.comment) { mutableStateOf(event.comment) }
     val playbackPositionMs by viewModel.playbackPositionMs.collectAsState()
 
     val effective = remember(state.document, event) {
