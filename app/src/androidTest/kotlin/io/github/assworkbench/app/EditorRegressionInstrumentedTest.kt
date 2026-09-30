@@ -2,14 +2,6 @@ package io.github.assworkbench.app
 
 import android.app.Application
 import android.net.Uri
-import android.os.Bundle
-import androidx.activity.ComponentActivity
-import androidx.activity.compose.setContent
-import androidx.activity.viewModels
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.darkColorScheme
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -19,7 +11,6 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import io.github.assworkbench.app.ui.ModernEditorScreen
 import io.github.assworkbench.domain.AssDocument
 import io.github.assworkbench.domain.AssEvent
 import io.github.assworkbench.domain.AssTextEncoding
@@ -33,44 +24,6 @@ import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
-
-/**
- * Test-only Activity so ActivityScenario.recreate() exercises the same Compose
- * save/restore boundary as a real configuration change. The recovery journal
- * is seeded before the ViewModel is first requested on the initial creation.
- */
-class EditorRegressionHostActivity : ComponentActivity() {
-    val editorViewModel: EditorViewModel by viewModels()
-
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        if (savedInstanceState == null) {
-            RecoveryStore(application).also { store ->
-                store.clear()
-                seedRecovery(store)
-            }
-        }
-
-        setContent {
-            MaterialTheme(colorScheme = darkColorScheme()) {
-                val state by editorViewModel.state.collectAsState()
-                ModernEditorScreen(
-                    state = state,
-                    viewModel = editorViewModel,
-                    onOpenReferenceVideo = {},
-                    onOpenMkvProject = {},
-                    onOpenSubtitle = {},
-                    onImportFont = {},
-                    onSave = {},
-                    onSaveAs = {},
-                    onSaveMkv = {},
-                    rendererEnabled = false,
-                    onEnableRenderer = {},
-                )
-            }
-        }
-    }
-}
 
 @RunWith(AndroidJUnit4::class)
 class EditorRegressionInstrumentedTest {
