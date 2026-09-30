@@ -358,6 +358,8 @@ fun ModernEditorScreen(
                                     videoAspectRatio = reported
                                 }
                             },
+                            interactionRegistry = interactionRegistry,
+                            viewportGesturesEnabled = previewMode != PreviewWorkspaceMode.MANIPULATION,
                             modifier = Modifier.fillMaxSize(),
                         )
                     }
@@ -518,19 +520,52 @@ fun ModernEditorScreen(
 
 @Composable
 private fun WorkbenchToolStrip(
-    selected: WorkbenchTool, onTool: (WorkbenchTool) -> Unit,
-    previewVisible: Boolean, onPreviewToggle: () -> Unit,
-    themeMode: String, onThemeToggle: () -> Unit,
+    openTools: Set<WorkbenchTool>,
+    onToolToggle: (WorkbenchTool) -> Unit,
+    previewVisible: Boolean,
+    onPreviewToggle: () -> Unit,
+    previewMode: PreviewWorkspaceMode,
+    onPreviewMode: (PreviewWorkspaceMode) -> Unit,
+    surfacesHidden: Boolean,
+    onToggleAllSurfaces: () -> Unit,
+    themeMode: String,
+    onThemeToggle: () -> Unit,
 ) {
-    Surface(color = MaterialTheme.colorScheme.surface) {
+    Surface(color = MaterialTheme.colorScheme.surface, tonalElevation = 2.dp) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(
+                Modifier.weight(1f).horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 WorkbenchTool.entries.forEach { entry ->
-                    FilterChip(selected = selected == entry, onClick = { onTool(entry) },
+                    FilterChip(
+                        selected = entry in openTools && !surfacesHidden,
+                        onClick = { onToolToggle(entry) },
                         modifier = Modifier.testTag("tool-${entry.name}"),
-                        label = { Text(entry.title) }, shape = RoundedCornerShape(8.dp))
+                        label = { Text(entry.title) },
+                        shape = RoundedCornerShape(12.dp),
+                    )
                 }
+                VerticalDivider(Modifier.height(28.dp))
+                PreviewWorkspaceMode.entries.forEach { mode ->
+                    FilterChip(
+                        selected = previewMode == mode,
+                        onClick = { onPreviewMode(mode) },
+                        modifier = Modifier.testTag("preview-mode-${mode.name}"),
+                        label = { Text("预览·${mode.label}") },
+                        shape = RoundedCornerShape(12.dp),
+                    )
+                }
+            }
+            TooltipIconButton(
+                if (surfacesHidden) "呼回全部浮层" else "隐藏全部浮层",
+                onToggleAllSurfaces,
+            ) {
+                Icon(
+                    if (surfacesHidden) Icons.Filled.Layers else Icons.Filled.LayersClear,
+                    null,
+                )
             }
             TooltipIconButton("主题：" + when (themeMode) { "dark" -> "深色"; "light" -> "浅色"; else -> "跟随系统" }, onThemeToggle) {
                 Icon(when (themeMode) { "dark" -> Icons.Filled.DarkMode; "light" -> Icons.Filled.LightMode; else -> Icons.Filled.BrightnessAuto }, null)
@@ -552,6 +587,8 @@ private fun WorkbenchPreview(
     rendererEnabled: Boolean,
     onEnableRenderer: () -> Unit,
     onVideoAspectRatio: (Float) -> Unit = {},
+    interactionRegistry: InteractionOverlayRegistry? = null,
+    viewportGesturesEnabled: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     VideoPreview(
@@ -592,8 +629,59 @@ private fun WorkbenchPreview(
         onEnableRenderer = onEnableRenderer,
         fillViewport = true,
         onVideoAspectRatio = onVideoAspectRatio,
+        interactionRegistry = interactionRegistry,
+        viewportGesturesEnabled = viewportGesturesEnabled,
         modifier = modifier,
     )
+}
+
+@Composable
+private fun FloatingToolContent(
+    tool: WorkbenchTool,
+    state: EditorState,
+    viewModel: EditorViewModel,
+    issues: List<AssQcIssue>,
+    expandedEventId: Long?,
+    onExpandedChange: (Long?) -> Unit,
+    onImportFont: () -> Unit,
+    onSaveMkv: () -> Unit,
+    eventEditorStateHolder: SaveableStateHolder,
+) {
+    val event = state.document.events.firstOrNull { it.id == (expandedEventId ?: state.focusedEventId) }
+    when (tool) {
+        WorkbenchTool.TEXT, WorkbenchTool.EFFECTS, WorkbenchTool.EVENT -> {
+            if (event == null) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text("先选择一条字幕")
+                }
+            } else {
+                Column(
+                    Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text("#${event.id} · ${tool.title}", style = MaterialTheme.typography.titleSmall)
+                    eventEditorStateHolder.SaveableStateProvider("floating-${tool.name}-${event.id}") {
+                        InlineEventEditor(
+                            event = event,
+                            styleName = event.style,
+                            state = state,
+                            viewModel = viewModel,
+                            onTool = { },
+                            activeSection = tool,
+                        )
+                    }
+                }
+            }
+        }
+        WorkbenchTool.TIMELINE -> ModernTimelinePane(state, viewModel, Modifier.fillMaxSize())
+        WorkbenchTool.STYLE -> StylePane(state, viewModel, Modifier.fillMaxSize())
+        WorkbenchTool.POSITION -> PositionPane(state, viewModel, Modifier.fillMaxSize())
+        WorkbenchTool.FONTS -> FontManagerPane(state, viewModel, onImportFont, Modifier.fillMaxSize())
+        WorkbenchTool.QC -> QcPane(state, viewModel, issues, Modifier.fillMaxSize())
+        WorkbenchTool.BATCH -> BatchPane(state, viewModel, Modifier.fillMaxSize())
+        WorkbenchTool.PROJECT -> ProjectPane(state, viewModel, onSaveMkv, Modifier.fillMaxSize())
+        WorkbenchTool.DIAGNOSTICS -> DiagnosticsPane(state, viewModel, Modifier.fillMaxSize())
+    }
 }
 
 @Composable
