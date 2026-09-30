@@ -1,5 +1,14 @@
 package io.github.assworkbench.app
 
+import android.content.pm.ActivityInfo
+import android.content.res.Configuration
+import android.graphics.Bitmap
+import android.util.Base64
+import android.util.Log
+import java.io.ByteArrayOutputStream
+import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.onRoot
 import android.app.Application
 import android.net.Uri
 import androidx.compose.ui.test.assertIsDisplayed
@@ -75,6 +84,7 @@ class EditorRegressionInstrumentedTest {
         // the visible editor now must commit the draft that survived disposal.
         assertFalse(eventText(1L).contains("DRAFT"))
         composeRule.onNodeWithText("应用正文")
+            .performScrollTo()
             .assertIsDisplayed()
             .performClick()
         composeRule.waitUntil(timeoutMillis = 5_000) {
@@ -105,6 +115,7 @@ class EditorRegressionInstrumentedTest {
 
         assertFalse(eventText(1L).contains("SWITCH"))
         composeRule.onNodeWithText("应用正文")
+            .performScrollTo()
             .performClick()
 
         composeRule.waitUntil(timeoutMillis = 5_000) {
@@ -131,12 +142,55 @@ class EditorRegressionInstrumentedTest {
         assertFalse(eventText(1L).contains("ROTATED"))
 
         composeRule.onNodeWithText("应用正文")
+            .performScrollTo()
             .assertIsDisplayed()
             .performClick()
 
         composeRule.waitUntil(timeoutMillis = 5_000) {
             eventText(1L) == "Recovered line ROTATED"
         }
+    }
+
+    @Test
+    fun inspectorDraftSurvivesToolSwitchAndRotation() {
+        restoreRecovery()
+        composeRule.onNodeWithTag("event-row-1").performClick()
+        composeRule.onNodeWithTag("event-raw-1").performTextInput(" WORKBENCH")
+        composeRule.onNodeWithTag("tool-EFFECTS").performScrollTo().performClick()
+        composeRule.onNodeWithTag("event-inspector").assertIsDisplayed()
+        composeRule.onNodeWithTag("tool-TEXT").performScrollTo().performClick()
+        composeRule.onNodeWithTag("event-raw-1").assertIsDisplayed()
+        composeRule.activityRule.scenario.onActivity {
+            it.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+        }
+        composeRule.waitUntil(10_000) {
+            composeRule.activity.resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+        }
+        composeRule.onNodeWithTag("preview-workspace").assertIsDisplayed()
+        composeRule.onNodeWithTag("subtitle-navigation").assertIsDisplayed()
+        composeRule.onNodeWithTag("event-inspector").assertIsDisplayed()
+        captureLayout("landscape")
+        composeRule.onNodeWithText("应用正文").performScrollTo().performClick()
+        composeRule.waitUntil(5_000) { eventText(1L) == "Recovered line WORKBENCH" }
+        composeRule.activityRule.scenario.onActivity {
+            it.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+        }
+        composeRule.waitUntil(10_000) {
+            composeRule.activity.resources.configuration.orientation == Configuration.ORIENTATION_PORTRAIT
+        }
+        captureLayout("portrait")
+    }
+
+    private fun captureLayout(name: String) {
+        composeRule.waitForIdle()
+        val bitmap = composeRule.onRoot().captureToImage().asAndroidBitmap()
+        val scaled = Bitmap.createScaledBitmap(bitmap, 900, (bitmap.height * 900f / bitmap.width).toInt(), true)
+        val output = ByteArrayOutputStream()
+        scaled.compress(Bitmap.CompressFormat.PNG, 100, output)
+        Base64.encodeToString(output.toByteArray(), Base64.NO_WRAP).chunked(2800).forEachIndexed { index, chunk ->
+            Log.i("AsswbVisual", "UI_CAPTURE:$name:$index:$chunk")
+        }
+        Log.i("AsswbVisual", "UI_CAPTURE_END:$name")
     }
 
     @Test

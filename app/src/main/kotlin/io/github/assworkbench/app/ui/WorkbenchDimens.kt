@@ -3,7 +3,7 @@ package io.github.assworkbench.app.ui
 import androidx.compose.ui.unit.dp
 
 /**
- * 0.25 workbench layout rhythm.
+ * 0.27.1 adaptive workbench layout rhythm.
  *
  * Android design guidance uses an 8dp primary grid with 4dp for smaller alignment
  * adjustments. Keep permanent surfaces on this rhythm unless a media geometry or

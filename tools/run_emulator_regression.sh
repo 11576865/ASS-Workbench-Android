@@ -15,4 +15,6 @@ find app/build/outputs/androidTest-results/connected -name 'logcat-*.txt' -type 
   tail -n 180 "$file" || true
 done
 
+# Actual rendered editor layouts for review, without retaining Actions artifacts.
+adb logcat -d -s AsswbVisual:I '*:S' || true
 exit "$status"
