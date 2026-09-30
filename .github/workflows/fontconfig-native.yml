@@ -59,6 +59,9 @@ jobs:
             echo y | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;$NDK_VERSION" >/dev/null
           fi
 
+          gh release view "$TAG" --json assets --jq '.assets[].name' | grep -Fxq "ASS-Workbench-Android-$VERSION-$SHORT_SHA-debug.apk"
+          gh release view "$TAG" --json assets --jq '.assets[].name' | grep -Fxq "ASS-Workbench-Android-$VERSION-$SHORT_SHA-build-identity.txt"
+
       - name: Fetch pinned native sources
         working-directory: .libmpvkt-src
         run: buildscripts/download-deps.sh
@@ -170,14 +173,43 @@ jobs:
             -Passwb.rendererExperimental=false \
             --stacktrace
 
-      - name: Collect production APK and renderer manifest
+      - name: Collect and verify production APK identity
         run: |
+          set -euxo pipefail
           VERSION="$(sed -nE 's/^val baseVersionName = "([^"]+)"/\1/p' app/build.gradle.kts | head -1)"
+          VERSION_CODE="$(sed -nE 's/^[[:space:]]*versionCode = ([0-9]+)/\1/p' app/build.gradle.kts | head -1)"
           test -n "$VERSION"
+          test -n "$VERSION_CODE"
           SHORT_SHA="$(printf '%s' "$GITHUB_SHA" | cut -c1-12)"
+          BUILD_CONFIG="app/build/generated/source/buildConfig/debug/io/github/assworkbench/app/BuildConfig.java"
+          test -f "$BUILD_CONFIG"
+          grep -Fq "VERSION_CODE = $VERSION_CODE" "$BUILD_CONFIG"
+          grep -Fq "VERSION_NAME = \"$VERSION\"" "$BUILD_CONFIG"
+          grep -Fq "ASSWB_BUILD_COMMIT = \"$SHORT_SHA\"" "$BUILD_CONFIG"
+          grep -Fq "ASSWB_BUILD_NUMBER = \"$GITHUB_RUN_NUMBER\"" "$BUILD_CONFIG"
+          grep -Fq "ASSWB_RENDERER_FONT_PROVIDER = \"fontconfig\"" "$BUILD_CONFIG"
+          grep -Fq "ASSWB_RENDERER_VERSION = \"0.3.0-asswb-fontconfig\"" "$BUILD_CONFIG"
+
           mkdir -p fontconfig-production-apk
-          cp app/build/outputs/apk/debug/app-debug.apk \
-            "fontconfig-production-apk/ASS-Workbench-Android-$VERSION-$SHORT_SHA-debug.apk"
+          APK="ASS-Workbench-Android-$VERSION-$SHORT_SHA-debug.apk"
+          IDENTITY="ASS-Workbench-Android-$VERSION-$SHORT_SHA-build-identity.txt"
+          cp app/build/outputs/apk/debug/app-debug.apk "fontconfig-production-apk/$APK"
+          {
+            echo "schema=1"
+            echo "version_name=$VERSION"
+            echo "version_code=$VERSION_CODE"
+            echo "commit=$GITHUB_SHA"
+            echo "short_commit=$SHORT_SHA"
+            echo "workflow=Fontconfig renderer native probe"
+            echo "run_number=$GITHUB_RUN_NUMBER"
+            echo "run_id=$GITHUB_RUN_ID"
+            echo "renderer_provider=fontconfig"
+            echo "renderer_version=0.3.0-asswb-fontconfig"
+            echo "apk_name=$APK"
+            echo "apk_sha256=$(sha256sum "fontconfig-production-apk/$APK" | awk '{print $1}')"
+            echo "renderer_manifest_sha256=$(sha256sum fontconfig-native-probe/renderer-manifest.txt | awk '{print $1}')"
+          } > "fontconfig-production-apk/$IDENTITY"
+
           cp fontconfig-native-probe/depinfo.sh fontconfig-production-apk/
           cp fontconfig-native-probe/fontconfig.pc fontconfig-production-apk/
           cp fontconfig-native-probe/libass.pc fontconfig-production-apk/
@@ -202,20 +234,21 @@ jobs:
           SHORT_SHA="$(printf '%s' "$GITHUB_SHA" | cut -c1-12)"
           TAG="v$VERSION"
           APK="fontconfig-production-apk/ASS-Workbench-Android-$VERSION-$SHORT_SHA-debug.apk"
-          NOTES="Rolling $VERSION construction prerelease. Canonical device-test APK built from commit $GITHUB_SHA (Actions run #$GITHUB_RUN_NUMBER). The version tag marks the construction milestone and may predate the rolling APK asset; use the in-app Diagnostics build identity or the SHA-bearing filename for exact provenance."
+          IDENTITY="fontconfig-production-apk/ASS-Workbench-Android-$VERSION-$SHORT_SHA-build-identity.txt"
+          NOTES="Rolling $VERSION construction prerelease. Canonical device-test APK built from commit $GITHUB_SHA (Actions run #$GITHUB_RUN_NUMBER). The version tag marks the construction milestone and may predate the rolling APK assets; exact provenance is carried by the SHA-bearing APK filename, the in-app Diagnostics identity, and the accompanying build-identity manifest."
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release view "$TAG" --json assets --jq '.assets[].name' | \
-              grep -E "^ASS-Workbench-Android-$VERSION-[0-9a-f]{12}-debug\\.apk$" | \
+              grep -E "^ASS-Workbench-Android-$VERSION-[0-9a-f]{12}-(debug\\.apk|build-identity\\.txt)$" | \
               while IFS= read -r asset; do
                 gh release delete-asset "$TAG" "$asset" -y
               done
-            gh release upload "$TAG" "$APK"
+            gh release upload "$TAG" "$APK" "$IDENTITY"
             gh release edit "$TAG" \
               --title "ASS Workbench Android $VERSION" \
               --prerelease \
               --notes "$NOTES"
           else
-            gh release create "$TAG" "$APK" \
+            gh release create "$TAG" "$APK" "$IDENTITY" \
               --target "$GITHUB_SHA" \
               --title "ASS Workbench Android $VERSION" \
               --prerelease \

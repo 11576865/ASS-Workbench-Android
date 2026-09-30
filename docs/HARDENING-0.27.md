@@ -195,8 +195,8 @@ Status values: **AUTO** = current automated coverage exists; **ADD** = add autom
 | L1 | Lifecycle | rotate portrait↔landscape during active edit | canonical document, focus, selection and draft semantics survive | DEVICE |
 | L2 | Lifecycle | process death/recovery after unsaved edit | recovery restores expected snapshot without inheriting stale MKV/container state | code-hardened + DEVICE |
 | S1 | Save | start MKV save, then edit/switch workspace | completed output is save-start snapshot; stale callback cannot mutate the later workspace | code-hardened + DEVICE |
-| B1 | Build | APK identity inspection | versionCode/version/commit/run are visible and match artifact name | AUTO + DEVICE |
-| B2 | Release | rolling 0.26 prerelease asset | APK filename/diagnostics identify exact source commit | AUTO |
+| B1 | Build | APK identity inspection | generated BuildConfig is checked against versionCode/version/commit/run; SHA-bearing APK ships with a hash manifest; Diagnostics exposes the same identity | AUTO + DEVICE spot-check |
+| B2 | Release | rolling 0.26 prerelease asset | release carries SHA-bearing APK + build-identity manifest and verifies both asset names after publication | AUTO |
 
 ## Freeze priorities
 
@@ -248,5 +248,5 @@ The 0.27 version bump is permitted only after:
 2. Android CI and the Fontconfig production workflow are green on the release-candidate commit;
 3. the destructive corpus has no unexplained preservation regression;
 4. a physical-device pass covers startup, open/save, MKV write-back, selected font packaging, preview, waveform failure behaviour, orientation, recovery and save/reopen;
-5. the build identity shown in Diagnostics matches the distributed APK;
+5. the build identity shown in Diagnostics matches the distributed APK and its SHA-bearing build-identity manifest;
 6. remaining limitations are documented rather than silently hidden.
