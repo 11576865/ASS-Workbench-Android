@@ -50,6 +50,7 @@ fun TypesettingPanel(
     viewModel: EditorViewModel,
     style: AssStyle,
     modifier: Modifier = Modifier,
+    contextEventId: Long? = state.focusedEventId,
 ) {
     var fontSize by remember(style) { mutableStateOf(style.fontSize.toString()) }
     var spacing by remember(style) { mutableStateOf(style.spacing.toString()) }
@@ -79,7 +80,7 @@ fun TypesettingPanel(
     val styleNames = state.document.styles.map { it.name }
 
 
-    val focusedEvent = state.focusedEventId?.let { id -> state.document.events.firstOrNull { it.id == id } }
+    val focusedEvent = contextEventId?.let { id -> state.document.events.firstOrNull { it.id == id } }
     val focusedSources = focusedEvent?.let(::styleOverrideSources).orEmpty()
     val hasInlineStyleOverrides = focusedSources.isNotEmpty()
     val hasEventMarginOverrides = focusedEvent?.let {
