@@ -3,6 +3,9 @@ package io.github.assworkbench.fonts
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
+import java.nio.file.AtomicMoveNotSupportedException
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 
 /**
  * Publishes the union of several font source directories into one stable
@@ -72,16 +75,10 @@ object RendererFontDirectory {
                     output.fd.sync()
                 }
             }
-            if (target.exists() && !target.delete()) {
-                error("Unable to replace renderer font: " + target.absolutePath)
-            }
-            if (!tmp.renameTo(target)) {
-                FileInputStream(tmp).use { input ->
-                    FileOutputStream(target).use { output ->
-                        input.copyTo(output)
-                        output.fd.sync()
-                    }
-                }
+            try {
+                Files.move(tmp.toPath(), target.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
+            } catch (_: AtomicMoveNotSupportedException) {
+                Files.move(tmp.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING)
             }
         } finally {
             if (tmp.exists()) tmp.delete()

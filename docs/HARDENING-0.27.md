@@ -189,6 +189,7 @@ Implemented hardening:
 - filename collision policy is deterministic, with the current project source taking priority;
 - the `sub-fonts-dir` path no longer changes when the first MKV attachment font arrives, avoiding an unnecessary mpv option/renderer identity change.
 - `fontRevision` intentionally recreates the mpv/libass core after font publication; this is a rare font-management event, not a per-edit/per-gesture path, and avoids depending on undocumented live provider rescans.
+- replacing a published font now moves a fully written temporary file over the old file in the same directory; the previous delete-then-rename/direct-copy path could expose a missing or partially written font if publication failed.
 
 The Fontconfig production path continues to use its explicit manual/project/system directories; this union directory primarily closes the compatibility/direct-provider path and keeps both renderer modes semantically aligned.
 

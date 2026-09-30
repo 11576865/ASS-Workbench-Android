@@ -69,4 +69,24 @@ class RendererFontDirectoryTest {
             root.deleteRecursively()
         }
     }
+
+    @Test
+    fun replacingPublishedFontLeavesOnlyCompleteNewFile() {
+        val root = Files.createTempDirectory("asswb-font-replace").toFile()
+        try {
+            val source = File(root, "manual").apply { mkdirs() }
+            val target = File(root, "renderer")
+            val font = File(source, "Updated.ttf")
+            font.writeBytes(byteArrayOf(1, 2, 3))
+            RendererFontDirectory.sync(target, listOf(source))
+
+            font.writeBytes(byteArrayOf(4, 5, 6, 7))
+            RendererFontDirectory.sync(target, listOf(source))
+
+            assertContentEquals(font.readBytes(), File(target, font.name).readBytes())
+            assertEquals(listOf(font.name), target.listFiles().orEmpty().map { it.name })
+        } finally {
+            root.deleteRecursively()
+        }
+    }
 }
