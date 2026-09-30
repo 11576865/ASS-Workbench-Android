@@ -133,13 +133,14 @@ jobs:
             echo "jni_sha256=$(sha256sum .libmpvkt-src/libmpvkt-native/native-libs/arm64-v8a/libmpvkt_jni.so | awk '{print $1}')"
           } > fontconfig-native-probe/renderer-manifest.txt
 
-      - name: Upload arm64 probe
+      - name: Upload one-day manual arm64 probe
+        if: github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@v4
         with:
-          name: asswb-fontconfig-native-arm64
+          name: asswb-fontconfig-native-arm64-manual
           path: fontconfig-native-probe/
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 1
 
       - name: Set up JDK 21 for patched AAR packaging
         uses: actions/setup-java@v5
@@ -238,13 +239,14 @@ jobs:
           cp fontconfig-native-probe/renderer-manifest.txt fontconfig-production-apk/
           cp fontconfig-native-probe/libmpv-needed.txt fontconfig-production-apk/
 
-      - name: Upload production Fontconfig APK
+      - name: Upload one-day manual production bundle
+        if: github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@v4
         with:
-          name: asswb-fontconfig-production-apk
+          name: asswb-fontconfig-production-manual
           path: fontconfig-production-apk/
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 1
 
       - name: Publish canonical GitHub prerelease
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
