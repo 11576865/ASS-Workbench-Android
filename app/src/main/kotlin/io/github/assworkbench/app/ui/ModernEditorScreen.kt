@@ -721,6 +721,7 @@ private fun FixedWorkspace(
             }
         }
         BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
+            val availableHeight = maxHeight
             val wide = maxWidth >= 1200.dp
             val medium = maxWidth >= 700.dp
             val preview: @Composable (Modifier) -> Unit = { previewModifier ->
@@ -763,7 +764,7 @@ private fun FixedWorkspace(
                         FilterChip(showPreview, { showPreview = !showPreview }, { Text("预览") },
                             modifier = Modifier.testTag("fixed-preview-toggle"))
                     }
-                    if (showPreview && maxHeight >= 500.dp) {
+                    if (showPreview && availableHeight >= 500.dp) {
                         preview(Modifier.fillMaxWidth().height(180.dp))
                         HorizontalDivider()
                     }
