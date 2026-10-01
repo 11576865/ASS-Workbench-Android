@@ -11,6 +11,8 @@ import io.github.assworkbench.domain.AssDocument
 import io.github.assworkbench.domain.AssDocumentEditing
 import io.github.assworkbench.domain.AssQcIssue
 import io.github.assworkbench.domain.AssQualityFixes
+import io.github.assworkbench.domain.BatchRule
+import io.github.assworkbench.domain.BatchRuleEngine
 import io.github.assworkbench.domain.AssTextDecoder
 import io.github.assworkbench.domain.AssTextEncoding
 import io.github.assworkbench.domain.EventOverrideEditor
@@ -669,6 +671,53 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                     )
                 }
             }
+        }
+    }
+
+    fun previewBatchRule(rule: BatchRule, selectedScope: Boolean) {
+        val snapshot = _state.value
+        val scope = if (selectedScope) snapshot.selectedEventIds else null
+        val preview = runCatching {
+            BatchRuleEngine.preview(snapshot.document, rule, scope)
+        }.getOrElse {
+            reportError("批处理规则预览失败", it)
+            return
+        }
+        _state.update {
+            it.copy(
+                previewDocument = preview.document,
+                batchRulePreviewEventIds = preview.affectedEventIds,
+                status = "批处理规则预览：${preview.affectedEventIds.size} 条将受影响；尚未写入 Undo 历史。",
+            )
+        }
+    }
+
+    fun applyBatchRule(rule: BatchRule, selectedScope: Boolean) {
+        val snapshot = _state.value
+        val scope = if (selectedScope) snapshot.selectedEventIds else null
+        val preview = runCatching {
+            BatchRuleEngine.preview(snapshot.document, rule, scope)
+        }.getOrElse {
+            reportError("批处理规则执行失败", it)
+            return
+        }
+        if (preview.affectedEventIds.isEmpty()) {
+            _state.update { it.copy(previewDocument = null, batchRulePreviewEventIds = emptySet(), status = "批处理规则没有匹配任何 Event。") }
+            return
+        }
+        editDocument("批处理规则已应用：${preview.affectedEventIds.size} 条；单次 Undo 可撤销。") {
+            preview.document
+        }
+        _state.update { it.copy(batchRulePreviewEventIds = emptySet()) }
+    }
+
+    fun clearBatchRulePreview() {
+        _state.update {
+            it.copy(
+                previewDocument = null,
+                batchRulePreviewEventIds = emptySet(),
+                status = "已取消批处理规则预览。",
+            )
         }
     }
 
