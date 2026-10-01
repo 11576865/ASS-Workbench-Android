@@ -58,7 +58,10 @@ internal fun FloatingWorkbenchSurface(
         val activate by rememberUpdatedState(onActivate)
         LaunchedEffect(id, visible) {
             if (visible) controller.ensure(id, fallback)
-            else controller.cancel(id)
+            else {
+                controller.cancel(id)
+                resizing = false
+            }
         }
         DisposableEffect(controller, id) { onDispose { controller.cancel(id) } }
 
@@ -184,7 +187,7 @@ internal fun FloatingWorkbenchSurface(
             }
         }
         // Only this outline redraws during resize; the tool remeasures once on release.
-        if (resizing) {
+        if (resizing && visible) {
             val outline = MaterialTheme.colorScheme.primary
             Canvas(Modifier.fillMaxSize().zIndex(controller.z(id) + 0.5f)) {
                 candidate.value?.let {
