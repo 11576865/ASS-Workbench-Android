@@ -59,7 +59,7 @@ object SubtitleCompatibilityAnalyzer {
                 )
             }
             val analysis = AssInlineSyntax.analyze(event.text)
-            if (analysis.tokens.any { it.kind == AssInlineTokenKind.OVERRIDE }) {
+            if (analysis.tokens.any { it.kind == AssInlineTokenKind.OVERRIDE_BLOCK }) {
                 out += CompatibilityIssue(
                     profile,
                     CompatibilitySeverity.WARNING,
