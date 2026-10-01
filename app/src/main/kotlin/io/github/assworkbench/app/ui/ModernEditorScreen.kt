@@ -225,13 +225,13 @@ fun ModernEditorScreen(
                 onTool = ::openTool,
                 workspaceMode = workspaceMode,
                 onWorkspaceModeToggle = {
-                    viewModel.setWorkspaceMode(
-                        if (workspaceMode == WorkspacePresentationMode.FIXED) {
-                            WorkspacePresentationMode.CANVAS_EXPERIMENTAL
-                        } else {
-                            WorkspacePresentationMode.FIXED
-                        }
-                    )
+                    val next = if (workspaceMode == WorkspacePresentationMode.FIXED) {
+                        workspaceState = workspaceState.withSurfacesHidden(false)
+                        WorkspacePresentationMode.CANVAS_EXPERIMENTAL
+                    } else {
+                        WorkspacePresentationMode.FIXED
+                    }
+                    viewModel.setWorkspaceMode(next)
                 },
             )
             }
