@@ -7,6 +7,9 @@ import androidx.lifecycle.viewModelScope
 import io.github.assworkbench.container.MatroskaReader
 import io.github.assworkbench.container.MatroskaScanResult
 import io.github.assworkbench.domain.AssCodec
+import io.github.assworkbench.domain.WorkspacePresentationMode
+import io.github.assworkbench.domain.AssWorkbenchProjectManifest
+import io.github.assworkbench.domain.AssWorkbenchProjectCodec
 import io.github.assworkbench.domain.AssDocument
 import io.github.assworkbench.domain.AssDocumentEditing
 import io.github.assworkbench.domain.AssQuickFixExecutor
@@ -62,6 +65,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     private var waveformSourceUri: String? = null
     private var containerScan: MatroskaScanResult? = null
     private var eventFormatClipboard: EventFormatClipboard? = null
+    private var pendingProjectRestore: AssWorkbenchProjectManifest? = null
     private val workspaceEpoch = AtomicLong(1L)
     private val writeBackSerial = AtomicLong(0L)
     private val _state = MutableStateFlow(
@@ -290,7 +294,30 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 if (_state.value.project.videoUri == uri.toString()) {
                     launchWaveformAnalysis(uri)
                 }
-                if (tracks.size == 1) selectContainerTrack(tracks.single().number)
+                val pendingTrack = pendingProjectRestore
+                    ?.takeIf { it.mkvUri == uri.toString() }
+                    ?.mkvTrackNumber
+                when {
+                    pendingTrack != null && tracks.any { it.number == pendingTrack } -> {
+                        selectContainerTrack(pendingTrack)
+                        val manifest = pendingProjectRestore
+                        if (manifest != null) {
+                            _state.update {
+                                it.copy(
+                                    projectFileUri = it.projectFileUri,
+                                    workspaceMode = manifest.workspaceMode,
+                                    project = it.project.copy(title = manifest.title),
+                                    status = "已恢复 ASS Workbench MKV 工程。",
+                                )
+                            }
+                        }
+                        pendingProjectRestore = null
+                    }
+                    tracks.size == 1 -> {
+                        selectContainerTrack(tracks.single().number)
+                        pendingProjectRestore = null
+                    }
+                }
             }.onFailure { error ->
                 if (error is kotlinx.coroutines.CancellationException) return@onFailure
                 if (
@@ -483,6 +510,97 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 }
             }
         }
+    }
+
+    fun setWorkspaceMode(mode: WorkspacePresentationMode) {
+        _state.update { it.copy(workspaceMode = mode) }
+    }
+
+    fun openWorkbenchProject(uri: Uri) {
+        val text = app.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+            ?: error("无法读取 ASS Workbench 工程文件")
+        val manifest = AssWorkbenchProjectCodec.parse(text)
+        pendingProjectRestore = manifest
+
+        when {
+            !manifest.mkvUri.isNullOrBlank() -> {
+                openMkvProject(Uri.parse(manifest.mkvUri))
+                _state.update {
+                    it.copy(
+                        projectFileUri = uri.toString(),
+                        workspaceMode = manifest.workspaceMode,
+                        status = "正在恢复 ASS Workbench MKV 工程……",
+                    )
+                }
+            }
+            !manifest.subtitleUri.isNullOrBlank() || !manifest.sourceSubtitleUri.isNullOrBlank() -> {
+                val source = manifest.subtitleUri ?: manifest.sourceSubtitleUri!!
+                openSubtitle(Uri.parse(source))
+                manifest.videoUri?.let { attachVideo(Uri.parse(it)) }
+                _state.update {
+                    it.copy(
+                        projectFileUri = uri.toString(),
+                        workspaceMode = manifest.workspaceMode,
+                        project = it.project.copy(title = manifest.title),
+                        status = "已恢复 ASS Workbench 工程。",
+                    )
+                }
+                pendingProjectRestore = null
+            }
+            else -> {
+                newSubtitleProject()
+                manifest.videoUri?.let { attachVideo(Uri.parse(it)) }
+                _state.update {
+                    it.copy(
+                        projectFileUri = uri.toString(),
+                        workspaceMode = manifest.workspaceMode,
+                        project = it.project.copy(title = manifest.title),
+                        status = "已恢复空白 ASS Workbench 工程。",
+                    )
+                }
+                pendingProjectRestore = null
+            }
+        }
+    }
+
+    fun saveWorkbenchProjectTo(uri: Uri): Boolean {
+        val snapshot = _state.value
+        val manifest = AssWorkbenchProjectManifest(
+            title = snapshot.project.title,
+            subtitleUri = snapshot.project.subtitleUri,
+            sourceSubtitleUri = snapshot.project.sourceSubtitleUri,
+            sourceFormat = snapshot.project.sourceFormat,
+            videoUri = snapshot.project.videoUri,
+            mkvUri = snapshot.container.uri,
+            mkvTrackNumber = snapshot.container.selectedTrackNumber,
+            workspaceMode = snapshot.workspaceMode,
+            importedFontUris = snapshot.importedFonts.map { "font-sha:" + it.sha256 },
+        )
+        return runCatching {
+            val text = AssWorkbenchProjectCodec.write(manifest)
+            app.contentResolver.openOutputStream(uri, "wt")?.bufferedWriter()?.use { it.write(text) }
+                ?: error("无法写入 ASS Workbench 工程文件")
+        }.fold(
+            onSuccess = {
+                _state.update {
+                    it.copy(
+                        projectFileUri = uri.toString(),
+                        status = "ASS Workbench 工程文件已保存。",
+                    )
+                }
+                true
+            },
+            onFailure = { error ->
+                reportError("工程文件保存失败", error)
+                false
+            },
+        )
+    }
+
+    fun saveCurrentWorkbenchProject(): Boolean {
+        val uri = _state.value.projectFileUri?.let(Uri::parse) ?: return false
+        saveWorkbenchProjectTo(uri)
+        return true
     }
 
     fun openPickedVideo(uri: Uri) {
