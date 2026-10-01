@@ -69,7 +69,7 @@ import kotlin.math.abs
 private enum class WorkbenchTool(val title: String) {
     SUBTITLES("字幕"), TEXT("正文"), TIMELINE("时间轴"), STYLE("样式"), POSITION("位置"),
     EFFECTS("效果"), EVENT("事件"), FONTS("字体"), QC("检查"), BATCH("批量"),
-    PROJECT("项目"), DIAGNOSTICS("诊断"), CAPABILITIES("功能地图"),
+    PROJECT("项目"), COMPATIBILITY("兼容性"), DIAGNOSTICS("诊断"), CAPABILITIES("功能地图"),
 }
 
 private enum class WorkspacePresentationMode(val label: String) {
@@ -775,6 +775,7 @@ private fun FloatingToolContent(
         WorkbenchTool.QC -> QcPane(state, viewModel, issues, Modifier.fillMaxSize())
         WorkbenchTool.BATCH -> BatchPane(state, viewModel, Modifier.fillMaxSize())
         WorkbenchTool.PROJECT -> ProjectPane(state, viewModel, onSaveMkv, Modifier.fillMaxSize())
+        WorkbenchTool.COMPATIBILITY -> CompatibilityPane(state, Modifier.fillMaxSize())
         WorkbenchTool.DIAGNOSTICS -> DiagnosticsPane(state, viewModel, Modifier.fillMaxSize())
         WorkbenchTool.CAPABILITIES -> WorkspaceToolDirectory(onOpenTool, Modifier.fillMaxSize())
     }
@@ -875,6 +876,7 @@ private fun ModernAppBar(
                         DropdownMenuItem(text = { Text("字体管理") }, leadingIcon = { Icon(Icons.Filled.FontDownload, null) }, onClick = { moreMenuOpen = false; onTool(WorkbenchTool.FONTS) })
                         DropdownMenuItem(text = { Text("质量检查") }, leadingIcon = { Icon(Icons.Filled.ErrorOutline, null) }, onClick = { moreMenuOpen = false; onTool(WorkbenchTool.QC) })
                         DropdownMenuItem(text = { Text("项目") }, leadingIcon = { Icon(Icons.Filled.Info, null) }, onClick = { moreMenuOpen = false; onTool(WorkbenchTool.PROJECT) })
+                        DropdownMenuItem(text = { Text("兼容性检查") }, leadingIcon = { Icon(Icons.Filled.Rule, null) }, onClick = { moreMenuOpen = false; onTool(WorkbenchTool.COMPATIBILITY) })
                         DropdownMenuItem(text = { Text("诊断") }, leadingIcon = { Icon(Icons.Filled.Tune, null) }, onClick = { moreMenuOpen = false; onTool(WorkbenchTool.DIAGNOSTICS) })
                         DropdownMenuItem(text = { Text("保存 ASS Workbench Project") }, leadingIcon = { Icon(Icons.Filled.Inventory2, null) }, onClick = { moreMenuOpen = false; onSaveProject() })
                         DropdownMenuItem(
@@ -3903,6 +3905,51 @@ private fun ProjectPane(state: EditorState, viewModel: EditorViewModel, onSaveMk
             ContainerBridgePanel(state.container, viewModel, onSaveMkv, dirty = state.dirty)
         }
         else Text(if (state.project.videoUri == null) "未附加参考视频" else "已附加参考视频", color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
+private fun CompatibilityPane(state: EditorState, modifier: Modifier = Modifier) {
+    var profileName by rememberSaveable { mutableStateOf(SubtitleCompatibilityProfile.LIBASS_ASS.name) }
+    val profile = SubtitleCompatibilityProfile.entries.firstOrNull { it.name == profileName }
+        ?: SubtitleCompatibilityProfile.LIBASS_ASS
+    val issues = remember(state.document, profile) {
+        SubtitleCompatibilityAnalyzer.inspect(state.document, profile)
+    }
+    Column(modifier.padding(WorkbenchDimens.Small), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("兼容性检查模式", style = MaterialTheme.typography.titleSmall)
+        Text(
+            "预览仍以 libass 为权威；这里分析跨格式/保守导出的语义损失，不伪装成第二 renderer。",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            SubtitleCompatibilityProfile.entries.forEach { entry ->
+                FilterChip(
+                    selected = profile == entry,
+                    onClick = { profileName = entry.name },
+                    label = { Text(entry.label) },
+                )
+            }
+        }
+        Text("${profile.label} · ${issues.size} 项", style = MaterialTheme.typography.labelLarge)
+        Divider()
+        LazyColumn(Modifier.fillMaxSize()) {
+            items(issues) { issue ->
+                Column(Modifier.fillMaxWidth().padding(vertical = 7.dp)) {
+                    Text(
+                        (issue.eventId?.let { "#$it · " } ?: "") + issue.message,
+                        color = when (issue.severity) {
+                            CompatibilitySeverity.ERROR -> MaterialTheme.colorScheme.error
+                            CompatibilitySeverity.WARNING -> MaterialTheme.colorScheme.tertiary
+                            CompatibilitySeverity.INFO -> MaterialTheme.colorScheme.onSurface
+                        },
+                    )
+                    Text(issue.code, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Divider()
+            }
+        }
     }
 }
 
