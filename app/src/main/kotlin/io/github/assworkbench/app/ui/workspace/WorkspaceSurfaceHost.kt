@@ -53,7 +53,40 @@ internal fun FloatingWorkbenchSurface(
         val viewportHeight = maxHeight.value
         val fallback = initialGeometry ?: SurfaceGeometry(initialOffset.x / density, initialOffset.y / density)
         val state = controller.state(id, fallback)
-        val geometry = state.geometry.inViewport(viewportWidth, viewportHeight)
+        val baseGeometry = state.geometry.inViewport(viewportWidth, viewportHeight)
+        val geometry = when (state.placement) {
+            SurfacePlacement.FLOATING -> baseGeometry
+            SurfacePlacement.DOCK_LEFT -> SurfaceGeometry(
+                x = 0f,
+                y = 0f,
+                width = minOf(360f, viewportWidth),
+                height = viewportHeight,
+            ).inViewport(viewportWidth, viewportHeight)
+            SurfacePlacement.DOCK_RIGHT -> {
+                val width = minOf(360f, viewportWidth)
+                SurfaceGeometry(
+                    x = (viewportWidth - width).coerceAtLeast(0f),
+                    y = 0f,
+                    width = width,
+                    height = viewportHeight,
+                ).inViewport(viewportWidth, viewportHeight)
+            }
+            SurfacePlacement.DOCK_BOTTOM -> {
+                val height = minOf(320f, viewportHeight)
+                SurfaceGeometry(
+                    x = 0f,
+                    y = (viewportHeight - height).coerceAtLeast(0f),
+                    width = viewportWidth,
+                    height = height,
+                ).inViewport(viewportWidth, viewportHeight)
+            }
+            SurfacePlacement.MINIMIZED -> SurfaceGeometry(
+                x = baseGeometry.x,
+                y = baseGeometry.y,
+                width = minOf(320f, viewportWidth),
+                height = 58f,
+            ).inViewport(viewportWidth, viewportHeight)
+        }
         val candidate = remember(controller, id) { controller.candidate(id) }
         var resizing by remember { mutableStateOf(false) }
         val activate by rememberUpdatedState(onActivate)
@@ -97,8 +130,8 @@ internal fun FloatingWorkbenchSurface(
                     Row(
                         Modifier.fillMaxWidth().testTag("surface-drag-$testTagId")
                             .background(MaterialTheme.colorScheme.surfaceContainerHighest)
-                            .pointerInput(id, state.layoutLocked, geometry, density) {
-                                if (!state.layoutLocked) detectDragGestures(
+                            .pointerInput(id, state.layoutLocked, state.placement, geometry, density) {
+                                if (!state.layoutLocked && state.placement == SurfacePlacement.FLOATING) detectDragGestures(
                                     onDragStart = {
                                         controller.begin(id, fallback, geometry)
                                         controller.bringToFront(id, fallback)
@@ -128,6 +161,24 @@ internal fun FloatingWorkbenchSurface(
                             Icon(Icons.Filled.Close, contentDescription = "收回 $title")
                         }
                     }
+                    val stackMembers = controller.stackMembers(id)
+                    if (stackMembers.size > 1) {
+                        Row(
+                            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
+                                .background(MaterialTheme.colorScheme.surfaceContainer),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            stackMembers.forEach { memberId ->
+                                TextButton(onClick = { controller.bringToFront(memberId) }) {
+                                    Text(
+                                        if (memberId == id) "● " + memberId.substringBefore(':')
+                                        else memberId.substringBefore(':'),
+                                        maxLines = 1,
+                                    )
+                                }
+                            }
+                        }
+                    }
                     // Actions remain reachable even in the compact presentation.
                     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
                         verticalAlignment = Alignment.CenterVertically) {
@@ -142,6 +193,32 @@ internal fun FloatingWorkbenchSurface(
                                 Icon(Icons.Filled.ContentCopy, contentDescription = "复制工具实例")
                             }
                         }
+                        TextButton(
+                            onClick = { controller.cyclePlacement(id, fallback) },
+                            modifier = Modifier.testTag("surface-placement-$testTagId"),
+                        ) {
+                            Text(
+                                when (state.placement) {
+                                    SurfacePlacement.FLOATING -> "浮动"
+                                    SurfacePlacement.DOCK_LEFT -> "左停靠"
+                                    SurfacePlacement.DOCK_RIGHT -> "右停靠"
+                                    SurfacePlacement.DOCK_BOTTOM -> "底停靠"
+                                    SurfacePlacement.MINIMIZED -> "最小化"
+                                }
+                            )
+                        }
+                        IconButton(
+                            onClick = {
+                                if (state.stackId == null) controller.stackWithFrontmost(id, fallback)
+                                else controller.unstack(id, fallback)
+                            },
+                            modifier = Modifier.testTag("surface-stack-$testTagId"),
+                        ) {
+                            Icon(
+                                if (state.stackId == null) Icons.Filled.Layers else Icons.Filled.LayersClear,
+                                contentDescription = if (state.stackId == null) "与最近工具组成 Tab Stack" else "移出 Tab Stack",
+                            )
+                        }
                         IconButton(onClick = { controller.toggleLayoutLock(id, fallback) },
                             modifier = Modifier.testTag("surface-lock-$testTagId")) {
                             Icon(if (state.layoutLocked) Icons.Filled.Lock else Icons.Filled.LockOpen,
@@ -154,8 +231,8 @@ internal fun FloatingWorkbenchSurface(
                             style = MaterialTheme.typography.labelSmall)
                     }
                     Box(Modifier.weight(1f).fillMaxWidth()) {
-                        content()
-                        if (!state.layoutLocked) {
+                        if (state.placement != SurfacePlacement.MINIMIZED) content()
+                        if (!state.layoutLocked && state.placement == SurfacePlacement.FLOATING) {
                             Icon(Icons.Filled.OpenInFull, contentDescription = "拖动调整窗口大小",
                                 modifier = Modifier.align(Alignment.BottomEnd)
                                     .testTag("surface-resize-$testTagId")
