@@ -19,7 +19,8 @@ internal fun RuleBatchPane(
     viewModel: EditorViewModel,
     modifier: Modifier = Modifier,
 ) {
-    var selectedOnly by rememberSaveable { mutableStateOf(false) }
+    val hasSelection = state.selectedEventIds.isNotEmpty()
+    var selectedOnly by rememberSaveable(hasSelection) { mutableStateOf(hasSelection) }
     var styleFilter by rememberSaveable { mutableStateOf("") }
     var textFilter by rememberSaveable { mutableStateOf("") }
     var actorFilter by rememberSaveable { mutableStateOf("") }
