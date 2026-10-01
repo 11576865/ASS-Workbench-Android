@@ -57,6 +57,9 @@ import io.github.assworkbench.app.EditorState
 import io.github.assworkbench.app.EditorViewModel
 import io.github.assworkbench.app.WaveformLiteState
 import io.github.assworkbench.app.WaveformLiteStatus
+import io.github.assworkbench.app.ui.interaction.InteractionOverlayRegistry
+import io.github.assworkbench.app.ui.interaction.WindowInteractionOverlay
+import io.github.assworkbench.app.ui.interaction.rememberInteractionOverlayRegistry
 import io.github.assworkbench.app.ui.workspace.WorkspaceBinding
 import io.github.assworkbench.app.ui.workspace.SurfaceGeometry
 import io.github.assworkbench.app.ui.workspace.FloatingWorkbenchSurface
