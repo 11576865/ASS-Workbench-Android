@@ -2,7 +2,7 @@
 
 A touch-first, raw-preserving ASS workbench for Android — evolving from subtitle editing into a professional mobile subtitle engineering environment.
 
-**Current release candidate: 0.27.1 / versionCode 30**
+**Current release candidate: 0.29.0 / versionCode 33**
 
 0.26 was the internal construction and hardening cycle. **0.27.0** is the first packaged product candidate. Physical-device validation follows the 0.27.0 publication; fixes found on real hardware will ship as **0.27.1, 0.27.2, ...** rather than holding the 0.27.0 version number open.
 
@@ -23,6 +23,23 @@ The editor follows several core rules:
 - structured tools should rewrite the smallest owned span rather than normalize whole Event text.
 - portrait is the primary workflow layout; landscape is the precision visual layout.
 - standalone ASS and MKV projects remain distinct workflows over the same ASS document core.
+
+## 0.29 project / interchange / authoring expansion
+
+0.29 turns the 0.28 Canvas experiment into one of two explicit presentation modes over the same editor core:
+
+- **Fixed Workspace** — stable preview + fixed inspector composition.
+- **Canvas Workspace (Experimental)** — floating tool instances with dock-left/right, minimize and tab-stack composition.
+- **ASS Workbench Project** (`.asswbproj`) — versioned self-contained canonical ASS snapshot plus source/media references, workspace presentation/layout and font-packaging selection. Plain subtitle files remain fully usable without a project file.
+- **Subtitle interchange** — standalone ASS, SubRip/SRT and WebVTT can be opened and saved. ASS remains the canonical rich editing representation; Compatibility reports surface semantics that cannot survive a plain-text target.
+- **QC / ASS Linter** — reading speed, line count, timing, syntax, Style, geometry and renderer-risk rules with explicit reversible Quick Fixes where a safe fix exists.
+- **Frame-aware timing** — CFR/VFR frame-time domain model plus live mpv frame number/FPS metadata. Existing frame-step transport and Start/End-from-playhead editing now share the frame-aware timing surface.
+- **Batch Rule Engine** — Scope → Filter → Action → Preview → Commit, with the whole committed rule applied as one Undo transaction.
+- **Karaoke** — structured `\\k / \\K / \\kf / \\ko / \\kt` inspection and timing/tag editing.
+- **Vector Clip** — lossless vector `\\clip / \\iclip` path inspection and direct point-coordinate editing.
+- **Font requirements** — the existing semantic request inventory remains the source of truth for “which fonts this ASS actually asks for”; unused Style definitions are excluded, inline `\\rStyle` / `\\fn` are included, and matching manual fonts can be selected for MKV packaging automatically.
+
+Font subsetting is deliberately not added to ASS Workbench; packaging/subsetting belongs to the downstream mux/packaging workflow.
 
 ## 0.27.1 adaptive workbench UI
 
