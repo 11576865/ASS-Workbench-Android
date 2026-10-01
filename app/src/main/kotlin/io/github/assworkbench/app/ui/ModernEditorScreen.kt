@@ -124,9 +124,25 @@ fun ModernEditorScreen(
             (activePositionResolution as? WorkspaceBindingResolution.Event)?.eventId
         else -> null
     }
-    val issues by produceState<List<AssQcIssue>>(initialValue = emptyList(), state.document) {
+    val issues by produceState<List<AssQcIssue>>(
+        initialValue = emptyList(),
+        state.document,
+        state.compatibilityProfile,
+    ) {
         value = withContext(Dispatchers.Default) {
-            AssQualityCheck.inspect(state.document)
+            val core = AssQualityCheck.inspect(state.document)
+            val compatibility = AssCompatibilityAnalyzer
+                .inspect(state.document, state.compatibilityProfile)
+                .map { issue ->
+                    AssQcIssue(
+                        eventId = issue.eventId ?: 0L,
+                        kind = AssQcKind.COMPATIBILITY,
+                        severity = AssQcSeverity.WARNING,
+                        message = issue.message,
+                        ruleId = "compat." + issue.code,
+                    )
+                }
+            core + compatibility
         }
     }
 
@@ -3656,6 +3672,27 @@ private fun QcPane(state: EditorState, viewModel: EditorViewModel, issues: List<
             else -> null
         }
         Text("质量检查 · ${issues.size}", style = MaterialTheme.typography.titleSmall)
+        Text("兼容性检查", style = MaterialTheme.typography.labelLarge)
+        Row(
+            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            AssCompatibilityProfile.entries.forEach { profile ->
+                FilterChip(
+                    selected = state.compatibilityProfile == profile,
+                    onClick = { viewModel.setCompatibilityProfile(profile) },
+                    label = {
+                        Text(
+                            when (profile) {
+                                AssCompatibilityProfile.LIBASS_NATIVE -> "libass"
+                                AssCompatibilityProfile.PORTABLE_CONSERVATIVE -> "保守可移植"
+                                AssCompatibilityProfile.VSFILTER_ORIENTED -> "VSFilter 检查"
+                            }
+                        )
+                    },
+                )
+            }
+        }
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text("$errors error · $warnings warning · ${issues.size-errors-warnings} info", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
             OutlinedButton(onClick = { previousIssueId?.let { viewModel.focusEvent(it, true) } }, enabled = previousIssueId != null) { Text("上一问题") }
@@ -3666,7 +3703,10 @@ private fun QcPane(state: EditorState, viewModel: EditorViewModel, issues: List<
         LazyColumn(Modifier.fillMaxSize()) {
             items(issues) { issue ->
                 Row(
-                    Modifier.fillMaxWidth().combinedClickable(onClick = { viewModel.focusEvent(issue.eventId, true) }, onLongClick = { viewModel.focusEvent(issue.eventId, true) }).padding(vertical = WorkbenchDimens.Small),
+                    Modifier.fillMaxWidth().combinedClickable(
+                        onClick = { if (issue.eventId > 0L) viewModel.focusEvent(issue.eventId, true) },
+                        onLongClick = { if (issue.eventId > 0L) viewModel.focusEvent(issue.eventId, true) },
+                    ).padding(vertical = WorkbenchDimens.Small),
                     verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Text(
@@ -3674,7 +3714,7 @@ private fun QcPane(state: EditorState, viewModel: EditorViewModel, issues: List<
                         color = when (issue.severity) { AssQcSeverity.ERROR -> MaterialTheme.colorScheme.error; AssQcSeverity.WARNING -> MaterialTheme.colorScheme.tertiary; AssQcSeverity.INFO -> MaterialTheme.colorScheme.onSurfaceVariant }
                     )
                     Column(Modifier.weight(1f)) {
-                        Text("#${issue.eventId} · ${issue.message}")
+                        Text((if (issue.eventId > 0L) "#${issue.eventId} · " else "文档 · ") + issue.message)
                         Text(issue.ruleId, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         if (issue.quickFixes.isNotEmpty()) {
                             Row(
