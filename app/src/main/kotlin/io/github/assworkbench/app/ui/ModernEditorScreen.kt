@@ -474,8 +474,7 @@ fun ModernEditorScreen(
                             }
                         }
                     }
-                    val eventBound = surfaceTool == WorkbenchTool.STYLE ||
-                        surfaceTool == WorkbenchTool.POSITION
+                    val eventBound = surfaceTool.descriptor.eventBindable
                     val bindingResolution = instance.binding.resolve(
                         focusedEventId = state.focusedEventId,
                         selectedEventIds = state.selectedEventIds,
@@ -539,7 +538,7 @@ fun ModernEditorScreen(
                             surfaceController.activateTab(tabId)
                             workspaceState = workspaceState.activate(tabId)
                         },
-                        onDuplicate = if (eventBound) {
+                        onDuplicate = if (surfaceTool.descriptor.canDuplicate) {
                             {
                                 workspaceState.newSibling(instance.id)?.let { sibling ->
                                     workspaceState = workspaceState
