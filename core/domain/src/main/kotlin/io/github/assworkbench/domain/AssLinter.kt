@@ -13,10 +13,15 @@ sealed interface AssQuickFix {
         })
     }
     data object UseDefaultStyle : AssQuickFix {
-        override val label = "改用 Default Style"
-        override fun apply(document: AssDocument, eventId: Long) = document.copy(events = document.events.map {
-            if (it.id == eventId) it.copy(style = "Default") else it
-        })
+        override val label = "改用可用 Style"
+        override fun apply(document: AssDocument, eventId: Long): AssDocument {
+            val replacement = document.styles.firstOrNull { it.name == "Default" }?.name
+                ?: document.styles.firstOrNull()?.name
+                ?: return document
+            return document.copy(events = document.events.map {
+                if (it.id == eventId) it.copy(style = replacement) else it
+            })
+        }
     }
     data object TrimVisibleWhitespace : AssQuickFix {
         override val label = "清理首尾空白"
