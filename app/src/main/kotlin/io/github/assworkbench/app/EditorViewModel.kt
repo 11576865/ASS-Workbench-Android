@@ -724,6 +724,30 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    fun initializeKaraoke(eventId: Long) {
+        editDocument("已为 Event 建立基础 Karaoke timing。") { doc ->
+            doc.copy(events = doc.events.map { event ->
+                if (event.id != eventId || AssKaraokeSemantic.inspect(event.text).segments.isNotEmpty()) event
+                else {
+                    val durationCs = ((event.end.millis - event.start.millis).coerceAtLeast(10L) / 10L)
+                        .coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+                    event.copy(text = "{\\k$durationCs}" + event.text)
+                }
+            })
+        }
+    }
+
+    fun createDefaultVectorClip(eventId: Long) {
+        editDocument("已建立默认 Vector Clip。") { doc ->
+            val w = doc.playResX
+            val h = doc.playResY
+            doc.copy(events = doc.events.map { event ->
+                if (event.id != eventId || AssVectorClipSemantic.inspect(event.text).isNotEmpty()) event
+                else event.copy(text = "{\\clip(m 0 0 l $w 0 l $w $h l 0 $h)}" + event.text)
+            })
+        }
+    }
+
     fun setKaraokeTiming(eventId: Long, segmentIndex: Int, valueCs: Int) {
         editDocument("已更新 Karaoke timing。") { doc ->
             doc.copy(events = doc.events.map { event ->
