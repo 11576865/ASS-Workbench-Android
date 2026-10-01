@@ -577,6 +577,7 @@ fun ModernEditorScreen(
                     rendererEnabled = rendererEnabled,
                     onEnableRenderer = onEnableRenderer,
                     onOpenTool = ::openTool,
+                    onEditEventPosition = ::openPositionTarget,
                     modifier = Modifier.weight(1f).fillMaxWidth().testTag("glass-layered-workspace"),
                 )
             } else BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().testTag("canvas-workspace")) {
@@ -753,6 +754,265 @@ fun ModernEditorScreen(
         }
     }
 }
+}
+
+@Composable
+private fun GlassLayeredWorkspace(
+    state: EditorState,
+    viewModel: EditorViewModel,
+    issues: List<AssQcIssue>,
+    workspaceState: WorkspaceState,
+    onWorkspaceStateChange: (WorkspaceState) -> Unit,
+    expandedEventId: Long?,
+    onExpandedChange: (Long?) -> Unit,
+    onImportFont: () -> Unit,
+    onSaveMkv: () -> Unit,
+    eventEditorStateHolder: SaveableStateHolder,
+    onOpenVideo: () -> Unit,
+    rendererEnabled: Boolean,
+    onEnableRenderer: () -> Unit,
+    onOpenTool: (WorkbenchTool) -> Unit,
+    onEditEventPosition: (Long) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val systemBlurAvailable = rememberSystemBackdropBlurEnabled()
+    var alpha by rememberSaveable { mutableFloatStateOf(0.72f) }
+    var blurDp by rememberSaveable { mutableFloatStateOf(24f) }
+    var performanceModeName by rememberSaveable { mutableStateOf(GlassPerformanceMode.AUTO.name) }
+    val performanceMode = GlassPerformanceMode.valueOf(performanceModeName)
+    val materials = remember { mutableStateMapOf<String, GlassMaterial>() }
+    val offsets = remember { mutableStateMapOf<String, IntOffset>() }
+
+    val existingEventIds = remember(state.document.events) {
+        state.document.events.asSequence().map { it.id }.toSet()
+    }
+
+    Box(modifier.background(MaterialTheme.colorScheme.surfaceContainerLowest)) {
+        WorkbenchPreview(
+            state = state,
+            viewModel = viewModel,
+            positionEditEventId = null,
+            onOpenVideo = onOpenVideo,
+            onOpenTimeline = { onOpenTool(WorkbenchTool.TIMELINE) },
+            rendererEnabled = rendererEnabled,
+            onEnableRenderer = onEnableRenderer,
+            onEditEventPosition = onEditEventPosition,
+            viewportGesturesEnabled = true,
+            modifier = Modifier.fillMaxSize().testTag("glass-preview"),
+        )
+
+        workspaceState.tools.forEachIndexed { index, instance ->
+            val tool = WorkbenchTool.entries.firstOrNull { it.name == instance.toolKey }
+                ?: return@forEachIndexed
+            val active = workspaceState.activeInstanceId == instance.id
+            val material = materials[instance.id] ?: GlassMaterial.FROSTED
+            val plan = resolveGlassRenderPlan(
+                material = material,
+                requestedAlpha = alpha,
+                requestedBlurDp = blurDp,
+                performanceMode = performanceMode,
+                systemBackdropBlurAvailable = systemBlurAvailable,
+                activeLayer = active,
+                deemphasized = workspaceState.activeInstanceId != null && !active,
+            )
+            val bindingResolution = instance.binding.resolve(
+                focusedEventId = state.focusedEventId,
+                selectedEventIds = state.selectedEventIds,
+                existingEventIds = existingEventIds,
+            )
+            val bindingLabel = when (val binding = instance.binding) {
+                WorkspaceBinding.FollowFocus ->
+                    state.focusedEventId?.let { "跟随 #$it" } ?: "跟随焦点"
+                WorkspaceBinding.FollowSelection ->
+                    if (state.selectedEventIds.isEmpty()) "跟随选择" else "选择 ${state.selectedEventIds.size} 条"
+                is WorkspaceBinding.PinnedEvent ->
+                    if (bindingResolution is WorkspaceBindingResolution.UnresolvedPinnedEvent) {
+                        "固定 #${binding.eventId} · 已失效"
+                    } else {
+                        "固定 #${binding.eventId}"
+                    }
+            }
+            val offset = offsets.getOrPut(instance.id) {
+                IntOffset(
+                    x = 18 + (index % 3) * 54,
+                    y = 96 + (index % 4) * 62,
+                )
+            }
+
+            GlassToolWindow(
+                id = instance.id,
+                title = tool.title,
+                subtitle = "${material.label} · $bindingLabel" +
+                    if (plan.degraded) " · 模糊降级" else "",
+                visible = !workspaceState.surfacesHidden,
+                active = active,
+                width = if (tool == WorkbenchTool.TIMELINE) 420.dp else 360.dp,
+                height = if (tool == WorkbenchTool.TIMELINE) 420.dp else 500.dp,
+                offset = offset,
+                renderPlan = plan,
+                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                onOffsetChange = { offsets[instance.id] = it },
+                onActivate = {
+                    onWorkspaceStateChange(workspaceState.activate(instance.id))
+                },
+                onCycleMaterial = {
+                    materials[instance.id] = material.next()
+                },
+                onClose = {
+                    materials.remove(instance.id)
+                    offsets.remove(instance.id)
+                    onWorkspaceStateChange(workspaceState.closeInstance(instance.id))
+                },
+            ) {
+                FloatingToolContent(
+                    instance = instance,
+                    tool = tool,
+                    state = state,
+                    viewModel = viewModel,
+                    issues = issues,
+                    expandedEventId = expandedEventId,
+                    onExpandedChange = onExpandedChange,
+                    onImportFont = onImportFont,
+                    onSaveMkv = onSaveMkv,
+                    eventEditorStateHolder = eventEditorStateHolder,
+                    onOpenTool = onOpenTool,
+                    onCloseText = { onExpandedChange(null) },
+                    searchOpen = false,
+                    onCloseSearch = {},
+                )
+            }
+        }
+
+        Surface(
+            modifier = Modifier.align(Alignment.BottomCenter)
+                .padding(8.dp)
+                .testTag("glass-control-deck"),
+            shape = RoundedCornerShape(24.dp),
+            tonalElevation = 5.dp,
+            color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.94f),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        ) {
+            Column(
+                Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Row(
+                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    AssistChip(
+                        onClick = { onOpenTool(WorkbenchTool.CAPABILITIES) },
+                        label = { Text("工具") },
+                        leadingIcon = { Icon(Icons.Filled.Apps, null, Modifier.size(18.dp)) },
+                        modifier = Modifier.testTag("glass-open-tools"),
+                    )
+                    listOf(
+                        WorkbenchTool.STYLE,
+                        WorkbenchTool.POSITION,
+                        WorkbenchTool.TIMELINE,
+                        WorkbenchTool.SUBTITLES,
+                    ).forEach { tool ->
+                        AssistChip(
+                            onClick = { onOpenTool(tool) },
+                            label = { Text(tool.title) },
+                        )
+                    }
+                    AssistChip(
+                        onClick = {
+                            onWorkspaceStateChange(
+                                workspaceState.withSurfacesHidden(!workspaceState.surfacesHidden)
+                            )
+                        },
+                        label = { Text(if (workspaceState.surfacesHidden) "显示各层" else "隐藏各层") },
+                        leadingIcon = {
+                            Icon(
+                                if (workspaceState.surfacesHidden) Icons.Filled.Layers
+                                else Icons.Filled.LayersClear,
+                                null,
+                                Modifier.size(18.dp),
+                            )
+                        },
+                    )
+                }
+
+                Row(
+                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    GlassPerformanceMode.entries.forEach { mode ->
+                        FilterChip(
+                            selected = performanceMode == mode,
+                            onClick = { performanceModeName = mode.name },
+                            label = { Text(mode.label) },
+                            modifier = Modifier.testTag("glass-performance-" + mode.name),
+                        )
+                    }
+                    Text(
+                        if (systemBlurAvailable) "系统背景模糊：可用" else "系统背景模糊：不可用，磨砂将降级",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (systemBlurAvailable) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                    )
+                }
+
+                Row(
+                    Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("透明度", style = MaterialTheme.typography.labelSmall, modifier = Modifier.width(54.dp))
+                    Slider(
+                        value = alpha,
+                        onValueChange = { alpha = it },
+                        valueRange = 0.25f..0.95f,
+                        modifier = Modifier.weight(1f).testTag("glass-alpha"),
+                    )
+                    Text("${(alpha * 100).roundToInt()}%", style = MaterialTheme.typography.labelSmall)
+                }
+                Row(
+                    Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("模糊", style = MaterialTheme.typography.labelSmall, modifier = Modifier.width(54.dp))
+                    Slider(
+                        value = blurDp,
+                        onValueChange = { blurDp = it },
+                        valueRange = 0f..42f,
+                        enabled = performanceMode != GlassPerformanceMode.LOW_COST,
+                        modifier = Modifier.weight(1f).testTag("glass-blur"),
+                    )
+                    Text("${blurDp.roundToInt()}dp", style = MaterialTheme.typography.labelSmall)
+                }
+
+                Row(
+                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
+                        .testTag("glass-layer-overview"),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    workspaceState.tools.forEach { instance ->
+                        val tool = WorkbenchTool.entries.firstOrNull { it.name == instance.toolKey }
+                            ?: return@forEach
+                        FilterChip(
+                            selected = workspaceState.activeInstanceId == instance.id,
+                            onClick = {
+                                onWorkspaceStateChange(workspaceState.activate(instance.id))
+                            },
+                            label = {
+                                Text(
+                                    tool.title + " · " +
+                                        (materials[instance.id] ?: GlassMaterial.FROSTED).label
+                                )
+                            },
+                        )
+                    }
+                }
+            }
+        }
+    }
 }
 
 @OptIn(ExperimentalFoundationApi::class)
