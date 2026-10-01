@@ -13,6 +13,9 @@ import io.github.assworkbench.domain.AssQcIssue
 import io.github.assworkbench.domain.AssQualityFixes
 import io.github.assworkbench.domain.BatchRule
 import io.github.assworkbench.domain.BatchRuleEngine
+import io.github.assworkbench.domain.AssKaraokeSemantic
+import io.github.assworkbench.domain.KaraokeTagKind
+import io.github.assworkbench.domain.AssVectorClipSemantic
 import io.github.assworkbench.domain.AssTextDecoder
 import io.github.assworkbench.domain.AssTextEncoding
 import io.github.assworkbench.domain.EventOverrideEditor
@@ -718,6 +721,33 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 batchRulePreviewEventIds = emptySet(),
                 status = "已取消批处理规则预览。",
             )
+        }
+    }
+
+    fun setKaraokeTiming(eventId: Long, segmentIndex: Int, valueCs: Int) {
+        editDocument("已更新 Karaoke timing。") { doc ->
+            doc.copy(events = doc.events.map { event ->
+                if (event.id != eventId) event
+                else event.copy(text = AssKaraokeSemantic.patchValue(event.text, segmentIndex, valueCs))
+            })
+        }
+    }
+
+    fun setKaraokeKind(eventId: Long, segmentIndex: Int, kind: KaraokeTagKind) {
+        editDocument("已更新 Karaoke tag。") { doc ->
+            doc.copy(events = doc.events.map { event ->
+                if (event.id != eventId) event
+                else event.copy(text = AssKaraokeSemantic.convertKind(event.text, segmentIndex, kind))
+            })
+        }
+    }
+
+    fun setVectorClipPoint(eventId: Long, clipIndex: Int, pointIndex: Int, x: Double, y: Double) {
+        editDocument("已更新 Vector Clip 节点。") { doc ->
+            doc.copy(events = doc.events.map { event ->
+                if (event.id != eventId) event
+                else event.copy(text = AssVectorClipSemantic.patchPoint(event.text, clipIndex, pointIndex, x, y))
+            })
         }
     }
 
