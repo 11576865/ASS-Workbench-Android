@@ -44,6 +44,13 @@ internal fun FloatingWorkbenchSurface(
     onActivate: () -> Unit = {},
     onToggleBinding: (() -> Unit)? = null,
     onDuplicate: (() -> Unit)? = null,
+    onDuplicateFollowFocus: (() -> Unit)? = null,
+    presenceLabel: String? = null,
+    contentDensityLabel: String? = null,
+    onToggleResident: (() -> Unit)? = null,
+    onBookmark: (() -> Unit)? = null,
+    onCycleContentDensity: (() -> Unit)? = null,
+    onRelink: (() -> Unit)? = null,
     tabTitles: List<Pair<String, String>> = emptyList(),
     onSelectTab: (String) -> Unit = {},
     content: @Composable () -> Unit,
@@ -173,7 +180,36 @@ internal fun FloatingWorkbenchSurface(
                                 }
                             }
                             onDuplicate?.let {
-                                IconButton(onClick = it) { Icon(Icons.Filled.ContentCopy, contentDescription = "复制工具实例") }
+                                IconButton(onClick = it) {
+                                    Icon(Icons.Filled.ContentCopy, contentDescription = "复制工具实例并沿用绑定")
+                                }
+                            }
+                            onDuplicateFollowFocus?.let {
+                                IconButton(onClick = it) {
+                                    Icon(Icons.Filled.CenterFocusStrong, contentDescription = "复制工具实例并跟随焦点")
+                                }
+                            }
+                            onToggleResident?.let {
+                                IconButton(onClick = it) {
+                                    Icon(Icons.Filled.PushPin, contentDescription = "切换临时与驻留")
+                                }
+                            }
+                            onBookmark?.let {
+                                IconButton(onClick = it) {
+                                    Icon(Icons.Filled.Bookmark, contentDescription = "收为侧书签")
+                                }
+                            }
+                            onCycleContentDensity?.let {
+                                TextButton(onClick = it) {
+                                    Text(contentDensityLabel ?: "密度")
+                                }
+                            }
+                            onRelink?.let {
+                                TextButton(onClick = it) {
+                                    Icon(Icons.Filled.Link, null, Modifier.size(18.dp))
+                                    Spacer(Modifier.width(4.dp))
+                                    Text("重新关联")
+                                }
                             }
                             IconButton(onClick = { controller.cycleDock(id, fallback) },
                                 modifier = Modifier.testTag("surface-dock-$testTagId")) {
@@ -198,8 +234,14 @@ internal fun FloatingWorkbenchSurface(
                                 onClick = { controller.cycleSize(id, fallback) },
                                 enabled = !state.layoutLocked && state.dock == SurfaceDock.FLOATING,
                             ) { Icon(Icons.Filled.OpenInFull, contentDescription = "切换浮层尺寸") }
-                            Text(state.dock.label + " · " + if (state.layoutLocked) "布局锁定" else state.sizeClass.label,
-                                style = MaterialTheme.typography.labelSmall)
+                            Text(
+                                listOfNotNull(
+                                    presenceLabel,
+                                    state.dock.label,
+                                    if (state.layoutLocked) "布局锁定" else state.sizeClass.label,
+                                ).joinToString(" · "),
+                                style = MaterialTheme.typography.labelSmall,
+                            )
                         }
                         Box(Modifier.weight(1f).fillMaxWidth()) {
                             content()
