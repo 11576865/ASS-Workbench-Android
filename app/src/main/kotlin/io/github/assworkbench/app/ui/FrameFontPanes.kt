@@ -134,7 +134,7 @@ internal fun FrameTimingPane(
 @Composable
 internal fun FontRequirementsPane(
     state: EditorState,
-    viewModel: EditorViewModel,
+    onOpenFonts: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val requirements = remember(state.document) { FontRequirementResolver.resolve(state.document) }
@@ -147,11 +147,10 @@ internal fun FontRequirementsPane(
             style = MaterialTheme.typography.bodySmall,
         )
         Button(
-            onClick = viewModel::selectRequestedFontsForPackaging,
-            enabled = state.container.uri != null,
+            onClick = onOpenFonts,
             modifier = Modifier.fillMaxWidth(),
         ) {
-            Text("为 MKV 写回自动选择所需已导入字体")
+            Text("管理字体与封装选择")
         }
         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             items(requirements, key = { it.family.lowercase() }) { req ->

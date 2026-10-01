@@ -724,6 +724,9 @@ private fun FixedWorkspace(
             val availableHeight = maxHeight
             val wide = maxWidth >= 1200.dp
             val medium = maxWidth >= 700.dp
+            val briefInspector = activeTool == WorkbenchTool.PROJECT || activeTool == WorkbenchTool.EVENT
+            val wideInspectorWeight = if (briefInspector) 0.30f else 0.40f
+            val mediumInspectorWeight = if (briefInspector) 0.42f else 0.55f
             val preview: @Composable (Modifier) -> Unit = { previewModifier ->
                 WorkbenchPreview(
                     state = state,
@@ -741,18 +744,18 @@ private fun FixedWorkspace(
                 wide -> Row(Modifier.fillMaxSize()) {
                     preview(Modifier.weight(0.32f).fillMaxHeight())
                     VerticalDivider()
-                    listPane(Modifier.weight(0.28f).fillMaxHeight())
+                    listPane(Modifier.weight(0.68f - wideInspectorWeight).fillMaxHeight())
                     VerticalDivider()
-                    inspector(Modifier.weight(0.40f).fillMaxHeight())
+                    inspector(Modifier.weight(wideInspectorWeight).fillMaxHeight())
                 }
                 medium -> Row(Modifier.fillMaxSize()) {
-                    Column(Modifier.weight(0.45f).fillMaxHeight()) {
+                    Column(Modifier.weight(1f - mediumInspectorWeight).fillMaxHeight()) {
                         preview(Modifier.weight(0.42f).fillMaxWidth())
                         HorizontalDivider()
                         listPane(Modifier.weight(0.58f).fillMaxWidth())
                     }
                     VerticalDivider()
-                    inspector(Modifier.weight(0.55f).fillMaxHeight())
+                    inspector(Modifier.weight(mediumInspectorWeight).fillMaxHeight())
                 }
                 else -> Column(Modifier.fillMaxSize()) {
                     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
@@ -937,7 +940,7 @@ private fun FloatingToolContent(
         WorkbenchTool.KARAOKE -> KaraokePane(state, viewModel, Modifier.fillMaxSize())
         WorkbenchTool.VECTOR_CLIP -> VectorClipPane(state, viewModel, Modifier.fillMaxSize())
         WorkbenchTool.COMPATIBILITY -> CompatibilityPane(state, viewModel, Modifier.fillMaxSize())
-        WorkbenchTool.FONT_REQUIREMENTS -> FontRequirementsPane(state, viewModel, Modifier.fillMaxSize())
+        WorkbenchTool.FONT_REQUIREMENTS -> FontRequirementsPane(state, { onOpenTool(WorkbenchTool.FONTS) }, Modifier.fillMaxSize())
         WorkbenchTool.STYLE -> StylePane(
             state = state,
             viewModel = viewModel,
@@ -1468,9 +1471,9 @@ private fun InlineEventEditor(
             Column(Modifier.padding(WorkbenchDimens.Small), verticalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro), verticalAlignment = Alignment.CenterVertically) {
                     OutlinedTextField(layerText, { layerText = it }, label = { Text("Layer") }, singleLine = true, modifier = Modifier.width(88.dp))
-                    OutlinedTextField(actorText, { actorText = it }, label = { Text("Actor") }, singleLine = true, modifier = Modifier.weight(1f))
                     FilterChip(selected = comment, onClick = { comment = !comment }, label = { Text(if (comment) "Comment" else "Dialogue") })
                 }
+                OutlinedTextField(actorText, { actorText = it }, label = { Text("Actor") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                     TextButton(onClick = {
                         layerText = event.layer.toString()
@@ -3729,26 +3732,6 @@ private fun FontManagerPane(
             Button(onClick = onImportFont, enabled = !state.fontImportBusy) {
                 Text(if (state.fontImportBusy) "导入中…" else "导入字体")
             }
-        }
-
-        if (requestedFamilies.isNotEmpty()) {
-            Row(
-                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro),
-            ) {
-                requestedFamilies.forEach { family ->
-                    AssistChip(
-                        onClick = {},
-                        label = { Text(family) },
-                    )
-                }
-            }
-        } else {
-            Text(
-                "当前 ASS 没有 Event 请求字体；未使用的 Style 定义不会被算作运行时字体需求。",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
         }
 
         if (state.container.uri != null) {
