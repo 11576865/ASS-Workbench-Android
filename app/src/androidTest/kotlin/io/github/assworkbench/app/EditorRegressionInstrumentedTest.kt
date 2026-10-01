@@ -72,10 +72,9 @@ class EditorRegressionInstrumentedTest {
                 return
             } catch (_: AssertionError) {
                 composeRule.onNodeWithTag("ui-variant-list").performTouchInput {
-                    val travel = size.height * 0.58f
                     swipe(
-                        start = Offset(center.x, center.y + travel / 2f),
-                        end = Offset(center.x, center.y - travel / 2f),
+                        start = Offset(center.x, center.y * 1.6f),
+                        end = Offset(center.x, center.y * 0.4f),
                         durationMillis = 240,
                     )
                 }
