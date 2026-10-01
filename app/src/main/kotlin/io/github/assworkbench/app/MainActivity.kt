@@ -33,6 +33,7 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import io.github.assworkbench.app.ui.ModernEditorScreen
+import io.github.assworkbench.app.ui.WorkbenchAppearance
 
 class MainActivity : ComponentActivity() {
     private val viewModel: EditorViewModel by viewModels()
@@ -90,6 +91,18 @@ class MainActivity : ComponentActivity() {
         hideSystemBars()
         StartupProbe.mark(this, "activity_setContent", "starting")
         setContent {
+            val appearancePrefs = remember {
+                getSharedPreferences("workbench-ui", MODE_PRIVATE)
+            }
+            var appearanceName by rememberSaveable {
+                mutableStateOf(
+                    appearancePrefs.getString("appearance", WorkbenchAppearance.SYSTEM.name)
+                        ?: WorkbenchAppearance.SYSTEM.name
+                )
+            }
+            val appearance = runCatching { WorkbenchAppearance.valueOf(appearanceName) }
+                .getOrDefault(WorkbenchAppearance.SYSTEM)
+
             MaterialTheme(colorScheme = darkColorScheme()) {
                 var rendererEnabled by rememberSaveable {
                     mutableStateOf(!StartupProbe.rendererCoreCrashSuspected(this@MainActivity))
@@ -164,6 +177,11 @@ class MainActivity : ComponentActivity() {
                         },
                         rendererEnabled = rendererEnabled,
                         onEnableRenderer = { rendererEnabled = true },
+                        appearance = appearance,
+                        onAppearanceChange = { next ->
+                            appearanceName = next.name
+                            appearancePrefs.edit().putString("appearance", next.name).apply()
+                        },
                     )
                 }
             }
