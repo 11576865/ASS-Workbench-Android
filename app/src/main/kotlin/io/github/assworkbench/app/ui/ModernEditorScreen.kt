@@ -93,6 +93,8 @@ fun ModernEditorScreen(
     onSaveMkv: () -> Unit,
     rendererEnabled: Boolean,
     onEnableRenderer: () -> Unit,
+    appearance: WorkbenchAppearance,
+    onAppearanceChange: (WorkbenchAppearance) -> Unit,
 ) {
     var workspaceState by rememberSaveable(
         stateSaver = listSaver(
@@ -218,7 +220,7 @@ fun ModernEditorScreen(
         workspaceState = workspaceState.withSurfacesHidden(!workspaceState.surfacesHidden)
     }
 
-    MaterialTheme(colorScheme = workbenchColors()) {
+    MaterialTheme(colorScheme = workbenchColors(appearance)) {
     Surface(
         modifier = Modifier.fillMaxSize(),
         color = MaterialTheme.colorScheme.background,
@@ -281,6 +283,8 @@ fun ModernEditorScreen(
                 },
                 onSaveProject = { saveProjectLauncher.launch(projectFileName()) },
                 onExportSrt = { exportSrtLauncher.launch(srtFileName()) },
+                appearance = appearance,
+                onAppearanceChange = onAppearanceChange,
             )
             }
 
@@ -1020,6 +1024,8 @@ private fun ModernAppBar(
     onOpenProject: () -> Unit,
     onSaveProject: () -> Unit,
     onExportSrt: () -> Unit,
+    appearance: WorkbenchAppearance,
+    onAppearanceChange: (WorkbenchAppearance) -> Unit,
 ) {
     var moreMenuOpen by remember { mutableStateOf(false) }
     Surface(tonalElevation = 2.dp) {
@@ -1081,6 +1087,24 @@ private fun ModernAppBar(
                             leadingIcon = { Icon(if (workspaceMode == WorkspacePresentationMode.FIXED) Icons.Filled.Dashboard else Icons.Filled.Science, null) },
                             onClick = { moreMenuOpen = false; onToggleWorkspaceMode() },
                             modifier = Modifier.testTag("workspace-mode-toggle"),
+                        )
+                        DropdownMenuItem(
+                            text = { Text("外观：" + appearance.label) },
+                            leadingIcon = {
+                                Icon(
+                                    when (appearance) {
+                                        WorkbenchAppearance.SYSTEM -> Icons.Filled.SettingsBrightness
+                                        WorkbenchAppearance.LIGHT -> Icons.Filled.LightMode
+                                        WorkbenchAppearance.DARK -> Icons.Filled.DarkMode
+                                    },
+                                    null,
+                                )
+                            },
+                            onClick = {
+                                moreMenuOpen = false
+                                onAppearanceChange(appearance.next())
+                            },
+                            modifier = Modifier.testTag("appearance-mode-toggle"),
                         )
                         DropdownMenuItem(text = { Text("保存 Workbench Project") }, leadingIcon = { Icon(Icons.Filled.SaveAs, null) }, onClick = { moreMenuOpen = false; onSaveProject() })
                         DropdownMenuItem(text = { Text("导出 SRT") }, leadingIcon = { Icon(Icons.Filled.Subtitles, null) }, onClick = { moreMenuOpen = false; onExportSrt() })
