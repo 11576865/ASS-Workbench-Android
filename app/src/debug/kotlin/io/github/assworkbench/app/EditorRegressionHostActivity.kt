@@ -42,10 +42,12 @@ class EditorRegressionHostActivity : ComponentActivity() {
                     onOpenReferenceVideo = {},
                     onOpenMkvProject = {},
                     onOpenSubtitle = {},
+                    onOpenProject = {},
                     onImportFont = {},
                     onSave = {},
                     onSaveAs = {},
                     onSaveMkv = {},
+                    onSaveProject = { _, _ -> },
                     rendererEnabled = false,
                     onEnableRenderer = {},
                 )
