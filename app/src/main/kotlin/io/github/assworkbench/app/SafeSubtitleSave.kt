@@ -86,7 +86,7 @@ internal object SafeSubtitleSave {
     ): AssTextEncoding {
         val decoded = AssTextDecoder.decode(bytes)
         require(decoded.encoding == expectedEncoding) {
-            "编码回读不一致：期望 \${expectedEncoding.displayName}，实际 \${decoded.encoding.displayName}"
+            "编码回读不一致：期望 ${expectedEncoding.displayName}，实际 ${decoded.encoding.displayName}"
         }
         val report = AssRoundTripVerifier.verify(document, decoded.text)
         require(report.equivalent) {
@@ -115,7 +115,7 @@ internal object SafeSubtitleSave {
     }
 
     private fun writeTarget(resolver: ContentResolver, uri: Uri, bytes: ByteArray) {
-        val descriptor = resolver.openFileDescriptor(uri, "rwt")
+        val descriptor = runCatching { resolver.openFileDescriptor(uri, "rwt") }.getOrNull()
         if (descriptor != null) {
             descriptor.use { pfd ->
                 FileOutputStream(pfd.fileDescriptor).use { output ->
