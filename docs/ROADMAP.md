@@ -1,3 +1,32 @@
+## 0.29.0 — Subtitle engineering expansion
+
+### Project / workspace
+- [x] Optional versioned ASS Workbench project manifest.
+- [x] Persist subtitle/media identity, compatibility profile, tool-instance state and committed surface layout.
+- [x] Stable Fixed Workspace and Experimental Canvas Workspace presentation switch over the same domain state.
+- [x] Canvas surface placement states: floating, left/right/bottom dock and minimized.
+- [x] Tab-stack grouping without changing tool binding or subtitle data.
+
+### QC / compatibility / timing
+- [x] Promote QC issues to rule IDs with explicit Quick Fix descriptors.
+- [x] User-invoked Quick Fixes for safe duration, Default Style, pos/move conflict and PlayRes clamping.
+- [x] Compatibility profiles: libass-native, portable/conservative and VSFilter-oriented analysis.
+- [x] Build exact video presentation-timestamp frame maps with CFR/VFR domain support.
+- [x] Expose Event boundary snapping to actual video frame timestamps.
+
+### Authoring / batch
+- [x] Composable batch rule engine: Scope → Filters → Actions → Diff preview → one Undo transaction.
+- [x] Karaoke timing semantic model and dedicated Karaoke tool.
+- [x] Vector Clip path model and dedicated exact-path authoring tool; nested transform clips remain untouched.
+- [x] Existing requested-font inventory remains authoritative for Styles, inline `\\fn` and `\\rStyle`.
+- [x] Explicitly reject font subsetting as an ASS Workbench responsibility; keep packaging optimization in mux/packaging workflows.
+
+### Subtitle source adapters
+- [x] SRT import into canonical ASS without allowing normal Save to overwrite the SRT source with ASS bytes.
+- [x] Explicit lossy SRT export.
+- [ ] Consider WebVTT only through the same source/export adapter boundary if a real workflow needs it.
+
+
 # Roadmap
 
 ## Done through 0.13
