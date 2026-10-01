@@ -132,7 +132,7 @@ internal fun FloatingWorkbenchSurface(
                             }.padding(start = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Icon(if (state.dock == SurfaceDock.FLOATING) Icons.Filled.DragIndicator else Icons.Filled.Dock,
+                        Icon(if (state.dock == SurfaceDock.FLOATING) Icons.Filled.DragIndicator else Icons.Filled.ViewSidebar,
                             contentDescription = null)
                         Column(Modifier.weight(1f).padding(horizontal = 6.dp)) {
                             Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.labelLarge)
