@@ -161,6 +161,26 @@ class EditorRegressionInstrumentedTest {
     }
 
     @Test
+    fun precisionLensWorkspaceShowsPrecisionControls() {
+        restoreRecovery()
+
+        composeRule.onNodeWithContentDescription("工具和更多操作").performClick()
+        composeRule.onNodeWithTag("workspace-mode-toggle").performClick()
+        composeRule.onNodeWithTag("ui-variant-use-PRECISION_LENS_EXPERIMENTAL")
+            .assertIsDisplayed()
+            .performClick()
+
+        composeRule.onNodeWithTag("precision-lens-workspace").assertIsDisplayed()
+        composeRule.onNodeWithTag("precision-controls").assertIsDisplayed()
+        composeRule.onNodeWithTag("precision-gain-COARSE").assertIsDisplayed()
+        composeRule.onNodeWithTag("precision-gain-FINE").assertIsDisplayed()
+        composeRule.onNodeWithTag("precision-lens-LOCAL_FOCUS").assertIsDisplayed()
+        composeRule.onNodeWithTag("precision-lens-FLOATING_LENS").assertIsDisplayed()
+        composeRule.onNodeWithTag("precision-snap-toggle").assertIsDisplayed()
+        composeRule.onNodeWithTag("precision-snap-bypass").assertIsDisplayed()
+    }
+
+    @Test
     fun rawDraftSurvivesSwitchingBetweenEvents() {
         restoreRecovery()
 
