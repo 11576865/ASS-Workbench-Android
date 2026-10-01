@@ -80,7 +80,7 @@ data class MatroskaAttachment(
     val isSupportedFont: Boolean
         get() {
             val ext = fileName.substringAfterLast('.', "").lowercase()
-            return ext in setOf("ttf", "otf") ||
+            return ext in setOf("ttf", "otf", "ttc", "otc") ||
                 mimeType.equals("font/ttf", true) ||
                 mimeType.equals("font/otf", true) ||
                 mimeType.equals("font/sfnt", true) ||
