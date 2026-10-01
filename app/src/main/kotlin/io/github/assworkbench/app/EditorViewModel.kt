@@ -19,6 +19,7 @@ import io.github.assworkbench.domain.EventOverrideEditor
 import io.github.assworkbench.domain.AssGeometrySemantic
 import io.github.assworkbench.domain.AssClipRect
 import io.github.assworkbench.domain.AssAnimationSemantic
+import io.github.assworkbench.domain.AssCompatibilityProfile
 import io.github.assworkbench.domain.AssComplexFade
 import io.github.assworkbench.domain.AssTransform
 import io.github.assworkbench.domain.EventFormatClipboard
@@ -514,6 +515,10 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
 
     fun setWorkspaceMode(mode: WorkspacePresentationMode) {
         _state.update { it.copy(workspaceMode = mode) }
+    }
+
+    fun setCompatibilityProfile(profile: AssCompatibilityProfile) {
+        _state.update { it.copy(compatibilityProfile = profile) }
     }
 
     fun openWorkbenchProject(uri: Uri) {
