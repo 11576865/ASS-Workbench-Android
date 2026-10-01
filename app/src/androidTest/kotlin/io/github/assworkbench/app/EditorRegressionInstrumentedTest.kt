@@ -107,7 +107,7 @@ class EditorRegressionInstrumentedTest {
 
         composeRule.onNodeWithContentDescription("工具和更多操作").performClick()
         composeRule.onNodeWithTag("workspace-mode-toggle").performClick()
-        composeRule.onNodeWithTag("ui-variant-use-PAGER_EXPERIMENTAL").performScrollTo().performClick()
+        composeRule.onNodeWithTag("ui-variant-use-PAGER_EXPERIMENTAL").performClick()
 
         composeRule.onNodeWithTag("pager-workspace").assertIsDisplayed()
         composeRule.onNodeWithTag("pager-page-preview").assertIsDisplayed()
@@ -141,7 +141,7 @@ class EditorRegressionInstrumentedTest {
 
         composeRule.onNodeWithContentDescription("工具和更多操作").performClick()
         composeRule.onNodeWithTag("workspace-mode-toggle").performClick()
-        composeRule.onNodeWithTag("ui-variant-use-SPATIAL_EXPERIMENTAL").performScrollTo().performClick()
+        composeRule.onNodeWithTag("ui-variant-use-SPATIAL_EXPERIMENTAL").performClick()
 
         composeRule.onNodeWithTag("spatial-workspace").assertIsDisplayed()
         composeRule.onNodeWithTag("spatial-overview").performClick()
@@ -162,7 +162,7 @@ class EditorRegressionInstrumentedTest {
 
         composeRule.onNodeWithContentDescription("工具和更多操作").performClick()
         composeRule.onNodeWithTag("workspace-mode-toggle").performClick()
-        composeRule.onNodeWithTag("ui-variant-use-GLASS_LAYERED_EXPERIMENTAL").performScrollTo().performClick()
+        composeRule.onNodeWithTag("ui-variant-use-GLASS_LAYERED_EXPERIMENTAL").performClick()
 
         composeRule.onNodeWithTag("glass-layered-workspace").assertIsDisplayed()
         composeRule.onNodeWithTag("glass-control-deck").assertIsDisplayed()
