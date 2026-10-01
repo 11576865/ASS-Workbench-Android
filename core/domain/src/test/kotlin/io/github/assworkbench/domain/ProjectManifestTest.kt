@@ -12,6 +12,9 @@ class ProjectManifestTest {
             sourceFormat = SubtitleSourceFormat.ASS,
             videoUri = "content://video/a.mkv",
             workspaceMode = WorkspacePresentationMode.CANVAS_EXPERIMENTAL,
+            compatibilityProfile = AssCompatibilityProfile.PORTABLE_CONSERVATIVE,
+            workspaceStateRows = listOf("workspace-v1", "row a"),
+            surfaceStateRows = listOf("surface-v2", "row b"),
             importedFontUris = listOf("content://font/a.otf"),
         )
         assertEquals(input, AssWorkbenchProjectCodec.parse(AssWorkbenchProjectCodec.write(input)))
