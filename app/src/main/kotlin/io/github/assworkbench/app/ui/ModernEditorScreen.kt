@@ -895,7 +895,7 @@ private fun SubtitleObjectWorkspace(
                                 style = MaterialTheme.typography.labelLarge,
                             )
                             Text(
-                                "${event.start.toEditable()} — ${event.end.toEditable()}",
+                                "${event.start.toAss()} — ${event.end.toAss()}",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -1025,7 +1025,7 @@ private fun SubtitleObjectWorkspace(
                 shape = RoundedCornerShape(16.dp),
             ) {
                 Text(
-                    "命中冻结：${SubTime(pick.frozenPositionMs).toEditable()}",
+                    "命中冻结：${SubTime(pick.frozenPositionMs).toAss()}",
                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
                     style = MaterialTheme.typography.labelMedium,
                 )
@@ -1281,7 +1281,7 @@ private fun ObjectCandidatePicker(
                         if (candidates.isEmpty()) {
                             "这个触点没有可靠的字形归属；显示当前时刻候选，不伪装成像素命中。"
                         } else {
-                            "候选冻结于 ${pick?.frozenPositionMs?.let { SubTime(it).toEditable() } ?: "—"}"
+                            "候选冻结于 ${pick?.frozenPositionMs?.let { SubTime(it).toAss() } ?: "—"}"
                         },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -1316,7 +1316,7 @@ private fun ObjectCandidatePicker(
                         )
                         Text(candidate.textLabel, maxLines = 2, style = MaterialTheme.typography.bodySmall)
                         Text(
-                            event?.let { "${it.start.toEditable()} — ${it.end.toEditable()}" } ?: "时间未知",
+                            event?.let { "${it.start.toAss()} — ${it.end.toAss()}" } ?: "时间未知",
                             style = MaterialTheme.typography.labelSmall,
                         )
                         Text(
