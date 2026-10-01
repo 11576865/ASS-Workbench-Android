@@ -1,0 +1,27 @@
+﻿; BOM-like character in content is intentional after decoder layer
+[Script Info]
+ScriptType: v4.00+
+Title: 日本語・中文・العربية・emoji 😀
+PlayResX: 1920
+PlayResY: 1080
+; preserve me
+
+[Aegisub Project Garbage]
+Audio File: ?video
+Video File: sample.mkv
+Video AR Mode: 4
+Video AR Value: 1.777778
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding,VendorMeta
+Style: Default,Noto Sans CJK JP,48,&H00FFFFFF,&H000000FF,&H00000000,&H64000000,0,0,0,0,100,100,0,0,1,2,1,2,10,10,10,1,KEEP_STYLE_EXTRA
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text,VendorID,QCState
+Dialogue: 0,0:00:01.00,0:00:03.00,Default,角色A,0,0,0,,こんにちは，世界！\N你好，世界！,line-u1,reviewed
+Dialogue: 0,0:00:03.00,0:00:05.00,Default,ممثّل,0,0,0,,مرحبا 😀 {literal-like text},line-u2,pending
+
+[Vendor Private Section]
+Keep-This: exactly
+NoColonOpaqueLine
+; opaque comment
