@@ -40,13 +40,13 @@ Each surface must have an independent identity.
 
 ## Phase 1C — Explicit editing target
 
-Current risk:
+- [x] Style / Position can resolve explicit ToolInstance Binding.
+- [x] Pinned Position mutation paths accept Event id rather than mutating Focus to reach the target.
+- [x] Opening a different pinned target creates a sibling instead of silently retargeting an existing pinned primary.
+- [x] Missing pinned Event remains UNRESOLVED instead of falling back to Focus.
+- [ ] Extend explicit target plumbing to remaining focus-dependent event tools.
 
-```
-Tool -> focusedEventId -> mutation
-```
-
-Target:
+Target invariant:
 
 ```
 ToolInstance
@@ -87,3 +87,18 @@ Do not persist:
 - [ ] Per-tool semantic size-class content
 
 See `WORKSPACE_SURFACES_0.27.2.md` for exact scope and test coverage.
+
+
+## Preview / Interaction phase — 0.29.x
+
+- [x] Interaction Overlay promoted from experimental container to `ui/interaction`.
+- [x] Fixed and Canvas hosts share one InteractionOverlayRegistry.
+- [x] Position rod/proxy can be hosted above either presentation.
+- [x] Preview long-press discovers active Dialogue candidates by ASS anchor.
+- [x] Candidate confidence distinguishes explicit anchor / derived anchor / unresolved semantics.
+- [x] Preview target action separates Focus from “open pinned Position target”.
+- [ ] Renderer-backed glyph/bbox hit testing. Anchor discovery must not be described as glyph hit testing.
+- [ ] Lens as an independent Workspace node.
+- [ ] Explicit control-display gain presets and persisted interaction preferences.
+
+The Preview picker is a discovery surface, not a second renderer. libass remains visual authority; approximate anchor discovery is intentionally labeled as such.
