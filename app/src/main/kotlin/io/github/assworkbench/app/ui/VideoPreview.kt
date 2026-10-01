@@ -97,6 +97,7 @@ internal fun VideoPreview(
     seekRequestMs: Long?,
     seekRequestNonce: Long,
     onPosition: (Long) -> Unit,
+    onFrameMetadata: (Long?, Double?) -> Unit = { _, _ -> },
     onRendererDiagnostics: (List<String>) -> Unit,
     configDir: File,
     fontsDir: File,
@@ -196,6 +197,7 @@ internal fun VideoPreview(
                 resumePositionMs = positionMs
                 onPosition(positionMs)
             },
+            onFrameMetadata = onFrameMetadata,
             onRendererDiagnostics = onRendererDiagnostics,
             configDir = configDir,
             fontsDir = fontsDir,
@@ -494,6 +496,7 @@ private fun AuthoritativeMpvPreview(
     seekRequestMs: Long?,
     seekRequestNonce: Long,
     onPosition: (Long) -> Unit,
+    onFrameMetadata: (Long?, Double?) -> Unit,
     onRendererDiagnostics: (List<String>) -> Unit,
     configDir: File,
     fontsDir: File,
@@ -579,6 +582,12 @@ private fun AuthoritativeMpvPreview(
     val estimatedVideoFps by remember(mpv) {
         mpv.observe(MpvProperties.EstimatedVfFps)
     }.collectAsState(initial = null)
+    LaunchedEffect(estimatedFrameNumber, estimatedVideoFps) {
+        onFrameMetadata(
+            estimatedFrameNumber?.toLong(),
+            estimatedVideoFps?.toDouble(),
+        )
+    }
     var protocolReady by remember(mpv) { mutableStateOf(false) }
     var subtitleAttached by remember(mpv, videoUri) { mutableStateOf(false) }
     var osdWidth by remember(mpv, videoUri) { mutableIntStateOf(0) }
