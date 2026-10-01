@@ -1008,6 +1008,7 @@ private fun ModernAppBar(
                             text = { Text("界面：" + workspaceMode.title) },
                             leadingIcon = { Icon(if (workspaceMode == WorkspacePresentationMode.FIXED) Icons.Filled.Dashboard else Icons.Filled.Science, null) },
                             onClick = { moreMenuOpen = false; onToggleWorkspaceMode() },
+                            modifier = Modifier.testTag("workspace-mode-toggle"),
                         )
                         DropdownMenuItem(text = { Text("保存 Workbench Project") }, leadingIcon = { Icon(Icons.Filled.SaveAs, null) }, onClick = { moreMenuOpen = false; onSaveProject() })
                         DropdownMenuItem(text = { Text("导出 SRT") }, leadingIcon = { Icon(Icons.Filled.Subtitles, null) }, onClick = { moreMenuOpen = false; onExportSrt() })
