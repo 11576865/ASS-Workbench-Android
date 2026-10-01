@@ -148,11 +148,10 @@ class EditorRegressionInstrumentedTest {
             .performClick()
 
         composeRule.onNodeWithTag("spatial-workspace").assertIsDisplayed()
+        composeRule.onNodeWithTag("spatial-overview").performClick()
         composeRule.onNodeWithTag("spatial-node-preview").assertIsDisplayed()
         composeRule.onNodeWithTag("spatial-node-subtitles").assertIsDisplayed()
         composeRule.onNodeWithTag("spatial-node-tool").assertIsDisplayed()
-
-        composeRule.onNodeWithTag("spatial-overview").performClick()
         composeRule.onNodeWithTag("spatial-navigation-mode").performClick()
         composeRule.onNodeWithTag("spatial-navigation-overlay").assertIsDisplayed()
 
