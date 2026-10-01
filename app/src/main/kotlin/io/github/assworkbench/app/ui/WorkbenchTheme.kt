@@ -7,7 +7,7 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
-internal enum class WorkbenchAppearance(val label: String) {
+enum class WorkbenchAppearance(val label: String) {
     SYSTEM("跟随系统"),
     LIGHT("浅色"),
     DARK("深色");
