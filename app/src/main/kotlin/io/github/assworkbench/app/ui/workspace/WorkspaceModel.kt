@@ -88,6 +88,28 @@ internal data class WorkspaceState(
         if (primary(toolKey) != null) closeInstance(primaryInstanceId(toolKey))
         else openPrimary(toolKey)
 
+    /**
+     * Open an event-bound tool without silently retargeting an existing pinned
+     * primary instance. A different pinned target therefore gets a sibling.
+     */
+    fun openPinnedEvent(toolKey: String, eventId: Long): WorkspaceState {
+        val primaryId = primaryInstanceId(toolKey)
+        val primary = primary(toolKey)
+        if (primary == null) {
+            return openPrimary(toolKey, WorkspaceBinding.PinnedEvent(eventId)).activate(primaryId)
+        }
+        val pinned = primary.binding as? WorkspaceBinding.PinnedEvent
+        if (pinned != null && pinned.eventId != eventId) {
+            val sibling = newSibling(primary.id)?.copy(binding = WorkspaceBinding.PinnedEvent(eventId))
+                ?: return this
+            return addInstance(sibling).activate(sibling.id).withSurfacesHidden(false)
+        }
+        return openPrimary(toolKey)
+            .updateBinding(primaryId, WorkspaceBinding.PinnedEvent(eventId))
+            .activate(primaryId)
+            .withSurfacesHidden(false)
+    }
+
     fun addInstance(instance: WorkspaceToolInstance): WorkspaceState {
         if (tools.any { it.id == instance.id }) return this
         return copy(tools = tools + instance)
