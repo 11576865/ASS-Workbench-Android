@@ -1,6 +1,7 @@
 package io.github.assworkbench.app
 
 import io.github.assworkbench.domain.AssDocument
+import io.github.assworkbench.domain.AssCompatibilityProfile
 import io.github.assworkbench.domain.AssInlineSyntax
 import io.github.assworkbench.domain.AssTextEncoding
 import io.github.assworkbench.domain.SubtitleProject
@@ -23,6 +24,7 @@ data class EditorState(
     val project: SubtitleProject = SubtitleProject(),
     val projectFileUri: String? = null,
     val workspaceMode: WorkspacePresentationMode = WorkspacePresentationMode.FIXED,
+    val compatibilityProfile: AssCompatibilityProfile = AssCompatibilityProfile.LIBASS_NATIVE,
     val document: AssDocument = AssDocument(),
     val previewDocument: AssDocument? = null,
     val waveform: WaveformLiteState = WaveformLiteState(),
