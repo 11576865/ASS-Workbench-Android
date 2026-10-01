@@ -1,6 +1,6 @@
 package io.github.assworkbench.domain
 
-enum class SubtitleInterchangeFormat { SRT, WEBVTT }
+enum class SubtitleDocumentFormat { ASS, SRT, WEBVTT }
 
 object SubRipCodec {
     private val timeLine = Regex("""^\s*(\d{1,2}):(\d{2}):(\d{2})[,.](\d{3})\s*-->\s*(\d{1,2}):(\d{2}):(\d{2})[,.](\d{3}).*$""")
