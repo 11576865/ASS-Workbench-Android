@@ -1,6 +1,9 @@
 package io.github.assworkbench.app.ui
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
@@ -48,9 +51,9 @@ internal fun FrameTimingPane(
         }
     }
 
-    Column(modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(modifier.verticalScroll(rememberScrollState()).padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("帧级时间", style = MaterialTheme.typography.titleMedium)
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             FilterChip(selected = mode == "AUTO", onClick = { mode = "AUTO" }, label = { Text("视频 PTS") })
             FilterChip(selected = mode == "CFR", onClick = { mode = "CFR" }, label = { Text("CFR") })
             FilterChip(selected = mode == "VFR", onClick = { mode = "VFR" }, label = { Text("VFR / timecodes v2") })

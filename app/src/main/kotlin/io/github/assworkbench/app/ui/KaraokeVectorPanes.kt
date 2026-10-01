@@ -43,27 +43,15 @@ internal fun KaraokePane(
         )
         if (segments.isEmpty()) {
             Text("当前 Event 没有 \\k / \\kf / \\ko / \\kt。")
+            val initialSegments = remember(event.text) { AssKaraokeCodec.initializePlainText(event.text) }
+            if (initialSegments == null) Text(
+                "当前正文含 ASS 标签或转义。自动分词不会清除它们；请在正文中明确添加 Karaoke 标签。",
+                style = MaterialTheme.typography.bodySmall,
+            )
             Button(
-                onClick = {
-                    val words = AssInlineSyntax.visibleText(event.text)
-                        .trim()
-                        .split(Regex("""\s+"""))
-                        .filter(String::isNotBlank)
-                    if (words.isNotEmpty()) {
-                        commit(
-                            words.mapIndexed { index, word ->
-                                AssKaraokeSegment(
-                                    AssKaraokeMode.K,
-                                    20,
-                                    word + if (index == words.lastIndex) "" else " ",
-                                )
-                            }
-                        )
-                    }
-                },
-            ) {
-                Text("按词建立 20cs 初始音节")
-            }
+                onClick = { initialSegments?.takeIf { it.isNotEmpty() }?.let(::commit) },
+                enabled = !initialSegments.isNullOrEmpty(),
+            ) { Text("按词建立 20cs 初始音节") }
         } else {
             LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 itemsIndexed(segments) { index, segment ->
@@ -139,7 +127,7 @@ internal fun VectorClipPane(
     Column(modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("Vector Clip · #${event.id}", style = MaterialTheme.typography.titleMedium)
         if (clip == null) {
-            Text("当前 Event 没有可解析的 vector \\clip / \\iclip。矩形 clip 继续由 Position 工具负责。")
+            Text("当前字幕没有可编辑的矢量裁剪路径。已有路径可在此修改；新路径需在正文中添加。矩形裁剪位于“位置与几何 → 矩形裁剪”。")
             return@Column
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -181,7 +169,7 @@ internal fun VectorClipPane(
                 pairs.forEach { drawCircle(Color.White, 4.dp.toPx(), point(it)) }
             }
         }
-        Text("路径 token（lossless path model；数字可直接修改）", style = MaterialTheme.typography.labelMedium)
+        Text("已有路径控制点 · 数字可直接修改", style = MaterialTheme.typography.labelMedium)
         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             itemsIndexed(clip.tokens) { index, token ->
                 if (token.command != null) {

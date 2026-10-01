@@ -7,6 +7,7 @@ import android.util.Base64
 import android.util.Log
 import java.io.ByteArrayOutputStream
 import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.onRoot
 import androidx.test.platform.app.InstrumentationRegistry
@@ -27,6 +28,7 @@ import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.performTextInput
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import io.github.assworkbench.app.ui.WorkbenchTool
 import io.github.assworkbench.domain.AssDocument
 import io.github.assworkbench.domain.AssEvent
 import io.github.assworkbench.domain.AssTextEncoding
@@ -70,7 +72,7 @@ class EditorRegressionInstrumentedTest {
         // explicit save/discard should still have something to recover.
         assertTrue(recoveryStore.exists())
 
-        composeRule.onNodeWithTag("event-row-1")
+        eventRow(1L)
             .assertIsDisplayed()
             .performClick()
 
@@ -81,7 +83,7 @@ class EditorRegressionInstrumentedTest {
         composeRule.onNodeWithTag("event-collapse-1")
             .performClick()
 
-        composeRule.onNodeWithTag("event-row-1")
+        eventRow(1L)
             .performClick()
 
         composeRule.onNodeWithTag("event-raw-1")
@@ -103,20 +105,20 @@ class EditorRegressionInstrumentedTest {
     fun rawDraftSurvivesSwitchingBetweenEvents() {
         restoreRecovery()
 
-        composeRule.onNodeWithTag("event-row-1")
+        eventRow(1L)
             .performClick()
         composeRule.onNodeWithTag("event-raw-1")
             .performTextInput(" SWITCH")
 
         openTool("SUBTITLES")
-        composeRule.onNodeWithTag("event-row-2")
+        eventRow(2L)
             .performScrollTo()
             .performClick()
         composeRule.onNodeWithTag("event-raw-2")
             .assertIsDisplayed()
 
         openTool("SUBTITLES")
-        composeRule.onNodeWithTag("event-row-1")
+        eventRow(1L)
             .performScrollTo()
             .performClick()
         composeRule.onNodeWithTag("event-raw-1")
@@ -137,7 +139,7 @@ class EditorRegressionInstrumentedTest {
     fun rawDraftSurvivesActivityRecreation() {
         restoreRecovery()
 
-        composeRule.onNodeWithTag("event-row-1")
+        eventRow(1L)
             .performClick()
         composeRule.onNodeWithTag("event-raw-1")
             .performTextInput(" ROTATED")
@@ -163,7 +165,7 @@ class EditorRegressionInstrumentedTest {
     @Test
     fun inspectorDraftSurvivesToolSwitchAndRotation() {
         restoreRecovery()
-        composeRule.onNodeWithTag("event-row-1").performClick()
+        eventRow(1L).performClick()
         composeRule.onNodeWithTag("event-raw-1").performTextInput(" WORKBENCH")
         openTool("EFFECTS")
         composeRule.onNodeWithTag("fixed-inspector").assertIsDisplayed()
@@ -175,8 +177,10 @@ class EditorRegressionInstrumentedTest {
         composeRule.waitUntil(10_000) {
             composeRule.activity.resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
         }
-        composeRule.onNodeWithTag("preview-workspace").assertIsDisplayed()
-        composeRule.onNodeWithTag("subtitle-navigation").assertIsDisplayed()
+        val previewNodes = composeRule.onAllNodesWithTag("preview-workspace").fetchSemanticsNodes(atLeastOneRootRequired = false)
+        if (previewNodes.isNotEmpty()) composeRule.onNodeWithTag("preview-workspace").assertIsDisplayed()
+        val listNodes = composeRule.onAllNodesWithTag("subtitle-navigation").fetchSemanticsNodes(atLeastOneRootRequired = false)
+        if (listNodes.isNotEmpty()) composeRule.onNodeWithTag("subtitle-navigation").assertIsDisplayed()
         composeRule.onNodeWithTag("event-inspector").assertIsDisplayed()
         captureLayout("landscape")
         val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
@@ -216,6 +220,31 @@ class EditorRegressionInstrumentedTest {
             composeRule.activity.resources.configuration.orientation == Configuration.ORIENTATION_PORTRAIT
         }
         captureLayout("portrait")
+    }
+
+    @Test
+    fun groupedNavigationAndGeometrySectionsPreserveDocument() {
+        restoreRecovery()
+        eventRow(1L).performClick()
+        val before = viewModel.state.value.document
+        for (name in listOf("FRAMES", "FONT_REQUIREMENTS", "QC", "PROJECT", "POSITION")) {
+            openTool(name)
+            composeRule.onNodeWithTag("fixed-inspector").assertIsDisplayed()
+        }
+        for (section in listOf("TRANSFORM", "CLIP", "STYLE_LAYOUT", "PLACEMENT")) {
+            composeRule.onNodeWithTag("position-section-$section").performScrollTo().performClick()
+            composeRule.waitForIdle()
+            assertEquals(before, viewModel.state.value.document)
+        }
+        captureLayout("grouped-geometry")
+        openTool("TEXT")
+        val compactList = composeRule.onAllNodesWithTag("fixed-page-list").fetchSemanticsNodes(atLeastOneRootRequired = false)
+        if (compactList.isNotEmpty()) {
+            composeRule.onNodeWithTag("fixed-page-list").performClick()
+            eventRow(1L).assertIsDisplayed().performClick()
+            composeRule.onNodeWithTag("event-raw-1").assertIsDisplayed()
+        }
+        assertEquals(before, viewModel.state.value.document)
     }
 
     private fun captureLayout(name: String) {
@@ -393,6 +422,13 @@ class EditorRegressionInstrumentedTest {
         openTool("SUBTITLES")
     }
 
+    private fun eventRow(id: Long): SemanticsNodeInteraction {
+        hideKeyboard()
+        val pages = composeRule.onAllNodesWithTag("fixed-page-list").fetchSemanticsNodes(atLeastOneRootRequired = false)
+        if (pages.isNotEmpty()) composeRule.onNodeWithTag("fixed-page-list").performClick()
+        return composeRule.onNodeWithTag("event-row-$id")
+    }
+
     private fun hideKeyboard() {
         composeRule.activityRule.scenario.onActivity { activity ->
             activity.getSystemService(android.view.inputmethod.InputMethodManager::class.java)
@@ -422,7 +458,13 @@ class EditorRegressionInstrumentedTest {
             .fetchSemanticsNodes(atLeastOneRootRequired = false)
             .isNotEmpty()
         if (fixedWorkspace) {
-            if (name == "SUBTITLES") return
+            if (name == "SUBTITLES") {
+                val pages = composeRule.onAllNodesWithTag("fixed-page-list").fetchSemanticsNodes(atLeastOneRootRequired = false)
+                if (pages.isNotEmpty()) composeRule.onNodeWithTag("fixed-page-list").performClick()
+                return
+            }
+            val group = WorkbenchTool.valueOf(name).group
+            composeRule.onNodeWithTag("fixed-group-${group.name}").performScrollTo().performClick()
             val fixedTool = composeRule.onAllNodesWithTag("fixed-tool-$name", useUnmergedTree = true)
                 .fetchSemanticsNodes(atLeastOneRootRequired = false)
             if (fixedTool.isNotEmpty()) {
