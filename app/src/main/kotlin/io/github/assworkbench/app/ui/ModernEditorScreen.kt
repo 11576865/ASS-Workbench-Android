@@ -68,7 +68,7 @@ import kotlin.math.abs
 
 private enum class WorkbenchTool(val title: String) {
     SUBTITLES("字幕"), TEXT("正文"), TIMELINE("时间轴"), STYLE("样式"), POSITION("位置"),
-    EFFECTS("效果"), EVENT("事件"), FONTS("字体"), QC("检查"), BATCH("批量"),
+    EFFECTS("效果"), EVENT("事件"), KARAOKE("卡拉OK"), VECTOR_CLIP("矢量裁剪"), FONTS("字体"), QC("检查"), BATCH("批量"),
     PROJECT("项目"), COMPATIBILITY("兼容性"), DIAGNOSTICS("诊断"), CAPABILITIES("功能地图"),
 }
 
@@ -757,6 +757,8 @@ private fun FloatingToolContent(
             }
         }
         WorkbenchTool.TIMELINE -> ModernTimelinePane(state, viewModel, Modifier.fillMaxSize())
+        WorkbenchTool.KARAOKE -> KaraokePane(state, viewModel, Modifier.fillMaxSize())
+        WorkbenchTool.VECTOR_CLIP -> VectorClipPane(state, viewModel, Modifier.fillMaxSize())
         WorkbenchTool.STYLE -> StylePane(
             state = state,
             viewModel = viewModel,
@@ -3905,6 +3907,133 @@ private fun ProjectPane(state: EditorState, viewModel: EditorViewModel, onSaveMk
             ContainerBridgePanel(state.container, viewModel, onSaveMkv, dirty = state.dirty)
         }
         else Text(if (state.project.videoUri == null) "未附加参考视频" else "已附加参考视频", color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
+private fun KaraokePane(
+    state: EditorState,
+    viewModel: EditorViewModel,
+    modifier: Modifier = Modifier,
+) {
+    val event = state.focusedEventId?.let { id -> state.document.events.firstOrNull { it.id == id } }
+    if (event == null) {
+        Box(modifier, contentAlignment = Alignment.Center) { Text("先选择一条字幕") }
+        return
+    }
+    val track = remember(event.text) { AssKaraokeSemantic.inspect(event.text) }
+    Column(modifier.padding(WorkbenchDimens.Small), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("Karaoke · Event #${event.id}", style = MaterialTheme.typography.titleSmall)
+        val eventCs = ((event.end.millis - event.start.millis).coerceAtLeast(0L) / 10L).toInt()
+        Text(
+            "音节 ${track.segments.size} · timing 合计 ${track.totalDurationCs} cs · Event $eventCs cs",
+            style = MaterialTheme.typography.labelSmall,
+            color = if (track.segments.isNotEmpty() && track.totalDurationCs != eventCs) {
+                MaterialTheme.colorScheme.tertiary
+            } else MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        if (track.segments.isEmpty()) {
+            Text("当前 Event 没有 \\\\k / \\\\K / \\\\kf / \\\\ko / \\\\kt。")
+            Button(onClick = { viewModel.initializeKaraoke(event.id) }) { Text("建立基础 Karaoke timing") }
+            return
+        }
+        Divider()
+        LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            items(track.segments, key = { it.index }) { segment ->
+                var valueText by remember(segment.index, segment.valueCs) { mutableStateOf(segment.valueCs.toString()) }
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.28f),
+                    shape = MaterialTheme.shapes.small,
+                ) {
+                    Column(Modifier.fillMaxWidth().padding(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("#${segment.index + 1} · ${segment.visibleText.ifBlank { "（空）" }}", Modifier.weight(1f))
+                            Text("\\${segment.kind.assName}", style = MaterialTheme.typography.labelSmall)
+                        }
+                        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                            KaraokeTagKind.entries.forEach { kind ->
+                                FilterChip(
+                                    selected = segment.kind == kind,
+                                    onClick = { viewModel.setKaraokeKind(event.id, segment.index, kind) },
+                                    label = { Text("\\${kind.assName}") },
+                                )
+                            }
+                        }
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                            OutlinedButton(onClick = {
+                                viewModel.setKaraokeTiming(event.id, segment.index, (segment.valueCs - 5).coerceAtLeast(0))
+                            }) { Text("−5") }
+                            OutlinedTextField(
+                                valueText,
+                                { valueText = it },
+                                label = { Text("centisecond") },
+                                singleLine = true,
+                                modifier = Modifier.weight(1f),
+                            )
+                            Button(onClick = {
+                                valueText.toIntOrNull()?.let { viewModel.setKaraokeTiming(event.id, segment.index, it) }
+                            }) { Text("应用") }
+                            OutlinedButton(onClick = {
+                                viewModel.setKaraokeTiming(event.id, segment.index, segment.valueCs + 5)
+                            }) { Text("+5") }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun VectorClipPane(
+    state: EditorState,
+    viewModel: EditorViewModel,
+    modifier: Modifier = Modifier,
+) {
+    val event = state.focusedEventId?.let { id -> state.document.events.firstOrNull { it.id == id } }
+    if (event == null) {
+        Box(modifier, contentAlignment = Alignment.Center) { Text("先选择一条字幕") }
+        return
+    }
+    val clips = remember(event.text) { AssVectorClipSemantic.inspect(event.text) }
+    Column(modifier.padding(WorkbenchDimens.Small), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("Vector Clip · Event #${event.id}", style = MaterialTheme.typography.titleSmall)
+        Text(
+            "节点编辑直接修改 ASS drawing path；Raw Event Text 仍是保真边界。",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        if (clips.isEmpty()) {
+            Text("当前 Event 没有 vector \\\\clip / \\\\iclip。")
+            Button(onClick = { viewModel.createDefaultVectorClip(event.id) }) { Text("建立全画布 Vector Clip") }
+            return
+        }
+        LazyColumn(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            clips.forEachIndexed { clipIndex, clip ->
+                item(key = "clip-$clipIndex") {
+                    Text(
+                        (if (clip.inverted) "\\\\iclip" else "\\\\clip") +
+                            (clip.scale?.let { " · scale $it" } ?: "") +
+                            " · ${clip.path.points.size} points",
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                }
+                items(clip.path.points, key = { "$clipIndex-${it.index}" }) { point ->
+                    var xText by remember(point.index, point.x) { mutableStateOf(point.x.toString()) }
+                    var yText by remember(point.index, point.y) { mutableStateOf(point.y.toString()) }
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text("${point.command} #${point.index + 1}", Modifier.width(58.dp), style = MaterialTheme.typography.labelSmall)
+                        OutlinedTextField(xText, { xText = it }, label = { Text("X") }, singleLine = true, modifier = Modifier.weight(1f))
+                        OutlinedTextField(yText, { yText = it }, label = { Text("Y") }, singleLine = true, modifier = Modifier.weight(1f))
+                        Button(onClick = {
+                            val x = xText.toDoubleOrNull()
+                            val y = yText.toDoubleOrNull()
+                            if (x != null && y != null) viewModel.setVectorClipPoint(event.id, clipIndex, point.index, x, y)
+                        }) { Text("应用") }
+                    }
+                }
+            }
+        }
     }
 }
 
