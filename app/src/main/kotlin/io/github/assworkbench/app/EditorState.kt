@@ -4,6 +4,7 @@ import io.github.assworkbench.domain.AssDocument
 import io.github.assworkbench.domain.AssInlineSyntax
 import io.github.assworkbench.domain.AssTextEncoding
 import io.github.assworkbench.domain.SubtitleProject
+import io.github.assworkbench.domain.SubtitleDocumentFormat
 import io.github.assworkbench.domain.WaveformEnvelope
 import io.github.assworkbench.fonts.FontAsset
 import io.github.assworkbench.fonts.FontDiagnostic
@@ -26,6 +27,7 @@ data class EditorState(
     val geometryScaleLocked: Boolean = true,
     val subtitleLoaded: Boolean = false,
     val subtitleTextEncoding: AssTextEncoding = AssTextEncoding.UTF8,
+    val subtitleFormat: SubtitleDocumentFormat = SubtitleDocumentFormat.ASS,
     val selectedEventIds: Set<Long> = emptySet(),
     val selectionAnchorId: Long? = null,
     val focusedEventId: Long? = null,
