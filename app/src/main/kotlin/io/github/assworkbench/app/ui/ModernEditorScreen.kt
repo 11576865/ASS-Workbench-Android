@@ -372,6 +372,31 @@ fun ModernEditorScreen(
                     }
                     val isPrimary = instance.id == WorkspaceState.primaryInstanceId(surfaceTool.name)
                     val tagId = if (isPrimary) surfaceTool.name else instance.id.replace(':', '-')
+                    val initialGeometry = when (surfaceTool) {
+                        WorkbenchTool.SUBTITLES -> SurfaceGeometry(
+                            x = (viewportWidth - 326f).coerceAtLeast(0f), y = 12f,
+                            width = 310f, height = (viewportHeight - 24f).coerceIn(160f, 620f),
+                        )
+                        WorkbenchTool.CAPABILITIES -> SurfaceGeometry(12f, 12f, 320f,
+                            (viewportHeight - 24f).coerceIn(160f, 620f))
+                        else -> SurfaceGeometry(16f + (index % 3) * 24f, 16f + (index % 4) * 20f)
+                    }
+                    surfaceController.ensure(instance.id, initialGeometry)
+                    if (!surfaceController.isVisibleStackTab(instance.id)) return@forEachIndexed
+                    val stackTabs = surfaceController.stackMemberIds(instance.id).mapNotNull { memberId ->
+                        val member = workspaceState.tools.firstOrNull { it.id == memberId } ?: return@mapNotNull null
+                        val memberTool = WorkbenchTool.entries.firstOrNull { it.name == member.toolKey }
+                            ?: return@mapNotNull null
+                        memberId to memberTool.title
+                    }
+                    val stackCandidates = workspaceState.tools
+                        .filter { candidate -> candidate.id != instance.id }
+                        .filter { candidate -> surfaceController.state(candidate.id, SurfaceGeometry()).stackId == null }
+                        .mapNotNull { candidate ->
+                            val candidateTool = WorkbenchTool.entries.firstOrNull { it.name == candidate.toolKey }
+                                ?: return@mapNotNull null
+                            candidate.id to candidateTool.title
+                        }
 
                     FloatingWorkbenchSurface(
                         id = instance.id,
@@ -382,14 +407,19 @@ fun ModernEditorScreen(
                         visible = visible,
                         controller = surfaceController,
                         initialOffset = Offset.Zero,
-                        initialGeometry = when (surfaceTool) {
-                            WorkbenchTool.SUBTITLES -> SurfaceGeometry(
-                                x = (viewportWidth - 326f).coerceAtLeast(0f), y = 12f,
-                                width = 310f, height = (viewportHeight - 24f).coerceIn(160f, 620f),
-                            )
-                            WorkbenchTool.CAPABILITIES -> SurfaceGeometry(12f, 12f, 320f,
-                                (viewportHeight - 24f).coerceIn(160f, 620f))
-                            else -> SurfaceGeometry(16f + (index % 3) * 24f, 16f + (index % 4) * 20f)
+                        initialGeometry = initialGeometry,
+                        stackTabs = stackTabs,
+                        stackCandidates = stackCandidates,
+                        onSelectStackTab = { tabId ->
+                            surfaceController.bringToFront(tabId)
+                            workspaceState = workspaceState.activate(tabId)
+                        },
+                        onStackWith = { targetId ->
+                            surfaceController.stack(instance.id, targetId, initialGeometry)
+                            workspaceState = workspaceState.activate(instance.id)
+                        },
+                        onUnstack = {
+                            surfaceController.unstack(instance.id, initialGeometry)
                         },
                         onActivate = {
                             workspaceState = workspaceState.activate(instance.id)
