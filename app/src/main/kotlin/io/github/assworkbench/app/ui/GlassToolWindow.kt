@@ -143,7 +143,7 @@ internal fun GlassToolWindow(
 
                 val background = GradientDrawable().apply {
                     shape = GradientDrawable.RECTANGLE
-                    cornerRadius = cornerPx
+                    this.cornerRadius = cornerPx
                     setColor(effectiveColor.toArgb())
                     setStroke(
                         with(density) { (if (active) 1.5.dp else 1.dp).roundToPx() },
