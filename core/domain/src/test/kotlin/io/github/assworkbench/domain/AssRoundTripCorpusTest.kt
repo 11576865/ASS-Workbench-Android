@@ -23,7 +23,34 @@ class AssRoundTripCorpusTest {
                 "Opaque-Key: Opaque-Value",
             ),
         ),
+        Fixture(
+            "complex-overrides.ass",
+            listOf("\\t(0,500,1.2,\\fscx115\\fscy115)", "\\move(100,900,1800,900,0,2500)", "\\unknownVendorTag(foo,bar)"),
+        ),
+        Fixture(
+            "drawing-karaoke.ass",
+            listOf("\\p1\\pbo2", "m 0 0 l 200 0 200 100 0 100", "\\kf30", "\\clip(m 0 0 l 100 0 100 100 0 100)"),
+        ),
+        Fixture(
+            "unicode-opaque.ass",
+            listOf("日本語・中文・العربية・emoji 😀", "KEEP_STYLE_EXTRA", "line-u2", "[Vendor Private Section]", "NoColonOpaqueLine"),
+        ),
     )
+
+    @Test
+    fun corpusIsSemanticallyStableAcrossParseWriteParse() {
+        fixtures.forEach { fixture ->
+            val source = javaClass.getResource("/roundtrip/" + fixture.name)?.readText()
+                ?: error("Missing fixture " + fixture.name)
+            val parsed = AssCodec.parse(source)
+            val output = AssCodec.write(parsed)
+            val report = AssRoundTripVerifier.verify(parsed, output)
+            assertTrue(report.equivalent, fixture.name + ": " + report.summary)
+            fixture.sentinels.forEach { marker ->
+                assertTrue(output.contains(marker), fixture.name + " lost " + marker)
+            }
+        }
+    }
 
     @Test
     fun corpusSurvivesOneFieldEditWithoutDroppingSupportedOpaqueData() {
@@ -48,6 +75,8 @@ class AssRoundTripCorpusTest {
             }
 
             val reparsed = AssCodec.parse(output)
+            val report = AssRoundTripVerifier.verify(edited, output)
+            assertTrue(report.equivalent, fixture.name + ": " + report.summary)
             assertEquals(parsed.styles.size, reparsed.styles.size, fixture.name)
             assertEquals(parsed.events.size, reparsed.events.size, fixture.name)
             assertEquals(styleExtras, reparsed.styles.map { it.extraFields }, fixture.name)

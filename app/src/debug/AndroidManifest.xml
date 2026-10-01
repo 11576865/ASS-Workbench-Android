@@ -4,5 +4,10 @@
         <activity
             android:name=".EditorRegressionHostActivity"
             android:exported="false" />
+        <provider
+            android:name=".SafeSaveTestProvider"
+            android:authorities="${applicationId}.safesave"
+            android:exported="false"
+            android:grantUriPermissions="true" />
     </application>
 </manifest>
