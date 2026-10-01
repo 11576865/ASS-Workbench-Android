@@ -4,6 +4,7 @@ import io.github.assworkbench.domain.AssDocument
 import io.github.assworkbench.domain.AssEffectiveInspector
 import io.github.assworkbench.domain.AssEvent
 import io.github.assworkbench.domain.AssGeometrySemantic
+import io.github.assworkbench.domain.AssInlineSyntax
 import io.github.assworkbench.domain.AssPoint
 import io.github.assworkbench.domain.AssPositionMode
 import io.github.assworkbench.domain.SubTime
@@ -25,6 +26,7 @@ internal enum class PreviewTargetConfidence {
 internal data class PreviewTargetCandidate(
     val eventId: Long,
     val styleName: String,
+    val textLabel: String,
     val layer: Int,
     val anchor: AssPoint?,
     val confidence: PreviewTargetConfidence,
@@ -45,8 +47,8 @@ internal object PreviewTargetResolver {
             .filterNot(AssEvent::comment)
             .map { event -> candidate(document, event, positionMs, point) }
             .sortedWith(
-                compareBy<PreviewTargetCandidate> { it.confidence.ordinal }
-                    .thenBy { it.distance }
+                compareBy<PreviewTargetCandidate> { it.distance }
+                    .thenBy { it.confidence.ordinal }
                     .thenByDescending { it.layer }
                     .thenBy { it.eventId }
             )
@@ -74,6 +76,12 @@ internal object PreviewTargetResolver {
         return PreviewTargetCandidate(
             eventId = event.id,
             styleName = event.style,
+            textLabel = AssInlineSyntax.visibleText(event.text)
+                .replace("\\N", " ")
+                .replace("\\n", " ")
+                .trim()
+                .ifBlank { "（空字幕）" }
+                .take(48),
             layer = event.layer,
             anchor = anchor,
             confidence = resolved.second,
