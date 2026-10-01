@@ -876,7 +876,7 @@ private fun ModernAppBar(
                     Text(
                         when {
                             state.container.uri != null -> "MKV 工程 · ${state.document.events.size} events"
-                            state.subtitleLoaded -> "独立 ASS · ${state.document.events.size} events"
+                            state.subtitleLoaded -> "独立 ${state.subtitleFormat.name} · ${state.document.events.size} events"
                             else -> "未载入字幕"
                         },
                         style = MaterialTheme.typography.labelSmall,
@@ -2336,6 +2336,12 @@ private fun ModernTimelinePane(state: EditorState, viewModel: EditorViewModel, m
             horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro),
         ) {
             Text(formatMs(playheadMs), style = MaterialTheme.typography.titleSmall)
+            state.currentFrameNumber?.let { frame ->
+                Text("F$frame", style = MaterialTheme.typography.labelMedium)
+            }
+            state.estimatedVideoFps?.let { fps ->
+                Text("%.3f fps".format(java.util.Locale.US, fps), style = MaterialTheme.typography.labelSmall)
+            }
             FilterChip(
                 selected = followPlayhead,
                 onClick = {
@@ -3935,7 +3941,11 @@ private fun BatchPane(state: EditorState, viewModel: EditorViewModel, modifier: 
 @Composable
 private fun ProjectPane(state: EditorState, viewModel: EditorViewModel, onSaveMkv: () -> Unit, modifier: Modifier = Modifier) {
     Column(modifier.padding(WorkbenchDimens.Small), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(if (state.container.uri != null) "MKV 工程" else "独立 ASS 工程", style = MaterialTheme.typography.titleSmall)
+        Text(
+            if (state.container.uri != null) "MKV 工程"
+            else "独立 ${state.subtitleFormat.name} 工程",
+            style = MaterialTheme.typography.titleSmall,
+        )
         Text(state.project.title)
         Text("PlayRes ${state.document.playResX}×${state.document.playResY} · ${state.document.styles.size} Style · ${state.document.events.size} Event", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (state.container.uri != null) {
