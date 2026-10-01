@@ -177,7 +177,7 @@ fun ModernEditorScreen(
     ) {
         Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
-            androidx.compose.animation.AnimatedVisibility(visible = !workspaceState.surfacesHidden) {
+            androidx.compose.animation.AnimatedVisibility(visible = workspaceMode == WorkspacePresentationMode.FIXED || !workspaceState.surfacesHidden) {
             ModernAppBar(
                 state = state,
                 viewModel = viewModel,
