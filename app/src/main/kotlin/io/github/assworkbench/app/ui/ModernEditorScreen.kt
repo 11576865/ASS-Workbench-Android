@@ -837,23 +837,26 @@ private fun FixedWorkspace(
             val previewVisible = policy.effectivePreview != PreviewDensity.HIDDEN
 
             val preview: @Composable (Modifier) -> Unit = { previewModifier ->
+                val positionTargetId = if (activeTool == WorkbenchTool.POSITION) {
+                    (instance.binding.resolve(
+                        focusedEventId = state.focusedEventId,
+                        selectedEventIds = state.selectedEventIds,
+                        existingEventIds = state.document.events.mapTo(hashSetOf()) { it.id },
+                    ) as? WorkspaceBindingResolution.Event)?.eventId
+                } else {
+                    null
+                }
                 WorkbenchPreview(
                     state = state,
                     viewModel = viewModel,
-                    positionEditEventId = if (activeTool == WorkbenchTool.POSITION) {
-                        (instance.binding.resolve(
-                            focusedEventId = state.focusedEventId,
-                            selectedEventIds = state.selectedEventIds,
-                            existingEventIds = state.document.events.mapTo(hashSetOf()) { it.id },
-                        ) as? WorkspaceBindingResolution.Event)?.eventId
-                    } else null,
+                    positionEditEventId = positionTargetId,
                     onOpenVideo = onOpenVideo,
                     onOpenTimeline = { selectTool(WorkbenchTool.TIMELINE) },
                     rendererEnabled = rendererEnabled,
                     onEnableRenderer = onEnableRenderer,
                     onEditEventPosition = onEditEventPosition,
                     interactionRegistry = if (activeTool == WorkbenchTool.POSITION) interactionRegistry else null,
-                    viewportGesturesEnabled = activeTool != WorkbenchTool.POSITION,
+                    viewportGesturesEnabled = positionTargetId == null,
                     modifier = previewModifier.testTag("preview-workspace"),
                 )
             }
