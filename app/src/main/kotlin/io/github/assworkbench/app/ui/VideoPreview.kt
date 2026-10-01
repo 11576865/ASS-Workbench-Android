@@ -82,14 +82,6 @@ import io.github.assworkbench.app.ui.preview.PreviewTargetCandidate
 import io.github.assworkbench.app.ui.preview.PreviewTargetConfidence
 import io.github.assworkbench.app.ui.preview.PreviewTargetResolver
 
-internal data class PreviewObjectPick(
-    val frozenPositionMs: Long,
-    val playX: Double,
-    val playY: Double,
-    val viewportFractionX: Float,
-    val viewportFractionY: Float,
-    val candidates: List<PreviewTargetCandidate>,
-)
 import io.github.yuroyami.libmpvkt.Mpv
 import io.github.yuroyami.libmpvkt.MpvCommands
 import io.github.yuroyami.libmpvkt.MpvResult
@@ -105,6 +97,15 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.concurrent.atomic.AtomicLong
+
+internal data class PreviewObjectPick(
+    val frozenPositionMs: Long,
+    val playX: Double,
+    val playY: Double,
+    val viewportFractionX: Float,
+    val viewportFractionY: Float,
+    val candidates: List<PreviewTargetCandidate>,
+)
 
 @Composable
 internal fun VideoPreview(
