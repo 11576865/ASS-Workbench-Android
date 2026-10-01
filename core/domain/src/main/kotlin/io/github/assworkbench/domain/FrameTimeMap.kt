@@ -44,7 +44,9 @@ class VfrFrameTimeMap(
     init {
         require(pts.isNotEmpty()) { "VFR frame map cannot be empty" }
         require(pts.first() >= 0L) { "Frame PTS must be non-negative" }
-        require(pts.zipWithNext().all { (a, b) -> b >= a }) { "Frame PTS must be monotonic" }
+        require((1 until pts.size).all { index -> pts[index] >= pts[index - 1] }) {
+            "Frame PTS must be monotonic"
+        }
     }
 
     override val frameCount: Long = pts.size.toLong()
