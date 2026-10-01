@@ -67,8 +67,10 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     private var recoveryJob: Job? = null
     private var fontDiagnosticJob: Job? = null
     private var waveformJob: Job? = null
+    private var frameTimelineJob: Job? = null
     private var containerScanJob: Job? = null
     private var waveformSourceUri: String? = null
+    private var frameTimelineSourceUri: String? = null
     private var containerScan: MatroskaScanResult? = null
     private var eventFormatClipboard: EventFormatClipboard? = null
     private var pendingProjectRestore: AssWorkbenchProjectManifest? = null
@@ -99,6 +101,9 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         containerScanJob?.cancel()
         containerScanJob = null
         containerScan = null
+        frameTimelineJob?.cancel()
+        frameTimelineJob = null
+        frameTimelineSourceUri = null
         val epoch = workspaceEpoch.incrementAndGet()
         if (resetProjectFonts) fontStore.beginProjectFontSession(epoch, refresh = false)
         return epoch
@@ -156,6 +161,50 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                         waveform = WaveformLiteState(
                             sourceUri = source,
                             status = WaveformLiteStatus.UNAVAILABLE,
+                            error = error.message ?: error::class.java.simpleName,
+                        )
+                    )
+                }
+            }
+        }
+    }
+
+
+    private fun launchFrameTimelineAnalysis(uri: Uri) {
+        val source = uri.toString()
+        frameTimelineJob?.cancel()
+        frameTimelineSourceUri = source
+        _state.update {
+            it.copy(
+                frameTimeline = FrameTimelineState(
+                    sourceUri = source,
+                    status = FrameTimelineStatus.ANALYZING,
+                )
+            )
+        }
+        frameTimelineJob = viewModelScope.launch {
+            val result = runCatching {
+                withContext(Dispatchers.IO) { FrameTimelineAnalyzer.analyze(app, uri) }
+            }
+            if (frameTimelineSourceUri != source || _state.value.project.videoUri != source) return@launch
+            result.onSuccess { map ->
+                _state.update {
+                    it.copy(
+                        frameTimeline = FrameTimelineState(
+                            sourceUri = source,
+                            status = FrameTimelineStatus.READY,
+                            map = map,
+                            frameCount = (map.frameAtOrBefore(Long.MAX_VALUE).coerceAtMost(Int.MAX_VALUE.toLong()) + 1L).toInt(),
+                        )
+                    )
+                }
+            }.onFailure { error ->
+                if (error is kotlinx.coroutines.CancellationException) return@onFailure
+                _state.update {
+                    it.copy(
+                        frameTimeline = FrameTimelineState(
+                            sourceUri = source,
+                            status = FrameTimelineStatus.UNAVAILABLE,
                             error = error.message ?: error::class.java.simpleName,
                         )
                     )
@@ -299,6 +348,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 refreshFonts(initial = false)
                 if (_state.value.project.videoUri == uri.toString()) {
                     launchWaveformAnalysis(uri)
+                    launchFrameTimelineAnalysis(uri)
                 }
                 val pendingTrack = pendingProjectRestore
                     ?.takeIf { it.mkvUri == uri.toString() }
@@ -338,6 +388,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 }
                 if (_state.value.project.videoUri == uri.toString()) {
                     launchWaveformAnalysis(uri)
+                    launchFrameTimelineAnalysis(uri)
                 }
             }
         }
@@ -664,6 +715,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             )
         }
         launchWaveformAnalysis(uri)
+        launchFrameTimelineAnalysis(uri)
     }
 
     fun openSubtitle(uri: Uri) {
