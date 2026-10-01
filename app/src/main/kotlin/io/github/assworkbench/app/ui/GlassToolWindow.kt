@@ -111,6 +111,8 @@ internal fun GlassToolWindow(
     val cornerRadius = 22.dp
     val backgroundAlpha = if (seeThrough) 0.08f else renderPlan.effectiveAlpha
     val effectiveColor = containerColor.copy(alpha = backgroundAlpha)
+    val activeBorderColor = MaterialTheme.colorScheme.primary
+    val inactiveBorderColor = MaterialTheme.colorScheme.outlineVariant
 
     Dialog(
         onDismissRequest = { },
@@ -145,11 +147,9 @@ internal fun GlassToolWindow(
                     setColor(effectiveColor.toArgb())
                     setStroke(
                         with(density) { (if (active) 1.5.dp else 1.dp).roundToPx() },
-                        (if (active) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.outlineVariant
-                        }).copy(alpha = if (active) 0.92f else 0.58f).toArgb(),
+                        (if (active) activeBorderColor else inactiveBorderColor)
+                            .copy(alpha = if (active) 0.92f else 0.58f)
+                            .toArgb(),
                     )
                 }
                 window.setBackgroundDrawable(background)
