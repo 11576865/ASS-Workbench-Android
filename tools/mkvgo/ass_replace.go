@@ -24,7 +24,7 @@ func ReplaceASS(ctx context.Context, srcPath string, trackID uint64, assPath, ds
 }
 
 // ReplaceASSWithFonts performs the same same-slot ASS replacement and, in the
-// same remux pass, appends selected TTF/OTF files as Matroska attachments.
+// same remux pass, appends selected TTF/OTF/TTC/OTC files as Matroska attachments.
 // Existing attachments are preserved. Attachment names are never overwritten:
 // a selected font whose generated attachment name already exists is skipped.
 func ReplaceASSWithFonts(
@@ -176,7 +176,7 @@ func appendFontAttachments(c *mkv.Container, fontPaths []string) error {
 		seenPaths[clean] = struct{}{}
 
 		ext := strings.ToLower(filepath.Ext(clean))
-		if ext != ".ttf" && ext != ".otf" {
+		if ext != ".ttf" && ext != ".otf" && ext != ".ttc" && ext != ".otc" {
 			return fmt.Errorf("unsupported font attachment %q", filepath.Base(clean))
 		}
 		data, err := os.ReadFile(clean)
@@ -206,8 +206,11 @@ func appendFontAttachments(c *mkv.Container, fontPaths []string) error {
 			key = candidateKey
 		}
 		mime := "font/ttf"
-		if ext == ".otf" {
+		switch ext {
+		case ".otf":
 			mime = "font/otf"
+		case ".ttc", ".otc":
+			mime = "font/collection"
 		}
 		c.Attachments = append(c.Attachments, mkv.Attachment{
 			ID:       nextID,

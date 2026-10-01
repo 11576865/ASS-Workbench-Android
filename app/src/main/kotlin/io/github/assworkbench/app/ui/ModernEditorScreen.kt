@@ -1527,6 +1527,7 @@ private fun WorkbenchPreview(
         fontRevision = state.fontRevision,
         initialPositionMs = viewModel.playbackPositionMs.value,
         focusedEventId = state.focusedEventId,
+        selectedAudioOrdinal = state.audioTracks.firstOrNull { it.extractorIndex == state.selectedAudioTrackIndex }?.ordinal,
         positionEditEventId = positionEditEventId,
         onPreviewEventPosition = { x, y ->
             positionEditEventId?.let { viewModel.previewEventPosition(it, x, y) }
@@ -2516,6 +2517,8 @@ private fun InlineTransformWorkspace(
         }
     }
 
+    AnimationAuthorPane(event, viewModel)
+
     if (addOpen) {
         AddTransformCard(
             event = event,
@@ -3303,10 +3306,17 @@ private fun ModernTimelinePane(state: EditorState, viewModel: EditorViewModel, m
     val visibleRelationCount = remember(visible, relationByEventId) {
         visible.asSequence().mapNotNull { relationByEventId[it.id] }.groupingBy { it.kind }.eachCount()
     }
-    val snapTargets = remember(visible, playheadMs, snapEvents, snapPlayhead) {
+    val speechBoundaries = remember(state.waveform.envelope) {
+        state.waveform.envelope?.let { AudioTimingAssist.speechBoundaries(it) }.orEmpty()
+    }
+    var snapSpeech by rememberSaveable { mutableStateOf(true) }
+    var snapScenes by rememberSaveable { mutableStateOf(true) }
+    val snapTargets = remember(visible, playheadMs, snapEvents, snapPlayhead, snapSpeech, snapScenes, speechBoundaries, state.sceneCutsMs) {
         buildList {
             if (snapPlayhead) add(playheadMs)
             if (snapEvents) visible.forEach { add(it.start.millis); add(it.end.millis) }
+            if (snapSpeech) addAll(speechBoundaries.filter { it in windowStart..windowEnd })
+            if (snapScenes) addAll(state.sceneCutsMs.filter { it in windowStart..windowEnd })
         }
     }
     val activeSnapStrength = TimelineSnapStrength.entries
@@ -3355,6 +3365,15 @@ private fun ModernTimelinePane(state: EditorState, viewModel: EditorViewModel, m
                     followPlayhead = true
                 }) { Text("回到播放头") }
             }
+            if (state.audioTracks.size > 1) {
+                state.audioTracks.forEach { track ->
+                    FilterChip(
+                        selected = track.extractorIndex == state.selectedAudioTrackIndex,
+                        onClick = { viewModel.selectAudioTrack(track.extractorIndex) },
+                        label = { Text(track.label) },
+                    )
+                }
+            }
             TextButton(onClick = { settingsOpen = true }) {
                 Text(if (snapEnabled) "Snap ${snapGridMs}ms" else "Snap off")
             }
@@ -3377,6 +3396,16 @@ private fun ModernTimelinePane(state: EditorState, viewModel: EditorViewModel, m
                     text = { Text((if (snapGrid) "✓ " else "") + "时间网格") },
                     enabled = snapEnabled,
                     onClick = { snapGrid = !snapGrid },
+                )
+                DropdownMenuItem(
+                    text = { Text((if (snapSpeech) "✓ " else "") + "语音边界") },
+                    enabled = snapEnabled && speechBoundaries.isNotEmpty(),
+                    onClick = { snapSpeech = !snapSpeech },
+                )
+                DropdownMenuItem(
+                    text = { Text((if (snapScenes) "✓ " else "") + "场景切点") },
+                    enabled = snapEnabled && state.sceneCutsMs.isNotEmpty(),
+                    onClick = { snapScenes = !snapScenes },
                 )
                 listOf(10L, 100L).forEach { grid ->
                     DropdownMenuItem(
@@ -4632,8 +4661,11 @@ private fun FontManagerPane(
                             FontOrigin.MKV_ATTACHMENT -> "MKV 附件"
                             FontOrigin.UNKNOWN -> "来源未知"
                         }
+                        val collectionLabel = if (font.collectionFaces.isNotEmpty()) {
+                            " · Collection " + font.collectionFaces.size + " faces"
+                        } else ""
                         Text(
-                            font.metadata.rendererFamily + " · " + originLabel +
+                            font.metadata.rendererFamily + collectionLabel + " · " + originLabel +
                                 if (requested) " · ASS 已请求" else " · 无显式请求",
                             style = MaterialTheme.typography.labelSmall,
                             color = if (
@@ -4660,15 +4692,26 @@ private fun FontManagerPane(
                         }
                     }
                     if (style != null) {
-                        TextButton(
-                            onClick = {
-                                viewModel.setStyleFont(
-                                    style.name,
-                                    font.metadata.rendererFamily,
-                                )
-                            },
-                        ) {
-                            Text("用于 " + style.name)
+                        if (font.collectionFaces.isEmpty()) {
+                            TextButton(
+                                onClick = { viewModel.setStyleFont(style.name, font.metadata.rendererFamily) },
+                            ) { Text("用于 " + style.name) }
+                        } else {
+                            var facesOpen by remember(font.sha256) { mutableStateOf(false) }
+                            Box {
+                                TextButton(onClick = { facesOpen = true }) { Text("选择 Face") }
+                                DropdownMenu(facesOpen, { facesOpen = false }) {
+                                    font.collectionFaces.forEachIndexed { faceIndex, face ->
+                                        DropdownMenuItem(
+                                            text = { Text((faceIndex + 1).toString() + " · " + face.rendererFamily) },
+                                            onClick = {
+                                                viewModel.setStyleFont(style.name, face.rendererFamily)
+                                                facesOpen = false
+                                            },
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
                 }

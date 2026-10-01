@@ -27,6 +27,9 @@ internal fun RuleBatchPane(
     var layerFilter by rememberSaveable { mutableStateOf("") }
     var tagFilter by rememberSaveable { mutableStateOf("") }
     var commentFilter by rememberSaveable { mutableStateOf("ALL") }
+    var rawRegexFilter by rememberSaveable { mutableStateOf("") }
+    var durationMin by rememberSaveable { mutableStateOf("") }
+    var durationMax by rememberSaveable { mutableStateOf("") }
 
     var shiftText by rememberSaveable { mutableStateOf("") }
     var styleText by rememberSaveable { mutableStateOf("") }
@@ -38,6 +41,14 @@ internal fun RuleBatchPane(
     var findText by rememberSaveable { mutableStateOf("") }
     var replaceText by rememberSaveable { mutableStateOf("") }
     var commentAction by rememberSaveable { mutableStateOf("KEEP") }
+    var regexFind by rememberSaveable { mutableStateOf("") }
+    var regexReplace by rememberSaveable { mutableStateOf("") }
+    var regexRaw by rememberSaveable { mutableStateOf(false) }
+    var timingOrigin by rememberSaveable { mutableStateOf("0") }
+    var timingNumerator by rememberSaveable { mutableStateOf("") }
+    var timingDenominator by rememberSaveable { mutableStateOf("") }
+    var overridePropertyName by rememberSaveable { mutableStateOf(AssTransformVisualProperty.BORDER.name) }
+    var overrideValue by rememberSaveable { mutableStateOf("") }
 
     fun filter(): AssBatchFilter {
         val filters = buildList<AssBatchFilter> {
@@ -50,6 +61,14 @@ internal fun RuleBatchPane(
             when (commentFilter) {
                 "DIALOGUE" -> add(AssBatchFilter.CommentIs(false))
                 "COMMENT" -> add(AssBatchFilter.CommentIs(true))
+            }
+            rawRegexFilter.takeIf(String::isNotBlank)?.let { raw ->
+                runCatching { Regex(raw) }.getOrNull()?.let { add(AssBatchFilter.RawRegex(it)) }
+            }
+            val minDuration = durationMin.toLongOrNull()
+            val maxDuration = durationMax.toLongOrNull()
+            if (minDuration != null || maxDuration != null) {
+                add(AssBatchFilter.DurationRange(minDuration ?: 0L, maxDuration ?: Long.MAX_VALUE))
             }
         }
         return when (filters.size) {
@@ -73,6 +92,24 @@ internal fun RuleBatchPane(
                 "DIALOGUE" -> add(AssBatchAction.SetComment(false))
                 "COMMENT" -> add(AssBatchAction.SetComment(true))
             }
+            regexFind.takeIf(String::isNotBlank)?.let { raw ->
+                runCatching { Regex(raw) }.getOrNull()?.let { pattern ->
+                    add(
+                        if (regexRaw) AssBatchAction.ReplaceRawRegex(pattern, regexReplace)
+                        else AssBatchAction.ReplaceVisibleRegex(pattern, regexReplace)
+                    )
+                }
+            }
+            val numerator = timingNumerator.toLongOrNull()
+            val denominator = timingDenominator.toLongOrNull()
+            if (numerator != null && denominator != null && numerator > 0 && denominator > 0) {
+                add(AssBatchAction.ScaleTiming(timingOrigin.toLongOrNull() ?: 0L, numerator, denominator))
+            }
+            overrideValue.toDoubleOrNull()?.let { value ->
+                AssTransformVisualProperty.entries.firstOrNull { it.name == overridePropertyName }?.let { property ->
+                    add(AssBatchAction.SetNumericOverride(property, value))
+                }
+            }
         }
         return AssBatchRecipe("interactive-rule", filter(), actions)
     }
@@ -80,7 +117,9 @@ internal fun RuleBatchPane(
     val recipe = remember(
         state.selectedEventIds,
         selectedOnly, styleFilter, textFilter, actorFilter, layerFilter, tagFilter, commentFilter,
+        rawRegexFilter, durationMin, durationMax,
         shiftText, styleText, layerText, actorText, marginL, marginR, marginV, findText, replaceText, commentAction,
+        regexFind, regexReplace, regexRaw, timingOrigin, timingNumerator, timingDenominator, overridePropertyName, overrideValue,
     ) { recipe() }
     val preview = remember(state.document, recipe) { AssBatchEngine.preview(state.document, recipe) }
     val changedExamples = remember(state.document, preview) {
@@ -123,6 +162,11 @@ internal fun RuleBatchPane(
             OutlinedTextField(layerFilter, { layerFilter = it }, label = { Text("Layer =") }, modifier = Modifier.weight(1f))
             OutlinedTextField(tagFilter, { tagFilter = it }, label = { Text("含 tag，例如 pos") }, modifier = Modifier.weight(1f))
         }
+        OutlinedTextField(rawRegexFilter, { rawRegexFilter = it }, label = { Text("Raw ASS Regex filter") }, modifier = Modifier.fillMaxWidth())
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            OutlinedTextField(durationMin, { durationMin = it }, label = { Text("最短时长 ms") }, modifier = Modifier.weight(1f))
+            OutlinedTextField(durationMax, { durationMax = it }, label = { Text("最长时长 ms") }, modifier = Modifier.weight(1f))
+        }
 
         HorizontalDivider()
         Text("Transform", style = MaterialTheme.typography.labelLarge)
@@ -145,6 +189,21 @@ internal fun RuleBatchPane(
             listOf("KEEP", "DIALOGUE", "COMMENT").forEach { mode ->
                 FilterChip(commentAction == mode, { commentAction = mode }, { Text("类型 ${mode}") })
             }
+        }
+        Text("高级 Transform", style = MaterialTheme.typography.labelLarge)
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            OutlinedTextField(regexFind, { regexFind = it }, label = { Text("Regex 查找") }, modifier = Modifier.weight(1f))
+            OutlinedTextField(regexReplace, { regexReplace = it }, label = { Text("Regex 替换") }, modifier = Modifier.weight(1f))
+        }
+        FilterChip(regexRaw, { regexRaw = !regexRaw }, { Text(if (regexRaw) "替换 Raw ASS" else "仅替正文") })
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            OutlinedTextField(timingOrigin, { timingOrigin = it }, label = { Text("缩放原点 ms") }, modifier = Modifier.weight(1f))
+            OutlinedTextField(timingNumerator, { timingNumerator = it }, label = { Text("时间倍率分子") }, modifier = Modifier.weight(1f))
+            OutlinedTextField(timingDenominator, { timingDenominator = it }, label = { Text("分母") }, modifier = Modifier.weight(1f))
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            OutlinedTextField(overridePropertyName, { overridePropertyName = it }, label = { Text("数值 override 属性") }, modifier = Modifier.weight(1f))
+            OutlinedTextField(overrideValue, { overrideValue = it }, label = { Text("值") }, modifier = Modifier.weight(1f))
         }
 
         HorizontalDivider()
@@ -171,5 +230,7 @@ internal fun RuleBatchPane(
             enabled = preview.changedEventIds.isNotEmpty(),
             modifier = Modifier.fillMaxWidth(),
         ) { Text("应用为一个事务") }
+
+        SemanticSearchReplacePane(state, viewModel)
     }
 }

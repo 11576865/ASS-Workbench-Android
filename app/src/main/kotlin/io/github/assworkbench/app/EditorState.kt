@@ -27,6 +27,9 @@ data class EditorState(
     /** Ephemeral namespace for UI bindings; increments whenever the document workspace is replaced. */
     val workspaceSessionId: Long = 1L,
     val waveform: WaveformLiteState = WaveformLiteState(),
+    val audioTracks: List<MediaAudioTrackInfo> = emptyList(),
+    val selectedAudioTrackIndex: Int? = null,
+    val sceneCutsMs: List<Long> = emptyList(),
     val geometryScaleLocked: Boolean = true,
     val subtitleLoaded: Boolean = false,
     val subtitleTextEncoding: AssTextEncoding = AssTextEncoding.UTF8,

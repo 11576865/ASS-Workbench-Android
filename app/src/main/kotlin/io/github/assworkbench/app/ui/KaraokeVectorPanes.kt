@@ -127,7 +127,8 @@ internal fun VectorClipPane(
     Column(modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("Vector Clip · #${event.id}", style = MaterialTheme.typography.titleMedium)
         if (clip == null) {
-            Text("当前字幕没有可编辑的矢量裁剪路径。已有路径可在此修改；新路径需在正文中添加。矩形裁剪位于“位置与几何 → 矩形裁剪”。")
+            Text("当前字幕没有可编辑的矢量裁剪路径。Drawing 仍可在下方创建和编辑。矩形裁剪位于“位置与几何 → 矩形裁剪”。")
+            DrawingAuthorPane(event, viewModel)
             return@Column
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -170,6 +171,7 @@ internal fun VectorClipPane(
             }
         }
         Text("已有路径控制点 · 数字可直接修改", style = MaterialTheme.typography.labelMedium)
+        DrawingAuthorPane(event, viewModel)
         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             itemsIndexed(clip.tokens) { index, token ->
                 if (token.command != null) {

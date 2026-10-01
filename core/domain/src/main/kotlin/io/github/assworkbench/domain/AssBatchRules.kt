@@ -13,6 +13,21 @@ sealed interface AssBatchFilter {
     data class TextContains(val value: String, val ignoreCase: Boolean = true) : AssBatchFilter {
         override fun matches(event: AssEvent, document: AssDocument) = AssInlineSyntax.visibleText(event.text).contains(value, ignoreCase)
     }
+    data class VisibleRegex(val pattern: Regex) : AssBatchFilter {
+        override fun matches(event: AssEvent, document: AssDocument) = pattern.containsMatchIn(AssInlineSyntax.visibleText(event.text))
+    }
+    data class RawRegex(val pattern: Regex) : AssBatchFilter {
+        override fun matches(event: AssEvent, document: AssDocument) = pattern.containsMatchIn(event.text)
+    }
+    data class StyleRegex(val pattern: Regex) : AssBatchFilter {
+        override fun matches(event: AssEvent, document: AssDocument) = pattern.containsMatchIn(event.style)
+    }
+    data class DurationRange(val minimumMs: Long, val maximumMs: Long) : AssBatchFilter {
+        override fun matches(event: AssEvent, document: AssDocument): Boolean {
+            val duration = (event.end.millis - event.start.millis).coerceAtLeast(0L)
+            return duration in minimumMs..maximumMs
+        }
+    }
     data class LayerIs(val layer: Int) : AssBatchFilter {
         override fun matches(event: AssEvent, document: AssDocument) = event.layer == layer
     }
@@ -67,6 +82,42 @@ sealed interface AssBatchAction {
             if (find.isEmpty()) return event
             val (text, changed) = AssDocumentEditing.replacePlainDialogueText(event.text, find, replacement)
             return if (changed) event.copy(text = text) else event
+        }
+    }
+    data class ReplaceVisibleRegex(val pattern: Regex, val replacement: String) : AssBatchAction {
+        override fun apply(event: AssEvent, document: AssDocument) =
+            event.copy(text = AssSearchReplace.replaceVisibleSegments(event.text, pattern, replacement))
+    }
+    data class ReplaceRawRegex(val pattern: Regex, val replacement: String) : AssBatchAction {
+        override fun apply(event: AssEvent, document: AssDocument) =
+            event.copy(text = pattern.replace(event.text, replacement))
+    }
+    data class ScaleTiming(
+        val originMs: Long,
+        val numerator: Long,
+        val denominator: Long,
+    ) : AssBatchAction {
+        init { require(numerator > 0 && denominator > 0) }
+        override fun apply(event: AssEvent, document: AssDocument): AssEvent {
+            fun scale(value: Long): Long = (originMs + ((value - originMs).toDouble() * numerator / denominator))
+                .toLong().coerceAtLeast(0L)
+            val start = scale(event.start.millis)
+            val end = scale(event.end.millis).coerceAtLeast(start)
+            return event.copy(start = SubTime(start), end = SubTime(end))
+        }
+    }
+    data class SetNumericOverride(
+        val property: AssTransformVisualProperty,
+        val value: Double?,
+    ) : AssBatchAction {
+        override fun apply(event: AssEvent, document: AssDocument): AssEvent {
+            val leading = Regex("""^(?:\{[^}]*\})*""").find(event.text)?.value.orEmpty()
+            val body = event.text.removePrefix(leading)
+            val block = leading.takeIf { it.contains('\\') } ?: "{}"
+            val content = block.removePrefix("{").removeSuffix("}")
+            val next = AssTransformVisualSemantic.patchNumeric(content, property, value)
+            val replacement = if (next.isBlank()) "" else "{$next}"
+            return event.copy(text = if (block == "{}") replacement + event.text else leading.replaceFirst(block, replacement) + body)
         }
     }
     data class SetMargins(val left: Int? = null, val right: Int? = null, val vertical: Int? = null) : AssBatchAction {
