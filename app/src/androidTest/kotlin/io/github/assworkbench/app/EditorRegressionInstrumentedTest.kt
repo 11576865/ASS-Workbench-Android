@@ -138,6 +138,30 @@ class EditorRegressionInstrumentedTest {
     }
 
     @Test
+    fun spatialWorkspaceExposesRealNodesAndNavigationControls() {
+        restoreRecovery()
+
+        composeRule.onNodeWithContentDescription("工具和更多操作").performClick()
+        composeRule.onNodeWithTag("workspace-mode-toggle").performClick()
+        composeRule.onNodeWithTag("ui-variant-use-SPATIAL_EXPERIMENTAL")
+            .assertIsDisplayed()
+            .performClick()
+
+        composeRule.onNodeWithTag("spatial-workspace").assertIsDisplayed()
+        composeRule.onNodeWithTag("spatial-node-preview").assertIsDisplayed()
+        composeRule.onNodeWithTag("spatial-node-subtitles").assertIsDisplayed()
+        composeRule.onNodeWithTag("spatial-node-tool").assertIsDisplayed()
+
+        composeRule.onNodeWithTag("spatial-overview").performClick()
+        composeRule.onNodeWithTag("spatial-navigation-mode").performClick()
+        composeRule.onNodeWithTag("spatial-navigation-overlay").assertIsDisplayed()
+
+        composeRule.onNodeWithTag("spatial-navigation-mode").performClick()
+        composeRule.onNodeWithTag("spatial-focus-subtitles").performClick()
+        composeRule.onNodeWithTag("spatial-node-subtitles").assertIsDisplayed()
+    }
+
+    @Test
     fun rawDraftSurvivesSwitchingBetweenEvents() {
         restoreRecovery()
 
