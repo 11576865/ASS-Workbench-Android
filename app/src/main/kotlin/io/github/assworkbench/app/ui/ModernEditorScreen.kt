@@ -105,9 +105,12 @@ fun ModernEditorScreen(
         if (state.projectWorkspaceRows.isNotEmpty()) {
             val restored = WorkspaceState.fromSaveableList(state.projectWorkspaceRows)
             workspaceState = restored
-            restored.activeInstance()?.toolKey?.let { key ->
-                if (WorkbenchTool.entries.any { it.name == key }) fixedToolName = key
-            }
+            restored.activeInstanceId
+                ?.let { id -> restored.tools.firstOrNull { it.id == id } }
+                ?.toolKey
+                ?.let { key ->
+                    if (WorkbenchTool.entries.any { it.name == key }) fixedToolName = key
+                }
         }
         if (state.projectSurfaceRows.isNotEmpty()) {
             surfaceController.restore(state.projectSurfaceRows)
