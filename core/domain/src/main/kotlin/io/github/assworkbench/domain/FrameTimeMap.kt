@@ -6,6 +6,13 @@ sealed interface FrameTimeMap {
     fun timeForFrame(frame: Long): Long
     fun snap(timeMs: Long): Long = timeForFrame(frameAtOrBefore(timeMs))
 
+    fun snapNearest(timeMs: Long): Long {
+        val beforeFrame = frameAtOrBefore(timeMs)
+        val before = timeForFrame(beforeFrame)
+        val after = timeForFrame(beforeFrame + 1L)
+        return if (after != before && kotlin.math.abs(after - timeMs) < kotlin.math.abs(timeMs - before)) after else before
+    }
+
     data class Cfr(val numerator: Long, val denominator: Long = 1L) : FrameTimeMap {
         init { require(numerator > 0 && denominator > 0) }
 
@@ -19,6 +26,7 @@ sealed interface FrameTimeMap {
     /** Exact VFR frame-boundary timestamps in milliseconds. */
     class Vfr(frameTimestampsMs: LongArray) : FrameTimeMap {
         private val frames = frameTimestampsMs.copyOf()
+        val frameCount: Int get() = frames.size
 
         init {
             require(frames.isNotEmpty())
