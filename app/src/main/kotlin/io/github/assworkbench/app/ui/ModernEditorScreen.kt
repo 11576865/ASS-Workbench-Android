@@ -48,6 +48,7 @@ import androidx.compose.ui.unit.dp
 import io.github.assworkbench.app.BuildConfig
 import io.github.assworkbench.app.EditorState
 import io.github.assworkbench.app.EditorViewModel
+import io.github.assworkbench.app.FrameTimelineStatus
 import io.github.assworkbench.app.WaveformLiteState
 import io.github.assworkbench.app.WaveformLiteStatus
 import io.github.assworkbench.app.ui.workspace.WorkspaceBinding
@@ -3707,7 +3708,7 @@ private fun QcPane(state: EditorState, viewModel: EditorViewModel, issues: List<
     Column(modifier.padding(WorkbenchDimens.Small), verticalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small)) {
         val errors = issues.count { it.severity == AssQcSeverity.ERROR }
         val warnings = issues.count { it.severity == AssQcSeverity.WARNING }
-        val issueEventIds = remember(issues) { issues.map { it.eventId }.distinct() }
+        val issueEventIds = remember(issues) { issues.map { it.eventId }.filter { it > 0L }.distinct() }
         val issueIndex = issueEventIds.indexOf(state.focusedEventId)
         val previousIssueId = if (issueIndex > 0) issueEventIds[issueIndex - 1] else null
         val nextIssueId = when {
