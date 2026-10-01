@@ -41,6 +41,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -93,13 +94,21 @@ fun ModernEditorScreen(
     onSaveMkv: () -> Unit,
     rendererEnabled: Boolean,
     onEnableRenderer: () -> Unit,
+    appearance: WorkbenchAppearance = WorkbenchAppearance.SYSTEM,
+    onAppearanceChange: (WorkbenchAppearance) -> Unit = {},
 ) {
     var workspaceState by rememberSaveable(
         stateSaver = listSaver(
             save = { it.toSaveableList() },
             restore = { WorkspaceState.fromSaveableList(it) },
         ),
-    ) { mutableStateOf(WorkspaceState(surfacesHidden = true)) }
+    ) {
+        mutableStateOf(
+            WorkspaceState(sessionId = state.workspaceSessionId)
+                .openPrimary(WorkbenchTool.STYLE.name)
+                .withSurfacesHidden(true)
+        )
+    }
     val surfaceController = rememberWorkbenchSurfaceController()
     val interactionRegistry = rememberInteractionOverlayRegistry()
     var expandedEventId by rememberSaveable { mutableStateOf<Long?>(null) }
@@ -117,6 +126,19 @@ fun ModernEditorScreen(
     val workspaceMode = WorkspacePresentationMode.valueOf(workspaceModeName)
     val fixedTool = WorkbenchTool.valueOf(fixedToolName)
 
+    LaunchedEffect(state.workspaceSessionId) {
+        if (workspaceState.sessionId != state.workspaceSessionId) {
+            workspaceState = WorkspaceState(sessionId = state.workspaceSessionId)
+                .openPrimary(WorkbenchTool.STYLE.name)
+                .withSurfacesHidden(true)
+            surfaceController.restore(emptyList())
+            expandedEventId = null
+            fixedToolName = WorkbenchTool.STYLE.name
+            fixedListRequested = false
+            workspaceModeName = WorkspacePresentationMode.FIXED.name
+        }
+    }
+
     val openProjectLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri ?: return@rememberLauncherForActivityResult
         runCatching {
@@ -127,8 +149,8 @@ fun ModernEditorScreen(
                 ?: error("无法读取 Workbench Project")
             ProjectFileCodec.decode(text)
         }.onSuccess { snapshot ->
-            viewModel.loadProjectSnapshot(snapshot)
-            workspaceState = WorkspaceState.fromSaveableList(snapshot.workspaceState)
+            val sessionId = viewModel.loadProjectSnapshot(snapshot)
+            workspaceState = WorkspaceState.fromSaveableList(snapshot.workspaceState).forSession(sessionId)
             surfaceController.restore(snapshot.surfaceState)
             workspaceModeName = runCatching {
                 WorkspacePresentationMode.valueOf(snapshot.workspaceMode)
@@ -195,17 +217,25 @@ fun ModernEditorScreen(
     }
 
     fun openTool(next: WorkbenchTool) {
+        workspaceState = workspaceState.openPrimary(next.name)
         if (workspaceMode == WorkspacePresentationMode.FIXED) {
             fixedListRequested = next == WorkbenchTool.SUBTITLES
             fixedNavigationRevision += 1
             if (!fixedListRequested) fixedToolName = next.name
             return
         }
-        workspaceState = workspaceState.openPrimary(next.name).withSurfacesHidden(false)
+        workspaceState = workspaceState.withSurfacesHidden(false)
         surfaceController.bringToFront(WorkspaceState.primaryInstanceId(next.name))
     }
 
     fun toggleWorkspaceMode() {
+        if (workspaceMode == WorkspacePresentationMode.CANVAS_EXPERIMENTAL) {
+            workspaceState.activeInstanceId
+                ?.let { id -> workspaceState.tools.firstOrNull { it.id == id }?.toolKey }
+                ?.let { key -> WorkbenchTool.entries.firstOrNull { it.name == key } }
+                ?.takeIf { it != WorkbenchTool.SUBTITLES && it != WorkbenchTool.CAPABILITIES }
+                ?.let { fixedToolName = it.name }
+        }
         workspaceModeName = if (workspaceMode == WorkspacePresentationMode.FIXED) {
             WorkspacePresentationMode.CANVAS_EXPERIMENTAL.name
         } else {
@@ -218,7 +248,7 @@ fun ModernEditorScreen(
         workspaceState = workspaceState.withSurfacesHidden(!workspaceState.surfacesHidden)
     }
 
-    MaterialTheme(colorScheme = workbenchColors()) {
+    MaterialTheme(colorScheme = workbenchColors(appearance)) {
     Surface(
         modifier = Modifier.fillMaxSize(),
         color = MaterialTheme.colorScheme.background,
@@ -281,6 +311,8 @@ fun ModernEditorScreen(
                 },
                 onSaveProject = { saveProjectLauncher.launch(projectFileName()) },
                 onExportSrt = { exportSrtLauncher.launch(srtFileName()) },
+                appearance = appearance,
+                onAppearanceChange = onAppearanceChange,
             )
             }
 
@@ -406,9 +438,20 @@ fun ModernEditorScreen(
                     viewModel = viewModel,
                     issues = issues,
                     activeTool = fixedTool,
+                    instance = workspaceState.activeForTool(fixedTool.name)
+                        ?: WorkspaceToolInstance(
+                            id = WorkspaceState.primaryInstanceId(fixedTool.name),
+                            toolKey = fixedTool.name,
+                            binding = WorkspaceBinding.FollowFocus,
+                        ),
                     navigationRevision = fixedNavigationRevision,
                     listRequested = fixedListRequested,
-                    onActiveTool = { fixedToolName = it.name },
+                    onActiveTool = { tool ->
+                        fixedToolName = tool.name
+                        workspaceState = workspaceState
+                            .openPrimary(tool.name)
+                            .activate(WorkspaceState.primaryInstanceId(tool.name))
+                    },
                     expandedEventId = expandedEventId,
                     onExpandedChange = { expandedEventId = it },
                     onImportFont = onImportFont,
@@ -445,8 +488,7 @@ fun ModernEditorScreen(
                             }
                         }
                     }
-                    val eventBound = surfaceTool == WorkbenchTool.STYLE ||
-                        surfaceTool == WorkbenchTool.POSITION
+                    val eventBound = surfaceTool.descriptor.eventBindable
                     val bindingResolution = instance.binding.resolve(
                         focusedEventId = state.focusedEventId,
                         selectedEventIds = state.selectedEventIds,
@@ -510,7 +552,7 @@ fun ModernEditorScreen(
                             surfaceController.activateTab(tabId)
                             workspaceState = workspaceState.activate(tabId)
                         },
-                        onDuplicate = if (eventBound) {
+                        onDuplicate = if (surfaceTool.descriptor.canDuplicate) {
                             {
                                 workspaceState.newSibling(instance.id)?.let { sibling ->
                                     workspaceState = workspaceState
@@ -599,6 +641,7 @@ private fun FixedWorkspace(
     viewModel: EditorViewModel,
     issues: List<AssQcIssue>,
     activeTool: WorkbenchTool,
+    instance: WorkspaceToolInstance,
     navigationRevision: Int,
     listRequested: Boolean,
     onActiveTool: (WorkbenchTool) -> Unit,
@@ -627,21 +670,21 @@ private fun FixedWorkspace(
             consumedNavigationRevision = navigationRevision
         }
     }
-    var showPreview by rememberSaveable { mutableStateOf(true) }
+
+    var previewDensityName by rememberSaveable { mutableStateOf(PreviewDensity.FULL.name) }
+    var navigationGroupRequested by rememberSaveable { mutableStateOf(false) }
+    val requestedPreview = runCatching { PreviewDensity.valueOf(previewDensityName) }
+        .getOrDefault(PreviewDensity.FULL)
     val fixedTools = WorkbenchTool.entries.filter {
         it.group == activeTool.group && it != WorkbenchTool.SUBTITLES && it != WorkbenchTool.CAPABILITIES
     }
+
     fun selectTool(tool: WorkbenchTool) {
+        navigationGroupRequested = false
         compactPage = "EDITOR"
         onActiveTool(tool)
     }
-    val instance = remember(activeTool) {
-        WorkspaceToolInstance(
-            id = "fixed:" + activeTool.name,
-            toolKey = activeTool.name,
-            binding = WorkspaceBinding.FollowFocus,
-        )
-    }
+
     val listPane: @Composable (Modifier) -> Unit = { paneModifier ->
         Column(paneModifier) {
             if (searchOpen) SearchStrip(state.query, viewModel::setQuery, onCloseSearch)
@@ -662,6 +705,7 @@ private fun FixedWorkspace(
             ) { }
         }
     }
+
     val inspector: @Composable (Modifier) -> Unit = { paneModifier ->
         Surface(
             modifier = paneModifier.testTag("fixed-inspector"),
@@ -693,49 +737,92 @@ private fun FixedWorkspace(
             color = MaterialTheme.colorScheme.surfaceContainerHigh,
         ) {
             Column {
-            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 6.dp),
-                horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                WorkbenchToolGroup.entries.forEach { group ->
+                Row(
+                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    WorkbenchToolGroup.entries.forEach { group ->
+                        FilterChip(
+                            selected = if (group == WorkbenchToolGroup.NAVIGATION) {
+                                navigationGroupRequested
+                            } else {
+                                !navigationGroupRequested && activeTool.group == group
+                            },
+                            onClick = {
+                                if (group == WorkbenchToolGroup.NAVIGATION) {
+                                    navigationGroupRequested = true
+                                    compactPage = "LIST"
+                                } else {
+                                    WorkbenchTool.entries
+                                        .firstOrNull { it.group == group && it != WorkbenchTool.SUBTITLES }
+                                        ?.let(::selectTool)
+                                }
+                            },
+                            label = { Text(group.title) },
+                            modifier = Modifier.testTag("fixed-group-" + group.name),
+                        )
+                    }
+                }
+                Row(
+                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(activeTool.group.title, style = MaterialTheme.typography.labelMedium)
+                    fixedTools.forEach { tool ->
+                        FilterChip(
+                            selected = tool == activeTool,
+                            onClick = { selectTool(tool) },
+                            label = { Text(tool.title) },
+                            modifier = Modifier.testTag("fixed-tool-" + tool.name),
+                        )
+                    }
                     FilterChip(
-                        selected = activeTool.group == group,
-                        onClick = {
-                            val first = WorkbenchTool.entries.first { it.group == group && it != WorkbenchTool.SUBTITLES }
-                            selectTool(first)
+                        selected = requestedPreview != PreviewDensity.HIDDEN,
+                        onClick = { previewDensityName = requestedPreview.next().name },
+                        label = { Text("预览 · " + requestedPreview.label) },
+                        leadingIcon = {
+                            Icon(
+                                if (requestedPreview == PreviewDensity.HIDDEN) Icons.Filled.VisibilityOff
+                                else Icons.Filled.Visibility,
+                                null,
+                                Modifier.size(18.dp),
+                            )
                         },
-                        label = { Text(group.title) },
-                        modifier = Modifier.testTag("fixed-group-" + group.name),
+                        modifier = Modifier.testTag("fixed-preview-density"),
                     )
                 }
-            }
-            Row(
-                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 6.dp),
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(activeTool.group.title, style = MaterialTheme.typography.labelMedium)
-                fixedTools.forEach { tool ->
-                    FilterChip(
-                        selected = tool == activeTool,
-                        onClick = { selectTool(tool) },
-                        label = { Text(tool.title) },
-                        modifier = Modifier.testTag("fixed-tool-" + tool.name),
-                    )
-                }
-            }
             }
         }
+
         BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
-            val availableHeight = maxHeight
-            val wide = maxWidth >= 1200.dp
-            val medium = maxWidth >= 700.dp
+            val density = LocalDensity.current
+            val imeVisible = WindowInsets.ime.getBottom(density) > 0
+            val policy = AdaptiveWorkspacePolicy.resolve(
+                widthDp = maxWidth.value,
+                heightDp = maxHeight.value,
+                imeVisible = imeVisible,
+                requestedPreview = requestedPreview,
+            )
             val briefInspector = activeTool == WorkbenchTool.PROJECT || activeTool == WorkbenchTool.EVENT
-            val wideInspectorWeight = if (briefInspector) 0.30f else 0.40f
-            val mediumInspectorWeight = if (briefInspector) 0.42f else 0.55f
+            val inspectorFraction = when (policy.profile) {
+                WorkbenchLayoutProfile.THREE_PANE -> if (briefInspector) 0.30f else policy.inspectorFraction
+                WorkbenchLayoutProfile.DUAL_PANE -> if (briefInspector) 0.38f else policy.inspectorFraction
+                WorkbenchLayoutProfile.COMPACT -> 1f
+            }
+            val previewVisible = policy.effectivePreview != PreviewDensity.HIDDEN
+
             val preview: @Composable (Modifier) -> Unit = { previewModifier ->
                 WorkbenchPreview(
                     state = state,
                     viewModel = viewModel,
-                    positionEditEventId = if (activeTool == WorkbenchTool.POSITION) state.focusedEventId else null,
+                    positionEditEventId = if (activeTool == WorkbenchTool.POSITION) {
+                        (instance.binding.resolve(
+                            focusedEventId = state.focusedEventId,
+                            selectedEventIds = state.selectedEventIds,
+                            existingEventIds = state.document.events.mapTo(hashSetOf()) { it.id },
+                        ) as? WorkspaceBindingResolution.Event)?.eventId
+                    } else null,
                     onOpenVideo = onOpenVideo,
                     onOpenTimeline = { selectTool(WorkbenchTool.TIMELINE) },
                     rendererEnabled = rendererEnabled,
@@ -744,39 +831,66 @@ private fun FixedWorkspace(
                     modifier = previewModifier.testTag("preview-workspace"),
                 )
             }
-            when {
-                wide -> Row(Modifier.fillMaxSize()) {
-                    preview(Modifier.weight(0.32f).fillMaxHeight())
+
+            when (policy.profile) {
+                WorkbenchLayoutProfile.THREE_PANE -> Row(Modifier.fillMaxSize()) {
+                    if (previewVisible) {
+                        val previewWeight = if (policy.effectivePreview == PreviewDensity.COMPACT) 0.22f else 0.32f
+                        preview(Modifier.weight(previewWeight).fillMaxHeight())
+                        VerticalDivider()
+                        listPane(
+                            Modifier.weight((1f - previewWeight - inspectorFraction).coerceAtLeast(0.20f))
+                                .fillMaxHeight()
+                        )
+                    } else {
+                        listPane(Modifier.weight(1f - inspectorFraction).fillMaxHeight())
+                    }
                     VerticalDivider()
-                    listPane(Modifier.weight(0.68f - wideInspectorWeight).fillMaxHeight())
-                    VerticalDivider()
-                    inspector(Modifier.weight(wideInspectorWeight).fillMaxHeight())
+                    inspector(Modifier.weight(inspectorFraction).fillMaxHeight())
                 }
-                medium -> Row(Modifier.fillMaxSize()) {
-                    Column(Modifier.weight(1f - mediumInspectorWeight).fillMaxHeight()) {
-                        preview(Modifier.weight(0.42f).fillMaxWidth())
-                        HorizontalDivider()
-                        listPane(Modifier.weight(0.58f).fillMaxWidth())
+
+                WorkbenchLayoutProfile.DUAL_PANE -> Row(Modifier.fillMaxSize()) {
+                    Column(Modifier.weight(1f - inspectorFraction).fillMaxHeight()) {
+                        if (previewVisible) {
+                            preview(
+                                Modifier.fillMaxWidth()
+                                    .height(policy.previewHeightDp.dp)
+                            )
+                            HorizontalDivider()
+                        }
+                        listPane(Modifier.weight(1f).fillMaxWidth())
                     }
                     VerticalDivider()
-                    inspector(Modifier.weight(mediumInspectorWeight).fillMaxHeight())
+                    inspector(Modifier.weight(inspectorFraction).fillMaxHeight())
                 }
-                else -> Column(Modifier.fillMaxSize()) {
-                    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        FilterChip(compactPage == "LIST", { compactPage = "LIST" }, { Text("字幕列表") },
-                            modifier = Modifier.testTag("fixed-page-list"))
-                        FilterChip(compactPage == "EDITOR", { compactPage = "EDITOR" }, { Text(activeTool.title) },
-                            modifier = Modifier.testTag("fixed-page-editor"))
-                        FilterChip(showPreview, { showPreview = !showPreview }, { Text("预览") },
-                            modifier = Modifier.testTag("fixed-preview-toggle"))
+
+                WorkbenchLayoutProfile.COMPACT -> Column(Modifier.fillMaxSize()) {
+                    Row(
+                        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        FilterChip(
+                            compactPage == "LIST",
+                            { compactPage = "LIST" },
+                            { Text("字幕列表") },
+                            modifier = Modifier.testTag("fixed-page-list"),
+                        )
+                        FilterChip(
+                            compactPage == "EDITOR",
+                            { compactPage = "EDITOR" },
+                            { Text(activeTool.title) },
+                            modifier = Modifier.testTag("fixed-page-editor"),
+                        )
                     }
-                    if (showPreview && availableHeight >= 500.dp) {
-                        preview(Modifier.fillMaxWidth().height(180.dp))
+                    if (previewVisible) {
+                        preview(Modifier.fillMaxWidth().height(policy.previewHeightDp.dp))
                         HorizontalDivider()
                     }
-                    if (compactPage == "LIST") listPane(Modifier.weight(1f).fillMaxWidth())
-                    else inspector(Modifier.weight(1f).fillMaxWidth())
+                    if (compactPage == "LIST") {
+                        listPane(Modifier.weight(1f).fillMaxWidth())
+                    } else {
+                        inspector(Modifier.weight(1f).fillMaxWidth())
+                    }
                 }
             }
         }
@@ -1020,6 +1134,8 @@ private fun ModernAppBar(
     onOpenProject: () -> Unit,
     onSaveProject: () -> Unit,
     onExportSrt: () -> Unit,
+    appearance: WorkbenchAppearance,
+    onAppearanceChange: (WorkbenchAppearance) -> Unit,
 ) {
     var moreMenuOpen by remember { mutableStateOf(false) }
     Surface(tonalElevation = 2.dp) {
@@ -1081,6 +1197,24 @@ private fun ModernAppBar(
                             leadingIcon = { Icon(if (workspaceMode == WorkspacePresentationMode.FIXED) Icons.Filled.Dashboard else Icons.Filled.Science, null) },
                             onClick = { moreMenuOpen = false; onToggleWorkspaceMode() },
                             modifier = Modifier.testTag("workspace-mode-toggle"),
+                        )
+                        DropdownMenuItem(
+                            text = { Text("外观：" + appearance.label) },
+                            leadingIcon = {
+                                Icon(
+                                    when (appearance) {
+                                        WorkbenchAppearance.SYSTEM -> Icons.Filled.SettingsBrightness
+                                        WorkbenchAppearance.LIGHT -> Icons.Filled.LightMode
+                                        WorkbenchAppearance.DARK -> Icons.Filled.DarkMode
+                                    },
+                                    null,
+                                )
+                            },
+                            onClick = {
+                                moreMenuOpen = false
+                                onAppearanceChange(appearance.next())
+                            },
+                            modifier = Modifier.testTag("appearance-mode-toggle"),
                         )
                         DropdownMenuItem(text = { Text("保存 Workbench Project") }, leadingIcon = { Icon(Icons.Filled.SaveAs, null) }, onClick = { moreMenuOpen = false; onSaveProject() })
                         DropdownMenuItem(text = { Text("导出 SRT") }, leadingIcon = { Icon(Icons.Filled.Subtitles, null) }, onClick = { moreMenuOpen = false; onExportSrt() })
@@ -1147,7 +1281,9 @@ private fun EventWorkspace(
     LaunchedEffect(state.focusedEventId, state.filteredEvents) {
         val focusedId = state.focusedEventId
         val index = state.filteredEvents.indexOfFirst { it.id == focusedId }
-        if (index >= 0) listState.animateScrollToItem(index)
+        if (index >= 0 && !listState.isScrollInProgress) {
+            listState.animateScrollToItem(index)
+        }
         if (expandedEventId != null && focusedId != null && expandedEventId != focusedId) {
             onExpandedChange(focusedId)
         }
@@ -1557,7 +1693,9 @@ private fun InlineEffectsEditor(event: AssEvent, playbackPositionMs: Long, viewM
     }
     fun commitVisual() { viewModel.applyEventVisualEffects(event.id, blur.toDoubleOrNull(), softEntry) }
 
-    DisposableEffect(event.id) { onDispose { viewModel.clearTransientPreview() } }
+    DisposableEffect(event.id) {
+        onDispose { viewModel.clearTransientPreview("effects:${event.id}") }
+    }
 
     Surface(
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.38f),
@@ -3133,7 +3271,7 @@ private fun PositionPane(
     }
 
     DisposableEffect(event.id) {
-        onDispose { viewModel.clearTransientPreview() }
+        onDispose { viewModel.clearTransientPreview("geometry:${event.id}") }
     }
 
     var sectionName by rememberSaveable { mutableStateOf(PositionSection.PLACEMENT.name) }

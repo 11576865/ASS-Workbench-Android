@@ -45,6 +45,7 @@ internal data class WorkspaceState(
     val tools: List<WorkspaceToolInstance> = emptyList(),
     val surfacesHidden: Boolean = false,
     val activeInstanceId: String? = null,
+    val sessionId: Long? = null,
 ) {
     fun hasTool(toolKey: String): Boolean = tools.any { it.toolKey == toolKey }
 
@@ -133,10 +134,13 @@ internal data class WorkspaceState(
     fun withSurfacesHidden(hidden: Boolean): WorkspaceState =
         copy(surfacesHidden = hidden)
 
+    fun forSession(id: Long): WorkspaceState = copy(sessionId = id)
+
     fun toSaveableList(): List<String> = buildList {
         add(SCHEMA_VERSION)
         add(if (surfacesHidden) "1" else "0")
         add(activeInstanceId.orEmpty())
+        add(sessionId?.toString().orEmpty())
         tools.forEach { instance ->
             val bindingCode: String
             val bindingArgument: String
@@ -168,18 +172,22 @@ internal data class WorkspaceState(
     }
 
     companion object {
-        private const val SCHEMA_VERSION = "workspace-v1"
+        private const val SCHEMA_VERSION = "workspace-v2"
+        private const val LEGACY_SCHEMA_VERSION = "workspace-v1"
         private const val SEPARATOR = "\u001F"
 
         fun primaryInstanceId(toolKey: String): String =
             toolKey + ":primary"
 
         fun fromSaveableList(values: List<String>): WorkspaceState {
-            if (values.firstOrNull() != SCHEMA_VERSION) return WorkspaceState()
+            val version = values.firstOrNull()
+            if (version != SCHEMA_VERSION && version != LEGACY_SCHEMA_VERSION) return WorkspaceState()
 
             val hidden = values.getOrNull(1) == "1"
             val serializedActive = values.getOrNull(2)?.takeIf(String::isNotBlank)
-            val restoredTools = values.drop(3).mapNotNull { encoded ->
+            val sessionId = if (version == SCHEMA_VERSION) values.getOrNull(3)?.toLongOrNull() else null
+            val toolStart = if (version == SCHEMA_VERSION) 4 else 3
+            val restoredTools = values.drop(toolStart).mapNotNull { encoded ->
                 val fields = encoded.split(SEPARATOR)
                 if (fields.size != 4) return@mapNotNull null
 
@@ -205,6 +213,7 @@ internal data class WorkspaceState(
                 tools = restoredTools,
                 surfacesHidden = hidden,
                 activeInstanceId = active,
+                sessionId = sessionId,
             )
         }
     }

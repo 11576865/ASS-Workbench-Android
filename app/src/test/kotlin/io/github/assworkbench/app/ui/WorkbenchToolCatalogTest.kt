@@ -16,4 +16,14 @@ class WorkbenchToolCatalogTest {
         assertTrue(WorkbenchToolGroup.entries.all { group -> WorkbenchTool.entries.any { it.group == group } })
         assertTrue(WorkbenchTool.entries.all { it.initialGeometry(0f, 0f).isValid() })
     }
+
+    @Test
+    fun eventBindingAndDuplicationAreDeclaredByDescriptor() {
+        assertTrue(WorkbenchTool.STYLE.descriptor.supportsPinnedEvent)
+        assertTrue(WorkbenchTool.POSITION.descriptor.supportsPinnedEvent)
+        assertTrue(WorkbenchTool.STYLE.descriptor.canDuplicate)
+        assertTrue(WorkbenchTool.POSITION.descriptor.canDuplicate)
+        assertTrue(!WorkbenchTool.PROJECT.descriptor.eventBindable)
+        assertTrue(!WorkbenchTool.FONTS.descriptor.canDuplicate)
+    }
 }
