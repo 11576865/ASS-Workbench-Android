@@ -1,5 +1,26 @@
 # Roadmap
 
+## 0.29 — Engineering workbench (current)
+
+- [x] Add a durable `.asswb` project snapshot format around the canonical ASS document.
+- [x] Provide Fixed UI and experimental Canvas UI presentations over the same editor model.
+- [x] Add Canvas docking, minimization and tab-stack state with versioned persistence.
+- [x] Promote QC into an ASS linter with explicit Quick Fix actions.
+- [x] Add CFR/VFR frame-timebase semantics; ASS serialization remains time-based.
+- [x] Add renderer-compatibility profiles as analysis rather than fake cross-renderer preview.
+- [x] Add a rule batch engine with preview and one-transaction commit.
+- [x] Add Karaoke semantic editing for `\\k / \\kf / \\ko / \\kt`.
+- [x] Add lossless vector-clip parsing/patching and an editing surface.
+- [x] Resolve actual font requirements from Style / `\\fn` / `\\rStyle`.
+- [x] Add SRT import into ASS and explicit SRT export.
+- [ ] Run the full Android CI + emulator regression gate and repair integration findings.
+- [ ] Physical-device pass for Fixed/Canvas switching, docking and the new authoring tools.
+
+### Explicit boundary
+
+Font subsetting is not an ASS Workbench feature. The workbench can identify required font families and select complete imported fonts for MKV packaging, but glyph-subset production belongs to a packaging/muxing pipeline.
+
+
 ## Done through 0.13
 
 - [x] ASS-first editable domain with mpv + libass authoritative preview.
