@@ -3,7 +3,7 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
-val baseVersionName = "0.27.1"
+val baseVersionName = "0.27.2"
 val rendererVersion = providers.gradleProperty("asswb.rendererVersion").getOrElse("0.3.0")
 val rendererProvider = providers.gradleProperty("asswb.rendererProvider").getOrElse("none")
 val rendererExperimental = providers.gradleProperty("asswb.rendererExperimental").map(String::toBoolean).getOrElse(false)
@@ -22,7 +22,7 @@ android {
         }
         minSdk = 26
         targetSdk = 35
-        versionCode = 30
+        versionCode = 31
         versionName = if (rendererExperimental) "$baseVersionName-fontconfig" else baseVersionName
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         manifestPlaceholders["appLabel"] = if (rendererExperimental) "ASS Workbench FC" else "ASS Workbench"
@@ -67,6 +67,7 @@ dependencies {
 
     implementation("io.github.yuroyami:libmpvkt-compose:$rendererVersion")
 
+    testImplementation("junit:junit:4.13.2")
     androidTestImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test:core-ktx:1.6.1")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")

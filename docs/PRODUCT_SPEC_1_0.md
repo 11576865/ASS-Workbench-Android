@@ -1,5 +1,7 @@
 # ASS Workbench Android — 1.0 Product Specification
 
+> UI architecture update (2026-10-01): fixed split-layout requirements in this document are superseded by the object-centric composable Workspace described in `WORKSPACE_KERNEL_PHASE1.md` and `WORKSPACE_SURFACES_0.27.2.md`. Domain safety, canonical ASS, renderer authority and product-output boundaries remain applicable. The workspace is the product UI, not a separate advanced mode.
+
 ## Product boundary
 
 ASS Workbench is a mobile/tablet **ASS editing, review and visual typesetting workbench**. ASS is the canonical editable representation. Video is reference media used for synchronized preview. An MKV may also be opened through the **Container Bridge** so an embedded ASS track and relevant font attachments can be exposed to the same editor.

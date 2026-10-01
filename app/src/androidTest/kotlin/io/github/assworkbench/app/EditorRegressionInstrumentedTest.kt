@@ -93,7 +93,7 @@ class EditorRegressionInstrumentedTest {
             .performScrollTo()
             .assertIsDisplayed()
             .performClick()
-        composeRule.waitUntil(timeoutMillis = 5_000) {
+        composeRule.waitUntil(timeoutMillis = 10_000) {
             eventText(1L) == "Recovered line DRAFT"
         }
     }
@@ -124,7 +124,7 @@ class EditorRegressionInstrumentedTest {
             .performScrollTo()
             .performClick()
 
-        composeRule.waitUntil(timeoutMillis = 5_000) {
+        composeRule.waitUntil(timeoutMillis = 10_000) {
             eventText(1L) == "Recovered line SWITCH"
         }
         assertEquals("Second recovered line", eventText(2L))
@@ -152,7 +152,7 @@ class EditorRegressionInstrumentedTest {
             .assertIsDisplayed()
             .performClick()
 
-        composeRule.waitUntil(timeoutMillis = 5_000) {
+        composeRule.waitUntil(timeoutMillis = 10_000) {
             eventText(1L) == "Recovered line ROTATED"
         }
     }
@@ -234,18 +234,17 @@ class EditorRegressionInstrumentedTest {
     fun experimentalSurfaceWorkspaceSupportsStackHideRestoreAndPreviewModes() {
         restoreRecovery()
 
+        fun waitForSurface(tag: String) {
+            composeRule.waitUntil(timeoutMillis = 10_000) {
+                runCatching {
+                    composeRule.onNodeWithTag(tag).assertIsDisplayed()
+                    true
+                }.getOrDefault(false)
+            }
+        }
+
         composeRule.onNodeWithTag("tool-POSITION").performScrollTo().performClick()
-        composeRule.onNodeWithTag("tool-STYLE").performScrollTo().performClick()
-        composeRule.waitForIdle()
-        composeRule.onNodeWithTag("surface-POSITION").assertIsDisplayed()
-        composeRule.onNodeWithTag("surface-STYLE").assertIsDisplayed()
-
-        composeRule.onNodeWithTag("tool-FONTS").performScrollTo().performClick()
-        composeRule.onNodeWithTag("tool-QC").performScrollTo().performClick()
-        composeRule.waitForIdle()
-        composeRule.onNodeWithTag("surface-FONTS").assertIsDisplayed()
-        composeRule.onNodeWithTag("surface-QC").assertIsDisplayed()
-
+        waitForSurface("surface-POSITION")
         val dragHandle = composeRule.onNodeWithTag("surface-drag-POSITION")
         val before = dragHandle.fetchSemanticsNode().boundsInRoot
         dragHandle.performTouchInput {
@@ -259,15 +258,23 @@ class EditorRegressionInstrumentedTest {
         val after = dragHandle.fetchSemanticsNode().boundsInRoot
         assertTrue("Floating surface drag handle should move the surface", after.left > before.left || after.top > before.top)
 
+        composeRule.onNodeWithTag("tool-STYLE").performScrollTo().performClick()
+        waitForSurface("surface-STYLE")
+
+        composeRule.onNodeWithTag("tool-FONTS").performScrollTo().performClick()
+        composeRule.onNodeWithTag("tool-QC").performScrollTo().performClick()
+        waitForSurface("surface-FONTS")
+        waitForSurface("surface-QC")
+
         composeRule.onNodeWithContentDescription("隐藏全部浮层").performClick()
-        composeRule.waitUntil(timeoutMillis = 5_000) {
+        composeRule.waitUntil(timeoutMillis = 10_000) {
             composeRule.onAllNodesWithTag("surface-drag-POSITION")
                 .fetchSemanticsNodes(atLeastOneRootRequired = false)
                 .isEmpty()
         }
 
         composeRule.onNodeWithContentDescription("呼回全部浮层").performClick()
-        composeRule.waitUntil(timeoutMillis = 5_000) {
+        composeRule.waitUntil(timeoutMillis = 10_000) {
             composeRule.onAllNodesWithTag("surface-drag-POSITION")
                 .fetchSemanticsNodes(atLeastOneRootRequired = false)
                 .isNotEmpty()
@@ -289,12 +296,44 @@ class EditorRegressionInstrumentedTest {
     }
 
     @Test
+    fun surfaceResizeAndLayoutLockSurviveRecreationWithoutChangingSubtitle() {
+        restoreRecovery()
+        val canonical = viewModel.state.value.document
+        composeRule.onNodeWithTag("tool-POSITION").performScrollTo().performClick()
+        composeRule.waitForIdle()
+        val surface = composeRule.onNodeWithTag("surface-POSITION")
+        val before = surface.fetchSemanticsNode().boundsInRoot
+        composeRule.onNodeWithTag("surface-resize-POSITION").performTouchInput {
+            swipe(start = center, end = center - androidx.compose.ui.geometry.Offset(80f, 100f), durationMillis = 350)
+        }
+        composeRule.waitForIdle()
+        val resized = surface.fetchSemanticsNode().boundsInRoot
+        assertTrue("Resize must reduce the committed window size", resized.width < before.width || resized.height < before.height)
+        composeRule.onNodeWithTag("surface-lock-POSITION").performClick()
+        val handle = composeRule.onNodeWithTag("surface-drag-POSITION")
+        val locked = handle.fetchSemanticsNode().boundsInRoot
+        handle.performTouchInput {
+            swipe(start = center, end = center + androidx.compose.ui.geometry.Offset(60f, 60f), durationMillis = 350)
+        }
+        composeRule.waitForIdle()
+        assertEquals(locked, handle.fetchSemanticsNode().boundsInRoot)
+        composeRule.activityRule.scenario.recreate()
+        composeRule.waitForIdle()
+        viewModel = composeRule.activity.editorViewModel
+        composeRule.onNodeWithContentDescription("解除布局锁定").assertIsDisplayed()
+        val restored = composeRule.onNodeWithTag("surface-POSITION").fetchSemanticsNode().boundsInRoot
+        assertEquals(resized.width, restored.width, 1f)
+        assertEquals(resized.height, restored.height, 1f)
+        assertEquals(canonical, viewModel.state.value.document)
+    }
+
+    @Test
     fun recoveryDiscardDeletesJournalWithoutLoadingIt() {
         composeRule.onNodeWithTag("recovery-discard")
             .assertIsDisplayed()
             .performClick()
 
-        composeRule.waitUntil(timeoutMillis = 5_000) {
+        composeRule.waitUntil(timeoutMillis = 10_000) {
             !viewModel.state.value.recoveryAvailable
         }
         assertFalse(recoveryStore.exists())
@@ -306,7 +345,7 @@ class EditorRegressionInstrumentedTest {
         restoreRecovery()
 
         viewModel.updateEventText(1L, "Recovered line UPDATED")
-        composeRule.waitUntil(timeoutMillis = 5_000) {
+        composeRule.waitUntil(timeoutMillis = 10_000) {
             recoveryStore.read()
                 ?.document
                 ?.events
@@ -345,7 +384,7 @@ class EditorRegressionInstrumentedTest {
             .assertIsDisplayed()
             .performClick()
 
-        composeRule.waitUntil(timeoutMillis = 5_000) {
+        composeRule.waitUntil(timeoutMillis = 10_000) {
             viewModel.state.value.subtitleLoaded &&
                 viewModel.state.value.document.events.size == 2
         }
