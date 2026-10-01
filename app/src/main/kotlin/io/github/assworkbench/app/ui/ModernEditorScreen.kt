@@ -78,11 +78,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.abs
 
-private enum class WorkspacePresentationMode(val title: String) {
-    FIXED("固定 UI"),
-    CANVAS_EXPERIMENTAL("实验性 Canvas"),
-}
-
 private enum class DestructiveWorkspaceAction { OPEN_ASS, OPEN_PROJECT, NEW_ASS }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -120,6 +115,7 @@ fun ModernEditorScreen(
     val eventEditorStateHolder = rememberSaveableStateHolder()
     var searchOpen by rememberSaveable { mutableStateOf(false) }
     var openMenu by remember { mutableStateOf(false) }
+    var uiVariantLabOpen by rememberSaveable { mutableStateOf(false) }
     var saveConfirmOpen by remember { mutableStateOf(false) }
     var mkvConfirmOpen by remember { mutableStateOf(false) }
     var destructiveWorkspaceAction by remember { mutableStateOf<DestructiveWorkspaceAction?>(null) }
@@ -128,7 +124,7 @@ fun ModernEditorScreen(
     var fixedToolName by rememberSaveable { mutableStateOf(WorkbenchTool.STYLE.name) }
     var fixedNavigationRevision by rememberSaveable { mutableIntStateOf(0) }
     var fixedListRequested by rememberSaveable { mutableStateOf(false) }
-    val workspaceMode = WorkspacePresentationMode.valueOf(workspaceModeName)
+    val workspaceMode = UiVariantRegistry.resolve(workspaceModeName)
     val fixedTool = WorkbenchTool.valueOf(fixedToolName)
 
     LaunchedEffect(state.workspaceSessionId) {
@@ -157,9 +153,7 @@ fun ModernEditorScreen(
             val sessionId = viewModel.loadProjectSnapshot(snapshot)
             workspaceState = WorkspaceState.fromSaveableList(snapshot.workspaceState).forSession(sessionId)
             surfaceController.restore(snapshot.surfaceState)
-            workspaceModeName = runCatching {
-                WorkspacePresentationMode.valueOf(snapshot.workspaceMode)
-            }.getOrDefault(WorkspacePresentationMode.FIXED).name
+            workspaceModeName = UiVariantRegistry.resolve(snapshot.workspaceMode).name
         }.onFailure { viewModel.reportError("Project 打开失败", it) }
     }
 
@@ -248,7 +242,8 @@ fun ModernEditorScreen(
         }
     }
 
-    fun toggleWorkspaceMode() {
+    fun selectWorkspaceMode(next: WorkspacePresentationMode) {
+        if (next == workspaceMode) return
         if (workspaceMode == WorkspacePresentationMode.CANVAS_EXPERIMENTAL) {
             workspaceState.activeInstanceId
                 ?.let { id -> workspaceState.tools.firstOrNull { it.id == id }?.toolKey }
@@ -256,11 +251,7 @@ fun ModernEditorScreen(
                 ?.takeIf { it != WorkbenchTool.SUBTITLES && it != WorkbenchTool.CAPABILITIES }
                 ?.let { fixedToolName = it.name }
         }
-        workspaceModeName = if (workspaceMode == WorkspacePresentationMode.FIXED) {
-            WorkspacePresentationMode.CANVAS_EXPERIMENTAL.name
-        } else {
-            WorkspacePresentationMode.FIXED.name
-        }
+        workspaceModeName = next.name
         workspaceState = workspaceState.withSurfacesHidden(false)
     }
 
@@ -321,7 +312,7 @@ fun ModernEditorScreen(
                 onSaveMkv = onSaveMkv,
                 onTool = ::openTool,
                 workspaceMode = workspaceMode,
-                onToggleWorkspaceMode = ::toggleWorkspaceMode,
+                onOpenUiVariantLab = { uiVariantLabOpen = true },
                 onOpenProject = {
                     if (state.dirty) {
                         destructiveWorkspaceAction = DestructiveWorkspaceAction.OPEN_PROJECT
@@ -334,6 +325,17 @@ fun ModernEditorScreen(
                 appearance = appearance,
                 onAppearanceChange = onAppearanceChange,
             )
+            }
+
+            if (uiVariantLabOpen) {
+                UiVariantLabDialog(
+                    selected = workspaceMode,
+                    onSelect = { next ->
+                        selectWorkspaceMode(next)
+                        uiVariantLabOpen = false
+                    },
+                    onDismiss = { uiVariantLabOpen = false },
+                )
             }
 
             if (saveConfirmOpen) {
@@ -1240,7 +1242,7 @@ private fun ModernAppBar(
     onSaveMkv: () -> Unit,
     onTool: (WorkbenchTool) -> Unit,
     workspaceMode: WorkspacePresentationMode,
-    onToggleWorkspaceMode: () -> Unit,
+    onOpenUiVariantLab: () -> Unit,
     onOpenProject: () -> Unit,
     onSaveProject: () -> Unit,
     onExportSrt: () -> Unit,
@@ -1303,9 +1305,9 @@ private fun ModernAppBar(
                         DropdownMenuItem(text = { Text("诊断") }, leadingIcon = { Icon(Icons.Filled.Tune, null) }, onClick = { moreMenuOpen = false; onTool(WorkbenchTool.DIAGNOSTICS) })
                         Divider()
                         DropdownMenuItem(
-                            text = { Text("界面：" + workspaceMode.title) },
-                            leadingIcon = { Icon(if (workspaceMode == WorkspacePresentationMode.FIXED) Icons.Filled.Dashboard else Icons.Filled.Science, null) },
-                            onClick = { moreMenuOpen = false; onToggleWorkspaceMode() },
+                            text = { Text("UI 实验室 · " + workspaceMode.title) },
+                            leadingIcon = { Icon(Icons.Filled.ViewCarousel, null) },
+                            onClick = { moreMenuOpen = false; onOpenUiVariantLab() },
                             modifier = Modifier.testTag("workspace-mode-toggle"),
                         )
                         DropdownMenuItem(
