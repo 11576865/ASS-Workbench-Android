@@ -74,7 +74,7 @@ private enum class WorkbenchTool(val title: String) {
     PROJECT("项目"), DIAGNOSTICS("诊断"), CAPABILITIES("功能地图"),
 }
 
-private enum class DestructiveWorkspaceAction { OPEN_ASS, NEW_ASS }
+private enum class DestructiveWorkspaceAction { OPEN_ASS, OPEN_PROJECT, NEW_ASS }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -194,7 +194,10 @@ fun ModernEditorScreen(
                         state.container.uri != null || state.dirty
                     if (hasWorkspace) mkvConfirmOpen = true else onOpenMkvProject()
                 },
-                onOpenWorkbenchProject = onOpenWorkbenchProject,
+                onOpenWorkbenchProject = {
+                    if (state.dirty) destructiveWorkspaceAction = DestructiveWorkspaceAction.OPEN_PROJECT
+                    else onOpenWorkbenchProject()
+                },
                 onOpenSubtitle = {
                     if (state.dirty) {
                         destructiveWorkspaceAction = DestructiveWorkspaceAction.OPEN_ASS
@@ -324,7 +327,9 @@ fun ModernEditorScreen(
                         Text(
                             when (action) {
                                 DestructiveWorkspaceAction.OPEN_ASS ->
-                                    "当前字幕有未保存修改。继续打开另一份 ASS 会丢弃当前未保存内容与对应恢复日志。"
+                                    "当前字幕有未保存修改。继续打开另一份 ASS / SRT 会丢弃当前未保存内容与对应恢复日志。"
+                                DestructiveWorkspaceAction.OPEN_PROJECT ->
+                                    "当前字幕有未保存修改。继续打开另一份 ASS Workbench 工程会丢弃当前未保存内容与对应恢复日志。"
                                 DestructiveWorkspaceAction.NEW_ASS ->
                                     "当前字幕有未保存修改。继续新建空白 ASS 会丢弃当前未保存内容与对应恢复日志。"
                             }
@@ -335,6 +340,7 @@ fun ModernEditorScreen(
                             destructiveWorkspaceAction = null
                             when (action) {
                                 DestructiveWorkspaceAction.OPEN_ASS -> onOpenSubtitle()
+                                DestructiveWorkspaceAction.OPEN_PROJECT -> onOpenWorkbenchProject()
                                 DestructiveWorkspaceAction.NEW_ASS -> viewModel.newSubtitleProject()
                             }
                         }) { Text("放弃修改并继续") }
