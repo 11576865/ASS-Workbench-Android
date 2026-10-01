@@ -74,6 +74,29 @@ class WorkspaceStateTest {
     }
 
     @Test
+    fun openingDifferentPinnedTargetCreatesSiblingInsteadOfRetargetingPrimary() {
+        var state = WorkspaceState().openPinnedEvent("POSITION", 41)
+        val primary = state.primary("POSITION")!!
+        assertEquals(WorkspaceBinding.PinnedEvent(41), primary.binding)
+
+        state = state.openPinnedEvent("POSITION", 87)
+
+        assertEquals(2, state.instances("POSITION").size)
+        assertEquals(WorkspaceBinding.PinnedEvent(41), state.primary("POSITION")!!.binding)
+        assertEquals(WorkspaceBinding.PinnedEvent(87), state.activeForTool("POSITION")!!.binding)
+    }
+
+    @Test
+    fun openingSamePinnedTargetReusesPrimary() {
+        val state = WorkspaceState()
+            .openPinnedEvent("POSITION", 41)
+            .openPinnedEvent("POSITION", 41)
+
+        assertEquals(1, state.instances("POSITION").size)
+        assertEquals(WorkspaceBinding.PinnedEvent(41), state.activeForTool("POSITION")!!.binding)
+    }
+
+    @Test
     fun sessionNamespaceRoundTripAndRebindAreExplicit() {
         val state = WorkspaceState(sessionId = 41L)
             .openPrimary("POSITION")
