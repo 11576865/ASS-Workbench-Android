@@ -34,6 +34,16 @@ class WorkbenchSurfaceControllerTest {
         assertEquals(60f, moved.y)
     }
 
+    @Test fun narrowSplitScreenStillSupportsVerticalMovement() {
+        val controller = WorkbenchSurfaceController()
+        controller.ensure("A", fallback)
+        controller.begin("A", fallback, fallback.inViewport(180f, 800f))
+        controller.moveBy("A", 0f, 25f, 180f, 800f)
+        controller.commit("A", fallback)
+        assertEquals(55f, controller.state("A", fallback).geometry.y)
+        assertEquals(374f, controller.state("A", fallback).geometry.width)
+    }
+
     @Test fun resizeCommitsOnceAndLayoutLockCancelsGesture() {
         val controller = WorkbenchSurfaceController()
         controller.ensure("A", fallback)

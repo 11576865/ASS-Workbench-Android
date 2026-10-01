@@ -14,7 +14,9 @@ internal data class SurfaceGeometry(
     fun inViewport(viewportWidth: Float, viewportHeight: Float): SurfaceGeometry {
         val availableWidth = viewportWidth.takeIf { it.isFinite() && it > 0f } ?: 1f
         val availableHeight = viewportHeight.takeIf { it.isFinite() && it > 0f } ?: 1f
-        val safe = if (isValid()) this else SurfaceGeometry()
+        // Projected candidates may be smaller than the canonical minimum in split-screen.
+        val safe = if (listOf(x, y, width, height).all { it.isFinite() } && width > 0f && height > 0f)
+            this else SurfaceGeometry()
         val w = safe.width.coerceAtMost(availableWidth)
         val h = safe.height.coerceAtMost(availableHeight)
         return safe.copy(
