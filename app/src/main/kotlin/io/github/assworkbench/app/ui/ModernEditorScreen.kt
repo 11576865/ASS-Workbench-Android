@@ -238,7 +238,12 @@ fun ModernEditorScreen(
                 viewModel = viewModel,
                 selectionMode = state.selectedEventIds.isNotEmpty(),
                 searchOpen = searchOpen,
-                onSearchToggle = { searchOpen = !searchOpen; openTool(WorkbenchTool.SUBTITLES) },
+                onSearchToggle = {
+                    searchOpen = !searchOpen
+                    if (workspaceMode == WorkspacePresentationMode.CANVAS_EXPERIMENTAL) {
+                        openTool(WorkbenchTool.SUBTITLES)
+                    }
+                },
                 onOpenMenu = { openMenu = true },
                 openMenu = openMenu,
                 onDismissMenu = { openMenu = false },
@@ -576,6 +581,147 @@ fun ModernEditorScreen(
 }
 
 @Composable
+private fun FixedWorkspace(
+    state: EditorState,
+    viewModel: EditorViewModel,
+    issues: List<AssQcIssue>,
+    activeTool: WorkbenchTool,
+    onActiveTool: (WorkbenchTool) -> Unit,
+    expandedEventId: Long?,
+    onExpandedChange: (Long?) -> Unit,
+    onImportFont: () -> Unit,
+    onSaveMkv: () -> Unit,
+    eventEditorStateHolder: SaveableStateHolder,
+    onOpenVideo: () -> Unit,
+    rendererEnabled: Boolean,
+    onEnableRenderer: () -> Unit,
+    searchOpen: Boolean,
+    onCloseSearch: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val fixedTools = remember {
+        WorkbenchTool.entries.filter {
+            it != WorkbenchTool.SUBTITLES && it != WorkbenchTool.CAPABILITIES
+        }
+    }
+    val instance = remember(activeTool) {
+        WorkspaceToolInstance(
+            id = "fixed:" + activeTool.name,
+            toolKey = activeTool.name,
+            binding = WorkspaceBinding.FollowFocus,
+        )
+    }
+    val listPane: @Composable (Modifier) -> Unit = { paneModifier ->
+        Column(paneModifier) {
+            if (searchOpen) SearchStrip(state.query, viewModel::setQuery, onCloseSearch)
+            EventWorkspace(
+                state = state,
+                viewModel = viewModel,
+                issuesByEvent = issues.groupBy { it.eventId },
+                expandedEventId = expandedEventId,
+                onExpandedChange = { next ->
+                    onExpandedChange(next)
+                    if (next != null) onActiveTool(WorkbenchTool.TEXT)
+                },
+                onTool = onActiveTool,
+                eventEditorStateHolder = eventEditorStateHolder,
+                tool = WorkbenchTool.TEXT,
+                modifier = Modifier.weight(1f),
+            ) { }
+        }
+    }
+    val inspector: @Composable (Modifier) -> Unit = { paneModifier ->
+        Surface(
+            modifier = paneModifier.testTag("fixed-inspector"),
+            color = MaterialTheme.colorScheme.surfaceContainer,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        ) {
+            FloatingToolContent(
+                instance = instance,
+                tool = activeTool,
+                state = state,
+                viewModel = viewModel,
+                issues = issues,
+                expandedEventId = expandedEventId,
+                onExpandedChange = onExpandedChange,
+                onImportFont = onImportFont,
+                onSaveMkv = onSaveMkv,
+                eventEditorStateHolder = eventEditorStateHolder,
+                onOpenTool = onActiveTool,
+                onCloseText = { onExpandedChange(null) },
+                searchOpen = searchOpen,
+                onCloseSearch = onCloseSearch,
+            )
+        }
+    }
+
+    Column(modifier) {
+        Surface(
+            tonalElevation = 2.dp,
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        ) {
+            Row(
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("固定 UI", style = MaterialTheme.typography.labelMedium)
+                fixedTools.forEach { tool ->
+                    FilterChip(
+                        selected = tool == activeTool,
+                        onClick = { onActiveTool(tool) },
+                        label = { Text(tool.title) },
+                        modifier = Modifier.testTag("fixed-tool-" + tool.name),
+                    )
+                }
+            }
+        }
+        BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
+            val wide = maxWidth >= 900.dp
+            if (wide) {
+                Row(Modifier.fillMaxSize()) {
+                    WorkbenchPreview(
+                        state = state,
+                        viewModel = viewModel,
+                        positionEditEventId = if (activeTool == WorkbenchTool.POSITION) state.focusedEventId else null,
+                        onOpenVideo = onOpenVideo,
+                        onOpenTimeline = { onActiveTool(WorkbenchTool.TIMELINE) },
+                        rendererEnabled = rendererEnabled,
+                        onEnableRenderer = onEnableRenderer,
+                        viewportGesturesEnabled = activeTool == WorkbenchTool.POSITION,
+                        modifier = Modifier.weight(1.15f).fillMaxHeight().testTag("preview-workspace"),
+                    )
+                    VerticalDivider()
+                    Row(Modifier.weight(0.85f).fillMaxHeight()) {
+                        listPane(Modifier.weight(0.46f).fillMaxHeight())
+                        VerticalDivider()
+                        inspector(Modifier.weight(0.54f).fillMaxHeight())
+                    }
+                }
+            } else {
+                Column(Modifier.fillMaxSize()) {
+                    WorkbenchPreview(
+                        state = state,
+                        viewModel = viewModel,
+                        positionEditEventId = if (activeTool == WorkbenchTool.POSITION) state.focusedEventId else null,
+                        onOpenVideo = onOpenVideo,
+                        onOpenTimeline = { onActiveTool(WorkbenchTool.TIMELINE) },
+                        rendererEnabled = rendererEnabled,
+                        onEnableRenderer = onEnableRenderer,
+                        viewportGesturesEnabled = activeTool == WorkbenchTool.POSITION,
+                        modifier = Modifier.weight(0.42f).fillMaxWidth().testTag("preview-workspace"),
+                    )
+                    HorizontalDivider()
+                    listPane(Modifier.heightIn(min = 150.dp, max = 230.dp).fillMaxWidth())
+                    HorizontalDivider()
+                    inspector(Modifier.weight(0.58f).fillMaxWidth())
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun WorkbenchPreview(
     state: EditorState,
     viewModel: EditorViewModel,
@@ -797,6 +943,11 @@ private fun ModernAppBar(
     onSave: () -> Unit,
     onSaveMkv: () -> Unit,
     onTool: (WorkbenchTool) -> Unit,
+    workspaceMode: WorkspacePresentationMode,
+    onToggleWorkspaceMode: () -> Unit,
+    onOpenProject: () -> Unit,
+    onSaveProject: () -> Unit,
+    onExportSrt: () -> Unit,
 ) {
     var moreMenuOpen by remember { mutableStateOf(false) }
     Surface(tonalElevation = 2.dp) {
@@ -836,7 +987,8 @@ private fun ModernAppBar(
                 Box {
                     TooltipIconButton("打开文件 / 工程", onOpenMenu) { Icon(Icons.Filled.FolderOpen, null) }
                     DropdownMenu(expanded = openMenu, onDismissRequest = onDismissMenu) {
-                        DropdownMenuItem(text = { Text("打开独立 ASS") }, leadingIcon = { Icon(Icons.Filled.Subtitles, null) }, onClick = { onDismissMenu(); onOpenSubtitle() })
+                        DropdownMenuItem(text = { Text("打开 ASS / SRT") }, leadingIcon = { Icon(Icons.Filled.Subtitles, null) }, onClick = { onDismissMenu(); onOpenSubtitle() })
+                        DropdownMenuItem(text = { Text("打开 Workbench Project") }, leadingIcon = { Icon(Icons.Filled.FolderSpecial, null) }, onClick = { onDismissMenu(); onOpenProject() })
                         DropdownMenuItem(text = { Text("打开 / 更换参考视频") }, leadingIcon = { Icon(Icons.Filled.Movie, null) }, onClick = { onDismissMenu(); onOpenVideo() })
                         DropdownMenuItem(text = { Text("打开 MKV 工程") }, leadingIcon = { Icon(Icons.Filled.VideoFile, null) }, onClick = { onDismissMenu(); onOpenMkvProject() })
                         Divider()
@@ -851,6 +1003,14 @@ private fun ModernAppBar(
                         DropdownMenuItem(text = { Text("质量检查") }, leadingIcon = { Icon(Icons.Filled.ErrorOutline, null) }, onClick = { moreMenuOpen = false; onTool(WorkbenchTool.QC) })
                         DropdownMenuItem(text = { Text("项目") }, leadingIcon = { Icon(Icons.Filled.Info, null) }, onClick = { moreMenuOpen = false; onTool(WorkbenchTool.PROJECT) })
                         DropdownMenuItem(text = { Text("诊断") }, leadingIcon = { Icon(Icons.Filled.Tune, null) }, onClick = { moreMenuOpen = false; onTool(WorkbenchTool.DIAGNOSTICS) })
+                        Divider()
+                        DropdownMenuItem(
+                            text = { Text("界面：" + workspaceMode.title) },
+                            leadingIcon = { Icon(if (workspaceMode == WorkspacePresentationMode.FIXED) Icons.Filled.Dashboard else Icons.Filled.Science, null) },
+                            onClick = { moreMenuOpen = false; onToggleWorkspaceMode() },
+                        )
+                        DropdownMenuItem(text = { Text("保存 Workbench Project") }, leadingIcon = { Icon(Icons.Filled.SaveAs, null) }, onClick = { moreMenuOpen = false; onSaveProject() })
+                        DropdownMenuItem(text = { Text("导出 SRT") }, leadingIcon = { Icon(Icons.Filled.Subtitles, null) }, onClick = { moreMenuOpen = false; onExportSrt() })
                         Divider()
                         if (state.container.uri != null) DropdownMenuItem(text = { Text("保存为新 MKV") }, onClick = { moreMenuOpen = false; onSaveMkv() })
                     }
