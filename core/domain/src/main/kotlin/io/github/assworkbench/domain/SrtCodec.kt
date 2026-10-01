@@ -30,7 +30,7 @@ object SrtCodec {
             if (index > 0) append("\r\n")
             append(index + 1).append("\r\n")
             append(formatTime(event.start)).append(" --> ").append(formatTime(event.end)).append("\r\n")
-            append(AssInlineSyntax.visibleText(event.text).replace("\\N", "\r\n").replace("\\n", "\r\n"))
+            append(exportBasicMarkup(event.text).replace("\\N", "\r\n").replace("\\n", "\r\n"))
             append("\r\n")
         }
     }
@@ -42,6 +42,46 @@ object SrtCodec {
         .replace(Regex("""(?i)</b>""")) { "{\\b0}" }
         .replace(Regex("""(?i)<u>""")) { "{\\u1}" }
         .replace(Regex("""(?i)</u>""")) { "{\\u0}" }
+
+    private data class BasicFormat(val italic: Boolean = false, val bold: Boolean = false, val underline: Boolean = false)
+
+    private fun exportBasicMarkup(value: String): String = buildString {
+        val blocks = Regex("""\{([^}]*)\}""").findAll(value).toList()
+        var cursor = 0
+        var state = BasicFormat()
+        fun transition(next: BasicFormat) {
+            if (next == state) return
+            if (state.underline) append("</u>")
+            if (state.bold) append("</b>")
+            if (state.italic) append("</i>")
+            if (next.italic) append("<i>")
+            if (next.bold) append("<b>")
+            if (next.underline) append("<u>")
+            state = next
+        }
+        blocks.forEach { block ->
+            append(value.substring(cursor, block.range.first))
+            var next = state
+            Regex("""\\(?:([ibu])\s*([01])|r[^\\}]*)""", RegexOption.IGNORE_CASE)
+                .findAll(block.groupValues[1]).forEach { tag ->
+                    val kind = tag.groupValues[1].lowercase()
+                    if (kind.isEmpty()) next = BasicFormat()
+                    else {
+                        val enabled = tag.groupValues[2] == "1"
+                        next = when (kind) {
+                            "i" -> next.copy(italic = enabled)
+                            "b" -> next.copy(bold = enabled)
+                            "u" -> next.copy(underline = enabled)
+                            else -> next
+                        }
+                    }
+                }
+            transition(next)
+            cursor = block.range.last + 1
+        }
+        append(value.substring(cursor))
+        transition(BasicFormat())
+    }
 
     private fun parseTime(parts: List<String>): SubTime {
         val h = parts[0].toLong()
