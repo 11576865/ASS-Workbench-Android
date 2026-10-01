@@ -744,9 +744,11 @@ private fun PagerWorkspace(
         showPage(PagerWorkspacePage.TOOL)
     }
 
+    var lastActiveTool by remember { mutableStateOf(activeTool) }
     LaunchedEffect(activeTool) {
-        if (pagerState.currentPage == PagerWorkspacePage.TOOL.ordinal) {
-            pagerState.scrollToPage(PagerWorkspacePage.TOOL.ordinal)
+        if (activeTool != lastActiveTool) {
+            pagerState.animateScrollToPage(PagerWorkspacePage.TOOL.ordinal)
+            lastActiveTool = activeTool
         }
     }
 
