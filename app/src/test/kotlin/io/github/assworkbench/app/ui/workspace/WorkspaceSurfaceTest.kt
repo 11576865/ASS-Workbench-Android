@@ -52,6 +52,18 @@ class WorkspaceSurfaceTest {
         assertTrue(WorkspaceSurfacePersistence.decode(listOf("future-v2")).isEmpty())
     }
 
+    @Test fun codecPreservesDockAndTabStackPresentation() {
+        val surface = WorkspaceSurfaceState(
+            instanceId = "STYLE:primary",
+            placement = SurfacePlacement.DOCK_RIGHT,
+            stackId = "stack:1",
+        )
+        assertEquals(
+            listOf(surface),
+            WorkspaceSurfacePersistence.decode(WorkspaceSurfacePersistence.encode(listOf(surface))),
+        )
+    }
+
     @Test fun freeResizeResolvesSizeClassOnlyFromCommittedGeometry() {
         assertEquals(SurfaceSizeClass.COMPACT, SurfaceSizeClass.forGeometry(SurfaceGeometry(width = 286f, height = 210f)))
         assertEquals(SurfaceSizeClass.STANDARD, SurfaceSizeClass.forGeometry(SurfaceGeometry()))
