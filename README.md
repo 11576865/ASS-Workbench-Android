@@ -2,7 +2,7 @@
 
 A touch-first, raw-preserving ASS workbench for Android — evolving from subtitle editing into a professional mobile subtitle engineering environment.
 
-**Current release candidate: 0.27.1 / versionCode 30**
+**Current development candidate: 0.29.0 / versionCode 33**
 
 0.26 was the internal construction and hardening cycle. **0.27.0** is the first packaged product candidate. Physical-device validation follows the 0.27.0 publication; fixes found on real hardware will ship as **0.27.1, 0.27.2, ...** rather than holding the 0.27.0 version number open.
 
@@ -23,6 +23,23 @@ The editor follows several core rules:
 - structured tools should rewrite the smallest owned span rather than normalize whole Event text.
 - portrait is the primary workflow layout; landscape is the precision visual layout.
 - standalone ASS and MKV projects remain distinct workflows over the same ASS document core.
+
+## 0.29 engineering expansion
+
+0.29 grows the 0.28 object-centric workspace into a broader subtitle-engineering layer while preserving ASS as the canonical editable document.
+
+- Optional versioned `.asswbproj` project files persist source/media identity, Fixed vs Experimental Canvas presentation, compatibility profile, tool-instance state and committed surface layout.
+- Fixed Workspace is the stable deterministic UI; Canvas Workspace remains the experimental floating/object-bound UI.
+- Canvas surfaces support floating, left/right/bottom docking, minimization and tab stacks.
+- QC is now a rule-oriented ASS linter with explicit user-invoked Quick Fix actions.
+- Compatibility profiles provide libass-native, conservative-portable and VSFilter-oriented analysis without pretending to emulate another renderer.
+- Video frame presentation timestamps can be indexed into an exact frame map for frame-number display and Event-boundary snapping; ASS serialization remains time-based.
+- Batch rules use Scope → Filters → Actions → Diff preview → one Undo transaction.
+- Karaoke and Vector Clip are first-class authoring tools over loss-preserving semantic models.
+- SRT can be imported into a canonical ASS working document and explicitly exported as a lossy SRT; importing SRT never makes Save overwrite the original file with ASS bytes.
+- Font dependency inventory continues to derive requested families from referenced Styles, `\\rStyle` resets and inline `\\fn`. Font subsetting is intentionally outside ASS Workbench because packaging/size optimization belongs to the mux/packaging workflow.
+
+See [0.29 expansion charter](docs/EXPANSION-0.29.md).
 
 ## 0.27.1 adaptive workbench UI
 
