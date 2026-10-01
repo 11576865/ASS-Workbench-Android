@@ -5,6 +5,7 @@ import io.github.assworkbench.domain.AssInlineSyntax
 import io.github.assworkbench.domain.AssTextEncoding
 import io.github.assworkbench.domain.SubtitleProject
 import io.github.assworkbench.domain.WaveformEnvelope
+import io.github.assworkbench.domain.WorkspacePresentationMode
 import io.github.assworkbench.fonts.FontAsset
 import io.github.assworkbench.fonts.FontDiagnostic
 import io.github.assworkbench.fonts.FontGlyphDiagnostic
@@ -20,6 +21,8 @@ data class WaveformLiteState(
 
 data class EditorState(
     val project: SubtitleProject = SubtitleProject(),
+    val projectFileUri: String? = null,
+    val workspaceMode: WorkspacePresentationMode = WorkspacePresentationMode.FIXED,
     val document: AssDocument = AssDocument(),
     val previewDocument: AssDocument? = null,
     val waveform: WaveformLiteState = WaveformLiteState(),
