@@ -12,7 +12,6 @@ import androidx.compose.ui.test.onRoot
 import androidx.test.platform.app.InstrumentationRegistry
 import android.app.Application
 import android.net.Uri
-import androidx.compose.ui.test.assertDoesNotExist
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -392,11 +391,23 @@ class EditorRegressionInstrumentedTest {
         openTool("SUBTITLES")
     }
 
+    private fun hideKeyboard() {
+        composeRule.activityRule.scenario.onActivity { activity ->
+            activity.getSystemService(android.view.inputmethod.InputMethodManager::class.java)
+                .hideSoftInputFromWindow(activity.window.decorView.windowToken, 0)
+        }
+        composeRule.waitUntil(5_000) {
+            composeRule.activity.window.decorView.rootWindowInsets
+                ?.isVisible(android.view.WindowInsets.Type.ime()) != true
+        }
+        composeRule.waitForIdle()
+    }
+
     private fun openTool(name: String) {
-        androidx.test.espresso.Espresso.closeSoftKeyboard()
+        hideKeyboard()
         composeRule.onNodeWithTag("workspace-tools").performClick()
         composeRule.onNodeWithTag("tool-search").performTextReplacement(name)
-        androidx.test.espresso.Espresso.closeSoftKeyboard()
+        hideKeyboard()
         composeRule.onNodeWithTag("tool-$name").performScrollTo().performClick()
         composeRule.waitForIdle()
     }

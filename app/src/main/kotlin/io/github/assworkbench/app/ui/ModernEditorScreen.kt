@@ -383,7 +383,10 @@ fun ModernEditorScreen(
                             null
                         },
                         onClose = {
-                            workspaceState = workspaceState.closeInstance(instance.id)
+                            if (surfaceTool == WorkbenchTool.TEXT) expandedEventId = null
+                            workspaceState = workspaceState.closeInstance(instance.id).let {
+                                if (it.tools.isEmpty()) it.withSurfacesHidden(true) else it
+                            }
                         },
                         modifier = Modifier.fillMaxSize(),
                     ) {

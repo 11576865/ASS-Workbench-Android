@@ -20,6 +20,11 @@ internal object FixedRod {
         return Step(cos(angle) * radial, sin(angle) * radial, angle, radial)
     }
 
+    // Screen Y grows down; ASS frz grows counterclockwise.
+    // https://aegisub.org/docs/latest/ass_tags/#text-rotation
+    fun assRotationDegrees(previous: Float, next: Float): Float =
+        -angularDelta(previous, next) * 180f / kotlin.math.PI.toFloat()
+
     fun angularDelta(previous: Float, next: Float): Float =
         atan2(sin(next - previous), cos(next - previous))
 }

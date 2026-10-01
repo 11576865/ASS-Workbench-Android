@@ -182,7 +182,7 @@ internal fun WindowInteractionOverlay(
                                             val delta = when {
                                                 isPosition -> Offset(step.dx, step.dy)
                                                 mode == RodMode.SCALE -> Offset(step.radial, -step.radial)
-                                                mode == RodMode.ROTATION -> Offset((angular * 180f / kotlin.math.PI.toFloat()) / 0.35f, 0f)
+                                                mode == RodMode.ROTATION -> Offset(FixedRod.assRotationDegrees(previousAngle, step.angle) / 0.35f, 0f)
                                                 else -> Offset(step.radial, angular * radius)
                                             }
                                             if (delta.getDistance() > 0.001f) {
@@ -217,7 +217,7 @@ internal fun WindowInteractionOverlay(
                 }
             }
             if (positionHandles.isNotEmpty()) {
-                Surface(Modifier.align(Alignment.TopCenter).padding(top = 6.dp),
+                Surface(Modifier.align(Alignment.TopCenter).padding(top = 6.dp).zIndex(1100f),
                     shape = MaterialTheme.shapes.extraLarge,
                     color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.95f)) {
                     Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 6.dp),

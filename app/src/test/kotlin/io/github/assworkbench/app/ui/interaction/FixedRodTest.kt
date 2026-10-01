@@ -37,6 +37,10 @@ class FixedRodTest {
         val delta = FixedRod.angularDelta((179 * PI / 180).toFloat(), (-179 * PI / 180).toFloat())
         assertEquals((2 * PI / 180).toFloat(), delta, 0.000001f)
     }
+    @Test fun clockwiseTouchUsesNegativeAssRotation() {
+        assertEquals(-90f, FixedRod.assRotationDegrees(0f, (PI / 2).toFloat()), 0.0001f)
+        assertEquals(90f, FixedRod.assRotationDegrees(0f, (-PI / 2).toFloat()), 0.0001f)
+    }
     @Test fun fingerAtAnchorRetainsDirectionAndFiniteValues() {
         val step = FixedRod.advance(42f, 42f, 42f, 42f, 112f, 1f)
         assertEquals(1f, step.angle, 0f)
