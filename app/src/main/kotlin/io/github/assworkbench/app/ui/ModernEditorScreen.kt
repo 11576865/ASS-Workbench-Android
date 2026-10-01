@@ -81,10 +81,12 @@ fun ModernEditorScreen(
     viewModel: EditorViewModel,
     onOpenReferenceVideo: () -> Unit,
     onOpenMkvProject: () -> Unit,
+    onOpenWorkbenchProject: () -> Unit,
     onOpenSubtitle: () -> Unit,
     onImportFont: () -> Unit,
     onSave: () -> Unit,
     onSaveAs: () -> Unit,
+    onSaveWorkbenchProject: () -> Unit,
     onSaveMkv: () -> Unit,
     rendererEnabled: Boolean,
     onEnableRenderer: () -> Unit,
@@ -165,6 +167,7 @@ fun ModernEditorScreen(
                         state.container.uri != null || state.dirty
                     if (hasWorkspace) mkvConfirmOpen = true else onOpenMkvProject()
                 },
+                onOpenWorkbenchProject = onOpenWorkbenchProject,
                 onOpenSubtitle = {
                     if (state.dirty) {
                         destructiveWorkspaceAction = DestructiveWorkspaceAction.OPEN_ASS
@@ -184,6 +187,7 @@ fun ModernEditorScreen(
                     if (state.project.subtitleUri == null) onSaveAs()
                     else saveConfirmOpen = true
                 },
+                onSaveWorkbenchProject = onSaveWorkbenchProject,
                 onSaveMkv = onSaveMkv,
                 onTool = ::openTool,
                 workspaceMode = workspaceMode,
@@ -784,10 +788,12 @@ private fun ModernAppBar(
     onDismissMenu: () -> Unit,
     onOpenVideo: () -> Unit,
     onOpenMkvProject: () -> Unit,
+    onOpenWorkbenchProject: () -> Unit,
     onOpenSubtitle: () -> Unit,
     onNewSubtitle: () -> Unit,
     onImportFont: () -> Unit,
     onSave: () -> Unit,
+    onSaveWorkbenchProject: () -> Unit,
     onSaveMkv: () -> Unit,
     onTool: (WorkbenchTool) -> Unit,
     workspaceMode: WorkspacePresentationMode,
@@ -831,7 +837,8 @@ private fun ModernAppBar(
                 Box {
                     TooltipIconButton("打开文件 / 工程", onOpenMenu) { Icon(Icons.Filled.FolderOpen, null) }
                     DropdownMenu(expanded = openMenu, onDismissRequest = onDismissMenu) {
-                        DropdownMenuItem(text = { Text("打开独立 ASS") }, leadingIcon = { Icon(Icons.Filled.Subtitles, null) }, onClick = { onDismissMenu(); onOpenSubtitle() })
+                        DropdownMenuItem(text = { Text("打开独立 ASS / SRT") }, leadingIcon = { Icon(Icons.Filled.Subtitles, null) }, onClick = { onDismissMenu(); onOpenSubtitle() })
+                        DropdownMenuItem(text = { Text("打开 ASS Workbench 工程") }, leadingIcon = { Icon(Icons.Filled.Workspaces, null) }, onClick = { onDismissMenu(); onOpenWorkbenchProject() })
                         DropdownMenuItem(text = { Text("打开 / 更换参考视频") }, leadingIcon = { Icon(Icons.Filled.Movie, null) }, onClick = { onDismissMenu(); onOpenVideo() })
                         DropdownMenuItem(text = { Text("打开 MKV 工程") }, leadingIcon = { Icon(Icons.Filled.VideoFile, null) }, onClick = { onDismissMenu(); onOpenMkvProject() })
                         Divider()
@@ -845,6 +852,7 @@ private fun ModernAppBar(
                         DropdownMenuItem(text = { Text("字体管理") }, leadingIcon = { Icon(Icons.Filled.FontDownload, null) }, onClick = { moreMenuOpen = false; onTool(WorkbenchTool.FONTS) })
                         DropdownMenuItem(text = { Text("质量检查") }, leadingIcon = { Icon(Icons.Filled.ErrorOutline, null) }, onClick = { moreMenuOpen = false; onTool(WorkbenchTool.QC) })
                         DropdownMenuItem(text = { Text("项目") }, leadingIcon = { Icon(Icons.Filled.Info, null) }, onClick = { moreMenuOpen = false; onTool(WorkbenchTool.PROJECT) })
+                        DropdownMenuItem(text = { Text("保存 ASS Workbench 工程") }, leadingIcon = { Icon(Icons.Filled.Save, null) }, onClick = { moreMenuOpen = false; onSaveWorkbenchProject() })
                         DropdownMenuItem(text = { Text("诊断") }, leadingIcon = { Icon(Icons.Filled.Tune, null) }, onClick = { moreMenuOpen = false; onTool(WorkbenchTool.DIAGNOSTICS) })
                         Divider()
                         DropdownMenuItem(
