@@ -1324,7 +1324,7 @@ private fun PositionDragOverlay(
                 }
             }
             Text(
-                "move S ${startX.toInt()},${startY.toInt()} → E ${endX.toInt()},${endY.toInt()}" + (if (originX != null) " · org ${originX!!.toInt()},${originY!!.toInt()} · rot ${displayRotation.toInt()}°" else "") + " · 拖控制点",
+                "move S ${startX.toInt()},${startY.toInt()} → E ${endX.toInt()},${endY.toInt()}" + (if (originX != null) " · org ${originX!!.toInt()},${originY!!.toInt()} · rot ${displayRotation.toInt()}°" else "") + " · 拖动操控杆",
                 modifier = Modifier.align(Alignment.TopStart).background(Color.Black.copy(alpha = 0.62f)).padding(horizontal = 6.dp, vertical = 3.dp),
                 color = Color.White,
                 style = MaterialTheme.typography.labelSmall,
@@ -1357,6 +1357,18 @@ private fun PositionDragOverlay(
             fun documentDelta(delta: Offset): Pair<Double, Double> =
                 (delta.x / w * playResXProxy).toDouble() to (delta.y / h * playResYProxy).toDouble()
             val preferred = with(proxyDensity) { Offset(118.dp.toPx(), 34.dp.toPx()) }
+            fun cancelDraft() {
+                x = geometry.position?.x ?: baseX
+                y = geometry.position?.y ?: baseY
+                originX = geometry.origin?.x
+                originY = geometry.origin?.y
+                directRotation = null
+                directScaleX = null
+                directScaleY = null
+                directShearX = null
+                directShearY = null
+                onCancel()
+            }
             val handles = mutableListOf<InteractionProxySpec>()
             handles += InteractionProxySpec(
                 id = "$proxyOwner-pos",
@@ -1370,7 +1382,7 @@ private fun PositionDragOverlay(
                     onPreview(x, y)
                 },
                 onCommit = { onCommit(x, y) },
-                onCancel = onCancel,
+                onCancel = ::cancelDraft,
             )
             if (originX != null && originY != null) {
                 handles += InteractionProxySpec(
@@ -1385,7 +1397,7 @@ private fun PositionDragOverlay(
                         onPreviewOrigin(originX!!, originY!!)
                     },
                     onCommit = { onCommitOrigin(originX!!, originY!!) },
-                    onCancel = onCancel,
+                    onCancel = ::cancelDraft,
                 )
             }
             handles += InteractionProxySpec(
@@ -1398,7 +1410,7 @@ private fun PositionDragOverlay(
                     onPreviewRotation(directRotation!!)
                 },
                 onCommit = { directRotation?.let(onCommitRotation) },
-                onCancel = onCancel,
+                onCancel = ::cancelDraft,
             )
             handles += InteractionProxySpec(
                 id = "$proxyOwner-scale",
@@ -1423,7 +1435,7 @@ private fun PositionDragOverlay(
                         onCommitScale(directScaleX!!, directScaleY!!)
                     }
                 },
-                onCancel = onCancel,
+                onCancel = ::cancelDraft,
             )
             handles += InteractionProxySpec(
                 id = "$proxyOwner-shear",
@@ -1440,7 +1452,7 @@ private fun PositionDragOverlay(
                         onCommitShear(directShearX!!, directShearY!!)
                     }
                 },
-                onCancel = onCancel,
+                onCancel = ::cancelDraft,
             )
             registry.publish(proxyOwner, handles)
         }
@@ -1644,6 +1656,10 @@ private fun PositionDragOverlay(
         Canvas(Modifier.fillMaxSize()) {
             val px = (x / document.playResX.coerceAtLeast(1)) * size.width
             val py = (y / document.playResY.coerceAtLeast(1)) * size.height
+            if (interactionRegistry != null) {
+                drawCircle(guideColor, 4.dp.toPx(), Offset(px.toFloat(), py.toFloat()))
+                return@Canvas
+            }
             drawCircle(
                 color = guideColor,
                 radius = 8.dp.toPx(),
@@ -1719,7 +1735,7 @@ private fun PositionDragOverlay(
             drawCircle(guideColor.copy(alpha = 0.9f), 5.dp.toPx(), fayHandle, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2.dp.toPx()))
         }
         Text(
-            "pos ${x.toInt()},${y.toInt()}" + (if (originX != null) " · org ${originX!!.toInt()},${originY!!.toInt()}" else "") + " · rot ${displayRotation.toInt()}° · scale ${displayScaleX.toInt()}×${displayScaleY.toInt()}% · shear ${"%.2f".format(java.util.Locale.US, displayShearX)},${"%.2f".format(java.util.Locale.US, displayShearY)} · 拖控制点",
+            "pos ${x.toInt()},${y.toInt()}" + (if (originX != null) " · org ${originX!!.toInt()},${originY!!.toInt()}" else "") + " · rot ${displayRotation.toInt()}° · scale ${displayScaleX.toInt()}×${displayScaleY.toInt()}% · shear ${"%.2f".format(java.util.Locale.US, displayShearX)},${"%.2f".format(java.util.Locale.US, displayShearY)} · 拖动操控杆",
             modifier = Modifier
                 .align(Alignment.TopStart)
                 .background(Color.Black.copy(alpha = 0.55f))

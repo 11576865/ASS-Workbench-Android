@@ -32,6 +32,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -297,7 +298,7 @@ fun ModernEditorScreen(
                 val viewportWidth = maxWidth.value
                 val viewportHeight = maxHeight.value
                 WorkbenchPreview(
-                    state, viewModel, positionEditEventId,
+                    state, viewModel, if (workspaceState.surfacesHidden) null else positionEditEventId,
                     onOpenReferenceVideo, { openTool(WorkbenchTool.TIMELINE) },
                     rendererEnabled, onEnableRenderer,
                     interactionRegistry = if (workspaceState.surfacesHidden) null else interactionRegistry,
@@ -626,7 +627,7 @@ private fun WorkspaceToolDirectory(onOpenTool: (WorkbenchTool) -> Unit, modifier
     var query by rememberSaveable { mutableStateOf("") }
     Column(modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         OutlinedTextField(query, { query = it }, label = { Text("搜索工具") }, singleLine = true,
-            leadingIcon = { Icon(Icons.Filled.Search, null) }, modifier = Modifier.fillMaxWidth())
+            leadingIcon = { Icon(Icons.Filled.Search, null) }, modifier = Modifier.fillMaxWidth().testTag("tool-search"))
         Text("调用后保留在工作区 · 拖动标题移动 · 清屏保留现场", style = MaterialTheme.typography.bodySmall)
         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             items(WorkbenchTool.entries.filter { it != WorkbenchTool.CAPABILITIES &&

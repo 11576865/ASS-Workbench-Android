@@ -24,6 +24,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipe
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.performTextInput
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -392,7 +393,10 @@ class EditorRegressionInstrumentedTest {
     }
 
     private fun openTool(name: String) {
+        androidx.test.espresso.Espresso.closeSoftKeyboard()
         composeRule.onNodeWithTag("workspace-tools").performClick()
+        composeRule.onNodeWithTag("tool-search").performTextReplacement(name)
+        androidx.test.espresso.Espresso.closeSoftKeyboard()
         composeRule.onNodeWithTag("tool-$name").performScrollTo().performClick()
         composeRule.waitForIdle()
     }
