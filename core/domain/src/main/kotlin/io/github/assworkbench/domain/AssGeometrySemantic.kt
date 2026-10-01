@@ -138,6 +138,12 @@ object AssGeometrySemantic {
         )
     }
 
+    fun removePosition(text: String): String = removeTags(
+        text = text,
+        scan = scanLeading(text),
+        names = setOf("pos"),
+    )
+
     /**
      * Patch or create a motion path without silently replacing an existing static position.
      */
@@ -165,6 +171,12 @@ object AssGeometrySemantic {
                 "${formatNumber(end.x)},${formatNumber(end.y)}$timing)",
         )
     }
+
+    fun removeMove(text: String): String = removeTags(
+        text = text,
+        scan = scanLeading(text),
+        names = setOf("move"),
+    )
 
     fun patchOrigin(text: String, x: Double, y: Double): String = patchTag(
         text = text,
