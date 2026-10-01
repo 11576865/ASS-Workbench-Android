@@ -66,22 +66,11 @@ class EditorRegressionInstrumentedTest {
     }
 
     private fun selectUiVariant(tag: String) {
-        repeat(10) {
-            try {
-                composeRule.onNodeWithTag(tag).assertIsDisplayed().performClick()
-                return
-            } catch (_: AssertionError) {
-                composeRule.onNodeWithTag("ui-variant-list").performTouchInput {
-                    swipe(
-                        start = Offset(center.x, center.y * 1.6f),
-                        end = Offset(center.x, center.y * 0.4f),
-                        durationMillis = 240,
-                    )
-                }
-                composeRule.waitForIdle()
-            }
-        }
-        composeRule.onNodeWithTag(tag).assertIsDisplayed().performClick()
+        composeRule.onNodeWithTag(tag)
+            .performScrollTo()
+            .assertIsDisplayed()
+            .performClick()
+        composeRule.waitForIdle()
     }
 
     @Test
