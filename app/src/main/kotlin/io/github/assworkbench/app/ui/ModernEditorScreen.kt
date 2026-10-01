@@ -560,6 +560,23 @@ fun ModernEditorScreen(
                     onCloseSearch = { searchOpen = false; viewModel.setQuery("") },
                     modifier = Modifier.weight(1f).fillMaxWidth().testTag("spatial-workspace"),
                 )
+            } else if (workspaceMode == WorkspacePresentationMode.SUBTITLE_OBJECT_EXPERIMENTAL) {
+                SubtitleObjectWorkspace(
+                    state = state,
+                    viewModel = viewModel,
+                    issues = issues,
+                    workspaceState = workspaceState,
+                    onWorkspaceStateChange = { workspaceState = it },
+                    expandedEventId = expandedEventId,
+                    onExpandedChange = { expandedEventId = it },
+                    onImportFont = onImportFont,
+                    onSaveMkv = onSaveMkv,
+                    eventEditorStateHolder = eventEditorStateHolder,
+                    onOpenVideo = onOpenReferenceVideo,
+                    rendererEnabled = rendererEnabled,
+                    onEnableRenderer = onEnableRenderer,
+                    modifier = Modifier.weight(1f).fillMaxWidth().testTag("subtitle-object-workspace"),
+                )
             } else BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().testTag("canvas-workspace")) {
                 val viewportWidth = maxWidth.value
                 val viewportHeight = maxHeight.value
@@ -727,6 +744,7 @@ fun ModernEditorScreen(
                 WorkspacePresentationMode.CANVAS_EXPERIMENTAL -> !workspaceState.surfacesHidden
                 WorkspacePresentationMode.PAGER_EXPERIMENTAL -> false
                 WorkspacePresentationMode.SPATIAL_EXPERIMENTAL -> false
+                WorkspacePresentationMode.SUBTITLE_OBJECT_EXPERIMENTAL -> false
             },
             modifier = Modifier.fillMaxSize().testTag("interaction-overlay"),
         )
