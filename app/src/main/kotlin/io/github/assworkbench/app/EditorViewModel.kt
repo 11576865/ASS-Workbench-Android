@@ -11,6 +11,10 @@ import io.github.assworkbench.domain.AssDocument
 import io.github.assworkbench.domain.AssDocumentEditing
 import io.github.assworkbench.domain.AssTextDecoder
 import io.github.assworkbench.domain.AssTextEncoding
+import io.github.assworkbench.domain.SrtCodec
+import io.github.assworkbench.domain.AssLintIssue
+import io.github.assworkbench.domain.AssBatchRecipe
+import io.github.assworkbench.domain.AssBatchEngine
 import io.github.assworkbench.domain.EventOverrideEditor
 import io.github.assworkbench.domain.AssGeometrySemantic
 import io.github.assworkbench.domain.AssClipRect
@@ -173,6 +177,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 previewDocument = null,
                 subtitleLoaded = true,
                 subtitleTextEncoding = AssTextEncoding.UTF8,
+                sourceFormat = SubtitleSourceFormat.ASS,
                 selectedEventIds = emptySet(),
                 selectionAnchorId = null,
                 focusedEventId = null,
@@ -211,6 +216,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 ),
                 subtitleLoaded = false,
                 subtitleTextEncoding = AssTextEncoding.UTF8,
+                sourceFormat = SubtitleSourceFormat.ASS,
                 importedFonts = it.importedFonts.filter { font ->
                     font.origin != io.github.assworkbench.fonts.FontOrigin.MKV_ATTACHMENT
                 },
@@ -335,6 +341,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 previewDocument = null,
                 subtitleLoaded = true,
                 subtitleTextEncoding = AssTextEncoding.UTF8,
+                sourceFormat = SubtitleSourceFormat.ASS,
                 selectedEventIds = emptySet(),
                 selectionAnchorId = null,
                 focusedEventId = document.events.firstOrNull()?.id,
@@ -511,15 +518,21 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         val bytes = app.contentResolver.openInputStream(uri)?.use { it.readBytes() }
             ?: error("无法读取字幕")
         val decoded = AssTextDecoder.decode(bytes)
-        val document = AssCodec.parse(decoded.text)
+        val name = displayName(uri) ?: "subtitle"
+        val isSrt = name.endsWith(".srt", ignoreCase = true)
+        val document = if (isSrt) SrtCodec.parse(decoded.text) else AssCodec.parse(decoded.text)
         history.reset(document)
         _state.update {
             it.copy(
-                project = it.project.copy(subtitleUri = uri.toString(), title = displayName(uri) ?: "ASS project"),
+                project = it.project.copy(
+                    subtitleUri = if (isSrt) null else uri.toString(),
+                    title = name,
+                ),
                 document = document,
                 previewDocument = null,
                 subtitleLoaded = true,
                 subtitleTextEncoding = decoded.encoding,
+                sourceFormat = if (isSrt) SubtitleSourceFormat.SRT else SubtitleSourceFormat.ASS,
                 selectedEventIds = emptySet(),
                 selectionAnchorId = null,
                 focusedEventId = document.events.firstOrNull()?.id,
@@ -528,7 +541,11 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 canRedo = false,
                 fontPackagingSelection = emptySet(),
                 container = ContainerBridgeState(),
-                status = "已载入 ${document.events.size} 条 ASS 事件 · ${decoded.encoding.displayName}。",
+                status = if (isSrt) {
+                    "已导入 ${document.events.size} 条 SRT；内部转换为 ASS 工作文档。保存按钮默认另存为 ASS，SRT 使用显式导出。"
+                } else {
+                    "已载入 ${document.events.size} 条 ASS 事件 · ${decoded.encoding.displayName}。"
+                },
             )
         }
         refreshFontDiagnostics()
@@ -607,6 +624,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 _state.update {
                     it.copy(
                         project = it.project.copy(subtitleUri = uri.toString()),
+                        sourceFormat = SubtitleSourceFormat.ASS,
                         dirty = false,
                         recoveryAvailable = false,
                         recoveryLabel = "",
@@ -626,6 +644,90 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 false
             },
         )
+    }
+
+    fun saveSrtTo(uri: Uri): Boolean {
+        val snapshot = _state.value
+        return runCatching {
+            val text = SrtCodec.write(snapshot.document)
+            app.contentResolver.openOutputStream(uri, "wt")?.bufferedWriter(Charsets.UTF_8)?.use { it.write(text) }
+                ?: error("无法写入 SRT")
+        }.fold(
+            onSuccess = {
+                _state.update { it.copy(status = "SRT 已导出；ASS 工作文档、Style 与高级效果没有被降格或覆盖。") }
+                true
+            },
+            onFailure = { error ->
+                _state.update { it.copy(status = "SRT 导出失败：" + (error.message ?: error::class.java.simpleName)) }
+                false
+            },
+        )
+    }
+
+    fun loadProjectSnapshot(snapshot: AssWorkbenchProjectSnapshot) {
+        clearPendingRecovery()
+        beginWorkspaceBoundary()
+        cancelWaveformAnalysis()
+        history.reset(snapshot.document)
+        val eventIds = snapshot.document.events.mapTo(hashSetOf()) { it.id }
+        val focused = snapshot.focusedEventId?.takeIf(eventIds::contains)
+            ?: snapshot.document.events.firstOrNull()?.id
+        _state.update { old ->
+            old.copy(
+                project = io.github.assworkbench.domain.SubtitleProject(
+                    title = snapshot.title,
+                    videoUri = snapshot.videoUri,
+                    subtitleUri = snapshot.subtitleUri,
+                ),
+                document = snapshot.document,
+                previewDocument = null,
+                waveform = WaveformLiteState(
+                    sourceUri = snapshot.videoUri,
+                    status = if (snapshot.videoUri == null) WaveformLiteStatus.IDLE else WaveformLiteStatus.ANALYZING,
+                ),
+                subtitleLoaded = true,
+                subtitleTextEncoding = snapshot.textEncoding,
+                sourceFormat = SubtitleSourceFormat.PROJECT,
+                selectedEventIds = snapshot.selectedEventIds.filterTo(linkedSetOf(), eventIds::contains),
+                selectionAnchorId = null,
+                focusedEventId = focused,
+                dirty = false,
+                canUndo = false,
+                canRedo = false,
+                container = snapshot.containerUri?.let { containerUri ->
+                    ContainerBridgeState(
+                        uri = containerUri,
+                        name = snapshot.title,
+                        selectedTrackNumber = snapshot.containerTrackNumber,
+                        writeBackAvailable = false,
+                    )
+                } ?: ContainerBridgeState(),
+                status = if (snapshot.containerUri != null) {
+                    "ASS Workbench Project 已恢复。MKV 来源关系已记录；容器写回需重新打开 MKV Bridge 后再执行。"
+                } else {
+                    "ASS Workbench Project 已恢复。"
+                },
+            )
+        }
+        snapshot.videoUri?.let { launchWaveformAnalysis(Uri.parse(it)) }
+        refreshFontDiagnostics()
+    }
+
+    fun applyQuickFix(issue: AssLintIssue) {
+        val eventId = issue.eventId ?: return
+        val fix = issue.quickFix ?: return
+        editDocument("Quick Fix：${issue.code} · ${fix.label}") { document ->
+            fix.apply(document, eventId)
+        }
+    }
+
+    fun applyBatchRecipe(recipe: AssBatchRecipe) {
+        val preview = AssBatchEngine.preview(_state.value.document, recipe)
+        if (preview.changedEventIds.isEmpty()) {
+            _state.update { it.copy(status = "批处理规则没有产生修改。") }
+            return
+        }
+        editDocument("批处理 ${recipe.id}：修改 ${preview.changedEventIds.size} 条字幕。") { preview.document }
     }
 
     fun saveCurrent(): Boolean {
