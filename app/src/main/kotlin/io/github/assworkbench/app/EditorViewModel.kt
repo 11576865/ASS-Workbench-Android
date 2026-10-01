@@ -412,6 +412,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             return
         }
         val saveEpoch = workspaceEpoch.get()
+        val sourceAssTrackNumbers = containerScan?.subtitleTracks?.map { it.number }
         val operationId = writeBackSerial.incrementAndGet()
         val sourceUri = snapshot.container.uri?.let(Uri::parse) ?: run {
             reportError("MKV 写回失败", IllegalStateException("没有已打开的 MKV 工程"))
@@ -493,7 +494,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                         require(roundTrip.equivalent) {
                             "写回验证失败：" + roundTrip.summary
                         }
-                        containerScan?.subtitleTracks?.map { it.number }?.let { sourceTracks ->
+                        sourceAssTrackNumbers?.let { sourceTracks ->
                             require(verifiedScan.subtitleTracks.map { it.number } == sourceTracks) {
                                 "写回验证失败：ASS 轨身份或顺序发生变化"
                             }
