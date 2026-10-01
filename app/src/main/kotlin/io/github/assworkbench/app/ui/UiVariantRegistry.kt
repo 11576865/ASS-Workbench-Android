@@ -37,6 +37,11 @@ internal enum class WorkspacePresentationMode(
         status = UiVariantStatus.EXPERIMENTAL,
         description = "把预览、字幕与工具放进大于屏幕的二维工作区；支持平移、缩放、鸟瞰与节点召回。",
     ),
+    TOOL_INSTANCES_EXPERIMENTAL(
+        title = "工具实例工作台",
+        status = UiVariantStatus.EXPERIMENTAL,
+        description = "同一工具可多实例；临时、驻留、侧书签和隐藏状态彼此独立，绑定与局部现场随实例保留。",
+    ),
 }
 
 /**
