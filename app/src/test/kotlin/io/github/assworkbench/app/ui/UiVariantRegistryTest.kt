@@ -12,6 +12,7 @@ class UiVariantRegistryTest {
         assertTrue(UiVariantRegistry.entries.contains(WorkspacePresentationMode.CANVAS_EXPERIMENTAL))
         assertTrue(UiVariantRegistry.entries.contains(WorkspacePresentationMode.PAGER_EXPERIMENTAL))
         assertTrue(UiVariantRegistry.entries.contains(WorkspacePresentationMode.SPATIAL_EXPERIMENTAL))
+        assertTrue(UiVariantRegistry.entries.contains(WorkspacePresentationMode.GLASS_LAYERED_EXPERIMENTAL))
     }
 
     @Test
@@ -31,6 +32,10 @@ class UiVariantRegistryTest {
         assertSame(
             WorkspacePresentationMode.SPATIAL_EXPERIMENTAL,
             UiVariantRegistry.resolve("SPATIAL_EXPERIMENTAL"),
+        )
+        assertSame(
+            WorkspacePresentationMode.GLASS_LAYERED_EXPERIMENTAL,
+            UiVariantRegistry.resolve("GLASS_LAYERED_EXPERIMENTAL"),
         )
     }
 
