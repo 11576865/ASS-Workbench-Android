@@ -57,7 +57,18 @@ class SafeSaveTestProvider : ContentProvider() {
         if (!target.exists() && !readOnly) target.createNewFile()
         if (!target.exists()) throw java.io.FileNotFoundException(uri.toString())
 
-        return ParcelFileDescriptor.open(target, ParcelFileDescriptor.parseMode(mode))
+        val flags = when (mode) {
+            "r" -> ParcelFileDescriptor.MODE_READ_ONLY
+            "w", "wt" -> ParcelFileDescriptor.MODE_WRITE_ONLY or
+                ParcelFileDescriptor.MODE_CREATE or ParcelFileDescriptor.MODE_TRUNCATE
+            "wa" -> ParcelFileDescriptor.MODE_WRITE_ONLY or
+                ParcelFileDescriptor.MODE_CREATE or ParcelFileDescriptor.MODE_APPEND
+            "rw" -> ParcelFileDescriptor.MODE_READ_WRITE or ParcelFileDescriptor.MODE_CREATE
+            "rwt" -> ParcelFileDescriptor.MODE_READ_WRITE or
+                ParcelFileDescriptor.MODE_CREATE or ParcelFileDescriptor.MODE_TRUNCATE
+            else -> throw java.io.FileNotFoundException("Unsupported mode: " + mode)
+        }
+        return ParcelFileDescriptor.open(target, flags)
     }
 
     override fun query(
