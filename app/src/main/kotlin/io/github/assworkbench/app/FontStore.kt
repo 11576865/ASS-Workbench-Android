@@ -199,9 +199,12 @@ class FontStore(private val context: Context) {
     fun glyphDiagnostic(family: String, text: String): FontGlyphDiagnostic? {
         val normalized = family.trim().lowercase()
         val asset = listImported().firstOrNull { candidate ->
-            val names = candidate.metadata.aliases + candidate.metadata.family + candidate.metadata.rendererFamily +
-                listOfNotNull(candidate.metadata.legacyFamily, candidate.metadata.fullName, candidate.metadata.postScriptName)
-            names.any { it.trim().lowercase() == normalized }
+            val faces = if (candidate.collectionFaces.isEmpty()) listOf(candidate.metadata) else candidate.collectionFaces
+            faces.any { face ->
+                val names = face.aliases + face.rendererAliases + face.family + face.rendererFamily +
+                    listOfNotNull(face.legacyFamily, face.typographicFamily, face.fullName, face.postScriptName)
+                names.any { it.trim().lowercase() == normalized }
+            }
         } ?: return FontGlyphDiagnostic(family, null, 0, emptyList())
 
         val file = listOf(
