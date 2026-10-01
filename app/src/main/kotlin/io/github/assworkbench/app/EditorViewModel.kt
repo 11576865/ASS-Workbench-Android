@@ -189,7 +189,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 dirty = false,
                 canUndo = false,
                 canRedo = false,
-                fontPackagingSelection = emptySet(),
+                fontPackagingSelection = manifest.fontPackagingSelection.toSet(),
                 container = ContainerBridgeState(),
                 status = "已新建空白 ASS；可在当前播放位置添加第一条字幕。",
             )
@@ -534,6 +534,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 workspaceMode = workspaceMode,
                 workspaceState = workspaceState,
                 surfaceState = surfaceState,
+                fontPackagingSelection = snapshot.fontPackagingSelection.sorted(),
             )
         )
     }
