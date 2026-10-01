@@ -21,6 +21,14 @@ import io.github.assworkbench.domain.AssClipRect
 import io.github.assworkbench.domain.AssAnimationSemantic
 import io.github.assworkbench.domain.AssComplexFade
 import io.github.assworkbench.domain.AssTransform
+import io.github.assworkbench.domain.AssSyncAnchor
+import io.github.assworkbench.domain.AssSubtitleSynchronizer
+import io.github.assworkbench.domain.AssSearchQuery
+import io.github.assworkbench.domain.AssSearchReplacement
+import io.github.assworkbench.domain.AssSearchReplace
+import io.github.assworkbench.domain.AssAnimationKeyframe
+import io.github.assworkbench.domain.AssAnimationAuthoring
+import io.github.assworkbench.domain.AssTransformVisualProperty
 import io.github.assworkbench.domain.EventFormatClipboard
 import io.github.assworkbench.domain.EventFormatClipboardOps
 import io.github.assworkbench.domain.EventFormatPasteMode
@@ -775,6 +783,61 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             return
         }
         editDocument("批处理 ${recipe.id}：修改 ${preview.changedEventIds.size} 条字幕。") { preview.document }
+    }
+
+    fun applySubtitleSynchronization(
+        anchors: List<AssSyncAnchor>,
+        selectedOnly: Boolean = false,
+    ) {
+        val snapshot = _state.value
+        val ids = snapshot.selectedEventIds.takeIf { selectedOnly && it.isNotEmpty() }
+        val preview = runCatching {
+            AssSubtitleSynchronizer.preview(snapshot.document, anchors, ids)
+        }.getOrElse { error ->
+            _state.update { it.copy(status = "同步参数无效：" + (error.message ?: "unknown")) }
+            return
+        }
+        if (preview.changedEventIds.isEmpty()) {
+            _state.update { it.copy(status = "同步映射没有产生修改。") }
+            return
+        }
+        editDocument(
+            "高级同步：${preview.anchors.size} 个锚点 · 修改 ${preview.changedEventIds.size} 条字幕。"
+        ) { preview.document }
+    }
+
+    fun applySearchReplacement(
+        query: AssSearchQuery,
+        replacement: AssSearchReplacement,
+    ) {
+        val preview = runCatching {
+            AssSearchReplace.preview(_state.value.document, query, replacement)
+        }.getOrElse { error ->
+            _state.update { it.copy(status = "搜索/替换规则无效：" + (error.message ?: "unknown")) }
+            return
+        }
+        if (preview.changedEventIds.isEmpty()) {
+            _state.update { it.copy(status = "搜索命中 ${preview.hits.size} 条，但替换没有产生修改。") }
+            return
+        }
+        editDocument(
+            "搜索/替换：命中 ${preview.hits.size} 条 · 修改 ${preview.changedEventIds.size} 条。"
+        ) { preview.document }
+    }
+
+    fun applyEventNumericAnimation(
+        eventId: Long,
+        property: AssTransformVisualProperty,
+        keyframes: List<AssAnimationKeyframe>,
+        accel: Double?,
+    ) {
+        editDocument("已为字幕 #$eventId 写入关键帧动画 · ${property.tag}。") { doc ->
+            doc.copy(events = doc.events.map { event ->
+                if (event.id != eventId) event else event.copy(
+                    text = AssAnimationAuthoring.applyNumericTrack(event.text, property, keyframes, accel)
+                )
+            })
+        }
     }
 
     fun saveCurrent(): Boolean {
