@@ -2393,6 +2393,34 @@ private fun ModernTimelinePane(state: EditorState, viewModel: EditorViewModel, m
             }
         }
 
+        if (!compact) {
+            val frameMap = state.frameTimeline.map
+            Surface(tonalElevation = 1.dp, shape = MaterialTheme.shapes.small) {
+                Row(
+                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(
+                        when (state.frameTimeline.status) {
+                            FrameTimelineStatus.IDLE -> "Frame map：未分析"
+                            FrameTimelineStatus.ANALYZING -> "Frame map：分析中…"
+                            FrameTimelineStatus.READY -> "Frame map：${state.frameTimeline.frameCount} frames"
+                            FrameTimelineStatus.UNAVAILABLE -> "Frame map：不可用"
+                        },
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                    if (frameMap != null && focusedEvent != null) {
+                        val startFrame = frameMap.frameAtOrBefore(focusedEvent.start.millis)
+                        val endFrame = frameMap.frameAtOrBefore(focusedEvent.end.millis)
+                        Text("Start F$startFrame · End F$endFrame", style = MaterialTheme.typography.labelSmall)
+                        TextButton(onClick = viewModel::snapFocusedStartToFrame) { Text("Start → frame") }
+                        TextButton(onClick = viewModel::snapFocusedEndToFrame) { Text("End → frame") }
+                    }
+                }
+            }
+        }
+
         BoxWithConstraints(
             Modifier
                 .fillMaxWidth()
