@@ -47,6 +47,7 @@ class EditorRegressionHostActivity : ComponentActivity() {
                     onSave = {},
                     onSaveAs = {},
                     onSaveWorkbenchProject = {},
+                    onExportSrt = {},
                     onSaveMkv = {},
                     rendererEnabled = false,
                     onEnableRenderer = {},
