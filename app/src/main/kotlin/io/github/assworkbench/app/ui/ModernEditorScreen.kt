@@ -68,7 +68,8 @@ import kotlin.math.abs
 
 private enum class WorkbenchTool(val title: String) {
     SUBTITLES("字幕"), TEXT("正文"), TIMELINE("时间轴"), STYLE("样式"), POSITION("位置"),
-    EFFECTS("效果"), EVENT("事件"), FONTS("字体"), QC("检查"), BATCH("批量"),
+    EFFECTS("效果"), EVENT("事件"), KARAOKE("Karaoke"), VECTOR_CLIP("Vector Clip"),
+    FONTS("字体"), QC("检查"), BATCH("批量"),
     PROJECT("项目"), DIAGNOSTICS("诊断"), CAPABILITIES("功能地图"),
 }
 
@@ -764,6 +765,8 @@ private fun FloatingToolContent(
             targetEventId = boundEventId,
             unresolvedPinnedEventId = unresolvedPinnedEventId,
         )
+        WorkbenchTool.KARAOKE -> KaraokePane(state, viewModel, Modifier.fillMaxSize())
+        WorkbenchTool.VECTOR_CLIP -> VectorClipPane(state, viewModel, Modifier.fillMaxSize())
         WorkbenchTool.FONTS -> FontManagerPane(state, viewModel, onImportFont, Modifier.fillMaxSize())
         WorkbenchTool.QC -> QcPane(state, viewModel, issues, Modifier.fillMaxSize())
         WorkbenchTool.BATCH -> BatchPane(state, viewModel, Modifier.fillMaxSize())
