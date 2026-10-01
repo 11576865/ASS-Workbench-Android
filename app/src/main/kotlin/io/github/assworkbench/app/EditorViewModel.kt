@@ -2403,6 +2403,14 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         _playbackPositionMs.value = positionMs.coerceAtLeast(0L)
     }
 
+    fun updateFrameMetadata(frameNumber: Long?, fps: Double?) {
+        val safeFrame = frameNumber?.takeIf { it >= 0L }
+        val safeFps = fps?.takeIf { it.isFinite() && it > 0.0 }
+        val current = _state.value
+        if (current.currentFrameNumber == safeFrame && current.estimatedVideoFps == safeFps) return
+        _state.update { it.copy(currentFrameNumber = safeFrame, estimatedVideoFps = safeFps) }
+    }
+
     fun seekPreviewTo(positionMs: Long) {
         val target = positionMs.coerceAtLeast(0L)
         _playbackPositionMs.value = target
