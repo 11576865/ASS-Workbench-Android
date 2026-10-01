@@ -88,6 +88,7 @@ fun ModernEditorScreen(
     onSave: () -> Unit,
     onSaveAs: () -> Unit,
     onSaveWorkbenchProject: () -> Unit,
+    onExportSrt: () -> Unit,
     onSaveMkv: () -> Unit,
     rendererEnabled: Boolean,
     onEnableRenderer: () -> Unit,
@@ -205,6 +206,7 @@ fun ModernEditorScreen(
                     else saveConfirmOpen = true
                 },
                 onSaveWorkbenchProject = onSaveWorkbenchProject,
+                onExportSrt = onExportSrt,
                 onSaveMkv = onSaveMkv,
                 onTool = ::openTool,
                 workspaceMode = workspaceMode,
@@ -813,6 +815,7 @@ private fun ModernAppBar(
     onImportFont: () -> Unit,
     onSave: () -> Unit,
     onSaveWorkbenchProject: () -> Unit,
+    onExportSrt: () -> Unit,
     onSaveMkv: () -> Unit,
     onTool: (WorkbenchTool) -> Unit,
     workspaceMode: WorkspacePresentationMode,
@@ -872,6 +875,7 @@ private fun ModernAppBar(
                         DropdownMenuItem(text = { Text("质量检查") }, leadingIcon = { Icon(Icons.Filled.ErrorOutline, null) }, onClick = { moreMenuOpen = false; onTool(WorkbenchTool.QC) })
                         DropdownMenuItem(text = { Text("项目") }, leadingIcon = { Icon(Icons.Filled.Info, null) }, onClick = { moreMenuOpen = false; onTool(WorkbenchTool.PROJECT) })
                         DropdownMenuItem(text = { Text("保存 ASS Workbench 工程") }, leadingIcon = { Icon(Icons.Filled.Save, null) }, onClick = { moreMenuOpen = false; onSaveWorkbenchProject() })
+                        DropdownMenuItem(text = { Text("导出 SRT（有损）") }, leadingIcon = { Icon(Icons.Filled.Subtitles, null) }, onClick = { moreMenuOpen = false; onExportSrt() })
                         DropdownMenuItem(text = { Text("诊断") }, leadingIcon = { Icon(Icons.Filled.Tune, null) }, onClick = { moreMenuOpen = false; onTool(WorkbenchTool.DIAGNOSTICS) })
                         Divider()
                         DropdownMenuItem(
