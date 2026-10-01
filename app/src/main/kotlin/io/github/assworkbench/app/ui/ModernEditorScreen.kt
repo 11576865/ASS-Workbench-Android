@@ -232,26 +232,7 @@ fun ModernEditorScreen(
         if (eventId !in existingEventIds) return
         viewModel.focusEvent(eventId, seek = false)
         val toolKey = WorkbenchTool.POSITION.name
-        val primaryId = WorkspaceState.primaryInstanceId(toolKey)
-        val primary = workspaceState.primary(toolKey)
-        workspaceState = when {
-            primary == null -> workspaceState
-                .openPrimary(toolKey, WorkspaceBinding.PinnedEvent(eventId))
-                .activate(primaryId)
-
-            primary.binding is WorkspaceBinding.PinnedEvent &&
-                primary.binding.eventId != eventId -> {
-                val sibling = workspaceState.newSibling(primary.id)
-                    ?.copy(binding = WorkspaceBinding.PinnedEvent(eventId))
-                if (sibling == null) workspaceState
-                else workspaceState.addInstance(sibling).activate(sibling.id)
-            }
-
-            else -> workspaceState
-                .openPrimary(toolKey)
-                .updateBinding(primaryId, WorkspaceBinding.PinnedEvent(eventId))
-                .activate(primaryId)
-        }
+        workspaceState = workspaceState.openPinnedEvent(toolKey, eventId)
 
         fixedListRequested = false
         fixedNavigationRevision += 1
