@@ -51,8 +51,8 @@ class MainActivity : ComponentActivity() {
 
     private val openSubtitle = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri ?: return@registerForActivityResult
-        if (!isAssDocument(uri)) {
-            viewModel.reportError("字幕导入失败", IllegalArgumentException("只接受 .ass 字幕文件"))
+        if (!isSubtitleDocument(uri)) {
+            viewModel.reportError("字幕导入失败", IllegalArgumentException("只接受 .ass / .srt 字幕文件"))
             return@registerForActivityResult
         }
         persist(uri, read = true, write = true)
@@ -152,7 +152,7 @@ class MainActivity : ComponentActivity() {
                         },
                         onOpenMkvProject = { openMkvProject.launch(arrayOf("video/x-matroska", "video/*", "application/octet-stream")) },
                         onOpenSubtitle = {
-                            openSubtitle.launch(arrayOf("application/x-ass", "text/x-ass", "text/x-ssa", "text/plain"))
+                            openSubtitle.launch(arrayOf("application/x-ass", "text/x-ass", "text/x-ssa", "application/x-subrip", "text/srt", "text/plain"))
                         },
                         onImportFont = { importFont.launch(arrayOf("font/ttf", "font/otf", "application/x-font-ttf", "application/x-font-opentype", "application/octet-stream")) },
                         onSave = {
@@ -183,13 +183,13 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun isAssDocument(uri: Uri): Boolean {
+    private fun isSubtitleDocument(uri: Uri): Boolean {
         val projection = arrayOf(OpenableColumns.DISPLAY_NAME)
         val name = contentResolver.query(uri, projection, null, null, null)?.use { cursor ->
             val column = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
             if (column >= 0 && cursor.moveToFirst()) cursor.getString(column) else null
         } ?: uri.lastPathSegment
-        return name?.endsWith(".ass", ignoreCase = true) == true
+        return name?.let { it.endsWith(".ass", ignoreCase = true) || it.endsWith(".srt", ignoreCase = true) } == true
     }
 
     private fun persist(uri: Uri, read: Boolean, write: Boolean) {
