@@ -12,6 +12,9 @@ data class AssWorkbenchProjectManifest(
     val mkvUri: String? = null,
     val mkvTrackNumber: Long? = null,
     val workspaceMode: WorkspacePresentationMode = WorkspacePresentationMode.FIXED,
+    val compatibilityProfile: AssCompatibilityProfile = AssCompatibilityProfile.LIBASS_NATIVE,
+    val workspaceStateRows: List<String> = emptyList(),
+    val surfaceStateRows: List<String> = emptyList(),
     val importedFontUris: List<String> = emptyList(),
     val reviewIdentity: String? = null,
 )
@@ -27,6 +30,9 @@ object AssWorkbenchProjectCodec {
         field("mkv", project.mkvUri)
         field("mkvTrack", project.mkvTrackNumber?.toString())
         field("workspace", project.workspaceMode.name)
+        field("compatibility", project.compatibilityProfile.name)
+        project.workspaceStateRows.forEach { field("workspaceRow", it) }
+        project.surfaceStateRows.forEach { field("surfaceRow", it) }
         project.importedFontUris.forEach { field("font", it) }
         field("review", project.reviewIdentity)
     }
@@ -52,6 +58,10 @@ object AssWorkbenchProjectCodec {
             mkvTrackNumber = one("mkvTrack")?.toLongOrNull(),
             workspaceMode = one("workspace")?.let { runCatching { WorkspacePresentationMode.valueOf(it) }.getOrNull() }
                 ?: WorkspacePresentationMode.FIXED,
+            compatibilityProfile = one("compatibility")?.let { runCatching { AssCompatibilityProfile.valueOf(it) }.getOrNull() }
+                ?: AssCompatibilityProfile.LIBASS_NATIVE,
+            workspaceStateRows = rows.filter { it.first == "workspaceRow" }.map { it.second },
+            surfaceStateRows = rows.filter { it.first == "surfaceRow" }.map { it.second },
             importedFontUris = rows.filter { it.first == "font" }.map { it.second },
             reviewIdentity = one("review"),
         )
