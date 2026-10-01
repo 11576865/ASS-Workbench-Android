@@ -128,6 +128,7 @@ internal fun FrameTimingPane(
                 )
             }
         }
+        SubtitleSyncPane(state, viewModel)
     }
 }
 
