@@ -79,4 +79,33 @@ class WorkbenchSurfaceControllerTest {
         val restored = WorkbenchSurfaceController(WorkspaceSurfacePersistence.decode(controller.save()))
         assertEquals(controller.save(), restored.save())
     }
+
+    @Test fun dockMinimizeAndTabStackAreCommittedAndPersisted() {
+        val controller = WorkbenchSurfaceController()
+        controller.ensure("A", fallback)
+        controller.ensure("B", SurfaceGeometry(60f, 70f))
+
+        controller.dock("A", SurfacePresentation.DOCK_LEFT, fallback)
+        assertEquals(SurfacePresentation.DOCK_LEFT, controller.state("A", fallback).presentation)
+
+        controller.undock("A", fallback)
+        controller.toggleMinimize("A", fallback)
+        assertEquals(SurfacePresentation.MINIMIZED, controller.state("A", fallback).presentation)
+        controller.toggleMinimize("A", fallback)
+        assertEquals(SurfacePresentation.FLOATING, controller.state("A", fallback).presentation)
+
+        controller.stack("A", "B", fallback, SurfaceGeometry(60f, 70f))
+        assertEquals(controller.state("A", fallback).stackId, controller.state("B", fallback).stackId)
+        assertTrue(controller.isVisibleStackTab("A"))
+        controller.bringToFront("B")
+        assertTrue(controller.isVisibleStackTab("B"))
+        assertFalse(controller.isVisibleStackTab("A"))
+
+        val restored = WorkbenchSurfaceController(WorkspaceSurfacePersistence.decode(controller.save()))
+        assertEquals(controller.save(), restored.save())
+        assertEquals(2, restored.stackMemberIds("B").size)
+
+        restored.unstack("B", fallback)
+        assertNull(restored.state("B", fallback).stackId)
+    }
 }
