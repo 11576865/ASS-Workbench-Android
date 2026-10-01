@@ -1,7 +1,9 @@
 package io.github.assworkbench.domain
 
-import org.junit.Assert.*
-import org.junit.Test
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 
 class AuthoringEngineSuiteTest {
     private fun event(id: Long, start: Long, end: Long, text: String = "Hello") =
