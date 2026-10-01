@@ -1,5 +1,8 @@
 package io.github.assworkbench.app.ui
 
+import android.content.Intent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -37,6 +40,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -45,7 +49,9 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import io.github.assworkbench.app.AssWorkbenchProjectSnapshot
 import io.github.assworkbench.app.BuildConfig
+import io.github.assworkbench.app.ProjectFileCodec
 import io.github.assworkbench.app.EditorState
 import io.github.assworkbench.app.EditorViewModel
 import io.github.assworkbench.app.WaveformLiteState
@@ -67,9 +73,16 @@ import kotlinx.coroutines.withContext
 import kotlin.math.abs
 
 private enum class WorkbenchTool(val title: String) {
-    SUBTITLES("字幕"), TEXT("正文"), TIMELINE("时间轴"), STYLE("样式"), POSITION("位置"),
-    EFFECTS("效果"), EVENT("事件"), FONTS("字体"), QC("检查"), BATCH("批量"),
+    SUBTITLES("字幕"), TEXT("正文"), TIMELINE("时间轴"), FRAMES("帧时间"),
+    STYLE("样式"), POSITION("位置"), EFFECTS("效果"), EVENT("事件"),
+    KARAOKE("卡拉OK"), VECTOR_CLIP("矢量裁剪"), FONTS("字体"), FONT_REQUIREMENTS("字体依赖"),
+    QC("检查"), COMPATIBILITY("兼容性"), BATCH("批量规则"),
     PROJECT("项目"), DIAGNOSTICS("诊断"), CAPABILITIES("功能地图"),
+}
+
+private enum class WorkspacePresentationMode(val title: String) {
+    FIXED("固定 UI"),
+    CANVAS_EXPERIMENTAL("实验性 Canvas"),
 }
 
 private enum class DestructiveWorkspaceAction { OPEN_ASS, NEW_ASS }
@@ -104,6 +117,68 @@ fun ModernEditorScreen(
     var saveConfirmOpen by remember { mutableStateOf(false) }
     var mkvConfirmOpen by remember { mutableStateOf(false) }
     var destructiveWorkspaceAction by remember { mutableStateOf<DestructiveWorkspaceAction?>(null) }
+    val context = LocalContext.current
+    var workspaceModeName by rememberSaveable { mutableStateOf(WorkspacePresentationMode.FIXED.name) }
+    var fixedToolName by rememberSaveable { mutableStateOf(WorkbenchTool.STYLE.name) }
+    val workspaceMode = WorkspacePresentationMode.valueOf(workspaceModeName)
+    val fixedTool = WorkbenchTool.valueOf(fixedToolName)
+
+    val openProjectLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri ?: return@rememberLauncherForActivityResult
+        runCatching {
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            val text = context.contentResolver.openInputStream(uri)?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }
+                ?: error("无法读取 Workbench Project")
+            ProjectFileCodec.decode(text)
+        }.onSuccess { snapshot ->
+            viewModel.loadProjectSnapshot(snapshot)
+            workspaceState = WorkspaceState.fromSaveableList(snapshot.workspaceState)
+            surfaceController.restore(snapshot.surfaceState)
+            workspaceModeName = runCatching {
+                WorkspacePresentationMode.valueOf(snapshot.workspaceMode)
+            }.getOrDefault(WorkspacePresentationMode.FIXED).name
+        }.onFailure { viewModel.reportError("Project 打开失败", it) }
+    }
+
+    val saveProjectLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json")
+    ) { uri ->
+        uri ?: return@rememberLauncherForActivityResult
+        val snapshot = AssWorkbenchProjectSnapshot(
+            title = state.project.title,
+            document = state.document,
+            videoUri = state.project.videoUri,
+            subtitleUri = state.project.subtitleUri,
+            containerUri = state.container.uri,
+            containerTrackNumber = state.container.selectedTrackNumber,
+            textEncoding = state.subtitleTextEncoding,
+            sourceFormat = state.sourceFormat,
+            focusedEventId = state.focusedEventId,
+            selectedEventIds = state.selectedEventIds,
+            workspaceMode = workspaceModeName,
+            workspaceState = workspaceState.toSaveableList(),
+            surfaceState = surfaceController.save(),
+        )
+        runCatching {
+            context.contentResolver.openOutputStream(uri, "wt")?.bufferedWriter(Charsets.UTF_8)?.use {
+                it.write(ProjectFileCodec.encode(snapshot))
+            } ?: error("无法写入 Workbench Project")
+        }.onFailure { viewModel.reportError("Project 保存失败", it) }
+    }
+
+    val exportSrtLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/x-subrip")
+    ) { uri ->
+        uri?.let(viewModel::saveSrtTo)
+    }
+
+    fun projectFileName(): String =
+        state.project.title.substringBeforeLast('.').ifBlank { "subtitle-project" } + ProjectFileCodec.EXTENSION
+
+    fun srtFileName(): String =
+        state.project.title.substringBeforeLast('.').ifBlank { "subtitle" } + ".srt"
 
     val existingEventIds = remember(state.document.events) {
         state.document.events.asSequence().map { it.id }.toSet()
@@ -126,8 +201,21 @@ fun ModernEditorScreen(
     }
 
     fun openTool(next: WorkbenchTool) {
+        if (workspaceMode == WorkspacePresentationMode.FIXED) {
+            fixedToolName = next.name
+            return
+        }
         workspaceState = workspaceState.openPrimary(next.name).withSurfacesHidden(false)
         surfaceController.bringToFront(WorkspaceState.primaryInstanceId(next.name))
+    }
+
+    fun toggleWorkspaceMode() {
+        workspaceModeName = if (workspaceMode == WorkspacePresentationMode.FIXED) {
+            WorkspacePresentationMode.CANVAS_EXPERIMENTAL.name
+        } else {
+            WorkspacePresentationMode.FIXED.name
+        }
+        workspaceState = workspaceState.withSurfacesHidden(false)
     }
 
     fun toggleAllSurfaces() {
@@ -142,7 +230,9 @@ fun ModernEditorScreen(
     ) {
         Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
-            androidx.compose.animation.AnimatedVisibility(visible = !workspaceState.surfacesHidden) {
+            androidx.compose.animation.AnimatedVisibility(
+                visible = workspaceMode == WorkspacePresentationMode.FIXED || !workspaceState.surfacesHidden
+            ) {
             ModernAppBar(
                 state = state,
                 viewModel = viewModel,
@@ -179,6 +269,11 @@ fun ModernEditorScreen(
                 },
                 onSaveMkv = onSaveMkv,
                 onTool = ::openTool,
+                workspaceMode = workspaceMode,
+                onToggleWorkspaceMode = ::toggleWorkspaceMode,
+                onOpenProject = { openProjectLauncher.launch(arrayOf("application/json", "text/plain", "*/*")) },
+                onSaveProject = { saveProjectLauncher.launch(projectFileName()) },
+                onExportSrt = { exportSrtLauncher.launch(srtFileName()) },
             )
             }
 
