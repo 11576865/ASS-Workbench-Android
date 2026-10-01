@@ -87,10 +87,12 @@ fun ModernEditorScreen(
     onOpenReferenceVideo: () -> Unit,
     onOpenMkvProject: () -> Unit,
     onOpenSubtitle: () -> Unit,
+    onOpenProject: () -> Unit,
     onImportFont: () -> Unit,
     onSave: () -> Unit,
     onSaveAs: () -> Unit,
     onSaveMkv: () -> Unit,
+    onSaveProject: (String, String) -> Unit,
     rendererEnabled: Boolean,
     onEnableRenderer: () -> Unit,
 ) {
@@ -182,6 +184,7 @@ fun ModernEditorScreen(
                         onOpenSubtitle()
                     }
                 },
+                onOpenProject = onOpenProject,
                 onNewSubtitle = {
                     if (state.dirty) {
                         destructiveWorkspaceAction = DestructiveWorkspaceAction.NEW_ASS
@@ -195,6 +198,15 @@ fun ModernEditorScreen(
                     else saveConfirmOpen = true
                 },
                 onSaveMkv = onSaveMkv,
+                onSaveProject = {
+                    val stem = state.project.title.substringBeforeLast('.').ifBlank { "project" }
+                    val payload = viewModel.buildProjectFile(
+                        workspaceMode = workspaceMode.name,
+                        workspaceState = workspaceState.toSaveableList(),
+                        surfaceState = surfaceController.save(),
+                    )
+                    onSaveProject(stem + WorkbenchProjectCodec.EXTENSION, payload)
+                },
                 onTool = ::openTool,
                 workspaceMode = workspaceMode,
                 onToggleWorkspaceMode = {
@@ -800,10 +812,12 @@ private fun ModernAppBar(
     onOpenVideo: () -> Unit,
     onOpenMkvProject: () -> Unit,
     onOpenSubtitle: () -> Unit,
+    onOpenProject: () -> Unit,
     onNewSubtitle: () -> Unit,
     onImportFont: () -> Unit,
     onSave: () -> Unit,
     onSaveMkv: () -> Unit,
+    onSaveProject: () -> Unit,
     onTool: (WorkbenchTool) -> Unit,
     workspaceMode: WorkspacePresentationMode,
     onToggleWorkspaceMode: () -> Unit,
@@ -846,7 +860,8 @@ private fun ModernAppBar(
                 Box {
                     TooltipIconButton("打开文件 / 工程", onOpenMenu) { Icon(Icons.Filled.FolderOpen, null) }
                     DropdownMenu(expanded = openMenu, onDismissRequest = onDismissMenu) {
-                        DropdownMenuItem(text = { Text("打开独立 ASS") }, leadingIcon = { Icon(Icons.Filled.Subtitles, null) }, onClick = { onDismissMenu(); onOpenSubtitle() })
+                        DropdownMenuItem(text = { Text("打开字幕（ASS / SRT / VTT）") }, leadingIcon = { Icon(Icons.Filled.Subtitles, null) }, onClick = { onDismissMenu(); onOpenSubtitle() })
+                        DropdownMenuItem(text = { Text("打开 ASS Workbench Project") }, leadingIcon = { Icon(Icons.Filled.Workspaces, null) }, onClick = { onDismissMenu(); onOpenProject() })
                         DropdownMenuItem(text = { Text("打开 / 更换参考视频") }, leadingIcon = { Icon(Icons.Filled.Movie, null) }, onClick = { onDismissMenu(); onOpenVideo() })
                         DropdownMenuItem(text = { Text("打开 MKV 工程") }, leadingIcon = { Icon(Icons.Filled.VideoFile, null) }, onClick = { onDismissMenu(); onOpenMkvProject() })
                         Divider()
@@ -861,6 +876,7 @@ private fun ModernAppBar(
                         DropdownMenuItem(text = { Text("质量检查") }, leadingIcon = { Icon(Icons.Filled.ErrorOutline, null) }, onClick = { moreMenuOpen = false; onTool(WorkbenchTool.QC) })
                         DropdownMenuItem(text = { Text("项目") }, leadingIcon = { Icon(Icons.Filled.Info, null) }, onClick = { moreMenuOpen = false; onTool(WorkbenchTool.PROJECT) })
                         DropdownMenuItem(text = { Text("诊断") }, leadingIcon = { Icon(Icons.Filled.Tune, null) }, onClick = { moreMenuOpen = false; onTool(WorkbenchTool.DIAGNOSTICS) })
+                        DropdownMenuItem(text = { Text("保存 ASS Workbench Project") }, leadingIcon = { Icon(Icons.Filled.Inventory2, null) }, onClick = { moreMenuOpen = false; onSaveProject() })
                         DropdownMenuItem(
                             text = { Text("界面：${workspaceMode.label}") },
                             leadingIcon = { Icon(Icons.Filled.ViewQuilt, null) },
