@@ -102,6 +102,42 @@ class EditorRegressionInstrumentedTest {
     }
 
     @Test
+    fun pagerWorkspaceSwitchesBetweenRealSubtitlePreviewAndToolPages() {
+        restoreRecovery()
+
+        composeRule.onNodeWithContentDescription("工具和更多操作").performClick()
+        composeRule.onNodeWithTag("workspace-mode-toggle").performClick()
+        composeRule.onNodeWithTag("ui-variant-use-PAGER_EXPERIMENTAL")
+            .assertIsDisplayed()
+            .performClick()
+
+        composeRule.onNodeWithTag("pager-workspace").assertIsDisplayed()
+        composeRule.onNodeWithTag("pager-page-preview").assertIsDisplayed()
+
+        composeRule.onNodeWithTag("pager-nav-SUBTITLES").performClick()
+        composeRule.waitUntil(5_000) {
+            composeRule.onAllNodesWithTag("pager-page-subtitles", useUnmergedTree = true)
+                .fetchSemanticsNodes(atLeastOneRootRequired = false)
+                .isNotEmpty()
+        }
+
+        composeRule.onNodeWithTag("event-row-1").performClick()
+        composeRule.waitUntil(5_000) {
+            composeRule.onAllNodesWithTag("pager-page-tool", useUnmergedTree = true)
+                .fetchSemanticsNodes(atLeastOneRootRequired = false)
+                .isNotEmpty()
+        }
+        composeRule.onNodeWithTag("event-inspector").assertIsDisplayed()
+
+        composeRule.onNodeWithTag("pager-nav-PREVIEW").performClick()
+        composeRule.waitUntil(5_000) {
+            composeRule.onAllNodesWithTag("pager-page-preview", useUnmergedTree = true)
+                .fetchSemanticsNodes(atLeastOneRootRequired = false)
+                .isNotEmpty()
+        }
+    }
+
+    @Test
     fun rawDraftSurvivesSwitchingBetweenEvents() {
         restoreRecovery()
 
