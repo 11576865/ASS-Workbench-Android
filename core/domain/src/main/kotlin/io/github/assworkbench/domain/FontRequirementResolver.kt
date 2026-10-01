@@ -10,12 +10,13 @@ object FontRequirementResolver {
 
     fun resolve(document: AssDocument): List<FontRequirement> {
         data class MutableReq(val sources: MutableSet<FontRequestSource> = linkedSetOf(), val eventIds: MutableSet<Long> = linkedSetOf())
-        val map = linkedMapOf<String, MutableReq>()
+        val map = linkedMapOf<String, Pair<String, MutableReq>>()
         val styles = document.styles.associateBy { it.name }
         fun add(family: String, source: FontRequestSource, eventId: Long) {
-            val key = family.trim()
-            if (key.isEmpty()) return
-            val req = map.getOrPut(key) { MutableReq() }
+            val displayFamily = family.trim()
+            if (displayFamily.isEmpty()) return
+            val normalized = displayFamily.lowercase()
+            val (_, req) = map.getOrPut(normalized) { displayFamily to MutableReq() }
             req.sources += source
             req.eventIds += eventId
         }
@@ -29,7 +30,7 @@ object FontRequirementResolver {
                 }
             }
         }
-        return map.map { (family, req) -> FontRequirement(family, req.sources, req.eventIds) }
+        return map.values.map { (family, req) -> FontRequirement(family, req.sources, req.eventIds) }
     }
 
     fun missing(document: AssDocument, availableFamilies: Set<String>): List<FontRequirement> {
