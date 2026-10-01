@@ -12,4 +12,16 @@ class AssVectorPathTest {
         val moved = AssVectorPathCodec.movePoint(path, 1, 0, 120.0, 4.0)
         assertEquals("2, m 0 0 l 120 4 b 100 0 100 100 0 100", AssVectorPathCodec.write(moved))
     }
+    @Test
+    fun ignores_vector_clip_nested_inside_transform() {
+        val text = "{\\t(0,500,\\clip(m 0 0 l 10 10))\\clip(m 1 1 l 20 20)}x"
+        val clip = AssVectorClipSemantic.inspectLeading(text)!!
+        assertEquals(1.0, clip.path.commands.first().coordinates.first())
+        val patched = AssVectorClipSemantic.patchLeading(
+            text,
+            clip.copy(path = AssVectorPathCodec.parse("m 2 2 l 30 30")),
+        )
+        kotlin.test.assertTrue(patched.contains("\\t(0,500,\\clip(m 0 0 l 10 10))"))
+        kotlin.test.assertTrue(patched.contains("\\clip(m 2 2 l 30 30)"))
+    }
 }
