@@ -74,6 +74,9 @@ import io.github.assworkbench.domain.AssGeometrySemantic
 import io.github.assworkbench.domain.AssPositionMode
 import io.github.assworkbench.domain.AssRendererRiskAnalyzer
 import io.github.assworkbench.fonts.RendererLogParser
+import io.github.assworkbench.app.ui.interaction.ClearInteractionOwnerOnDispose
+import io.github.assworkbench.app.ui.interaction.InteractionOverlayRegistry
+import io.github.assworkbench.app.ui.interaction.InteractionProxySpec
 import io.github.assworkbench.app.ui.preview.PreviewTargetCandidate
 import io.github.assworkbench.app.ui.preview.PreviewTargetConfidence
 import io.github.assworkbench.app.ui.preview.PreviewTargetResolver
