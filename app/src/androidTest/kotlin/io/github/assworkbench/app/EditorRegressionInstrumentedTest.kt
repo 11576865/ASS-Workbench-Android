@@ -244,15 +244,7 @@ class EditorRegressionInstrumentedTest {
         }
 
         composeRule.onNodeWithTag("tool-POSITION").performScrollTo().performClick()
-        composeRule.onNodeWithTag("tool-STYLE").performScrollTo().performClick()
         waitForSurface("surface-POSITION")
-        waitForSurface("surface-STYLE")
-
-        composeRule.onNodeWithTag("tool-FONTS").performScrollTo().performClick()
-        composeRule.onNodeWithTag("tool-QC").performScrollTo().performClick()
-        waitForSurface("surface-FONTS")
-        waitForSurface("surface-QC")
-
         val dragHandle = composeRule.onNodeWithTag("surface-drag-POSITION")
         val before = dragHandle.fetchSemanticsNode().boundsInRoot
         dragHandle.performTouchInput {
@@ -265,6 +257,14 @@ class EditorRegressionInstrumentedTest {
         composeRule.waitForIdle()
         val after = dragHandle.fetchSemanticsNode().boundsInRoot
         assertTrue("Floating surface drag handle should move the surface", after.left > before.left || after.top > before.top)
+
+        composeRule.onNodeWithTag("tool-STYLE").performScrollTo().performClick()
+        waitForSurface("surface-STYLE")
+
+        composeRule.onNodeWithTag("tool-FONTS").performScrollTo().performClick()
+        composeRule.onNodeWithTag("tool-QC").performScrollTo().performClick()
+        waitForSurface("surface-FONTS")
+        waitForSurface("surface-QC")
 
         composeRule.onNodeWithContentDescription("隐藏全部浮层").performClick()
         composeRule.waitUntil(timeoutMillis = 10_000) {
@@ -293,6 +293,38 @@ class EditorRegressionInstrumentedTest {
         composeRule.onNodeWithTag("preview-mode-MANIPULATION").performScrollTo().performClick()
         composeRule.onNodeWithTag("preview-workspace").assertIsDisplayed()
         composeRule.onNodeWithTag("interaction-overlay").assertIsDisplayed()
+    }
+
+    @Test
+    fun surfaceResizeAndLayoutLockSurviveRecreationWithoutChangingSubtitle() {
+        restoreRecovery()
+        val canonical = viewModel.state.value.document
+        composeRule.onNodeWithTag("tool-POSITION").performScrollTo().performClick()
+        composeRule.waitForIdle()
+        val surface = composeRule.onNodeWithTag("surface-POSITION")
+        val before = surface.fetchSemanticsNode().boundsInRoot
+        composeRule.onNodeWithTag("surface-resize-POSITION").performTouchInput {
+            swipe(start = center, end = center - androidx.compose.ui.geometry.Offset(80f, 100f), durationMillis = 350)
+        }
+        composeRule.waitForIdle()
+        val resized = surface.fetchSemanticsNode().boundsInRoot
+        assertTrue("Resize must reduce the committed window size", resized.width < before.width || resized.height < before.height)
+        composeRule.onNodeWithTag("surface-lock-POSITION").performClick()
+        val handle = composeRule.onNodeWithTag("surface-drag-POSITION")
+        val locked = handle.fetchSemanticsNode().boundsInRoot
+        handle.performTouchInput {
+            swipe(start = center, end = center + androidx.compose.ui.geometry.Offset(60f, 60f), durationMillis = 350)
+        }
+        composeRule.waitForIdle()
+        assertEquals(locked, handle.fetchSemanticsNode().boundsInRoot)
+        composeRule.activityRule.scenario.recreate()
+        composeRule.waitForIdle()
+        viewModel = composeRule.activity.editorViewModel
+        composeRule.onNodeWithContentDescription("解除布局锁定").assertIsDisplayed()
+        val restored = composeRule.onNodeWithTag("surface-POSITION").fetchSemanticsNode().boundsInRoot
+        assertEquals(resized.width, restored.width, 1f)
+        assertEquals(resized.height, restored.height, 1f)
+        assertEquals(canonical, viewModel.state.value.document)
     }
 
     @Test

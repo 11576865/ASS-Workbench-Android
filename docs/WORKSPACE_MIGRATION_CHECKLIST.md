@@ -73,3 +73,17 @@ Do not persist:
 - transient renderer state
 - pointer interaction state
 - temporary preview overlays
+
+## Surface phase — 0.27.2
+
+- [x] Separate surface geometry/size/lock/order model
+- [x] Saveable Activity restoration, committed geometry only
+- [x] Temporary viewport clamp without overwriting canonical layout
+- [x] Tool strip and app bar outside floating hit regions
+- [x] Independent layout lock vs object pin
+- [x] Free resize outline and one release-time remeasure
+- [ ] Durable project workspace persistence / user templates
+- [ ] Docked / floating host migration
+- [ ] Per-tool semantic size-class content
+
+See `WORKSPACE_SURFACES_0.27.2.md` for exact scope and test coverage.
