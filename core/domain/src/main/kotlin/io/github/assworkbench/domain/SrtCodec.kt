@@ -36,12 +36,12 @@ object SrtCodec {
     }
 
     private fun importBasicMarkup(value: String): String = value
-        .replace(Regex("""(?i)<i>"""), "{\\i1}")
-        .replace(Regex("""(?i)</i>"""), "{\\i0}")
-        .replace(Regex("""(?i)<b>"""), "{\\b1}")
-        .replace(Regex("""(?i)</b>"""), "{\\b0}")
-        .replace(Regex("""(?i)<u>"""), "{\\u1}")
-        .replace(Regex("""(?i)</u>"""), "{\\u0}")
+        .replace(Regex("""(?i)<i>""")) { "{\\i1}" }
+        .replace(Regex("""(?i)</i>""")) { "{\\i0}" }
+        .replace(Regex("""(?i)<b>""")) { "{\\b1}" }
+        .replace(Regex("""(?i)</b>""")) { "{\\b0}" }
+        .replace(Regex("""(?i)<u>""")) { "{\\u1}" }
+        .replace(Regex("""(?i)</u>""")) { "{\\u0}" }
 
     private fun parseTime(parts: List<String>): SubTime {
         val h = parts[0].toLong()
