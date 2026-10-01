@@ -9,6 +9,7 @@ import io.github.assworkbench.container.MatroskaScanResult
 import io.github.assworkbench.domain.AssCodec
 import io.github.assworkbench.domain.AssDocument
 import io.github.assworkbench.domain.AssDocumentEditing
+import io.github.assworkbench.domain.AssRoundTripVerifier
 import io.github.assworkbench.domain.AssTextDecoder
 import io.github.assworkbench.domain.AssTextEncoding
 import io.github.assworkbench.domain.SrtCodec
@@ -474,6 +475,29 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                             output = result,
                             fonts = packageFiles,
                         )
+
+                        // Validate the complete remux product before exposing it to
+                        // the user-selected destination. The original MKV is never
+                        // overwritten by this workflow.
+                        val verifiedScan = result.inputStream().buffered().use { input ->
+                            MatroskaReader().scan(input, retainAttachments = false)
+                        }
+                        val verifiedTrack = verifiedScan.subtitleTracks
+                            .firstOrNull { it.number == trackNumber }
+                            ?: error("写回验证失败：目标 ASS 轨不存在")
+                        val verifiedDocument = AssCodec.parse(verifiedTrack.toAss())
+                        val roundTrip = AssRoundTripVerifier.compare(
+                            AssRoundTripVerifier.snapshot(snapshot.document),
+                            AssRoundTripVerifier.snapshot(verifiedDocument),
+                        )
+                        require(roundTrip.equivalent) {
+                            "写回验证失败：" + roundTrip.summary
+                        }
+                        containerScan?.subtitleTracks?.map { it.number }?.let { sourceTracks ->
+                            require(verifiedScan.subtitleTracks.map { it.number } == sourceTracks) {
+                                "写回验证失败：ASS 轨身份或顺序发生变化"
+                            }
+                        }
 
                         app.contentResolver.openOutputStream(outputUri, "w")?.use { output ->
                             result.inputStream().buffered().use { input -> input.copyTo(output, 1024 * 1024) }
