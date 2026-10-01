@@ -38,6 +38,7 @@ import androidx.compose.material3.TooltipBox
 import androidx.compose.material3.TooltipDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
@@ -60,6 +61,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.unit.dp
@@ -73,6 +75,12 @@ import io.github.assworkbench.domain.AssGeometrySemantic
 import io.github.assworkbench.domain.AssPositionMode
 import io.github.assworkbench.domain.AssRendererRiskAnalyzer
 import io.github.assworkbench.fonts.RendererLogParser
+import io.github.assworkbench.app.ui.interaction.ClearInteractionOwnerOnDispose
+import io.github.assworkbench.app.ui.interaction.InteractionOverlayRegistry
+import io.github.assworkbench.app.ui.interaction.InteractionProxySpec
+import io.github.assworkbench.app.ui.preview.PreviewTargetCandidate
+import io.github.assworkbench.app.ui.preview.PreviewTargetConfidence
+import io.github.assworkbench.app.ui.preview.PreviewTargetResolver
 import io.github.yuroyami.libmpvkt.Mpv
 import io.github.yuroyami.libmpvkt.MpvCommands
 import io.github.yuroyami.libmpvkt.MpvResult
@@ -121,6 +129,7 @@ internal fun VideoPreview(
     onSetEventClip: (Double, Double, Double, Double, Boolean) -> Unit,
     onCancelEventPositionPreview: () -> Unit,
     onFocusEvent: (Long) -> Unit,
+    onEditEventPosition: (Long) -> Unit = onFocusEvent,
     onSetEventTiming: (Long, Long, Long) -> Unit,
     onOpenVideo: () -> Unit,
     onOpenTimeline: () -> Unit = {},
@@ -220,6 +229,7 @@ internal fun VideoPreview(
             onSetEventClip = onSetEventClip,
             onCancelEventPositionPreview = onCancelEventPositionPreview,
             onFocusEvent = onFocusEvent,
+            onEditEventPosition = onEditEventPosition,
             onSetEventTiming = onSetEventTiming,
             onOpenVideo = onOpenVideo,
             onOpenTimeline = onOpenTimeline,
@@ -518,6 +528,7 @@ private fun AuthoritativeMpvPreview(
     onSetEventClip: (Double, Double, Double, Double, Boolean) -> Unit,
     onCancelEventPositionPreview: () -> Unit,
     onFocusEvent: (Long) -> Unit,
+    onEditEventPosition: (Long) -> Unit,
     onSetEventTiming: (Long, Long, Long) -> Unit,
     onOpenVideo: () -> Unit,
     onOpenTimeline: () -> Unit,
@@ -588,6 +599,8 @@ private fun AuthoritativeMpvPreview(
     var osdMarginLeft by remember(mpv, videoUri) { mutableIntStateOf(0) }
     var osdMarginRight by remember(mpv, videoUri) { mutableIntStateOf(0) }
     var playbackControlsVisible by remember(mpv, videoUri) { mutableStateOf(true) }
+    var targetCandidates by remember(mpv, videoUri) { mutableStateOf<List<PreviewTargetCandidate>>(emptyList()) }
+    var targetPickerOpen by remember(mpv, videoUri) { mutableStateOf(false) }
     var viewportScale by remember(videoUri) { mutableStateOf(1f) }
     var viewportPan by remember(videoUri) { mutableStateOf(Offset.Zero) }
     var lastReportedPositionMs by remember(mpv) { mutableLongStateOf(initialPositionMs.coerceAtLeast(0L)) }
@@ -639,6 +652,13 @@ private fun AuthoritativeMpvPreview(
             if (videoWidth > 0 && videoHeight > 0) {
                 onVideoAspectRatio(videoWidth.toFloat() / videoHeight.toFloat())
             }
+        }
+    }
+
+    LaunchedEffect(videoUri, positionEditEventId) {
+        if (videoUri.isNullOrBlank() || positionEditEventId != null) {
+            targetPickerOpen = false
+            targetCandidates = emptyList()
         }
     }
 
@@ -771,8 +791,27 @@ private fun AuthoritativeMpvPreview(
                         }
                         .pointerInput(videoUri, positionEditEventId) {
                             detectTapGestures(
-                                onTap = { playbackControlsVisible = true },
+                                onTap = {
+                                    targetPickerOpen = false
+                                    playbackControlsVisible = true
+                                },
+                                onLongPress = { offset ->
+                                    val positionMs = ((playback.positionSeconds ?: (lastReportedPositionMs / 1000.0)) * 1000.0)
+                                        .toLong()
+                                        .coerceAtLeast(0L)
+                                    val playX = (offset.x / size.width.coerceAtLeast(1) * document.playResX).toDouble()
+                                    val playY = (offset.y / size.height.coerceAtLeast(1) * document.playResY).toDouble()
+                                    targetCandidates = PreviewTargetResolver.candidates(
+                                        document = document,
+                                        positionMs = positionMs,
+                                        x = playX,
+                                        y = playY,
+                                    )
+                                    targetPickerOpen = true
+                                    playbackControlsVisible = false
+                                },
                                 onDoubleTap = {
+                                    targetPickerOpen = false
                                     viewportScale = 1f
                                     viewportPan = Offset.Zero
                                     playbackControlsVisible = true
@@ -892,6 +931,24 @@ private fun AuthoritativeMpvPreview(
                     )
                 }
             }
+            if (targetPickerOpen && positionEditEventId == null) {
+                PreviewTargetPicker(
+                    candidates = targetCandidates,
+                    onDismiss = {
+                        targetPickerOpen = false
+                        playbackControlsVisible = true
+                    },
+                    onFocus = { id ->
+                        targetPickerOpen = false
+                        onFocusEvent(id)
+                    },
+                    onEditPosition = { id ->
+                        targetPickerOpen = false
+                        onEditEventPosition(id)
+                    },
+                    modifier = Modifier.align(Alignment.TopCenter).padding(12.dp),
+                )
+            }
             if (!videoUri.isNullOrBlank() && positionEditEventId == null) {
                 AnimatedVisibility(
                     visible = playbackControlsVisible,
@@ -928,6 +985,80 @@ private fun AuthoritativeMpvPreview(
                             },
                             onOpenTimeline = onOpenTimeline,
                         )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PreviewTargetPicker(
+    candidates: List<PreviewTargetCandidate>,
+    onDismiss: () -> Unit,
+    onFocus: (Long) -> Unit,
+    onEditPosition: (Long) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier.fillMaxWidth(0.92f).testTag("preview-target-picker"),
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.97f),
+        shadowElevation = 8.dp,
+    ) {
+        Column(
+            Modifier.padding(10.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("当前画面对象", style = MaterialTheme.typography.titleSmall)
+                    Text(
+                        if (candidates.isEmpty()) {
+                            "当前时间没有可定位的 Dialogue。"
+                        } else {
+                            "按 ASS anchor 排序；不是 libass 字形边界命中。"
+                        },
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                TextButton(onClick = onDismiss) { Text("关闭") }
+            }
+            candidates.forEach { candidate ->
+                Surface(
+                    shape = MaterialTheme.shapes.medium,
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                ) {
+                    Row(
+                        Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text("#${candidate.eventId} · ${candidate.styleName} · L${candidate.layer}")
+                            Text(
+                                candidate.textLabel,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                maxLines = 1,
+                            )
+                            Text(
+                                when (candidate.confidence) {
+                                    PreviewTargetConfidence.EXACT_ANCHOR -> "Anchor：ASS 明确坐标"
+                                    PreviewTargetConfidence.APPROXIMATE_ANCHOR -> "Anchor：按对齐与边距推导"
+                                    PreviewTargetConfidence.UNRESOLVED -> "Anchor：语义冲突 / 无法可靠定位"
+                                },
+                                style = MaterialTheme.typography.labelSmall,
+                                color = when (candidate.confidence) {
+                                    PreviewTargetConfidence.UNRESOLVED -> MaterialTheme.colorScheme.error
+                                    PreviewTargetConfidence.APPROXIMATE_ANCHOR -> MaterialTheme.colorScheme.tertiary
+                                    PreviewTargetConfidence.EXACT_ANCHOR -> MaterialTheme.colorScheme.onSurfaceVariant
+                                },
+                            )
+                        }
+                        TextButton(onClick = { onFocus(candidate.eventId) }) { Text("聚焦") }
+                        Button(onClick = { onEditPosition(candidate.eventId) }) { Text("位置") }
                     }
                 }
             }

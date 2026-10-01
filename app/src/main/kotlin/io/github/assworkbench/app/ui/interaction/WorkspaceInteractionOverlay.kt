@@ -1,6 +1,5 @@
-package io.github.assworkbench.app.ui
+package io.github.assworkbench.app.ui.interaction
 
-import io.github.assworkbench.app.ui.interaction.FixedRod
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Row

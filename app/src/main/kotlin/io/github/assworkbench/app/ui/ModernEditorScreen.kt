@@ -57,6 +57,9 @@ import io.github.assworkbench.app.EditorState
 import io.github.assworkbench.app.EditorViewModel
 import io.github.assworkbench.app.WaveformLiteState
 import io.github.assworkbench.app.WaveformLiteStatus
+import io.github.assworkbench.app.ui.interaction.InteractionOverlayRegistry
+import io.github.assworkbench.app.ui.interaction.WindowInteractionOverlay
+import io.github.assworkbench.app.ui.interaction.rememberInteractionOverlayRegistry
 import io.github.assworkbench.app.ui.workspace.WorkspaceBinding
 import io.github.assworkbench.app.ui.workspace.SurfaceGeometry
 import io.github.assworkbench.app.ui.workspace.FloatingWorkbenchSurface
@@ -226,6 +229,21 @@ fun ModernEditorScreen(
         }
         workspaceState = workspaceState.withSurfacesHidden(false)
         surfaceController.bringToFront(WorkspaceState.primaryInstanceId(next.name))
+    }
+
+    fun openPositionTarget(eventId: Long) {
+        if (eventId !in existingEventIds) return
+        viewModel.focusEvent(eventId, seek = false)
+        val toolKey = WorkbenchTool.POSITION.name
+        workspaceState = workspaceState.openPinnedEvent(toolKey, eventId)
+
+        fixedListRequested = false
+        fixedNavigationRevision += 1
+        fixedToolName = toolKey
+        if (workspaceMode == WorkspacePresentationMode.CANVAS_EXPERIMENTAL) {
+            workspaceState = workspaceState.withSurfacesHidden(false)
+            workspaceState.activeInstanceId?.let { id -> surfaceController.bringToFront(id) }
+        }
     }
 
     fun toggleWorkspaceMode() {
@@ -460,6 +478,8 @@ fun ModernEditorScreen(
                     onOpenVideo = onOpenReferenceVideo,
                     rendererEnabled = rendererEnabled,
                     onEnableRenderer = onEnableRenderer,
+                    interactionRegistry = interactionRegistry,
+                    onEditEventPosition = ::openPositionTarget,
                     searchOpen = searchOpen,
                     onCloseSearch = { searchOpen = false; viewModel.setQuery("") },
                     modifier = Modifier.weight(1f).fillMaxWidth().testTag("fixed-workspace"),
@@ -471,8 +491,9 @@ fun ModernEditorScreen(
                     state, viewModel, if (workspaceState.surfacesHidden) null else positionEditEventId,
                     onOpenReferenceVideo, { openTool(WorkbenchTool.TIMELINE) },
                     rendererEnabled, onEnableRenderer,
+                    onEditEventPosition = ::openPositionTarget,
                     interactionRegistry = if (workspaceState.surfacesHidden) null else interactionRegistry,
-                    viewportGesturesEnabled = activePositionInstance == null || workspaceState.surfacesHidden,
+                    viewportGesturesEnabled = positionEditEventId == null || workspaceState.surfacesHidden,
                     modifier = Modifier.fillMaxSize().testTag("preview-workspace"),
                 )
                 workspaceState.tools.forEachIndexed { index, instance ->
@@ -623,13 +644,14 @@ fun ModernEditorScreen(
             }
         }
 
-        if (workspaceMode == WorkspacePresentationMode.CANVAS_EXPERIMENTAL) {
-            WindowInteractionOverlay(
-                registry = interactionRegistry,
-                visible = !workspaceState.surfacesHidden,
-                modifier = Modifier.fillMaxSize().testTag("interaction-overlay"),
-            )
-        }
+        WindowInteractionOverlay(
+            registry = interactionRegistry,
+            visible = when (workspaceMode) {
+                WorkspacePresentationMode.FIXED -> fixedTool == WorkbenchTool.POSITION
+                WorkspacePresentationMode.CANVAS_EXPERIMENTAL -> !workspaceState.surfacesHidden
+            },
+            modifier = Modifier.fillMaxSize().testTag("interaction-overlay"),
+        )
         }
     }
 }
@@ -653,6 +675,8 @@ private fun FixedWorkspace(
     onOpenVideo: () -> Unit,
     rendererEnabled: Boolean,
     onEnableRenderer: () -> Unit,
+    interactionRegistry: InteractionOverlayRegistry,
+    onEditEventPosition: (Long) -> Unit,
     searchOpen: Boolean,
     onCloseSearch: () -> Unit,
     modifier: Modifier = Modifier,
@@ -813,21 +837,26 @@ private fun FixedWorkspace(
             val previewVisible = policy.effectivePreview != PreviewDensity.HIDDEN
 
             val preview: @Composable (Modifier) -> Unit = { previewModifier ->
+                val positionTargetId = if (activeTool == WorkbenchTool.POSITION) {
+                    (instance.binding.resolve(
+                        focusedEventId = state.focusedEventId,
+                        selectedEventIds = state.selectedEventIds,
+                        existingEventIds = state.document.events.mapTo(hashSetOf()) { it.id },
+                    ) as? WorkspaceBindingResolution.Event)?.eventId
+                } else {
+                    null
+                }
                 WorkbenchPreview(
                     state = state,
                     viewModel = viewModel,
-                    positionEditEventId = if (activeTool == WorkbenchTool.POSITION) {
-                        (instance.binding.resolve(
-                            focusedEventId = state.focusedEventId,
-                            selectedEventIds = state.selectedEventIds,
-                            existingEventIds = state.document.events.mapTo(hashSetOf()) { it.id },
-                        ) as? WorkspaceBindingResolution.Event)?.eventId
-                    } else null,
+                    positionEditEventId = positionTargetId,
                     onOpenVideo = onOpenVideo,
                     onOpenTimeline = { selectTool(WorkbenchTool.TIMELINE) },
                     rendererEnabled = rendererEnabled,
                     onEnableRenderer = onEnableRenderer,
-                    viewportGesturesEnabled = activeTool != WorkbenchTool.POSITION,
+                    onEditEventPosition = onEditEventPosition,
+                    interactionRegistry = if (activeTool == WorkbenchTool.POSITION) interactionRegistry else null,
+                    viewportGesturesEnabled = positionTargetId == null,
                     modifier = previewModifier.testTag("preview-workspace"),
                 )
             }
@@ -906,6 +935,7 @@ private fun WorkbenchPreview(
     onOpenTimeline: () -> Unit,
     rendererEnabled: Boolean,
     onEnableRenderer: () -> Unit,
+    onEditEventPosition: (Long) -> Unit = { id -> viewModel.focusEvent(id, seek = false) },
     onVideoAspectRatio: (Float) -> Unit = {},
     interactionRegistry: InteractionOverlayRegistry? = null,
     viewportGesturesEnabled: Boolean = false,
@@ -974,6 +1004,7 @@ private fun WorkbenchPreview(
         },
         onCancelEventPositionPreview = viewModel::clearTransientPreview,
         onFocusEvent = { viewModel.focusEvent(it, seek = false) },
+        onEditEventPosition = onEditEventPosition,
         onSetEventTiming = viewModel::setEventTiming,
         onOpenVideo = onOpenVideo,
         onOpenTimeline = onOpenTimeline,

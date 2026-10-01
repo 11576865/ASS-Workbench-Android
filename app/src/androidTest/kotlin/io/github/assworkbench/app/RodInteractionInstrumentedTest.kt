@@ -12,9 +12,9 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipe
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import io.github.assworkbench.app.ui.InteractionOverlayRegistry
-import io.github.assworkbench.app.ui.InteractionProxySpec
-import io.github.assworkbench.app.ui.WindowInteractionOverlay
+import io.github.assworkbench.app.ui.interaction.InteractionOverlayRegistry
+import io.github.assworkbench.app.ui.interaction.InteractionProxySpec
+import io.github.assworkbench.app.ui.interaction.WindowInteractionOverlay
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
