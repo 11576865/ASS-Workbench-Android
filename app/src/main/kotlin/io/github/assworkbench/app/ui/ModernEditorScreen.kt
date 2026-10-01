@@ -103,7 +103,11 @@ fun ModernEditorScreen(
     val surfaceController = rememberWorkbenchSurfaceController()
     LaunchedEffect(state.projectFileUri, state.projectWorkspaceRows, state.projectSurfaceRows) {
         if (state.projectWorkspaceRows.isNotEmpty()) {
-            workspaceState = WorkspaceState.fromSaveableList(state.projectWorkspaceRows)
+            val restored = WorkspaceState.fromSaveableList(state.projectWorkspaceRows)
+            workspaceState = restored
+            restored.activeInstance()?.toolKey?.let { key ->
+                if (WorkbenchTool.entries.any { it.name == key }) fixedToolName = key
+            }
         }
         if (state.projectSurfaceRows.isNotEmpty()) {
             surfaceController.restore(state.projectSurfaceRows)
@@ -160,6 +164,7 @@ fun ModernEditorScreen(
     fun openTool(next: WorkbenchTool) {
         if (workspaceMode == WorkspacePresentationMode.FIXED) {
             fixedToolName = next.name
+            workspaceState = workspaceState.openPrimary(next.name)
         } else {
             workspaceState = workspaceState.openPrimary(next.name).withSurfacesHidden(false)
             surfaceController.bringToFront(WorkspaceState.primaryInstanceId(next.name))
