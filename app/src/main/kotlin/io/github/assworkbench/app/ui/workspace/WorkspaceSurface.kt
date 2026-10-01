@@ -51,12 +51,18 @@ internal enum class SurfaceSizeClass(val label: String) {
     }
 }
 
+internal enum class SurfacePlacement {
+    FLOATING, DOCK_LEFT, DOCK_RIGHT, DOCK_BOTTOM, MINIMIZED,
+}
+
 internal data class WorkspaceSurfaceState(
     val instanceId: String,
     val geometry: SurfaceGeometry = SurfaceGeometry(),
     val sizeClass: SurfaceSizeClass = SurfaceSizeClass.STANDARD,
     val layoutLocked: Boolean = false,
     val zOrder: Int = 1,
+    val placement: SurfacePlacement = SurfacePlacement.FLOATING,
+    val stackId: String? = null,
 ) {
     fun withGeometry(next: SurfaceGeometry): WorkspaceSurfaceState =
         if (layoutLocked || !next.isValid()) this
@@ -65,21 +71,32 @@ internal data class WorkspaceSurfaceState(
 
 /** Versioned private editor state; deliberately has no subtitle binding or parameter values. */
 internal object WorkspaceSurfacePersistence {
-    private const val VERSION = "surface-v1"
+    private const val VERSION = "surface-v2"
+    private const val LEGACY_VERSION = "surface-v1"
     private const val SEPARATOR = '\u001f'
 
     fun encode(surfaces: Collection<WorkspaceSurfaceState>): List<String> =
         listOf(VERSION) + surfaces.map {
-            listOf(it.instanceId, it.geometry.x, it.geometry.y, it.geometry.width,
-                it.geometry.height, it.sizeClass.name, it.layoutLocked, it.zOrder)
-                .joinToString(SEPARATOR.toString())
+            listOf(
+                it.instanceId,
+                it.geometry.x,
+                it.geometry.y,
+                it.geometry.width,
+                it.geometry.height,
+                it.sizeClass.name,
+                it.layoutLocked,
+                it.zOrder,
+                it.placement.name,
+                it.stackId.orEmpty(),
+            ).joinToString(SEPARATOR.toString())
         }
 
     fun decode(values: List<String>): List<WorkspaceSurfaceState> {
-        if (values.firstOrNull() != VERSION) return emptyList()
+        val version = values.firstOrNull() ?: return emptyList()
+        if (version != VERSION && version != LEGACY_VERSION) return emptyList()
         return values.drop(1).mapNotNull { row ->
             val parts = row.split(SEPARATOR)
-            if (parts.size != 8 || parts[0].isBlank()) return@mapNotNull null
+            if (parts.size !in setOf(8, 10) || parts[0].isBlank()) return@mapNotNull null
             val numbers = parts.slice(1..4).map { it.toFloatOrNull() ?: return@mapNotNull null }
             val geometry = SurfaceGeometry(numbers[0], numbers[1], numbers[2], numbers[3])
             if (!geometry.isValid()) return@mapNotNull null
@@ -88,7 +105,11 @@ internal object WorkspaceSurfacePersistence {
             val locked = parts[6].toBooleanStrictOrNull() ?: return@mapNotNull null
             val z = parts[7].toIntOrNull()?.takeIf { it in 1..1_000_000 }
                 ?: return@mapNotNull null
-            WorkspaceSurfaceState(parts[0], geometry, sizeClass, locked, z)
+            val placement = parts.getOrNull(8)?.let { name ->
+                SurfacePlacement.entries.firstOrNull { it.name == name }
+            } ?: SurfacePlacement.FLOATING
+            val stackId = parts.getOrNull(9)?.takeIf(String::isNotBlank)
+            WorkspaceSurfaceState(parts[0], geometry, sizeClass, locked, z, placement, stackId)
         }.distinctBy { it.instanceId }
     }
 }
