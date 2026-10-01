@@ -1867,6 +1867,8 @@ private fun InlineTransformWorkspace(
         }
     }
 
+    AnimationAuthorPane(event, viewModel)
+
     if (addOpen) {
         AddTransformCard(
             event = event,
