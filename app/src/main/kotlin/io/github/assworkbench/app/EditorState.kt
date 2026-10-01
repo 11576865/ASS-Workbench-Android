@@ -26,6 +26,7 @@ data class EditorState(
     val geometryScaleLocked: Boolean = true,
     val subtitleLoaded: Boolean = false,
     val subtitleTextEncoding: AssTextEncoding = AssTextEncoding.UTF8,
+    val sourceFormat: SubtitleSourceFormat = SubtitleSourceFormat.ASS,
     val selectedEventIds: Set<Long> = emptySet(),
     val selectionAnchorId: Long? = null,
     val focusedEventId: Long? = null,

@@ -46,7 +46,6 @@ internal class WorkbenchSurfaceController(restored: List<WorkspaceSurfaceState> 
 
     fun commit(id: String, fallback: SurfaceGeometry) {
         candidate(id).value?.let { next ->
-            // Tiny viewports may project below the canonical minimum.
             val original = state(id, fallback).geometry
             val valid = if (id in resizeGestures) next.copy(
                 width = next.width.coerceAtLeast(SurfaceGeometry.MIN_WIDTH),
@@ -68,6 +67,70 @@ internal class WorkbenchSurfaceController(restored: List<WorkspaceSurfaceState> 
         surfaces[id] = old.copy(layoutLocked = !old.layoutLocked)
     }
 
+    fun toggleMinimized(id: String, fallback: SurfaceGeometry) {
+        cancel(id)
+        val old = state(id, fallback)
+        surfaces[id] = old.copy(minimized = !old.minimized)
+        bringToFront(id)
+    }
+
+    fun cycleDock(id: String, fallback: SurfaceGeometry) {
+        cancel(id)
+        val old = state(id, fallback)
+        surfaces[id] = old.copy(dock = old.dock.next(), minimized = false)
+        bringToFront(id)
+    }
+
+    fun stackWithFront(id: String, fallback: SurfaceGeometry) {
+        ensure(id, fallback)
+        val current = surfaces[id] ?: return
+        val other = surfaces.values
+            .filter { it.instanceId != id && !it.minimized }
+            .maxByOrNull { it.zOrder } ?: return
+        val group = current.tabGroupId ?: other.tabGroupId ?: "tabs-" + minOf(id, other.instanceId) + "-" + maxOf(id, other.instanceId)
+        val sharedGeometry = other.geometry
+        val sharedDock = other.dock
+        surfaces[id] = current.copy(tabGroupId = group, geometry = sharedGeometry, dock = sharedDock)
+        surfaces[other.instanceId] = other.copy(tabGroupId = group)
+        bringToFront(id)
+    }
+
+    fun unstack(id: String, fallback: SurfaceGeometry) {
+        val old = state(id, fallback)
+        surfaces[id] = old.copy(tabGroupId = null)
+        bringToFront(id)
+    }
+
+    fun tabGroup(id: String): List<String> {
+        val group = surfaces[id]?.tabGroupId ?: return listOf(id)
+        return surfaces.values.filter { it.tabGroupId == group }.sortedBy { it.zOrder }.map { it.instanceId }
+    }
+
+    fun activeTab(id: String): String =
+        tabGroup(id).maxByOrNull { surfaces[it]?.zOrder ?: 0 } ?: id
+
+    fun activateTab(id: String) {
+        bringToFront(id)
+    }
+
+    fun remove(id: String): String? {
+        cancel(id)
+        candidates.remove(id)
+        val removed = surfaces.remove(id) ?: return null
+        val group = removed.tabGroupId ?: return null
+        val survivors = surfaces.values.filter { it.tabGroupId == group }
+        if (survivors.isEmpty()) return null
+        if (survivors.size == 1) {
+            val survivor = survivors.single()
+            surfaces[survivor.instanceId] = survivor.copy(tabGroupId = null)
+            bringToFront(survivor.instanceId)
+            return survivor.instanceId
+        }
+        val survivor = survivors.maxBy { it.zOrder }.instanceId
+        bringToFront(survivor)
+        return survivor
+    }
+
     fun cycleSize(id: String, fallback: SurfaceGeometry) {
         val old = state(id, fallback)
         if (old.layoutLocked) return
@@ -81,11 +144,17 @@ internal class WorkbenchSurfaceController(restored: List<WorkspaceSurfaceState> 
         if (id !in surfaces) bringToFront(id, fallback)
     }
 
+    fun restore(encoded: List<String>) {
+        candidates.values.forEach { it.value = null }
+        resizeGestures.clear()
+        surfaces.clear()
+        WorkspaceSurfacePersistence.decode(encoded).forEach { surfaces[it.instanceId] = it }
+    }
+
     fun z(id: String): Float = (surfaces[id]?.zOrder ?: 1).toFloat()
 
     fun bringToFront(id: String, fallback: SurfaceGeometry? = null) {
         val old = surfaces[id] ?: fallback?.let { WorkspaceSurfaceState(id, it) } ?: return
-        // Bounded ordering also keeps long sessions/restored state safe.
         if ((surfaces.values.maxOfOrNull { it.zOrder } ?: 1) >= 999_999) {
             surfaces.values.sortedBy { it.zOrder }.forEachIndexed { index, surface ->
                 surfaces[surface.instanceId] = surface.copy(zOrder = index + 1)

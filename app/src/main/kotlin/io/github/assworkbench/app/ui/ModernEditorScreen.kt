@@ -1,5 +1,8 @@
 package io.github.assworkbench.app.ui
 
+import android.content.Intent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -37,6 +40,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -45,7 +49,9 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import io.github.assworkbench.app.AssWorkbenchProjectSnapshot
 import io.github.assworkbench.app.BuildConfig
+import io.github.assworkbench.app.ProjectFileCodec
 import io.github.assworkbench.app.EditorState
 import io.github.assworkbench.app.EditorViewModel
 import io.github.assworkbench.app.WaveformLiteState
@@ -67,12 +73,19 @@ import kotlinx.coroutines.withContext
 import kotlin.math.abs
 
 private enum class WorkbenchTool(val title: String) {
-    SUBTITLES("字幕"), TEXT("正文"), TIMELINE("时间轴"), STYLE("样式"), POSITION("位置"),
-    EFFECTS("效果"), EVENT("事件"), FONTS("字体"), QC("检查"), BATCH("批量"),
+    SUBTITLES("字幕"), TEXT("正文"), TIMELINE("时间轴"), FRAMES("帧时间"),
+    STYLE("样式"), POSITION("位置"), EFFECTS("效果"), EVENT("事件"),
+    KARAOKE("卡拉OK"), VECTOR_CLIP("矢量裁剪"), FONTS("字体"), FONT_REQUIREMENTS("字体依赖"),
+    QC("检查"), COMPATIBILITY("兼容性"), BATCH("批量规则"),
     PROJECT("项目"), DIAGNOSTICS("诊断"), CAPABILITIES("功能地图"),
 }
 
-private enum class DestructiveWorkspaceAction { OPEN_ASS, NEW_ASS }
+private enum class WorkspacePresentationMode(val title: String) {
+    FIXED("固定 UI"),
+    CANVAS_EXPERIMENTAL("实验性 Canvas"),
+}
+
+private enum class DestructiveWorkspaceAction { OPEN_ASS, OPEN_PROJECT, NEW_ASS }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -104,6 +117,68 @@ fun ModernEditorScreen(
     var saveConfirmOpen by remember { mutableStateOf(false) }
     var mkvConfirmOpen by remember { mutableStateOf(false) }
     var destructiveWorkspaceAction by remember { mutableStateOf<DestructiveWorkspaceAction?>(null) }
+    val context = LocalContext.current
+    var workspaceModeName by rememberSaveable { mutableStateOf(WorkspacePresentationMode.FIXED.name) }
+    var fixedToolName by rememberSaveable { mutableStateOf(WorkbenchTool.STYLE.name) }
+    val workspaceMode = WorkspacePresentationMode.valueOf(workspaceModeName)
+    val fixedTool = WorkbenchTool.valueOf(fixedToolName)
+
+    val openProjectLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri ?: return@rememberLauncherForActivityResult
+        runCatching {
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            val text = context.contentResolver.openInputStream(uri)?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }
+                ?: error("无法读取 Workbench Project")
+            ProjectFileCodec.decode(text)
+        }.onSuccess { snapshot ->
+            viewModel.loadProjectSnapshot(snapshot)
+            workspaceState = WorkspaceState.fromSaveableList(snapshot.workspaceState)
+            surfaceController.restore(snapshot.surfaceState)
+            workspaceModeName = runCatching {
+                WorkspacePresentationMode.valueOf(snapshot.workspaceMode)
+            }.getOrDefault(WorkspacePresentationMode.FIXED).name
+        }.onFailure { viewModel.reportError("Project 打开失败", it) }
+    }
+
+    val saveProjectLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json")
+    ) { uri ->
+        uri ?: return@rememberLauncherForActivityResult
+        val snapshot = AssWorkbenchProjectSnapshot(
+            title = state.project.title,
+            document = state.document,
+            videoUri = state.project.videoUri,
+            subtitleUri = state.project.subtitleUri,
+            containerUri = state.container.uri,
+            containerTrackNumber = state.container.selectedTrackNumber,
+            textEncoding = state.subtitleTextEncoding,
+            sourceFormat = state.sourceFormat,
+            focusedEventId = state.focusedEventId,
+            selectedEventIds = state.selectedEventIds,
+            workspaceMode = workspaceModeName,
+            workspaceState = workspaceState.toSaveableList(),
+            surfaceState = surfaceController.save(),
+        )
+        runCatching {
+            context.contentResolver.openOutputStream(uri, "wt")?.bufferedWriter(Charsets.UTF_8)?.use {
+                it.write(ProjectFileCodec.encode(snapshot))
+            } ?: error("无法写入 Workbench Project")
+        }.onFailure { viewModel.reportError("Project 保存失败", it) }
+    }
+
+    val exportSrtLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/x-subrip")
+    ) { uri ->
+        uri?.let(viewModel::saveSrtTo)
+    }
+
+    fun projectFileName(): String =
+        state.project.title.substringBeforeLast('.').ifBlank { "subtitle-project" } + ProjectFileCodec.EXTENSION
+
+    fun srtFileName(): String =
+        state.project.title.substringBeforeLast('.').ifBlank { "subtitle" } + ".srt"
 
     val existingEventIds = remember(state.document.events) {
         state.document.events.asSequence().map { it.id }.toSet()
@@ -126,8 +201,21 @@ fun ModernEditorScreen(
     }
 
     fun openTool(next: WorkbenchTool) {
+        if (workspaceMode == WorkspacePresentationMode.FIXED) {
+            fixedToolName = next.name
+            return
+        }
         workspaceState = workspaceState.openPrimary(next.name).withSurfacesHidden(false)
         surfaceController.bringToFront(WorkspaceState.primaryInstanceId(next.name))
+    }
+
+    fun toggleWorkspaceMode() {
+        workspaceModeName = if (workspaceMode == WorkspacePresentationMode.FIXED) {
+            WorkspacePresentationMode.CANVAS_EXPERIMENTAL.name
+        } else {
+            WorkspacePresentationMode.FIXED.name
+        }
+        workspaceState = workspaceState.withSurfacesHidden(false)
     }
 
     fun toggleAllSurfaces() {
@@ -142,13 +230,20 @@ fun ModernEditorScreen(
     ) {
         Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
-            androidx.compose.animation.AnimatedVisibility(visible = !workspaceState.surfacesHidden) {
+            androidx.compose.animation.AnimatedVisibility(
+                visible = workspaceMode == WorkspacePresentationMode.FIXED || !workspaceState.surfacesHidden
+            ) {
             ModernAppBar(
                 state = state,
                 viewModel = viewModel,
                 selectionMode = state.selectedEventIds.isNotEmpty(),
                 searchOpen = searchOpen,
-                onSearchToggle = { searchOpen = !searchOpen; openTool(WorkbenchTool.SUBTITLES) },
+                onSearchToggle = {
+                    searchOpen = !searchOpen
+                    if (workspaceMode == WorkspacePresentationMode.CANVAS_EXPERIMENTAL) {
+                        openTool(WorkbenchTool.SUBTITLES)
+                    }
+                },
                 onOpenMenu = { openMenu = true },
                 openMenu = openMenu,
                 onDismissMenu = { openMenu = false },
@@ -179,6 +274,17 @@ fun ModernEditorScreen(
                 },
                 onSaveMkv = onSaveMkv,
                 onTool = ::openTool,
+                workspaceMode = workspaceMode,
+                onToggleWorkspaceMode = ::toggleWorkspaceMode,
+                onOpenProject = {
+                    if (state.dirty) {
+                        destructiveWorkspaceAction = DestructiveWorkspaceAction.OPEN_PROJECT
+                    } else {
+                        openProjectLauncher.launch(arrayOf("application/json", "text/plain", "*/*"))
+                    }
+                },
+                onSaveProject = { saveProjectLauncher.launch(projectFileName()) },
+                onExportSrt = { exportSrtLauncher.launch(srtFileName()) },
             )
             }
 
@@ -273,7 +379,9 @@ fun ModernEditorScreen(
                         Text(
                             when (action) {
                                 DestructiveWorkspaceAction.OPEN_ASS ->
-                                    "当前字幕有未保存修改。继续打开另一份 ASS 会丢弃当前未保存内容与对应恢复日志。"
+                                    "当前字幕有未保存修改。继续打开另一份 ASS / SRT 会丢弃当前未保存内容与对应恢复日志。"
+                                DestructiveWorkspaceAction.OPEN_PROJECT ->
+                                    "当前字幕有未保存修改。继续打开 Workbench Project 会替换当前文档与工作区，并丢弃当前未保存内容与对应恢复日志。"
                                 DestructiveWorkspaceAction.NEW_ASS ->
                                     "当前字幕有未保存修改。继续新建空白 ASS 会丢弃当前未保存内容与对应恢复日志。"
                             }
@@ -284,6 +392,8 @@ fun ModernEditorScreen(
                             destructiveWorkspaceAction = null
                             when (action) {
                                 DestructiveWorkspaceAction.OPEN_ASS -> onOpenSubtitle()
+                                DestructiveWorkspaceAction.OPEN_PROJECT ->
+                                    openProjectLauncher.launch(arrayOf("application/json", "text/plain", "*/*"))
                                 DestructiveWorkspaceAction.NEW_ASS -> viewModel.newSubtitleProject()
                             }
                         }) { Text("放弃修改并继续") }
@@ -294,7 +404,26 @@ fun ModernEditorScreen(
                 )
             }
 
-            BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().testTag("canvas-workspace")) {
+            if (workspaceMode == WorkspacePresentationMode.FIXED) {
+                FixedWorkspace(
+                    state = state,
+                    viewModel = viewModel,
+                    issues = issues,
+                    activeTool = fixedTool,
+                    onActiveTool = { fixedToolName = it.name },
+                    expandedEventId = expandedEventId,
+                    onExpandedChange = { expandedEventId = it },
+                    onImportFont = onImportFont,
+                    onSaveMkv = onSaveMkv,
+                    eventEditorStateHolder = eventEditorStateHolder,
+                    onOpenVideo = onOpenReferenceVideo,
+                    rendererEnabled = rendererEnabled,
+                    onEnableRenderer = onEnableRenderer,
+                    searchOpen = searchOpen,
+                    onCloseSearch = { searchOpen = false; viewModel.setQuery("") },
+                    modifier = Modifier.weight(1f).fillMaxWidth().testTag("fixed-workspace"),
+                )
+            } else BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().testTag("canvas-workspace")) {
                 val viewportWidth = maxWidth.value
                 val viewportHeight = maxHeight.value
                 WorkbenchPreview(
@@ -308,7 +437,16 @@ fun ModernEditorScreen(
                 workspaceState.tools.forEachIndexed { index, instance ->
                     val surfaceTool = WorkbenchTool.entries.firstOrNull { it.name == instance.toolKey }
                         ?: return@forEachIndexed
-                    val visible = !workspaceState.surfacesHidden
+                    val groupIds = surfaceController.tabGroup(instance.id)
+                    val activeTabId = surfaceController.activeTab(instance.id)
+                    val visible = !workspaceState.surfacesHidden && activeTabId == instance.id
+                    val tabTitles = groupIds.mapNotNull { groupId ->
+                        workspaceState.tools.firstOrNull { it.id == groupId }?.let { grouped ->
+                            WorkbenchTool.entries.firstOrNull { it.name == grouped.toolKey }?.let { groupedTool ->
+                                groupId to groupedTool.title
+                            }
+                        }
+                    }
                     val eventBound = surfaceTool == WorkbenchTool.STYLE ||
                         surfaceTool == WorkbenchTool.POSITION
                     val bindingResolution = instance.binding.resolve(
@@ -369,6 +507,11 @@ fun ModernEditorScreen(
                         } else {
                             null
                         },
+                        tabTitles = tabTitles,
+                        onSelectTab = { tabId ->
+                            surfaceController.activateTab(tabId)
+                            workspaceState = workspaceState.activate(tabId)
+                        },
                         onDuplicate = if (eventBound) {
                             {
                                 workspaceState.newSibling(instance.id)?.let { sibling ->
@@ -384,8 +527,13 @@ fun ModernEditorScreen(
                         },
                         onClose = {
                             if (surfaceTool == WorkbenchTool.TEXT) expandedEventId = null
-                            workspaceState = workspaceState.closeInstance(instance.id).let {
-                                if (it.tools.isEmpty()) it.withSurfacesHidden(true) else it
+                            val survivingTabId = surfaceController.remove(instance.id)
+                            workspaceState = workspaceState.closeInstance(instance.id).let { closed ->
+                                val activated = survivingTabId
+                                    ?.takeIf { survivor -> closed.tools.any { it.id == survivor } }
+                                    ?.let(closed::activate)
+                                    ?: closed
+                                if (activated.tools.isEmpty()) activated.withSurfacesHidden(true) else activated
                             }
                         },
                         modifier = Modifier.fillMaxSize(),
@@ -435,14 +583,157 @@ fun ModernEditorScreen(
             }
         }
 
-        WindowInteractionOverlay(
-            registry = interactionRegistry,
-            visible = !workspaceState.surfacesHidden,
-            modifier = Modifier.fillMaxSize().testTag("interaction-overlay"),
-        )
+        if (workspaceMode == WorkspacePresentationMode.CANVAS_EXPERIMENTAL) {
+            WindowInteractionOverlay(
+                registry = interactionRegistry,
+                visible = !workspaceState.surfacesHidden,
+                modifier = Modifier.fillMaxSize().testTag("interaction-overlay"),
+            )
+        }
         }
     }
 }
+}
+
+@Composable
+private fun FixedWorkspace(
+    state: EditorState,
+    viewModel: EditorViewModel,
+    issues: List<AssQcIssue>,
+    activeTool: WorkbenchTool,
+    onActiveTool: (WorkbenchTool) -> Unit,
+    expandedEventId: Long?,
+    onExpandedChange: (Long?) -> Unit,
+    onImportFont: () -> Unit,
+    onSaveMkv: () -> Unit,
+    eventEditorStateHolder: SaveableStateHolder,
+    onOpenVideo: () -> Unit,
+    rendererEnabled: Boolean,
+    onEnableRenderer: () -> Unit,
+    searchOpen: Boolean,
+    onCloseSearch: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val fixedTools = remember {
+        WorkbenchTool.entries.filter {
+            it != WorkbenchTool.SUBTITLES && it != WorkbenchTool.CAPABILITIES
+        }
+    }
+    val instance = remember(activeTool) {
+        WorkspaceToolInstance(
+            id = "fixed:" + activeTool.name,
+            toolKey = activeTool.name,
+            binding = WorkspaceBinding.FollowFocus,
+        )
+    }
+    val listPane: @Composable (Modifier) -> Unit = { paneModifier ->
+        Column(paneModifier) {
+            if (searchOpen) SearchStrip(state.query, viewModel::setQuery, onCloseSearch)
+            EventWorkspace(
+                state = state,
+                viewModel = viewModel,
+                issuesByEvent = issues.groupBy { it.eventId },
+                expandedEventId = expandedEventId,
+                onExpandedChange = { next ->
+                    onExpandedChange(next)
+                    if (next != null) onActiveTool(WorkbenchTool.TEXT)
+                },
+                onTool = onActiveTool,
+                eventEditorStateHolder = eventEditorStateHolder,
+                tool = WorkbenchTool.TEXT,
+                modifier = Modifier.weight(1f),
+            ) { }
+        }
+    }
+    val inspector: @Composable (Modifier) -> Unit = { paneModifier ->
+        Surface(
+            modifier = paneModifier.testTag("fixed-inspector"),
+            color = MaterialTheme.colorScheme.surfaceContainer,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        ) {
+            FloatingToolContent(
+                instance = instance,
+                tool = activeTool,
+                state = state,
+                viewModel = viewModel,
+                issues = issues,
+                expandedEventId = expandedEventId,
+                onExpandedChange = onExpandedChange,
+                onImportFont = onImportFont,
+                onSaveMkv = onSaveMkv,
+                eventEditorStateHolder = eventEditorStateHolder,
+                onOpenTool = onActiveTool,
+                onCloseText = { onExpandedChange(null) },
+                searchOpen = searchOpen,
+                onCloseSearch = onCloseSearch,
+            )
+        }
+    }
+
+    Column(modifier) {
+        Surface(
+            tonalElevation = 2.dp,
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        ) {
+            Row(
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("固定 UI", style = MaterialTheme.typography.labelMedium)
+                fixedTools.forEach { tool ->
+                    FilterChip(
+                        selected = tool == activeTool,
+                        onClick = { onActiveTool(tool) },
+                        label = { Text(tool.title) },
+                        modifier = Modifier.testTag("fixed-tool-" + tool.name),
+                    )
+                }
+            }
+        }
+        BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
+            val wide = maxWidth >= 900.dp
+            if (wide) {
+                Row(Modifier.fillMaxSize()) {
+                    WorkbenchPreview(
+                        state = state,
+                        viewModel = viewModel,
+                        positionEditEventId = if (activeTool == WorkbenchTool.POSITION) state.focusedEventId else null,
+                        onOpenVideo = onOpenVideo,
+                        onOpenTimeline = { onActiveTool(WorkbenchTool.TIMELINE) },
+                        rendererEnabled = rendererEnabled,
+                        onEnableRenderer = onEnableRenderer,
+                        viewportGesturesEnabled = activeTool != WorkbenchTool.POSITION,
+                        modifier = Modifier.weight(1.15f).fillMaxHeight().testTag("preview-workspace"),
+                    )
+                    VerticalDivider()
+                    Row(Modifier.weight(0.85f).fillMaxHeight()) {
+                        listPane(Modifier.weight(0.46f).fillMaxHeight())
+                        VerticalDivider()
+                        inspector(Modifier.weight(0.54f).fillMaxHeight())
+                    }
+                }
+            } else {
+                Column(Modifier.fillMaxSize()) {
+                    WorkbenchPreview(
+                        state = state,
+                        viewModel = viewModel,
+                        positionEditEventId = if (activeTool == WorkbenchTool.POSITION) state.focusedEventId else null,
+                        onOpenVideo = onOpenVideo,
+                        onOpenTimeline = { onActiveTool(WorkbenchTool.TIMELINE) },
+                        rendererEnabled = rendererEnabled,
+                        onEnableRenderer = onEnableRenderer,
+                        viewportGesturesEnabled = activeTool != WorkbenchTool.POSITION,
+                        modifier = Modifier.weight(0.42f).fillMaxWidth().testTag("preview-workspace"),
+                    )
+                    HorizontalDivider()
+                    listPane(Modifier.heightIn(min = 150.dp, max = 230.dp).fillMaxWidth())
+                    HorizontalDivider()
+                    inspector(Modifier.weight(0.58f).fillMaxWidth())
+                }
+            }
+        }
+    }
 }
 
 @Composable
@@ -602,6 +893,11 @@ private fun FloatingToolContent(
             }
         }
         WorkbenchTool.TIMELINE -> ModernTimelinePane(state, viewModel, Modifier.fillMaxSize())
+        WorkbenchTool.FRAMES -> FrameTimingPane(state, viewModel, Modifier.fillMaxSize())
+        WorkbenchTool.KARAOKE -> KaraokePane(state, viewModel, Modifier.fillMaxSize())
+        WorkbenchTool.VECTOR_CLIP -> VectorClipPane(state, viewModel, Modifier.fillMaxSize())
+        WorkbenchTool.COMPATIBILITY -> CompatibilityPane(state, viewModel, Modifier.fillMaxSize())
+        WorkbenchTool.FONT_REQUIREMENTS -> FontRequirementsPane(state, viewModel, Modifier.fillMaxSize())
         WorkbenchTool.STYLE -> StylePane(
             state = state,
             viewModel = viewModel,
@@ -617,8 +913,8 @@ private fun FloatingToolContent(
             unresolvedPinnedEventId = unresolvedPinnedEventId,
         )
         WorkbenchTool.FONTS -> FontManagerPane(state, viewModel, onImportFont, Modifier.fillMaxSize())
-        WorkbenchTool.QC -> QcPane(state, viewModel, issues, Modifier.fillMaxSize())
-        WorkbenchTool.BATCH -> BatchPane(state, viewModel, Modifier.fillMaxSize())
+        WorkbenchTool.QC -> AdvancedQcPane(state, viewModel, Modifier.fillMaxSize())
+        WorkbenchTool.BATCH -> RuleBatchPane(state, viewModel, Modifier.fillMaxSize())
         WorkbenchTool.PROJECT -> ProjectPane(state, viewModel, onSaveMkv, Modifier.fillMaxSize())
         WorkbenchTool.DIAGNOSTICS -> DiagnosticsPane(state, viewModel, Modifier.fillMaxSize())
         WorkbenchTool.CAPABILITIES -> WorkspaceToolDirectory(onOpenTool, Modifier.fillMaxSize())
@@ -662,6 +958,11 @@ private fun ModernAppBar(
     onSave: () -> Unit,
     onSaveMkv: () -> Unit,
     onTool: (WorkbenchTool) -> Unit,
+    workspaceMode: WorkspacePresentationMode,
+    onToggleWorkspaceMode: () -> Unit,
+    onOpenProject: () -> Unit,
+    onSaveProject: () -> Unit,
+    onExportSrt: () -> Unit,
 ) {
     var moreMenuOpen by remember { mutableStateOf(false) }
     Surface(tonalElevation = 2.dp) {
@@ -701,7 +1002,8 @@ private fun ModernAppBar(
                 Box {
                     TooltipIconButton("打开文件 / 工程", onOpenMenu) { Icon(Icons.Filled.FolderOpen, null) }
                     DropdownMenu(expanded = openMenu, onDismissRequest = onDismissMenu) {
-                        DropdownMenuItem(text = { Text("打开独立 ASS") }, leadingIcon = { Icon(Icons.Filled.Subtitles, null) }, onClick = { onDismissMenu(); onOpenSubtitle() })
+                        DropdownMenuItem(text = { Text("打开 ASS / SRT") }, leadingIcon = { Icon(Icons.Filled.Subtitles, null) }, onClick = { onDismissMenu(); onOpenSubtitle() })
+                        DropdownMenuItem(text = { Text("打开 Workbench Project") }, leadingIcon = { Icon(Icons.Filled.FolderSpecial, null) }, onClick = { onDismissMenu(); onOpenProject() })
                         DropdownMenuItem(text = { Text("打开 / 更换参考视频") }, leadingIcon = { Icon(Icons.Filled.Movie, null) }, onClick = { onDismissMenu(); onOpenVideo() })
                         DropdownMenuItem(text = { Text("打开 MKV 工程") }, leadingIcon = { Icon(Icons.Filled.VideoFile, null) }, onClick = { onDismissMenu(); onOpenMkvProject() })
                         Divider()
@@ -716,6 +1018,15 @@ private fun ModernAppBar(
                         DropdownMenuItem(text = { Text("质量检查") }, leadingIcon = { Icon(Icons.Filled.ErrorOutline, null) }, onClick = { moreMenuOpen = false; onTool(WorkbenchTool.QC) })
                         DropdownMenuItem(text = { Text("项目") }, leadingIcon = { Icon(Icons.Filled.Info, null) }, onClick = { moreMenuOpen = false; onTool(WorkbenchTool.PROJECT) })
                         DropdownMenuItem(text = { Text("诊断") }, leadingIcon = { Icon(Icons.Filled.Tune, null) }, onClick = { moreMenuOpen = false; onTool(WorkbenchTool.DIAGNOSTICS) })
+                        Divider()
+                        DropdownMenuItem(
+                            text = { Text("界面：" + workspaceMode.title) },
+                            leadingIcon = { Icon(if (workspaceMode == WorkspacePresentationMode.FIXED) Icons.Filled.Dashboard else Icons.Filled.Science, null) },
+                            onClick = { moreMenuOpen = false; onToggleWorkspaceMode() },
+                            modifier = Modifier.testTag("workspace-mode-toggle"),
+                        )
+                        DropdownMenuItem(text = { Text("保存 Workbench Project") }, leadingIcon = { Icon(Icons.Filled.SaveAs, null) }, onClick = { moreMenuOpen = false; onSaveProject() })
+                        DropdownMenuItem(text = { Text("导出 SRT") }, leadingIcon = { Icon(Icons.Filled.Subtitles, null) }, onClick = { moreMenuOpen = false; onExportSrt() })
                         Divider()
                         if (state.container.uri != null) DropdownMenuItem(text = { Text("保存为新 MKV") }, onClick = { moreMenuOpen = false; onSaveMkv() })
                     }

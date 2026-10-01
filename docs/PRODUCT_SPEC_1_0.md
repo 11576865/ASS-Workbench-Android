@@ -1,6 +1,6 @@
 # ASS Workbench Android — 1.0 Product Specification
 
-> UI architecture update (2026-10-01): fixed split-layout requirements in this document are superseded by the object-centric composable Workspace described in `WORKSPACE_KERNEL_PHASE1.md` and `WORKSPACE_SURFACES_0.27.2.md`. Domain safety, canonical ASS, renderer authority and product-output boundaries remain applicable. The workspace is the product UI, not a separate advanced mode.
+> UI architecture update (2026-10-01): the product now exposes two presentations over one editor model: a Fixed production workspace and an experimental object-centric Canvas workspace. Domain safety, canonical ASS, renderer authority and output boundaries are shared; these are not two independent editors.
 
 ## Product boundary
 
@@ -22,6 +22,8 @@ On an Android phone or tablet, a user can open local video and ASS independently
 
 ### Editing
 - ASS first-class and canonical.
+- SRT may be imported as a compatibility interchange source; it is promoted into an ASS editing document rather than limiting the editor to SRT semantics.
+- SRT export is explicit and must never silently replace or downgrade the canonical ASS document.
 - Event list: start/end/layer/style/text, with syntax-aware ASS rendering rather than destructive or hidden simplification of override tags.
 - Multiple events may overlap in time.
 - Search and jump to event.
@@ -71,7 +73,6 @@ On an Android phone or tablet, a user can open local video and ASS independently
 - Unknown override tags remain losslessly editable even when the structured UI does not understand them.
 
 ## Not required for 1.0
-- SRT import;
 - hard-sub video rendering;
 - general-purpose container editing/muxing;
 - professional waveform/spectrogram timing;

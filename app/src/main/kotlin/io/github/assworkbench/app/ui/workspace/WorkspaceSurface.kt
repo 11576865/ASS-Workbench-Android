@@ -14,7 +14,6 @@ internal data class SurfaceGeometry(
     fun inViewport(viewportWidth: Float, viewportHeight: Float): SurfaceGeometry {
         val availableWidth = viewportWidth.takeIf { it.isFinite() && it > 0f } ?: 1f
         val availableHeight = viewportHeight.takeIf { it.isFinite() && it > 0f } ?: 1f
-        // Projected candidates may be smaller than the canonical minimum in split-screen.
         val safe = if (listOf(x, y, width, height).all { it.isFinite() } && width > 0f && height > 0f)
             this else SurfaceGeometry()
         val w = safe.width.coerceAtMost(availableWidth)
@@ -51,12 +50,24 @@ internal enum class SurfaceSizeClass(val label: String) {
     }
 }
 
+internal enum class SurfaceDock(val label: String) {
+    FLOATING("浮动"),
+    LEFT("左侧"),
+    RIGHT("右侧"),
+    BOTTOM("底部");
+
+    fun next(): SurfaceDock = entries[(ordinal + 1) % entries.size]
+}
+
 internal data class WorkspaceSurfaceState(
     val instanceId: String,
     val geometry: SurfaceGeometry = SurfaceGeometry(),
     val sizeClass: SurfaceSizeClass = SurfaceSizeClass.STANDARD,
     val layoutLocked: Boolean = false,
     val zOrder: Int = 1,
+    val dock: SurfaceDock = SurfaceDock.FLOATING,
+    val minimized: Boolean = false,
+    val tabGroupId: String? = null,
 ) {
     fun withGeometry(next: SurfaceGeometry): WorkspaceSurfaceState =
         if (layoutLocked || !next.isValid()) this
@@ -65,30 +76,67 @@ internal data class WorkspaceSurfaceState(
 
 /** Versioned private editor state; deliberately has no subtitle binding or parameter values. */
 internal object WorkspaceSurfacePersistence {
-    private const val VERSION = "surface-v1"
+    private const val VERSION = "surface-v2"
+    private const val LEGACY_VERSION = "surface-v1"
     private const val SEPARATOR = '\u001f'
 
     fun encode(surfaces: Collection<WorkspaceSurfaceState>): List<String> =
         listOf(VERSION) + surfaces.map {
-            listOf(it.instanceId, it.geometry.x, it.geometry.y, it.geometry.width,
-                it.geometry.height, it.sizeClass.name, it.layoutLocked, it.zOrder)
-                .joinToString(SEPARATOR.toString())
+            listOf(
+                it.instanceId,
+                it.geometry.x,
+                it.geometry.y,
+                it.geometry.width,
+                it.geometry.height,
+                it.sizeClass.name,
+                it.layoutLocked,
+                it.zOrder,
+                it.dock.name,
+                it.minimized,
+                it.tabGroupId.orEmpty(),
+            ).joinToString(SEPARATOR.toString())
         }
 
-    fun decode(values: List<String>): List<WorkspaceSurfaceState> {
-        if (values.firstOrNull() != VERSION) return emptyList()
-        return values.drop(1).mapNotNull { row ->
+    fun decode(values: List<String>): List<WorkspaceSurfaceState> = when (values.firstOrNull()) {
+        VERSION -> decodeV2(values.drop(1))
+        LEGACY_VERSION -> decodeV1(values.drop(1))
+        else -> emptyList()
+    }
+
+    private fun decodeV2(rows: List<String>): List<WorkspaceSurfaceState> =
+        rows.mapNotNull { row ->
+            val parts = row.split(SEPARATOR)
+            if (parts.size != 11 || parts[0].isBlank()) return@mapNotNull null
+            val numbers = parts.slice(1..4).map { it.toFloatOrNull() ?: return@mapNotNull null }
+            val geometry = SurfaceGeometry(numbers[0], numbers[1], numbers[2], numbers[3])
+            if (!geometry.isValid()) return@mapNotNull null
+            val sizeClass = SurfaceSizeClass.entries.firstOrNull { it.name == parts[5] } ?: return@mapNotNull null
+            val locked = parts[6].toBooleanStrictOrNull() ?: return@mapNotNull null
+            val z = parts[7].toIntOrNull()?.takeIf { it in 1..1_000_000 } ?: return@mapNotNull null
+            val dock = SurfaceDock.entries.firstOrNull { it.name == parts[8] } ?: SurfaceDock.FLOATING
+            val minimized = parts[9].toBooleanStrictOrNull() ?: false
+            WorkspaceSurfaceState(
+                instanceId = parts[0],
+                geometry = geometry,
+                sizeClass = sizeClass,
+                layoutLocked = locked,
+                zOrder = z,
+                dock = dock,
+                minimized = minimized,
+                tabGroupId = parts[10].takeIf(String::isNotBlank),
+            )
+        }.distinctBy { it.instanceId }
+
+    private fun decodeV1(rows: List<String>): List<WorkspaceSurfaceState> =
+        rows.mapNotNull { row ->
             val parts = row.split(SEPARATOR)
             if (parts.size != 8 || parts[0].isBlank()) return@mapNotNull null
             val numbers = parts.slice(1..4).map { it.toFloatOrNull() ?: return@mapNotNull null }
             val geometry = SurfaceGeometry(numbers[0], numbers[1], numbers[2], numbers[3])
             if (!geometry.isValid()) return@mapNotNull null
-            val sizeClass = SurfaceSizeClass.entries.firstOrNull { it.name == parts[5] }
-                ?: return@mapNotNull null
+            val sizeClass = SurfaceSizeClass.entries.firstOrNull { it.name == parts[5] } ?: return@mapNotNull null
             val locked = parts[6].toBooleanStrictOrNull() ?: return@mapNotNull null
-            val z = parts[7].toIntOrNull()?.takeIf { it in 1..1_000_000 }
-                ?: return@mapNotNull null
+            val z = parts[7].toIntOrNull()?.takeIf { it in 1..1_000_000 } ?: return@mapNotNull null
             WorkspaceSurfaceState(parts[0], geometry, sizeClass, locked, z)
         }.distinctBy { it.instanceId }
-    }
 }
