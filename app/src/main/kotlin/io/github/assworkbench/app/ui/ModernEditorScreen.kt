@@ -161,7 +161,9 @@ fun ModernEditorScreen(
     ) {
         Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
-            androidx.compose.animation.AnimatedVisibility(visible = !workspaceState.surfacesHidden) {
+            androidx.compose.animation.AnimatedVisibility(
+                visible = workspaceMode == WorkspacePresentationMode.FIXED || !workspaceState.surfacesHidden
+            ) {
             ModernAppBar(
                 state = state,
                 viewModel = viewModel,
@@ -3712,7 +3714,10 @@ private fun QcPane(state: EditorState, viewModel: EditorViewModel, issues: List<
 private fun BatchPane(state: EditorState, viewModel: EditorViewModel, modifier: Modifier = Modifier) {
     var styleMenuOpen by remember { mutableStateOf(false) }
     var pasteMenuOpen by remember { mutableStateOf(false) }
-    Column(modifier.padding(WorkbenchDimens.Small), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(
+        modifier.verticalScroll(rememberScrollState()).padding(WorkbenchDimens.Small),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
         Text("已选 ${state.selectedEventIds.size} 条", style = MaterialTheme.typography.titleSmall)
 
         var ruleSelectedScope by rememberSaveable { mutableStateOf(false) }
