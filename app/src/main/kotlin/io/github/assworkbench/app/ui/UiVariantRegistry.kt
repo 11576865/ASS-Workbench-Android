@@ -37,6 +37,11 @@ internal enum class WorkspacePresentationMode(
         status = UiVariantStatus.EXPERIMENTAL,
         description = "把预览、字幕与工具放进大于屏幕的二维工作区；支持平移、缩放、鸟瞰与节点召回。",
     ),
+    EDGE_BOOKMARK_EXPERIMENTAL(
+        title = "四边书签工作台",
+        status = UiVariantStatus.EXPERIMENTAL,
+        description = "左右书签轨与四边工具层围绕中央预览展开；边层可临时、驻留、拖动预览并吸附尺寸。",
+    ),
 }
 
 /**
