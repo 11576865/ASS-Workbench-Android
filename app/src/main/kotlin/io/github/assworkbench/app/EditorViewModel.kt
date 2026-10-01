@@ -667,12 +667,15 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     fun saveTo(uri: Uri): Boolean {
         val snapshot = _state.value
         return runCatching {
-            val text = AssCodec.write(snapshot.document)
-            val bytes = snapshot.subtitleTextEncoding.encode(text)
-            app.contentResolver.openOutputStream(uri, "wt")?.use { it.write(bytes) }
-                ?: error("无法写入字幕")
+            SafeSubtitleSave.write(
+                resolver = app.contentResolver,
+                cacheDir = app.cacheDir,
+                uri = uri,
+                document = snapshot.document,
+                encoding = snapshot.subtitleTextEncoding,
+            )
         }.fold(
-            onSuccess = {
+            onSuccess = { result ->
                 clearPendingRecovery()
                 _state.update {
                     it.copy(
@@ -681,7 +684,9 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                         dirty = false,
                         recoveryAvailable = false,
                         recoveryLabel = "",
-                        status = "ASS 已保存。",
+                        status = "ASS 已安全保存并回读验证 · " +
+                            (result.bytesWritten / 1024L).coerceAtLeast(1L) + " KiB · " +
+                            result.verifiedEncoding.displayName + "。",
                     )
                 }
                 true
