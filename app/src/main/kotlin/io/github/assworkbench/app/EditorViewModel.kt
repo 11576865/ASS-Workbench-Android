@@ -175,6 +175,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 ),
                 document = document,
                 previewDocument = null,
+                previewOwnerId = null,
                 subtitleLoaded = true,
                 subtitleTextEncoding = AssTextEncoding.UTF8,
                 sourceFormat = SubtitleSourceFormat.ASS,
@@ -339,6 +340,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 project = it.project.copy(subtitleUri = null, title = it.container.name + " · " + track.displayName),
                 document = document,
                 previewDocument = null,
+                previewOwnerId = null,
                 subtitleLoaded = true,
                 subtitleTextEncoding = AssTextEncoding.UTF8,
                 sourceFormat = SubtitleSourceFormat.ASS,
@@ -530,6 +532,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 ),
                 document = document,
                 previewDocument = null,
+                previewOwnerId = null,
                 subtitleLoaded = true,
                 subtitleTextEncoding = decoded.encoding,
                 sourceFormat = if (isSrt) SubtitleSourceFormat.SRT else SubtitleSourceFormat.ASS,
@@ -681,6 +684,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 ),
                 document = snapshot.document,
                 previewDocument = null,
+                previewOwnerId = null,
                 waveform = WaveformLiteState(
                     sourceUri = snapshot.videoUri,
                     status = if (snapshot.videoUri == null) WaveformLiteStatus.IDLE else WaveformLiteStatus.ANALYZING,
@@ -902,7 +906,10 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         val ny = y.coerceIn(0.0, state.document.playResY.toDouble())
         val preview = withEventPosition(state.document, id, nx, ny)
         _state.update { current ->
-            current.copy(previewDocument = if (preview == state.document) null else preview)
+            current.copy(
+                previewDocument = if (preview == state.document) null else preview,
+                previewOwnerId = if (preview == state.document) null else "geometry:$id",
+            )
         }
     }
 
@@ -938,7 +945,10 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             endY = endY,
         )
         _state.update { current ->
-            current.copy(previewDocument = if (preview == state.document) null else preview)
+            current.copy(
+                previewDocument = if (preview == state.document) null else preview,
+                previewOwnerId = if (preview == state.document) null else "geometry:$id",
+            )
         }
     }
 
@@ -989,7 +999,10 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         val id = state.focusedEventId ?: return
         val preview = withEventOrigin(state.document, id, x, y)
         _state.update { current ->
-            current.copy(previewDocument = if (preview == state.document) null else preview)
+            current.copy(
+                previewDocument = if (preview == state.document) null else preview,
+                previewOwnerId = if (preview == state.document) null else "geometry:$id",
+            )
         }
     }
 
@@ -1030,7 +1043,10 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         val id = state.focusedEventId ?: return
         val preview = withEventRotationZ(state.document, id, angle)
         _state.update { current ->
-            current.copy(previewDocument = if (preview == state.document) null else preview)
+            current.copy(
+                previewDocument = if (preview == state.document) null else preview,
+                previewOwnerId = if (preview == state.document) null else "geometry:$id",
+            )
         }
     }
 
@@ -1070,7 +1086,10 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         val id = state.focusedEventId ?: return
         val preview = withEventScale(state.document, id, scaleX, scaleY)
         _state.update { current ->
-            current.copy(previewDocument = if (preview == state.document) null else preview)
+            current.copy(
+                previewDocument = if (preview == state.document) null else preview,
+                previewOwnerId = if (preview == state.document) null else "geometry:$id",
+            )
         }
     }
 
@@ -1113,7 +1132,10 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         val id = state.focusedEventId ?: return
         val preview = withEventShear(state.document, id, shearX, shearY)
         _state.update { current ->
-            current.copy(previewDocument = if (preview == state.document) null else preview)
+            current.copy(
+                previewDocument = if (preview == state.document) null else preview,
+                previewOwnerId = if (preview == state.document) null else "geometry:$id",
+            )
         }
     }
 
@@ -1162,7 +1184,10 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         val id = state.focusedEventId ?: return
         val preview = withEventRectClip(state.document, id, left, top, right, bottom, inverted)
         _state.update { current ->
-            current.copy(previewDocument = if (preview == state.document) null else preview)
+            current.copy(
+                previewDocument = if (preview == state.document) null else preview,
+                previewOwnerId = if (preview == state.document) null else "geometry:$id",
+            )
         }
     }
 
@@ -1240,7 +1265,10 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         if (state.document.events.none { it.id == id }) return
         val preview = withEventPosition(state.document, id, x, y)
         _state.update { current ->
-            current.copy(previewDocument = if (preview == state.document) null else preview)
+            current.copy(
+                previewDocument = if (preview == state.document) null else preview,
+                previewOwnerId = if (preview == state.document) null else "geometry:$id",
+            )
         }
     }
 
@@ -1256,7 +1284,10 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         if (state.document.events.none { it.id == id }) return
         val preview = withEventMove(state.document, id, sx, sy, ex, ey)
         _state.update { current ->
-            current.copy(previewDocument = if (preview == state.document) null else preview)
+            current.copy(
+                previewDocument = if (preview == state.document) null else preview,
+                previewOwnerId = if (preview == state.document) null else "geometry:$id",
+            )
         }
     }
 
@@ -1272,7 +1303,10 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         if (state.document.events.none { it.id == id }) return
         val preview = withEventOrigin(state.document, id, x, y)
         _state.update { current ->
-            current.copy(previewDocument = if (preview == state.document) null else preview)
+            current.copy(
+                previewDocument = if (preview == state.document) null else preview,
+                previewOwnerId = if (preview == state.document) null else "geometry:$id",
+            )
         }
     }
 
@@ -1297,7 +1331,10 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         if (state.document.events.none { it.id == id }) return
         val preview = withEventRotationZ(state.document, id, angle)
         _state.update { current ->
-            current.copy(previewDocument = if (preview == state.document) null else preview)
+            current.copy(
+                previewDocument = if (preview == state.document) null else preview,
+                previewOwnerId = if (preview == state.document) null else "geometry:$id",
+            )
         }
     }
 
@@ -1322,7 +1359,10 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         if (state.document.events.none { it.id == id }) return
         val preview = withEventScale(state.document, id, scaleX, scaleY)
         _state.update { current ->
-            current.copy(previewDocument = if (preview == state.document) null else preview)
+            current.copy(
+                previewDocument = if (preview == state.document) null else preview,
+                previewOwnerId = if (preview == state.document) null else "geometry:$id",
+            )
         }
     }
 
@@ -1347,7 +1387,10 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         if (state.document.events.none { it.id == id }) return
         val preview = withEventShear(state.document, id, shearX, shearY)
         _state.update { current ->
-            current.copy(previewDocument = if (preview == state.document) null else preview)
+            current.copy(
+                previewDocument = if (preview == state.document) null else preview,
+                previewOwnerId = if (preview == state.document) null else "geometry:$id",
+            )
         }
     }
 
@@ -1379,7 +1422,10 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         if (state.document.events.none { it.id == id }) return
         val preview = withEventRectClip(state.document, id, left, top, right, bottom, inverted)
         _state.update { current ->
-            current.copy(previewDocument = if (preview == state.document) null else preview)
+            current.copy(
+                previewDocument = if (preview == state.document) null else preview,
+                previewOwnerId = if (preview == state.document) null else "geometry:$id",
+            )
         }
     }
 
@@ -1859,7 +1905,12 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
 
     fun clearFocusedStyleOverrides() {
         val id = _state.value.focusedEventId ?: return
-        editDocument("已清除当前字幕的样式/位置覆盖；该字幕现在继承 Style。") { doc ->
+        clearEventStyleOverrides(id)
+    }
+
+    fun clearEventStyleOverrides(id: Long) {
+        if (_state.value.document.events.none { it.id == id }) return
+        editDocument("已清除字幕 #$id 的样式/位置覆盖；该字幕现在继承 Style。") { doc ->
             doc.copy(events = doc.events.map { event ->
                 if (event.id == id) event.inheritStyle() else event
             })
@@ -1986,7 +2037,10 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             encoding = encoding,
         )
         _state.update { state ->
-            state.copy(previewDocument = if (preview == before) null else preview)
+            state.copy(
+                previewDocument = if (preview == before) null else preview,
+                previewOwnerId = if (preview == before) null else "style:$styleName",
+            )
         }
     }
 
@@ -2109,7 +2163,12 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     fun previewEventVisualEffects(id: Long, blur: Double?, softEntry: Boolean) {
         val before = _state.value.document
         val preview = withEventVisualEffects(before, id, blur, softEntry)
-        _state.update { state -> state.copy(previewDocument = if (preview == before) null else preview) }
+        _state.update { state ->
+            state.copy(
+                previewDocument = if (preview == before) null else preview,
+                previewOwnerId = if (preview == before) null else "effects:$id",
+            )
+        }
     }
 
     fun applyEventVisualEffects(id: Long, blur: Double?, softEntry: Boolean) {
@@ -2161,7 +2220,10 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             )
         })
         _state.update { state ->
-            state.copy(previewDocument = if (preview == before) null else preview)
+            state.copy(
+                previewDocument = if (preview == before) null else preview,
+                previewOwnerId = if (preview == before) null else "effects:$id",
+            )
         }
     }
 
@@ -2335,6 +2397,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 project = snapshot.project,
                 document = snapshot.document,
                 previewDocument = null,
+                previewOwnerId = null,
                 waveform = snapshot.project.videoUri?.let { uri ->
                     WaveformLiteState(sourceUri = uri, status = WaveformLiteStatus.IDLE)
                 } ?: WaveformLiteState(),
@@ -2387,9 +2450,16 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         _state.update { it.copy(rendererDiagnostics = normalized) }
     }
 
-    fun clearTransientPreview() {
+    fun clearTransientPreview(ownerId: String? = null) {
         _state.update { state ->
-            if (state.previewDocument == null) state else state.copy(previewDocument = null)
+            if (
+                state.previewDocument == null ||
+                (ownerId != null && state.previewOwnerId != ownerId)
+            ) {
+                state
+            } else {
+                state.copy(previewDocument = null, previewOwnerId = null)
+            }
         }
     }
 
@@ -2418,6 +2488,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             state.copy(
                 document = document,
                 previewDocument = null,
+                previewOwnerId = null,
                 selectedEventIds = selected,
                 selectionAnchorId = state.selectionAnchorId?.takeIf { it in validIds },
                 focusedEventId = focused,
