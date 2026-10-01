@@ -1,6 +1,9 @@
 package io.github.assworkbench.app.ui
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
@@ -48,9 +51,9 @@ internal fun FrameTimingPane(
         }
     }
 
-    Column(modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(modifier.verticalScroll(rememberScrollState()).padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("帧级时间", style = MaterialTheme.typography.titleMedium)
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             FilterChip(selected = mode == "AUTO", onClick = { mode = "AUTO" }, label = { Text("视频 PTS") })
             FilterChip(selected = mode == "CFR", onClick = { mode = "CFR" }, label = { Text("CFR") })
             FilterChip(selected = mode == "VFR", onClick = { mode = "VFR" }, label = { Text("VFR / timecodes v2") })
@@ -131,7 +134,7 @@ internal fun FrameTimingPane(
 @Composable
 internal fun FontRequirementsPane(
     state: EditorState,
-    viewModel: EditorViewModel,
+    onOpenFonts: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val requirements = remember(state.document) { FontRequirementResolver.resolve(state.document) }
@@ -144,11 +147,10 @@ internal fun FontRequirementsPane(
             style = MaterialTheme.typography.bodySmall,
         )
         Button(
-            onClick = viewModel::selectRequestedFontsForPackaging,
-            enabled = state.container.uri != null,
+            onClick = onOpenFonts,
             modifier = Modifier.fillMaxWidth(),
         ) {
-            Text("为 MKV 写回自动选择所需已导入字体")
+            Text("管理字体与封装选择")
         }
         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             items(requirements, key = { it.family.lowercase() }) { req ->

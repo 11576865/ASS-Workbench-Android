@@ -26,16 +26,13 @@ internal fun AdvancedQcPane(
     viewModel: EditorViewModel,
     modifier: Modifier = Modifier,
 ) {
-    var profileName by rememberSaveable { mutableStateOf(AssCompatibilityProfile.LIBASS_NATIVE.name) }
     var maxCpsText by rememberSaveable { mutableStateOf("25") }
-    val profile = AssCompatibilityProfile.valueOf(profileName)
     val maxCps = maxCpsText.toDoubleOrNull()?.coerceIn(1.0, 100.0) ?: 25.0
     val issues by produceState<List<AssLintIssue>>(
         initialValue = emptyList(),
         state.document,
         state.fontDiagnostics,
         state.fontGlyphDiagnostics,
-        profile,
         maxCps,
     ) {
         val document = state.document
@@ -48,7 +45,6 @@ internal fun AdvancedQcPane(
                         document,
                         AssLintConfig(
                             maxCps = maxCps,
-                            compatibilityProfile = profile.takeUnless { it == AssCompatibilityProfile.LIBASS_NATIVE },
                         ),
                     )
                 )
@@ -90,16 +86,8 @@ internal fun AdvancedQcPane(
         }
     }
     Column(modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("ASS Linter", style = MaterialTheme.typography.titleMedium)
-        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            AssCompatibilityProfile.entries.forEach { entry ->
-                FilterChip(
-                    selected = entry == profile,
-                    onClick = { profileName = entry.name },
-                    label = { Text(entry.name.replace('_', ' ')) },
-                )
-            }
-        }
+        Text("ASS 质量检查", style = MaterialTheme.typography.titleMedium)
+        Text("文档、时间、文本和字体问题；跨播放器风险位于“兼容性”。", style = MaterialTheme.typography.bodySmall)
         OutlinedTextField(
             value = maxCpsText,
             onValueChange = { maxCpsText = it },

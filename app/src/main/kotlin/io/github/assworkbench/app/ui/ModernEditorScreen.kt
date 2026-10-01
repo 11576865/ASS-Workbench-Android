@@ -72,14 +72,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.abs
 
-private enum class WorkbenchTool(val title: String) {
-    SUBTITLES("字幕"), TEXT("正文"), TIMELINE("时间轴"), FRAMES("帧时间"),
-    STYLE("样式"), POSITION("位置"), EFFECTS("效果"), EVENT("事件"),
-    KARAOKE("卡拉OK"), VECTOR_CLIP("矢量裁剪"), FONTS("字体"), FONT_REQUIREMENTS("字体依赖"),
-    QC("检查"), COMPATIBILITY("兼容性"), BATCH("批量规则"),
-    PROJECT("项目"), DIAGNOSTICS("诊断"), CAPABILITIES("功能地图"),
-}
-
 private enum class WorkspacePresentationMode(val title: String) {
     FIXED("固定 UI"),
     CANVAS_EXPERIMENTAL("实验性 Canvas"),
@@ -120,6 +112,8 @@ fun ModernEditorScreen(
     val context = LocalContext.current
     var workspaceModeName by rememberSaveable { mutableStateOf(WorkspacePresentationMode.FIXED.name) }
     var fixedToolName by rememberSaveable { mutableStateOf(WorkbenchTool.STYLE.name) }
+    var fixedNavigationRevision by rememberSaveable { mutableIntStateOf(0) }
+    var fixedListRequested by rememberSaveable { mutableStateOf(false) }
     val workspaceMode = WorkspacePresentationMode.valueOf(workspaceModeName)
     val fixedTool = WorkbenchTool.valueOf(fixedToolName)
 
@@ -202,7 +196,9 @@ fun ModernEditorScreen(
 
     fun openTool(next: WorkbenchTool) {
         if (workspaceMode == WorkspacePresentationMode.FIXED) {
-            fixedToolName = next.name
+            fixedListRequested = next == WorkbenchTool.SUBTITLES
+            fixedNavigationRevision += 1
+            if (!fixedListRequested) fixedToolName = next.name
             return
         }
         workspaceState = workspaceState.openPrimary(next.name).withSurfacesHidden(false)
@@ -240,7 +236,7 @@ fun ModernEditorScreen(
                 searchOpen = searchOpen,
                 onSearchToggle = {
                     searchOpen = !searchOpen
-                    if (workspaceMode == WorkspacePresentationMode.CANVAS_EXPERIMENTAL) {
+                    if (searchOpen || workspaceMode == WorkspacePresentationMode.CANVAS_EXPERIMENTAL) {
                         openTool(WorkbenchTool.SUBTITLES)
                     }
                 },
@@ -410,6 +406,8 @@ fun ModernEditorScreen(
                     viewModel = viewModel,
                     issues = issues,
                     activeTool = fixedTool,
+                    navigationRevision = fixedNavigationRevision,
+                    listRequested = fixedListRequested,
                     onActiveTool = { fixedToolName = it.name },
                     expandedEventId = expandedEventId,
                     onExpandedChange = { expandedEventId = it },
@@ -487,7 +485,7 @@ fun ModernEditorScreen(
                             )
                             WorkbenchTool.CAPABILITIES -> SurfaceGeometry(12f, 12f, 320f,
                                 (viewportHeight - 24f).coerceIn(160f, 620f))
-                            else -> SurfaceGeometry(16f + (index % 3) * 24f, 16f + (index % 4) * 20f)
+                            else -> surfaceTool.initialGeometry(16f + (index % 3) * 24f, 16f + (index % 4) * 20f)
                         },
                         onActivate = {
                             workspaceState = workspaceState.activate(instance.id)
@@ -601,6 +599,8 @@ private fun FixedWorkspace(
     viewModel: EditorViewModel,
     issues: List<AssQcIssue>,
     activeTool: WorkbenchTool,
+    navigationRevision: Int,
+    listRequested: Boolean,
     onActiveTool: (WorkbenchTool) -> Unit,
     expandedEventId: Long?,
     onExpandedChange: (Long?) -> Unit,
@@ -614,10 +614,26 @@ private fun FixedWorkspace(
     onCloseSearch: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val fixedTools = remember {
-        WorkbenchTool.entries.filter {
-            it != WorkbenchTool.SUBTITLES && it != WorkbenchTool.CAPABILITIES
+    var compactPage by rememberSaveable { mutableStateOf("LIST") }
+    var lastActiveTool by remember { mutableStateOf(activeTool) }
+    LaunchedEffect(activeTool) {
+        if (activeTool != lastActiveTool) compactPage = "EDITOR"
+        lastActiveTool = activeTool
+    }
+    var consumedNavigationRevision by rememberSaveable { mutableIntStateOf(0) }
+    LaunchedEffect(navigationRevision) {
+        if (navigationRevision != consumedNavigationRevision) {
+            compactPage = if (listRequested) "LIST" else "EDITOR"
+            consumedNavigationRevision = navigationRevision
         }
+    }
+    var showPreview by rememberSaveable { mutableStateOf(true) }
+    val fixedTools = WorkbenchTool.entries.filter {
+        it.group == activeTool.group && it != WorkbenchTool.SUBTITLES && it != WorkbenchTool.CAPABILITIES
+    }
+    fun selectTool(tool: WorkbenchTool) {
+        compactPage = "EDITOR"
+        onActiveTool(tool)
     }
     val instance = remember(activeTool) {
         WorkspaceToolInstance(
@@ -635,10 +651,11 @@ private fun FixedWorkspace(
                 issuesByEvent = issues.groupBy { it.eventId },
                 expandedEventId = expandedEventId,
                 onExpandedChange = { next ->
-                    onExpandedChange(next)
-                    if (next != null) onActiveTool(WorkbenchTool.TEXT)
+                    val target = next ?: expandedEventId
+                    onExpandedChange(target)
+                    if (target != null) selectTool(WorkbenchTool.TEXT)
                 },
-                onTool = onActiveTool,
+                onTool = ::selectTool,
                 eventEditorStateHolder = eventEditorStateHolder,
                 tool = WorkbenchTool.TEXT,
                 modifier = Modifier.weight(1f),
@@ -662,8 +679,8 @@ private fun FixedWorkspace(
                 onImportFont = onImportFont,
                 onSaveMkv = onSaveMkv,
                 eventEditorStateHolder = eventEditorStateHolder,
-                onOpenTool = onActiveTool,
-                onCloseText = { onExpandedChange(null) },
+                onOpenTool = ::selectTool,
+                onCloseText = { onExpandedChange(null); compactPage = "LIST" },
                 searchOpen = searchOpen,
                 onCloseSearch = onCloseSearch,
             )
@@ -675,61 +692,91 @@ private fun FixedWorkspace(
             tonalElevation = 2.dp,
             color = MaterialTheme.colorScheme.surfaceContainerHigh,
         ) {
+            Column {
+            Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                WorkbenchToolGroup.entries.forEach { group ->
+                    FilterChip(
+                        selected = activeTool.group == group,
+                        onClick = {
+                            val first = WorkbenchTool.entries.first { it.group == group && it != WorkbenchTool.SUBTITLES }
+                            selectTool(first)
+                        },
+                        label = { Text(group.title) },
+                        modifier = Modifier.testTag("fixed-group-" + group.name),
+                    )
+                }
+            }
             Row(
                 Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 6.dp),
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text("固定 UI", style = MaterialTheme.typography.labelMedium)
+                Text(activeTool.group.title, style = MaterialTheme.typography.labelMedium)
                 fixedTools.forEach { tool ->
                     FilterChip(
                         selected = tool == activeTool,
-                        onClick = { onActiveTool(tool) },
+                        onClick = { selectTool(tool) },
                         label = { Text(tool.title) },
                         modifier = Modifier.testTag("fixed-tool-" + tool.name),
                     )
                 }
             }
+            }
         }
         BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
-            val wide = maxWidth >= 900.dp
-            if (wide) {
-                Row(Modifier.fillMaxSize()) {
-                    WorkbenchPreview(
-                        state = state,
-                        viewModel = viewModel,
-                        positionEditEventId = if (activeTool == WorkbenchTool.POSITION) state.focusedEventId else null,
-                        onOpenVideo = onOpenVideo,
-                        onOpenTimeline = { onActiveTool(WorkbenchTool.TIMELINE) },
-                        rendererEnabled = rendererEnabled,
-                        onEnableRenderer = onEnableRenderer,
-                        viewportGesturesEnabled = activeTool != WorkbenchTool.POSITION,
-                        modifier = Modifier.weight(1.15f).fillMaxHeight().testTag("preview-workspace"),
-                    )
+            val availableHeight = maxHeight
+            val wide = maxWidth >= 1200.dp
+            val medium = maxWidth >= 700.dp
+            val briefInspector = activeTool == WorkbenchTool.PROJECT || activeTool == WorkbenchTool.EVENT
+            val wideInspectorWeight = if (briefInspector) 0.30f else 0.40f
+            val mediumInspectorWeight = if (briefInspector) 0.42f else 0.55f
+            val preview: @Composable (Modifier) -> Unit = { previewModifier ->
+                WorkbenchPreview(
+                    state = state,
+                    viewModel = viewModel,
+                    positionEditEventId = if (activeTool == WorkbenchTool.POSITION) state.focusedEventId else null,
+                    onOpenVideo = onOpenVideo,
+                    onOpenTimeline = { selectTool(WorkbenchTool.TIMELINE) },
+                    rendererEnabled = rendererEnabled,
+                    onEnableRenderer = onEnableRenderer,
+                    viewportGesturesEnabled = activeTool != WorkbenchTool.POSITION,
+                    modifier = previewModifier.testTag("preview-workspace"),
+                )
+            }
+            when {
+                wide -> Row(Modifier.fillMaxSize()) {
+                    preview(Modifier.weight(0.32f).fillMaxHeight())
                     VerticalDivider()
-                    Row(Modifier.weight(0.85f).fillMaxHeight()) {
-                        listPane(Modifier.weight(0.46f).fillMaxHeight())
-                        VerticalDivider()
-                        inspector(Modifier.weight(0.54f).fillMaxHeight())
-                    }
+                    listPane(Modifier.weight(0.68f - wideInspectorWeight).fillMaxHeight())
+                    VerticalDivider()
+                    inspector(Modifier.weight(wideInspectorWeight).fillMaxHeight())
                 }
-            } else {
-                Column(Modifier.fillMaxSize()) {
-                    WorkbenchPreview(
-                        state = state,
-                        viewModel = viewModel,
-                        positionEditEventId = if (activeTool == WorkbenchTool.POSITION) state.focusedEventId else null,
-                        onOpenVideo = onOpenVideo,
-                        onOpenTimeline = { onActiveTool(WorkbenchTool.TIMELINE) },
-                        rendererEnabled = rendererEnabled,
-                        onEnableRenderer = onEnableRenderer,
-                        viewportGesturesEnabled = activeTool != WorkbenchTool.POSITION,
-                        modifier = Modifier.weight(0.42f).fillMaxWidth().testTag("preview-workspace"),
-                    )
-                    HorizontalDivider()
-                    listPane(Modifier.heightIn(min = 150.dp, max = 230.dp).fillMaxWidth())
-                    HorizontalDivider()
-                    inspector(Modifier.weight(0.58f).fillMaxWidth())
+                medium -> Row(Modifier.fillMaxSize()) {
+                    Column(Modifier.weight(1f - mediumInspectorWeight).fillMaxHeight()) {
+                        preview(Modifier.weight(0.42f).fillMaxWidth())
+                        HorizontalDivider()
+                        listPane(Modifier.weight(0.58f).fillMaxWidth())
+                    }
+                    VerticalDivider()
+                    inspector(Modifier.weight(mediumInspectorWeight).fillMaxHeight())
+                }
+                else -> Column(Modifier.fillMaxSize()) {
+                    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        FilterChip(compactPage == "LIST", { compactPage = "LIST" }, { Text("字幕列表") },
+                            modifier = Modifier.testTag("fixed-page-list"))
+                        FilterChip(compactPage == "EDITOR", { compactPage = "EDITOR" }, { Text(activeTool.title) },
+                            modifier = Modifier.testTag("fixed-page-editor"))
+                        FilterChip(showPreview, { showPreview = !showPreview }, { Text("预览") },
+                            modifier = Modifier.testTag("fixed-preview-toggle"))
+                    }
+                    if (showPreview && availableHeight >= 500.dp) {
+                        preview(Modifier.fillMaxWidth().height(180.dp))
+                        HorizontalDivider()
+                    }
+                    if (compactPage == "LIST") listPane(Modifier.weight(1f).fillMaxWidth())
+                    else inspector(Modifier.weight(1f).fillMaxWidth())
                 }
             }
         }
@@ -897,7 +944,7 @@ private fun FloatingToolContent(
         WorkbenchTool.KARAOKE -> KaraokePane(state, viewModel, Modifier.fillMaxSize())
         WorkbenchTool.VECTOR_CLIP -> VectorClipPane(state, viewModel, Modifier.fillMaxSize())
         WorkbenchTool.COMPATIBILITY -> CompatibilityPane(state, viewModel, Modifier.fillMaxSize())
-        WorkbenchTool.FONT_REQUIREMENTS -> FontRequirementsPane(state, viewModel, Modifier.fillMaxSize())
+        WorkbenchTool.FONT_REQUIREMENTS -> FontRequirementsPane(state, { onOpenTool(WorkbenchTool.FONTS) }, Modifier.fillMaxSize())
         WorkbenchTool.STYLE -> StylePane(
             state = state,
             viewModel = viewModel,
@@ -927,13 +974,23 @@ private fun WorkspaceToolDirectory(onOpenTool: (WorkbenchTool) -> Unit, modifier
     Column(modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         OutlinedTextField(query, { query = it }, label = { Text("搜索工具") }, singleLine = true,
             leadingIcon = { Icon(Icons.Filled.Search, null) }, modifier = Modifier.fillMaxWidth().testTag("tool-search"))
-        Text("调用后保留在工作区 · 拖动标题移动 · 清屏保留现场", style = MaterialTheme.typography.bodySmall)
+        Text("按编辑对象分区；同一工具在固定界面与 Canvas 中共用。", style = MaterialTheme.typography.bodySmall)
         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            items(WorkbenchTool.entries.filter { it != WorkbenchTool.CAPABILITIES &&
-                (query.isBlank() || it.title.contains(query, ignoreCase = true) || it.name.contains(query, ignoreCase = true)) }) { entry ->
-                OutlinedButton(onClick = { onOpenTool(entry) }, modifier = Modifier.fillMaxWidth().testTag("tool-${entry.name}")) {
-                    Text(entry.title, Modifier.weight(1f))
-                    Icon(Icons.Filled.OpenInNew, null, Modifier.size(18.dp))
+            WorkbenchToolGroup.entries.forEach { group ->
+                val entries = WorkbenchTool.entries.filter { it.group == group && it != WorkbenchTool.CAPABILITIES &&
+                    (query.isBlank() || it.title.contains(query, ignoreCase = true) || it.name.contains(query, ignoreCase = true) ||
+                        it.description.contains(query, ignoreCase = true) || group.title.contains(query)) }
+                if (entries.isNotEmpty()) {
+                    item(key = "group-" + group.name) { Text(group.title, style = MaterialTheme.typography.titleSmall) }
+                    items(entries, key = { it.name }) { entry ->
+                        OutlinedButton(onClick = { onOpenTool(entry) }, modifier = Modifier.fillMaxWidth().testTag("tool-${entry.name}")) {
+                            Column(Modifier.weight(1f)) {
+                                Text(entry.title)
+                                Text(entry.description, style = MaterialTheme.typography.labelSmall)
+                            }
+                            Icon(Icons.Filled.OpenInNew, null, Modifier.size(18.dp))
+                        }
+                    }
                 }
             }
         }
@@ -1418,9 +1475,9 @@ private fun InlineEventEditor(
             Column(Modifier.padding(WorkbenchDimens.Small), verticalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro), verticalAlignment = Alignment.CenterVertically) {
                     OutlinedTextField(layerText, { layerText = it }, label = { Text("Layer") }, singleLine = true, modifier = Modifier.width(88.dp))
-                    OutlinedTextField(actorText, { actorText = it }, label = { Text("Actor") }, singleLine = true, modifier = Modifier.weight(1f))
                     FilterChip(selected = comment, onClick = { comment = !comment }, label = { Text(if (comment) "Comment" else "Dialogue") })
                 }
+                OutlinedTextField(actorText, { actorText = it }, label = { Text("Actor") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                     TextButton(onClick = {
                         layerText = event.layer.toString()
@@ -3079,8 +3136,21 @@ private fun PositionPane(
         onDispose { viewModel.clearTransientPreview() }
     }
 
+    var sectionName by rememberSaveable { mutableStateOf(PositionSection.PLACEMENT.name) }
+    val section = PositionSection.valueOf(sectionName)
+    val sectionScroll = rememberLazyListState()
+    LaunchedEffect(section) { sectionScroll.scrollToItem(0) }
+    Column(modifier) {
+    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        PositionSection.entries.forEach { entry ->
+            FilterChip(section == entry, { sectionName = entry.name }, { Text(entry.title) },
+                modifier = Modifier.testTag("position-section-" + entry.name))
+        }
+    }
     LazyColumn(
-        modifier.padding(WorkbenchDimens.Small),
+        Modifier.weight(1f).padding(WorkbenchDimens.Small),
+        state = sectionScroll,
         verticalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small),
     ) {
         item {
@@ -3091,6 +3161,7 @@ private fun PositionPane(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+        if (section == PositionSection.PLACEMENT) {
         item {
             Text("Event 对齐覆盖")
             Column(verticalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro)) {
@@ -3149,6 +3220,8 @@ private fun PositionPane(
             }
         }
 
+        }
+        if (section == PositionSection.TRANSFORM) {
         item { Divider() }
         item {
             Text("变换原点 · \\org", style = MaterialTheme.typography.titleSmall)
@@ -3404,6 +3477,8 @@ private fun PositionPane(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+        }
+        if (section == PositionSection.CLIP) {
         item { Divider() }
         item {
             Text("矩形裁剪 · \\clip / \\iclip", style = MaterialTheme.typography.titleSmall)
@@ -3506,6 +3581,8 @@ private fun PositionPane(
                 }
             }
         }
+        }
+        if (section == PositionSection.PLACEMENT) {
         item {
             Text("任意位置")
             Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small)) {
@@ -3550,7 +3627,8 @@ private fun PositionPane(
             )
         }
 
-        if (style != null) {
+        }
+        if (style != null && section == PositionSection.STYLE_LAYOUT) {
             item { Divider() }
             item {
                 Text("Style 基础位置 · ${style.name}", style = MaterialTheme.typography.titleSmall)
@@ -3595,6 +3673,7 @@ private fun PositionPane(
                 }
             }
         }
+    }
     }
 }
 
@@ -3657,26 +3736,6 @@ private fun FontManagerPane(
             Button(onClick = onImportFont, enabled = !state.fontImportBusy) {
                 Text(if (state.fontImportBusy) "导入中…" else "导入字体")
             }
-        }
-
-        if (requestedFamilies.isNotEmpty()) {
-            Row(
-                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro),
-            ) {
-                requestedFamilies.forEach { family ->
-                    AssistChip(
-                        onClick = {},
-                        label = { Text(family) },
-                    )
-                }
-            }
-        } else {
-            Text(
-                "当前 ASS 没有 Event 请求字体；未使用的 Style 定义不会被算作运行时字体需求。",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
         }
 
         if (state.container.uri != null) {
@@ -3802,132 +3861,8 @@ private fun FontManagerPane(
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun QcPane(state: EditorState, viewModel: EditorViewModel, issues: List<AssQcIssue>, modifier: Modifier = Modifier) {
-    Column(modifier.padding(WorkbenchDimens.Small), verticalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small)) {
-        val errors = issues.count { it.severity == AssQcSeverity.ERROR }
-        val warnings = issues.count { it.severity == AssQcSeverity.WARNING }
-        val issueEventIds = remember(issues) { issues.map { it.eventId }.distinct() }
-        val issueIndex = issueEventIds.indexOf(state.focusedEventId)
-        val previousIssueId = if (issueIndex > 0) issueEventIds[issueIndex - 1] else null
-        val nextIssueId = when {
-            issueEventIds.isEmpty() -> null
-            issueIndex < 0 -> issueEventIds.first()
-            issueIndex < issueEventIds.lastIndex -> issueEventIds[issueIndex + 1]
-            else -> null
-        }
-        Text("质量检查 · ${issues.size}", style = MaterialTheme.typography.titleSmall)
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("$errors error · $warnings warning · ${issues.size-errors-warnings} info", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
-            OutlinedButton(onClick = { previousIssueId?.let { viewModel.focusEvent(it, true) } }, enabled = previousIssueId != null) { Text("上一问题") }
-            Spacer(Modifier.width(WorkbenchDimens.Micro))
-            OutlinedButton(onClick = { nextIssueId?.let { viewModel.focusEvent(it, true) } }, enabled = nextIssueId != null) { Text("下一问题") }
-        }
-        Divider()
-        LazyColumn(Modifier.fillMaxSize()) {
-            items(issues) { issue ->
-                Row(
-                    Modifier.fillMaxWidth().combinedClickable(onClick = { viewModel.focusEvent(issue.eventId, true) }, onLongClick = { viewModel.focusEvent(issue.eventId, true) }).padding(vertical = WorkbenchDimens.Small),
-                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text(
-                        when (issue.severity) { AssQcSeverity.ERROR -> "!"; AssQcSeverity.WARNING -> "⚠"; AssQcSeverity.INFO -> "•" },
-                        color = when (issue.severity) { AssQcSeverity.ERROR -> MaterialTheme.colorScheme.error; AssQcSeverity.WARNING -> MaterialTheme.colorScheme.tertiary; AssQcSeverity.INFO -> MaterialTheme.colorScheme.onSurfaceVariant }
-                    )
-                    Column(Modifier.weight(1f)) {
-                        Text("#${issue.eventId} · ${issue.message}")
-                        Text(issue.kind.name, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                }
-                Divider()
-            }
-        }
-    }
-}
-
-@Composable
-private fun BatchPane(state: EditorState, viewModel: EditorViewModel, modifier: Modifier = Modifier) {
-    var styleMenuOpen by remember { mutableStateOf(false) }
-    var pasteMenuOpen by remember { mutableStateOf(false) }
-    Column(modifier.padding(WorkbenchDimens.Small), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("已选 ${state.selectedEventIds.size} 条", style = MaterialTheme.typography.titleSmall)
-        if (state.selectedEventIds.isEmpty()) { Text("长按字幕进入多选。"); return }
-        Box {
-            OutlinedButton(onClick = { styleMenuOpen = true }, modifier = Modifier.fillMaxWidth()) {
-                Text("批量指定 Style")
-            }
-            DropdownMenu(expanded = styleMenuOpen, onDismissRequest = { styleMenuOpen = false }) {
-                state.document.styles.forEach { style ->
-                    DropdownMenuItem(
-                        text = { Text(style.name) },
-                        onClick = {
-                            styleMenuOpen = false
-                            viewModel.assignSelectedStyle(style.name)
-                        },
-                    )
-                }
-            }
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small)) {
-            OutlinedButton({ viewModel.shiftSelected(-100) }, Modifier.weight(1f)) { Text("−100 ms") }
-            OutlinedButton({ viewModel.shiftSelected(100) }, Modifier.weight(1f)) { Text("+100 ms") }
-        }
-        Button(viewModel::alignSelectedStartToPlayback, Modifier.fillMaxWidth()) { Text("第一条对齐播放头") }
-        Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small)) {
-            OutlinedButton({ viewModel.setSelectedComment(false) }, Modifier.weight(1f)) { Text("Dialogue") }
-            OutlinedButton({ viewModel.setSelectedComment(true) }, Modifier.weight(1f)) { Text("Comment") }
-        }
-        if (state.selectedEventIds.size >= 2) {
-            Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small)) {
-                OutlinedButton({ viewModel.mergeSelected(useLineBreak = true) }, Modifier.weight(1f)) { Text("合并 · \\N") }
-                OutlinedButton({ viewModel.mergeSelected(useLineBreak = false) }, Modifier.weight(1f)) { Text("合并 · 空格") }
-            }
-            Text(
-                "合并只接受 Event 列表中连续的选择；非连续选择会保持原样并提示错误。",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        OutlinedButton(viewModel::clearSelectedStyleOverrides, Modifier.fillMaxWidth()) { Text("清除 Style / 位置覆盖") }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small)) {
-            OutlinedButton(
-                viewModel::copyFocusedFormatToClipboard,
-                Modifier.weight(1f),
-                enabled = state.focusedEventId != null,
-            ) { Text("复制焦点格式" + (state.focusedEventId?.let { " · #$it" } ?: "")) }
-            Box(Modifier.weight(1f)) {
-                OutlinedButton(onClick = { pasteMenuOpen = true }, modifier = Modifier.fillMaxWidth()) { Text("粘贴格式…") }
-                DropdownMenu(expanded = pasteMenuOpen, onDismissRequest = { pasteMenuOpen = false }) {
-                    listOf(
-                        EventFormatPasteMode.STYLE to "Style",
-                        EventFormatPasteMode.MARGINS to "Margins",
-                        EventFormatPasteMode.POSITION to "Position · pos/move",
-                        EventFormatPasteMode.EFFECTS to "Effects · fad/fade/blur/t",
-                        EventFormatPasteMode.OVERRIDES to "全部 leading overrides",
-                        EventFormatPasteMode.ALL to "全部格式",
-                    ).forEach { (mode, label) ->
-                        DropdownMenuItem(
-                            text = { Text(label) },
-                            onClick = {
-                                pasteMenuOpen = false
-                                viewModel.pasteFormatClipboardToSelected(mode)
-                            },
-                        )
-                    }
-                }
-            }
-        }
-        Text(
-            "格式剪贴板只复制结构化格式，不复制正文、时间或 {comment}。Position / Effects 只替换顶层对应 tag，不会误改 \\t(...) 内部的嵌套 tag。",
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Button(viewModel::deleteSelectedOrFocused, Modifier.fillMaxWidth()) { Icon(Icons.Filled.Delete, null); Spacer(Modifier.width(4.dp)); Text("删除已选字幕") }
-    }
-}
-
-@Composable
 private fun ProjectPane(state: EditorState, viewModel: EditorViewModel, onSaveMkv: () -> Unit, modifier: Modifier = Modifier) {
-    Column(modifier.padding(WorkbenchDimens.Small), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(modifier.verticalScroll(rememberScrollState()).padding(WorkbenchDimens.Small), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(if (state.container.uri != null) "MKV 工程" else "独立 ASS 工程", style = MaterialTheme.typography.titleSmall)
         Text(state.project.title)
         Text("PlayRes ${state.document.playResX}×${state.document.playResY} · ${state.document.styles.size} Style · ${state.document.events.size} Event", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

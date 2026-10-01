@@ -101,8 +101,16 @@ internal fun RuleBatchPane(
             style = MaterialTheme.typography.bodySmall,
         )
 
+        if (state.selectedEventIds.size > 1) {
+            Text("已选字幕结构", style = MaterialTheme.typography.labelLarge)
+            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                OutlinedButton({ viewModel.mergeSelected(useLineBreak = true) }) { Text("合并 · 换行") }
+                OutlinedButton({ viewModel.mergeSelected(useLineBreak = false) }) { Text("合并 · 空格") }
+            }
+            Text("合并直接作用于已选字幕并可撤销；下方规则需预览后提交。", style = MaterialTheme.typography.labelSmall)
+        }
         Text("Scope / Filter", style = MaterialTheme.typography.labelLarge)
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             FilterChip(selectedOnly, { selectedOnly = !selectedOnly }, { Text("仅已选 ${state.selectedEventIds.size}") })
             listOf("ALL", "DIALOGUE", "COMMENT").forEach { mode ->
                 FilterChip(commentFilter == mode, { commentFilter = mode }, { Text(mode) })
