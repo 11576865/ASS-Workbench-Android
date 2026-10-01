@@ -1512,6 +1512,7 @@ private fun WorkbenchPreview(
     onVideoAspectRatio: (Float) -> Unit = {},
     interactionRegistry: InteractionOverlayRegistry? = null,
     viewportGesturesEnabled: Boolean = false,
+    onObjectLongPress: ((PreviewObjectPick) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     VideoPreview(
@@ -1587,6 +1588,7 @@ private fun WorkbenchPreview(
         onVideoAspectRatio = onVideoAspectRatio,
         interactionRegistry = interactionRegistry,
         viewportGesturesEnabled = viewportGesturesEnabled,
+        onObjectLongPress = onObjectLongPress,
         modifier = modifier,
     )
 }
