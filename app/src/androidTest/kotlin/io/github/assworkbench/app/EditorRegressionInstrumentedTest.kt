@@ -138,6 +138,8 @@ class EditorRegressionInstrumentedTest {
     @Test
     fun rawDraftSurvivesActivityRecreation() {
         restoreRecovery()
+        // Global search requests LIST once; recreation must restore the later EDITOR page.
+        composeRule.onNodeWithContentDescription("搜索").performClick()
 
         eventRow(1L)
             .performClick()

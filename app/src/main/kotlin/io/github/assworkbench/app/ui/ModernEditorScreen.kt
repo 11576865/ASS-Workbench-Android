@@ -620,8 +620,12 @@ private fun FixedWorkspace(
         if (activeTool != lastActiveTool) compactPage = "EDITOR"
         lastActiveTool = activeTool
     }
+    var consumedNavigationRevision by rememberSaveable { mutableIntStateOf(0) }
     LaunchedEffect(navigationRevision) {
-        if (navigationRevision > 0) compactPage = if (listRequested) "LIST" else "EDITOR"
+        if (navigationRevision != consumedNavigationRevision) {
+            compactPage = if (listRequested) "LIST" else "EDITOR"
+            consumedNavigationRevision = navigationRevision
+        }
     }
     var showPreview by rememberSaveable { mutableStateOf(true) }
     val fixedTools = WorkbenchTool.entries.filter {
