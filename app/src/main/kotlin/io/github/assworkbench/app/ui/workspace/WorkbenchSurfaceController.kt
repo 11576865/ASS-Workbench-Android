@@ -70,11 +70,77 @@ internal class WorkbenchSurfaceController(restored: List<WorkspaceSurfaceState> 
 
     fun cycleSize(id: String, fallback: SurfaceGeometry) {
         val old = state(id, fallback)
-        if (old.layoutLocked) return
+        if (old.layoutLocked || old.presentation != SurfacePresentation.FLOATING) return
         val next = SurfaceSizeClass.entries[(old.sizeClass.ordinal + 1) % SurfaceSizeClass.entries.size]
         cancel(id)
         surfaces[id] = old.copy(geometry = next.geometryAt(old.geometry.x, old.geometry.y), sizeClass = next)
         bringToFront(id)
+    }
+
+    fun toggleMinimize(id: String, fallback: SurfaceGeometry) {
+        cancel(id)
+        val old = state(id, fallback)
+        val next = if (old.presentation == SurfacePresentation.MINIMIZED) {
+            SurfacePresentation.FLOATING
+        } else {
+            SurfacePresentation.MINIMIZED
+        }
+        surfaces[id] = old.copy(presentation = next)
+        bringToFront(id)
+    }
+
+    fun dock(id: String, side: SurfacePresentation, fallback: SurfaceGeometry) {
+        require(side == SurfacePresentation.DOCK_LEFT || side == SurfacePresentation.DOCK_RIGHT)
+        cancel(id)
+        val old = state(id, fallback)
+        surfaces[id] = old.copy(presentation = side, stackId = null)
+        bringToFront(id)
+    }
+
+    fun undock(id: String, fallback: SurfaceGeometry) {
+        cancel(id)
+        val old = state(id, fallback)
+        surfaces[id] = old.copy(presentation = SurfacePresentation.FLOATING)
+        bringToFront(id)
+    }
+
+    fun stack(id: String, targetId: String, fallback: SurfaceGeometry, targetFallback: SurfaceGeometry = fallback) {
+        if (id == targetId) return
+        cancel(id)
+        cancel(targetId)
+        val source = state(id, fallback)
+        val target = state(targetId, targetFallback)
+        val stack = target.stackId ?: source.stackId ?: "stack:" + targetId
+        val targetGeometry = target.geometry
+        surfaces[targetId] = target.copy(
+            stackId = stack,
+            presentation = SurfacePresentation.FLOATING,
+        )
+        surfaces[id] = source.copy(
+            stackId = stack,
+            presentation = SurfacePresentation.FLOATING,
+            geometry = targetGeometry,
+            sizeClass = target.sizeClass,
+        )
+        bringToFront(id)
+    }
+
+    fun unstack(id: String, fallback: SurfaceGeometry) {
+        val old = state(id, fallback)
+        if (old.stackId == null) return
+        surfaces[id] = old.copy(stackId = null)
+        bringToFront(id)
+    }
+
+    fun stackMemberIds(id: String): List<String> {
+        val stack = surfaces[id]?.stackId ?: return listOf(id)
+        return surfaces.values.filter { it.stackId == stack }.sortedBy { it.zOrder }.map { it.instanceId }
+    }
+
+    fun isVisibleStackTab(id: String): Boolean {
+        val stack = surfaces[id]?.stackId ?: return true
+        val members = surfaces.values.filter { it.stackId == stack }
+        return members.maxByOrNull { it.zOrder }?.instanceId == id
     }
 
     fun ensure(id: String, fallback: SurfaceGeometry) {
