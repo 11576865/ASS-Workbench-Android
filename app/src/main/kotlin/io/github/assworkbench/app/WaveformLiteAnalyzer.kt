@@ -21,23 +21,29 @@ internal object WaveformLiteAnalyzer {
     private const val MAGIC = 0x41574631
     private const val MAX_BUCKETS = 10_000_000
 
-    suspend fun loadOrAnalyze(context: Context, uri: Uri): WaveformEnvelope {
-        val key = cacheKey(context, uri)
+    suspend fun loadOrAnalyze(context: Context, uri: Uri, audioTrackIndex: Int? = null): WaveformEnvelope {
+        val key = cacheKey(context, uri, audioTrackIndex)
         readCache(context, key)?.let { return it }
-        val result = analyze(context, uri)
+        val result = analyze(context, uri, audioTrackIndex)
         currentCoroutineContext().ensureActive()
         writeCache(context, key, result)
         return result
     }
 
-    private suspend fun analyze(context: Context, uri: Uri): WaveformEnvelope {
+    private suspend fun analyze(context: Context, uri: Uri, audioTrackIndex: Int?): WaveformEnvelope {
         val extractor = MediaExtractor()
         var codec: MediaCodec? = null
         try {
             extractor.setDataSource(context, uri, emptyMap())
-            val track = (0 until extractor.trackCount).firstOrNull { index ->
-                extractor.getTrackFormat(index).getString(MediaFormat.KEY_MIME)?.startsWith("audio/") == true
-            } ?: error("没有可分析的音轨")
+            val track = audioTrackIndex
+                ?.takeIf { index ->
+                    index in 0 until extractor.trackCount &&
+                        extractor.getTrackFormat(index).getString(MediaFormat.KEY_MIME)?.startsWith("audio/") == true
+                }
+                ?: (0 until extractor.trackCount).firstOrNull { index ->
+                    extractor.getTrackFormat(index).getString(MediaFormat.KEY_MIME)?.startsWith("audio/") == true
+                }
+                ?: error("没有可分析的音轨")
             val format = extractor.getTrackFormat(track)
             val mime = format.getString(MediaFormat.KEY_MIME) ?: error("音轨 MIME 缺失")
             extractor.selectTrack(track)
@@ -129,11 +135,11 @@ internal object WaveformLiteAnalyzer {
         }
     }
 
-    private fun cacheKey(context: Context, uri: Uri): String {
+    private fun cacheKey(context: Context, uri: Uri, audioTrackIndex: Int?): String {
         val length = runCatching {
             context.contentResolver.openAssetFileDescriptor(uri, "r")?.use { it.length }
         }.getOrNull() ?: -1L
-        val source = uri.toString() + "|" + length
+        val source = uri.toString() + "|" + length + "|audio=" + (audioTrackIndex ?: -1)
         return MessageDigest.getInstance("SHA-256")
             .digest(source.toByteArray())
             .joinToString("") { "%02x".format(it) }
