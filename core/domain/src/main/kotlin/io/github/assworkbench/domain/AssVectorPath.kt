@@ -59,3 +59,44 @@ object AssVectorPathCodec {
         if (value % 1.0 == 0.0) value.toLong().toString()
         else "%.4f".format(java.util.Locale.US, value).trimEnd('0').trimEnd('.')
 }
+
+
+data class AssVectorClip(
+    val inverted: Boolean,
+    val path: AssVectorPath,
+)
+
+object AssVectorClipSemantic {
+    private val clip = Regex("""\\(i?clip)\(([^)]*)\)""", RegexOption.IGNORE_CASE)
+
+    fun inspectLeading(text: String): AssVectorClip? {
+        val prefix = leadingOverridePrefix(text)
+        if (prefix.isEmpty()) return null
+        val match = clip.findAll(prefix).lastOrNull() ?: return null
+        val payload = match.groupValues[2]
+        val path = runCatching { AssVectorPathCodec.parse(payload) }.getOrNull() ?: return null
+        return AssVectorClip(
+            inverted = match.groupValues[1].equals("iclip", ignoreCase = true),
+            path = path,
+        )
+    }
+
+    fun patchLeading(text: String, clipValue: AssVectorClip): String {
+        val prefix = leadingOverridePrefix(text)
+        if (prefix.isEmpty()) return text
+        val match = clip.findAll(prefix).lastOrNull() ?: return text
+        val replacement = "\\" + (if (clipValue.inverted) "iclip" else "clip") +
+            "(" + AssVectorPathCodec.write(clipValue.path) + ")"
+        return text.replaceRange(match.range, replacement)
+    }
+
+    private fun leadingOverridePrefix(text: String): String {
+        var cursor = 0
+        while (cursor < text.length && text[cursor] == '{') {
+            val close = text.indexOf('}', cursor + 1)
+            if (close < 0) return ""
+            cursor = close + 1
+        }
+        return text.substring(0, cursor)
+    }
+}
