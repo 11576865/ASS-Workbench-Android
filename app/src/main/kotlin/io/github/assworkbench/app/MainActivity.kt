@@ -36,11 +36,37 @@ import io.github.assworkbench.app.ui.ModernEditorScreen
 
 class MainActivity : ComponentActivity() {
     private val viewModel: EditorViewModel by viewModels()
+    private var pendingProjectText: String? = null
 
     private val openReferenceVideo = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri ?: return@registerForActivityResult
         persist(uri, read = true, write = false)
         viewModel.openPickedVideo(uri)
+    }
+
+    private val openWorkbenchProject = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri ?: return@registerForActivityResult
+        persist(uri, read = true, write = true)
+        runCatching {
+            val text = contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
+                ?: error("无法读取工程文件")
+            viewModel.openProjectFile(text, uri)
+        }.onFailure { viewModel.reportError("工程打开失败", it) }
+    }
+
+    private val saveWorkbenchProject = registerForActivityResult(
+        ActivityResultContracts.CreateDocument(WorkbenchProjectCodec.MIME)
+    ) { uri ->
+        val text = pendingProjectText
+        pendingProjectText = null
+        uri ?: return@registerForActivityResult
+        if (text == null) return@registerForActivityResult
+        persist(uri, read = true, write = true)
+        runCatching {
+            contentResolver.openOutputStream(uri, "wt")?.bufferedWriter()?.use { it.write(text) }
+                ?: error("无法写入工程文件")
+            viewModel.markProjectFileSaved(uri)
+        }.onFailure { viewModel.reportError("工程保存失败", it) }
     }
 
     private val openMkvProject = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -154,6 +180,9 @@ class MainActivity : ComponentActivity() {
                         onOpenSubtitle = {
                             openSubtitle.launch(arrayOf("application/x-ass", "text/x-ass", "text/x-ssa", "application/x-subrip", "text/vtt", "text/plain"))
                         },
+                        onOpenProject = {
+                            openWorkbenchProject.launch(arrayOf(WorkbenchProjectCodec.MIME, "application/json", "text/plain"))
+                        },
                         onImportFont = { importFont.launch(arrayOf("font/ttf", "font/otf", "application/x-font-ttf", "application/x-font-opentype", "application/octet-stream")) },
                         onSave = {
                             if (!viewModel.saveCurrent()) saveSubtitleAs.launch(defaultFileName(state.project.title))
@@ -161,6 +190,10 @@ class MainActivity : ComponentActivity() {
                         onSaveAs = { saveSubtitleAs.launch(defaultFileName(state.project.title)) },
                         onSaveMkv = {
                             saveMkvAs.launch(defaultMkvFileName(state.container.name.ifBlank { state.project.title }))
+                        },
+                        onSaveProject = { fileName, text ->
+                            pendingProjectText = text
+                            saveWorkbenchProject.launch(fileName)
                         },
                         rendererEnabled = rendererEnabled,
                         onEnableRenderer = { rendererEnabled = true },
