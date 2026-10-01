@@ -24,6 +24,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -217,7 +219,9 @@ fun ModernEditorScreen(
 
     fun openTool(next: WorkbenchTool) {
         workspaceState = workspaceState.openPrimary(next.name, next.descriptor.defaultBinding)
-        if (workspaceMode == WorkspacePresentationMode.FIXED) {
+        if (workspaceMode == WorkspacePresentationMode.FIXED ||
+            workspaceMode == WorkspacePresentationMode.PAGER_EXPERIMENTAL
+        ) {
             fixedListRequested = next == WorkbenchTool.SUBTITLES
             fixedNavigationRevision += 1
             if (!fixedListRequested) fixedToolName = next.name
@@ -488,6 +492,37 @@ fun ModernEditorScreen(
                     onCloseSearch = { searchOpen = false; viewModel.setQuery("") },
                     modifier = Modifier.weight(1f).fillMaxWidth().testTag("fixed-workspace"),
                 )
+            } else if (workspaceMode == WorkspacePresentationMode.PAGER_EXPERIMENTAL) {
+                PagerWorkspace(
+                    state = state,
+                    viewModel = viewModel,
+                    issues = issues,
+                    activeTool = fixedTool,
+                    instance = workspaceState.activeForTool(fixedTool.name)
+                        ?: WorkspaceToolInstance(
+                            id = WorkspaceState.primaryInstanceId(fixedTool.name),
+                            toolKey = fixedTool.name,
+                            binding = fixedTool.descriptor.defaultBinding,
+                        ),
+                    onActiveTool = { tool ->
+                        fixedToolName = tool.name
+                        workspaceState = workspaceState
+                            .openPrimary(tool.name, tool.descriptor.defaultBinding)
+                            .activate(WorkspaceState.primaryInstanceId(tool.name))
+                    },
+                    expandedEventId = expandedEventId,
+                    onExpandedChange = { expandedEventId = it },
+                    onImportFont = onImportFont,
+                    onSaveMkv = onSaveMkv,
+                    eventEditorStateHolder = eventEditorStateHolder,
+                    onOpenVideo = onOpenReferenceVideo,
+                    rendererEnabled = rendererEnabled,
+                    onEnableRenderer = onEnableRenderer,
+                    onEditEventPosition = ::openPositionTarget,
+                    searchOpen = searchOpen,
+                    onCloseSearch = { searchOpen = false; viewModel.setQuery("") },
+                    modifier = Modifier.weight(1f).fillMaxWidth().testTag("pager-workspace"),
+                )
             } else BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().testTag("canvas-workspace")) {
                 val viewportWidth = maxWidth.value
                 val viewportHeight = maxHeight.value
@@ -653,6 +688,7 @@ fun ModernEditorScreen(
             visible = when (workspaceMode) {
                 WorkspacePresentationMode.FIXED -> fixedTool == WorkbenchTool.POSITION
                 WorkspacePresentationMode.CANVAS_EXPERIMENTAL -> !workspaceState.surfacesHidden
+                WorkspacePresentationMode.PAGER_EXPERIMENTAL -> false
             },
             modifier = Modifier.fillMaxSize().testTag("interaction-overlay"),
         )
