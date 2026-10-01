@@ -60,6 +60,13 @@ class MainActivity : ComponentActivity() {
             .onFailure { viewModel.reportError("字幕导入失败", it) }
     }
 
+    private val openWorkbenchProject = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri ?: return@registerForActivityResult
+        persist(uri, read = true, write = true)
+        runCatching { viewModel.openWorkbenchProject(uri) }
+            .onFailure { viewModel.reportError("工程文件打开失败", it) }
+    }
+
     private val importFont = registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
         if (uris.isEmpty()) return@registerForActivityResult
         uris.forEach { persist(it, read = true, write = false) }
@@ -77,6 +84,13 @@ class MainActivity : ComponentActivity() {
         persist(uri, read = true, write = true)
         runCatching { viewModel.saveTo(uri) }
             .onFailure { viewModel.reportError("字幕保存失败", it) }
+    }
+
+    private val saveWorkbenchProjectAs = registerForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
+        uri ?: return@registerForActivityResult
+        persist(uri, read = true, write = true)
+        runCatching { viewModel.saveWorkbenchProjectTo(uri) }
+            .onFailure { viewModel.reportError("工程文件保存失败", it) }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -151,6 +165,9 @@ class MainActivity : ComponentActivity() {
                             openReferenceVideo.launch(arrayOf("video/*", "video/x-matroska", "application/octet-stream"))
                         },
                         onOpenMkvProject = { openMkvProject.launch(arrayOf("video/x-matroska", "video/*", "application/octet-stream")) },
+                        onOpenWorkbenchProject = {
+                            openWorkbenchProject.launch(arrayOf("application/octet-stream", "text/plain"))
+                        },
                         onOpenSubtitle = {
                             openSubtitle.launch(arrayOf("application/x-ass", "text/x-ass", "text/x-ssa", "application/x-subrip", "text/srt", "text/plain"))
                         },
@@ -159,6 +176,11 @@ class MainActivity : ComponentActivity() {
                             if (!viewModel.saveCurrent()) saveSubtitleAs.launch(defaultFileName(state.project.title))
                         },
                         onSaveAs = { saveSubtitleAs.launch(defaultFileName(state.project.title)) },
+                        onSaveWorkbenchProject = {
+                            if (!viewModel.saveCurrentWorkbenchProject()) {
+                                saveWorkbenchProjectAs.launch(defaultProjectFileName(state.project.title))
+                            }
+                        },
                         onSaveMkv = {
                             saveMkvAs.launch(defaultMkvFileName(state.container.name.ifBlank { state.project.title }))
                         },
@@ -209,5 +231,10 @@ class MainActivity : ComponentActivity() {
     private fun defaultFileName(title: String): String {
         val stem = title.substringBeforeLast('.').ifBlank { "subtitle" }
         return "$stem.ass"
+    }
+
+    private fun defaultProjectFileName(title: String): String {
+        val stem = title.substringBeforeLast('.').ifBlank { "subtitle-project" }
+        return "$stem.asswbproj"
     }
 }
