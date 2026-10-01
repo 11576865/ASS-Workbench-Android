@@ -194,7 +194,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                             sourceUri = source,
                             status = FrameTimelineStatus.READY,
                             map = map,
-                            frameCount = (map.frameAtOrBefore(Long.MAX_VALUE).coerceAtMost(Int.MAX_VALUE.toLong()) + 1L).toInt(),
+                            frameCount = map.frameCount,
                         )
                     )
                 }
@@ -1071,6 +1071,24 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 ) else event
             })
         }
+    }
+
+    fun snapFocusedStartToFrame() {
+        val state = _state.value
+        val id = state.focusedEventId ?: return
+        val map = state.frameTimeline.map ?: return
+        val event = state.document.events.firstOrNull { it.id == id } ?: return
+        val snapped = map.snapNearest(event.start.millis).coerceAtMost(event.end.millis)
+        setEventTiming(id, snapped, event.end.millis)
+    }
+
+    fun snapFocusedEndToFrame() {
+        val state = _state.value
+        val id = state.focusedEventId ?: return
+        val map = state.frameTimeline.map ?: return
+        val event = state.document.events.firstOrNull { it.id == id } ?: return
+        val snapped = map.snapNearest(event.end.millis).coerceAtLeast(event.start.millis)
+        setEventTiming(id, event.start.millis, snapped)
     }
 
     fun previewFocusedPosition(x: Double, y: Double) {
