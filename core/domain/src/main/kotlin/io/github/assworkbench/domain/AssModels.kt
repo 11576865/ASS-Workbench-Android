@@ -79,9 +79,15 @@ data class AssDocument(
             .toList()
 }
 
+enum class SubtitleSourceFormat { ASS, SRT, MKV_ASS, UNKNOWN }
+
 data class SubtitleProject(
     val title: String = "Untitled",
     val videoUri: String? = null,
+    /** Current ASS save target. Null for imported lossy/source formats until Save As. */
     val subtitleUri: String? = null,
+    /** Original imported subtitle resource, including SRT when converted into canonical ASS. */
+    val sourceSubtitleUri: String? = null,
+    val sourceFormat: SubtitleSourceFormat = SubtitleSourceFormat.UNKNOWN,
     val splitRatio: Float = 0.56f,
 )
