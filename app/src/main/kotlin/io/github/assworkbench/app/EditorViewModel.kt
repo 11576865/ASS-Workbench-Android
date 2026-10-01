@@ -59,6 +59,8 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     private var recoveryJob: Job? = null
     private var fontDiagnosticJob: Job? = null
     private var waveformJob: Job? = null
+    private var sceneCutJob: Job? = null
+    private var mediaCatalogJob: Job? = null
     private var containerScanJob: Job? = null
     private var waveformSourceUri: String? = null
     private var containerScan: MatroskaScanResult? = null
@@ -108,8 +110,43 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
 
     private fun cancelWaveformAnalysis() {
         waveformJob?.cancel()
+        sceneCutJob?.cancel()
+        mediaCatalogJob?.cancel()
         waveformJob = null
+        sceneCutJob = null
+        mediaCatalogJob = null
         waveformSourceUri = null
+    }
+
+    private fun launchMediaAssist(uri: Uri) {
+        val source = uri.toString()
+        mediaCatalogJob?.cancel()
+        sceneCutJob?.cancel()
+        mediaCatalogJob = viewModelScope.launch {
+            val tracks = runCatching { withContext(Dispatchers.IO) { MediaTrackCatalog.audioTracks(app, uri) } }
+                .getOrDefault(emptyList())
+            if (_state.value.project.videoUri != source) return@launch
+            _state.update { current ->
+                val selected = current.selectedAudioTrackIndex?.takeIf { index -> tracks.any { it.extractorIndex == index } }
+                    ?: tracks.firstOrNull()?.extractorIndex
+                current.copy(audioTracks = tracks, selectedAudioTrackIndex = selected)
+            }
+            launchWaveformAnalysis(uri)
+        }
+        sceneCutJob = viewModelScope.launch {
+            val cuts = runCatching { withContext(Dispatchers.IO) { SceneCutAnalyzer.analyze(app, uri) } }
+                .getOrDefault(emptyList())
+            if (_state.value.project.videoUri == source) {
+                _state.update { it.copy(sceneCutsMs = cuts) }
+            }
+        }
+    }
+
+    fun selectAudioTrack(extractorIndex: Int) {
+        val current = _state.value
+        if (current.audioTracks.none { it.extractorIndex == extractorIndex }) return
+        _state.update { it.copy(selectedAudioTrackIndex = extractorIndex) }
+        current.project.videoUri?.let { launchWaveformAnalysis(Uri.parse(it)) }
     }
 
     private fun launchWaveformAnalysis(uri: Uri) {
@@ -127,7 +164,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         waveformJob = viewModelScope.launch {
             val result = runCatching {
                 withContext(Dispatchers.IO) {
-                    WaveformLiteAnalyzer.loadOrAnalyze(app, uri)
+                    WaveformLiteAnalyzer.loadOrAnalyze(app, uri, _state.value.selectedAudioTrackIndex)
                 }
             }
             if (waveformSourceUri != source || _state.value.project.videoUri != source) return@launch
@@ -290,7 +327,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 }
                 refreshFonts(initial = false)
                 if (_state.value.project.videoUri == uri.toString()) {
-                    launchWaveformAnalysis(uri)
+                    launchMediaAssist(uri)
                 }
                 if (tracks.size == 1) selectContainerTrack(tracks.single().number)
             }.onFailure { error ->
@@ -306,7 +343,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                     )
                 }
                 if (_state.value.project.videoUri == uri.toString()) {
-                    launchWaveformAnalysis(uri)
+                    launchMediaAssist(uri)
                 }
             }
         }
@@ -494,7 +531,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 )
             }
             if (current.waveform.status != WaveformLiteStatus.READY) {
-                launchWaveformAnalysis(uri)
+                launchMediaAssist(uri)
             }
             return
         }
@@ -506,6 +543,9 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         _state.update {
             it.copy(
                 project = it.project.copy(videoUri = uri.toString()),
+                audioTracks = emptyList(),
+                selectedAudioTrackIndex = null,
+                sceneCutsMs = emptyList(),
                 status = if ((displayName(uri) ?: "").endsWith(".mkv", ignoreCase = true)) {
                     "已把 MKV 作为参考视频载入；如需编辑它的内嵌 ASS，请使用顶部 MKV 入口。"
                 } else {
@@ -513,7 +553,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 },
             )
         }
-        launchWaveformAnalysis(uri)
+        launchMediaAssist(uri)
     }
 
     fun openSubtitle(uri: Uri) {
