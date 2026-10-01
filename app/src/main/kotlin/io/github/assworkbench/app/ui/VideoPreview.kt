@@ -81,6 +81,15 @@ import io.github.assworkbench.app.ui.interaction.InteractionProxySpec
 import io.github.assworkbench.app.ui.preview.PreviewTargetCandidate
 import io.github.assworkbench.app.ui.preview.PreviewTargetConfidence
 import io.github.assworkbench.app.ui.preview.PreviewTargetResolver
+
+internal data class PreviewObjectPick(
+    val frozenPositionMs: Long,
+    val playX: Double,
+    val playY: Double,
+    val viewportFractionX: Float,
+    val viewportFractionY: Float,
+    val candidates: List<PreviewTargetCandidate>,
+)
 import io.github.yuroyami.libmpvkt.Mpv
 import io.github.yuroyami.libmpvkt.MpvCommands
 import io.github.yuroyami.libmpvkt.MpvResult
@@ -139,6 +148,7 @@ internal fun VideoPreview(
     onVideoAspectRatio: (Float) -> Unit = {},
     interactionRegistry: InteractionOverlayRegistry? = null,
     viewportGesturesEnabled: Boolean = false,
+    onObjectLongPress: ((PreviewObjectPick) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     if (!rendererEnabled) {
@@ -237,6 +247,7 @@ internal fun VideoPreview(
             onVideoAspectRatio = onVideoAspectRatio,
             interactionRegistry = interactionRegistry,
             viewportGesturesEnabled = viewportGesturesEnabled,
+            onObjectLongPress = onObjectLongPress,
             modifier = modifier,
         )
     }
@@ -536,6 +547,7 @@ private fun AuthoritativeMpvPreview(
     onVideoAspectRatio: (Float) -> Unit,
     interactionRegistry: InteractionOverlayRegistry?,
     viewportGesturesEnabled: Boolean,
+    onObjectLongPress: ((PreviewObjectPick) -> Unit)?,
     modifier: Modifier,
 ) {
     val context = LocalContext.current
@@ -801,13 +813,29 @@ private fun AuthoritativeMpvPreview(
                                         .coerceAtLeast(0L)
                                     val playX = (offset.x / size.width.coerceAtLeast(1) * document.playResX).toDouble()
                                     val playY = (offset.y / size.height.coerceAtLeast(1) * document.playResY).toDouble()
-                                    targetCandidates = PreviewTargetResolver.candidates(
+                                    val candidates = PreviewTargetResolver.candidates(
                                         document = document,
                                         positionMs = positionMs,
                                         x = playX,
                                         y = playY,
                                     )
-                                    targetPickerOpen = true
+                                    if (onObjectLongPress != null) {
+                                        targetPickerOpen = false
+                                        targetCandidates = emptyList()
+                                        onObjectLongPress(
+                                            PreviewObjectPick(
+                                                frozenPositionMs = positionMs,
+                                                playX = playX,
+                                                playY = playY,
+                                                viewportFractionX = offset.x / size.width.coerceAtLeast(1),
+                                                viewportFractionY = offset.y / size.height.coerceAtLeast(1),
+                                                candidates = candidates,
+                                            )
+                                        )
+                                    } else {
+                                        targetCandidates = candidates
+                                        targetPickerOpen = true
+                                    }
                                     playbackControlsVisible = false
                                 },
                                 onDoubleTap = {
