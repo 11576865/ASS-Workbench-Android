@@ -3786,7 +3786,12 @@ private fun QcPane(state: EditorState, viewModel: EditorViewModel, issues: List<
 private fun BatchPane(state: EditorState, viewModel: EditorViewModel, modifier: Modifier = Modifier) {
     var styleMenuOpen by remember { mutableStateOf(false) }
     var pasteMenuOpen by remember { mutableStateOf(false) }
-    Column(modifier.padding(WorkbenchDimens.Small), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(
+        modifier.padding(WorkbenchDimens.Small).verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        BatchRuleWorkbench(state, viewModel)
+        Divider()
         Text("已选 ${state.selectedEventIds.size} 条", style = MaterialTheme.typography.titleSmall)
         if (state.selectedEventIds.isEmpty()) { Text("长按字幕进入多选。"); return }
         Box {
