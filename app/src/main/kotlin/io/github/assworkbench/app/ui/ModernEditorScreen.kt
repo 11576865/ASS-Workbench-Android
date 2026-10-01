@@ -1069,8 +1069,11 @@ private fun FloatingToolContent(
         }
         WorkbenchTool.TEXT, WorkbenchTool.EFFECTS, WorkbenchTool.EVENT -> {
             if (event == null) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("先选择一条字幕")
+                Column(Modifier.fillMaxSize()) {
+                    editScope?.let { WorkspaceEditScopeBar(it) }
+                    Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        Text(if (editScope?.unresolved == true) "绑定目标已失效" else "先选择一条字幕")
+                    }
                 }
             } else {
                 Column(
