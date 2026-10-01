@@ -104,7 +104,7 @@ fun ModernEditorScreen(
         ),
     ) {
         mutableStateOf(
-            WorkspaceState()
+            WorkspaceState(sessionId = state.workspaceSessionId)
                 .openPrimary(WorkbenchTool.STYLE.name)
                 .withSurfacesHidden(true)
         )
@@ -126,6 +126,19 @@ fun ModernEditorScreen(
     val workspaceMode = WorkspacePresentationMode.valueOf(workspaceModeName)
     val fixedTool = WorkbenchTool.valueOf(fixedToolName)
 
+    LaunchedEffect(state.workspaceSessionId) {
+        if (workspaceState.sessionId != state.workspaceSessionId) {
+            workspaceState = WorkspaceState(sessionId = state.workspaceSessionId)
+                .openPrimary(WorkbenchTool.STYLE.name)
+                .withSurfacesHidden(true)
+            surfaceController.restore(emptyList())
+            expandedEventId = null
+            fixedToolName = WorkbenchTool.STYLE.name
+            fixedListRequested = false
+            workspaceModeName = WorkspacePresentationMode.FIXED.name
+        }
+    }
+
     val openProjectLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri ?: return@rememberLauncherForActivityResult
         runCatching {
@@ -136,8 +149,8 @@ fun ModernEditorScreen(
                 ?: error("无法读取 Workbench Project")
             ProjectFileCodec.decode(text)
         }.onSuccess { snapshot ->
-            viewModel.loadProjectSnapshot(snapshot)
-            workspaceState = WorkspaceState.fromSaveableList(snapshot.workspaceState)
+            val sessionId = viewModel.loadProjectSnapshot(snapshot)
+            workspaceState = WorkspaceState.fromSaveableList(snapshot.workspaceState).forSession(sessionId)
             surfaceController.restore(snapshot.surfaceState)
             workspaceModeName = runCatching {
                 WorkspacePresentationMode.valueOf(snapshot.workspaceMode)
