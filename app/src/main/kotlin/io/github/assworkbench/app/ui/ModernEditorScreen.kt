@@ -65,6 +65,7 @@ import io.github.assworkbench.app.EditorViewModel
 import io.github.assworkbench.app.WaveformLiteState
 import io.github.assworkbench.app.WaveformLiteStatus
 import io.github.assworkbench.app.ui.interaction.InteractionOverlayRegistry
+import io.github.assworkbench.app.ui.interaction.PrecisionInteractionOverlay
 import io.github.assworkbench.app.ui.interaction.WindowInteractionOverlay
 import io.github.assworkbench.app.ui.interaction.rememberInteractionOverlayRegistry
 import io.github.assworkbench.app.ui.workspace.WorkspaceBinding
@@ -560,6 +561,17 @@ fun ModernEditorScreen(
                     onCloseSearch = { searchOpen = false; viewModel.setQuery("") },
                     modifier = Modifier.weight(1f).fillMaxWidth().testTag("spatial-workspace"),
                 )
+            } else if (workspaceMode == WorkspacePresentationMode.PRECISION_LENS_EXPERIMENTAL) {
+                PrecisionLensWorkspace(
+                    state = state,
+                    viewModel = viewModel,
+                    issues = issues,
+                    onOpenVideo = onOpenReferenceVideo,
+                    rendererEnabled = rendererEnabled,
+                    onEnableRenderer = onEnableRenderer,
+                    interactionRegistry = interactionRegistry,
+                    modifier = Modifier.weight(1f).fillMaxWidth().testTag("precision-lens-workspace"),
+                )
             } else BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().testTag("canvas-workspace")) {
                 val viewportWidth = maxWidth.value
                 val viewportHeight = maxHeight.value
@@ -727,12 +739,157 @@ fun ModernEditorScreen(
                 WorkspacePresentationMode.CANVAS_EXPERIMENTAL -> !workspaceState.surfacesHidden
                 WorkspacePresentationMode.PAGER_EXPERIMENTAL -> false
                 WorkspacePresentationMode.SPATIAL_EXPERIMENTAL -> false
+                WorkspacePresentationMode.PRECISION_LENS_EXPERIMENTAL -> false
             },
             modifier = Modifier.fillMaxSize().testTag("interaction-overlay"),
+        )
+        PrecisionInteractionOverlay(
+            registry = interactionRegistry,
+            visible = workspaceMode == WorkspacePresentationMode.PRECISION_LENS_EXPERIMENTAL,
+            modifier = Modifier.fillMaxSize(),
         )
         }
     }
 }
+}
+
+@Composable
+private fun PrecisionLensWorkspace(
+    state: EditorState,
+    viewModel: EditorViewModel,
+    issues: List<AssQcIssue>,
+    onOpenVideo: () -> Unit,
+    rendererEnabled: Boolean,
+    onEnableRenderer: () -> Unit,
+    interactionRegistry: InteractionOverlayRegistry,
+    modifier: Modifier = Modifier,
+) {
+    val focusedEvent = state.focusedEventId?.let { id ->
+        state.document.events.firstOrNull { it.id == id }
+    }
+    val geometry = focusedEvent?.let { AssGeometrySemantic.inspect(it.text) }
+    val unsupportedReason = focusedEvent?.let {
+        when {
+            geometry?.positionMode == AssPositionMode.CONFLICT ->
+                "当前 Event 同时包含 pos 与 move，直接位置操控已受限；可继续使用 org / 旋转，或转到 Raw / 数值编辑。"
+            geometry?.positionMode == AssPositionMode.MOVE && geometry.move == null ->
+                "move 语义无法可靠解析；保留 Raw 编辑入口。"
+            else -> null
+        }
+    }
+
+    Column(modifier.background(MaterialTheme.colorScheme.surfaceContainerLowest)) {
+        Surface(
+            Modifier.fillMaxWidth(),
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            tonalElevation = 3.dp,
+        ) {
+            Row(
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp, vertical = 5.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Text("精密几何", style = MaterialTheme.typography.titleSmall)
+                state.document.events.take(16).forEach { event ->
+                    FilterChip(
+                        selected = event.id == state.focusedEventId,
+                        onClick = { viewModel.focusEvent(event.id, seek = true) },
+                        label = { Text("#${event.id}") },
+                    )
+                }
+                if (state.document.events.size > 16) {
+                    Text("+${state.document.events.size - 16}", style = MaterialTheme.typography.labelSmall)
+                }
+            }
+        }
+
+        Box(Modifier.weight(1f).fillMaxWidth()) {
+            WorkbenchPreview(
+                state = state,
+                viewModel = viewModel,
+                positionEditEventId = state.focusedEventId,
+                onOpenVideo = onOpenVideo,
+                onOpenTimeline = {},
+                rendererEnabled = rendererEnabled,
+                onEnableRenderer = onEnableRenderer,
+                interactionRegistry = interactionRegistry,
+                viewportGesturesEnabled = false,
+                modifier = Modifier.fillMaxSize().testTag("precision-preview"),
+            )
+
+            if (focusedEvent == null) {
+                Surface(
+                    modifier = Modifier.align(Alignment.Center)
+                        .padding(18.dp)
+                        .testTag("precision-empty-state"),
+                    shape = RoundedCornerShape(22.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.96f),
+                ) {
+                    Column(
+                        Modifier.padding(16.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text("先选择一条字幕", style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            "选择后直接出现位置、旋转、缩放、倾斜与 org 操纵杆。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+
+            unsupportedReason?.let { message ->
+                Surface(
+                    modifier = Modifier.align(Alignment.BottomCenter)
+                        .padding(10.dp)
+                        .fillMaxWidth(0.92f)
+                        .testTag("precision-unsupported-reason"),
+                    shape = RoundedCornerShape(18.dp),
+                    color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.96f),
+                ) {
+                    Row(
+                        Modifier.padding(10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Icon(Icons.Filled.Info, null)
+                        Text(message, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+                    }
+                }
+            }
+        }
+
+        focusedEvent?.let { event ->
+            Surface(
+                Modifier.fillMaxWidth().testTag("precision-object-strip"),
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                tonalElevation = 3.dp,
+            ) {
+                Row(
+                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp, vertical = 5.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text("#${event.id} · ${event.style} · L${event.layer}", style = MaterialTheme.typography.labelLarge)
+                    Text(event.start.toAss() + " — " + event.end.toAss(), style = MaterialTheme.typography.labelSmall)
+                    AssistChip(
+                        onClick = { viewModel.setGeometryScaleLocked(!state.geometryScaleLocked) },
+                        label = { Text(if (state.geometryScaleLocked) "XY 缩放锁定" else "XY 独立缩放") },
+                    )
+                    AssistChip(
+                        onClick = { viewModel.clearTransientPreview() },
+                        label = { Text("清临时预览") },
+                    )
+                    AssistChip(
+                        onClick = { viewModel.focusEvent(event.id, seek = false) },
+                        label = { Text("保持对象焦点") },
+                    )
+                }
+            }
+        }
+    }
 }
 
 @OptIn(ExperimentalFoundationApi::class)
