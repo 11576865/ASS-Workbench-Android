@@ -20,7 +20,9 @@ class EngineeringSuiteTest {
         assertEquals(2, doc.events.size)
         assertEquals("Hello\\Nworld", doc.events[0].text)
         assertTrue(doc.events[1].text.contains("\\i1"))
-        assertTrue(SrtCodec.write(doc).contains("00:00:01,000 --> 00:00:02,250"))
+        val written = SrtCodec.write(doc)
+        assertTrue(written.contains("00:00:01,000 --> 00:00:02,250"))
+        assertTrue(written.contains("<i>Italic</i>"))
     }
 
     @Test fun cfrAndVfrSnap() {
@@ -46,6 +48,12 @@ class EngineeringSuiteTest {
         val segments = listOf(AssKaraokeSegment(AssKaraokeMode.K, 20, "Hi"), AssKaraokeSegment(AssKaraokeMode.KF, 30, "!"))
         assertEquals(500L, AssKaraokeCodec.totalDurationMs(segments))
         assertEquals(2, AssKaraokeCodec.parse(AssKaraokeCodec.write(segments)).size)
+        val decorated = "{\\an8}{\\an7\\k20\\bord2}Hi{\\K30}!"
+        val parsed = AssKaraokeCodec.parse(decorated)
+        val rewritten = AssKaraokeCodec.write(parsed.toMutableList().also {
+            it[0] = it[0].copy(centiseconds = 25)
+        })
+        assertTrue(rewritten.startsWith("{\\an8}{\\an7\\k25\\bord2}Hi{\\K30}!"))
         val text = "{\\clip(m 0 0 l 100 0 l 100 100)}x"
         val clip = AssVectorClipCodec.inspect(text)!!
         val moved = clip.copy(tokens = clip.tokens.map { if (it.number != null) it.copy(number = it.number + 1) else it })
@@ -61,6 +69,12 @@ class EngineeringSuiteTest {
         assertTrue("Arial" in families)
         assertTrue("Inline Font" in families)
         assertTrue("Alt Font" in families)
+        val caseVariant = doc.copy(
+            events = doc.events + AssEvent(2, start = SubTime(1000), end = SubTime(2000), text = "{\\fnARIAL}C"),
+        )
+        val arial = FontRequirementResolver.resolve(caseVariant).filter { it.family.equals("Arial", ignoreCase = true) }
+        assertEquals(1, arial.size)
+        assertTrue(setOf(1L, 2L).all { it in arial.single().eventIds })
     }
 
     @Test fun linterOffersExplicitQuickFixes() {
