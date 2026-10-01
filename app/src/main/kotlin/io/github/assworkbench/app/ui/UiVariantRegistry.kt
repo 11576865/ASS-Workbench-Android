@@ -37,6 +37,11 @@ internal enum class WorkspacePresentationMode(
         status = UiVariantStatus.EXPERIMENTAL,
         description = "把预览、字幕与工具放进大于屏幕的二维工作区；支持平移、缩放、鸟瞰与节点召回。",
     ),
+    PRECISION_LENS_EXPERIMENTAL(
+        title = "操纵杆精密放大工作台",
+        status = UiVariantStatus.EXPERIMENTAL,
+        description = "围绕字幕几何操纵杆加入局部放大、粗细调、吸附预告、触觉反馈与实时读数。",
+    ),
 }
 
 /**
