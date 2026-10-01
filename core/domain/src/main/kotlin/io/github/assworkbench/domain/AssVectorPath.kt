@@ -67,36 +67,74 @@ data class AssVectorClip(
 )
 
 object AssVectorClipSemantic {
-    private val clip = Regex("""\\(i?clip)\(([^)]*)\)""", RegexOption.IGNORE_CASE)
+    private data class ClipRef(
+        val inverted: Boolean,
+        val payload: String,
+        val start: Int,
+        val endExclusive: Int,
+    )
 
     fun inspectLeading(text: String): AssVectorClip? {
-        val prefix = leadingOverridePrefix(text)
-        if (prefix.isEmpty()) return null
-        val match = clip.findAll(prefix).lastOrNull() ?: return null
-        val payload = match.groupValues[2]
-        val path = runCatching { AssVectorPathCodec.parse(payload) }.getOrNull() ?: return null
-        return AssVectorClip(
-            inverted = match.groupValues[1].equals("iclip", ignoreCase = true),
-            path = path,
-        )
+        val ref = topLevelClips(text).lastOrNull() ?: return null
+        val path = runCatching { AssVectorPathCodec.parse(ref.payload) }.getOrNull() ?: return null
+        return AssVectorClip(ref.inverted, path)
     }
 
     fun patchLeading(text: String, clipValue: AssVectorClip): String {
-        val prefix = leadingOverridePrefix(text)
-        if (prefix.isEmpty()) return text
-        val match = clip.findAll(prefix).lastOrNull() ?: return text
+        val ref = topLevelClips(text).lastOrNull() ?: return text
         val replacement = "\\" + (if (clipValue.inverted) "iclip" else "clip") +
             "(" + AssVectorPathCodec.write(clipValue.path) + ")"
-        return text.replaceRange(match.range, replacement)
+        return text.replaceRange(ref.start, ref.endExclusive, replacement)
     }
 
-    private fun leadingOverridePrefix(text: String): String {
-        var cursor = 0
-        while (cursor < text.length && text[cursor] == '{') {
-            val close = text.indexOf('}', cursor + 1)
-            if (close < 0) return ""
-            cursor = close + 1
+    /**
+     * Finds only top-level clip tags in consecutive leading override blocks.
+     * A clip nested inside \\t(...) is deliberately ignored.
+     */
+    private fun topLevelClips(text: String): List<ClipRef> {
+        val out = mutableListOf<ClipRef>()
+        var blockStart = 0
+        while (blockStart < text.length && text[blockStart] == '{') {
+            val close = text.indexOf('}', blockStart + 1)
+            if (close < 0) return out
+            var i = blockStart + 1
+            var depth = 0
+            while (i < close) {
+                when (text[i]) {
+                    '(' -> { depth++; i++ }
+                    ')' -> { if (depth > 0) depth--; i++ }
+                    '\\' -> {
+                        if (depth != 0) { i++; continue }
+                        val lower = text.substring(i, close).lowercase()
+                        val spelling = when {
+                            lower.startsWith("\\iclip(") -> "iclip"
+                            lower.startsWith("\\clip(") -> "clip"
+                            else -> null
+                        }
+                        if (spelling == null) { i++; continue }
+                        val open = i + spelling.length + 1
+                        var p = open + 1
+                        var innerDepth = 1
+                        while (p < close && innerDepth > 0) {
+                            if (text[p] == '(') innerDepth++
+                            else if (text[p] == ')') innerDepth--
+                            p++
+                        }
+                        if (innerDepth != 0) { i++; continue }
+                        out += ClipRef(
+                            inverted = spelling == "iclip",
+                            payload = text.substring(open + 1, p - 1),
+                            start = i,
+                            endExclusive = p,
+                        )
+                        i = p
+                    }
+                    else -> i++
+                }
+            }
+            blockStart = close + 1
         }
-        return text.substring(0, cursor)
+        return out
     }
 }
+
