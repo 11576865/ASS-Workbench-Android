@@ -23,6 +23,7 @@ data class EditorState(
     val project: SubtitleProject = SubtitleProject(),
     val document: AssDocument = AssDocument(),
     val previewDocument: AssDocument? = null,
+    val batchRulePreviewEventIds: Set<Long> = emptySet(),
     val waveform: WaveformLiteState = WaveformLiteState(),
     val geometryScaleLocked: Boolean = true,
     val subtitleLoaded: Boolean = false,
