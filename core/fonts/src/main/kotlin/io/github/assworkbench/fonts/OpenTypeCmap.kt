@@ -6,9 +6,9 @@ import java.nio.ByteOrder
 object OpenTypeCmap {
     private const val CMAP_TAG = 0x636D6170
 
-    fun supportsCodePoint(bytes: ByteArray, codePoint: Int): Boolean {
+    fun supportsCodePoint(bytes: ByteArray, codePoint: Int, sfntOffset: Int = 0): Boolean {
         if (codePoint < 0 || codePoint > 0x10FFFF) return false
-        val table = findTable(bytes, CMAP_TAG) ?: return false
+        val table = findTable(bytes, CMAP_TAG, sfntOffset) ?: return false
         val base = table.first
         val length = table.second
         if (length < 4 || base < 0 || base + length > bytes.size) return false
@@ -49,11 +49,12 @@ object OpenTypeCmap {
         bytes: ByteArray,
         codePoints: Collection<Int>,
         limit: Int = 24,
+        sfntOffset: Int = 0,
     ): List<Int> {
         if (limit <= 0) return emptyList()
         val out = ArrayList<Int>()
         for (cp in codePoints) {
-            if (!supportsCodePoint(bytes, cp)) {
+            if (!supportsCodePoint(bytes, cp, sfntOffset)) {
                 out += cp
                 if (out.size >= limit) break
             }
@@ -122,12 +123,12 @@ object OpenTypeCmap {
         return false
     }
 
-    private fun findTable(bytes: ByteArray, tag: Int): Pair<Int, Int>? {
-        if (bytes.size < 12) return null
-        val numTables = u16(bytes, 4)
-        if (12 + numTables * 16 > bytes.size) return null
+    private fun findTable(bytes: ByteArray, tag: Int, sfntOffset: Int): Pair<Int, Int>? {
+        if (sfntOffset < 0 || sfntOffset + 12 > bytes.size) return null
+        val numTables = u16(bytes, sfntOffset + 4)
+        if (sfntOffset.toLong() + 12L + numTables.toLong() * 16L > bytes.size.toLong()) return null
         repeat(numTables) { index ->
-            val off = 12 + index * 16
+            val off = sfntOffset + 12 + index * 16
             if (i32(bytes, off) == tag) {
                 val tableOffset = u32(bytes, off + 8).toInt()
                 val tableLength = u32(bytes, off + 12).toInt()
