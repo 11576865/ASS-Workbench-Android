@@ -30,6 +30,7 @@ data class EditorState(
     val document: AssDocument = AssDocument(),
     val previewDocument: AssDocument? = null,
     val waveform: WaveformLiteState = WaveformLiteState(),
+    val frameTimeline: FrameTimelineState = FrameTimelineState(),
     val geometryScaleLocked: Boolean = true,
     val subtitleLoaded: Boolean = false,
     val subtitleTextEncoding: AssTextEncoding = AssTextEncoding.UTF8,
