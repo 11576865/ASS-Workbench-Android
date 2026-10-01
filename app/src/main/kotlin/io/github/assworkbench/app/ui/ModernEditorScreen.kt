@@ -462,7 +462,7 @@ fun ModernEditorScreen(
                         ?: WorkspaceToolInstance(
                             id = WorkspaceState.primaryInstanceId(fixedTool.name),
                             toolKey = fixedTool.name,
-                            binding = WorkspaceBinding.FollowFocus,
+                            binding = fixedTool.descriptor.defaultBinding,
                         ),
                     navigationRevision = fixedNavigationRevision,
                     listRequested = fixedListRequested,
