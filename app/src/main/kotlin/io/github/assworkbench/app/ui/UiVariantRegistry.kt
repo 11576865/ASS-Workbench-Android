@@ -32,6 +32,11 @@ internal enum class WorkspacePresentationMode(
         status = UiVariantStatus.EXPERIMENTAL,
         description = "字幕、预览、当前工具三页切换；一次只把一个主要任务放到前台。",
     ),
+    SPATIAL_EXPERIMENTAL(
+        title = "空间工作现场",
+        status = UiVariantStatus.EXPERIMENTAL,
+        description = "把预览、字幕与工具放进大于屏幕的二维工作区；支持平移、缩放、鸟瞰与节点召回。",
+    ),
 }
 
 /**
