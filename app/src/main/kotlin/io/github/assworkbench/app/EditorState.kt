@@ -24,6 +24,8 @@ data class EditorState(
     val previewDocument: AssDocument? = null,
     /** Owner of the single active transient domain preview. */
     val previewOwnerId: String? = null,
+    /** Ephemeral namespace for UI bindings; increments whenever the document workspace is replaced. */
+    val workspaceSessionId: Long = 1L,
     val waveform: WaveformLiteState = WaveformLiteState(),
     val geometryScaleLocked: Boolean = true,
     val subtitleLoaded: Boolean = false,
