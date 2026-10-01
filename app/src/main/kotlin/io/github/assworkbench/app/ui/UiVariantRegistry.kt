@@ -37,6 +37,11 @@ internal enum class WorkspacePresentationMode(
         status = UiVariantStatus.EXPERIMENTAL,
         description = "把预览、字幕与工具放进大于屏幕的二维工作区；支持平移、缩放、鸟瞰与节点召回。",
     ),
+    GLASS_LAYERED_EXPERIMENTAL(
+        title = "玻璃叠层工作台",
+        status = UiVariantStatus.EXPERIMENTAL,
+        description = "工具以独立透明/磨砂/实底层叠加在预览上；支持真实背景模糊、层概览与临时看穿。",
+    ),
 }
 
 /**
