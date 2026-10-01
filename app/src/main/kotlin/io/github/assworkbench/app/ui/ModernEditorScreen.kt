@@ -76,6 +76,8 @@ import io.github.assworkbench.app.ui.workspace.WorkspaceEditScopeResolver
 import io.github.assworkbench.app.ui.workspace.WorkspaceEditScopeSummary
 import io.github.assworkbench.app.ui.workspace.WorkspaceState
 import io.github.assworkbench.app.ui.workspace.WorkspaceToolInstance
+import io.github.assworkbench.app.ui.workspace.WorkspaceToolPresence
+import io.github.assworkbench.app.ui.workspace.ToolContentDensity
 import io.github.assworkbench.app.ui.workspace.resolve
 import io.github.assworkbench.domain.*
 import io.github.assworkbench.fonts.FontDiagnostics
@@ -224,6 +226,28 @@ fun ModernEditorScreen(
     }
 
     fun openTool(next: WorkbenchTool) {
+        val primaryId = WorkspaceState.primaryInstanceId(next.name)
+        if (workspaceMode == WorkspacePresentationMode.TOOL_INSTANCES_EXPERIMENTAL) {
+            val existing = workspaceState.primary(next.name)
+            workspaceState = if (
+                existing != null &&
+                workspaceState.activeInstanceId == primaryId &&
+                existing.presence == WorkspaceToolPresence.TEMPORARY
+            ) {
+                workspaceState.updatePresence(primaryId, WorkspaceToolPresence.HIDDEN)
+            } else {
+                workspaceState
+                    .openPrimary(next.name, next.descriptor.defaultBinding)
+                    .updatePresence(primaryId, WorkspaceToolPresence.TEMPORARY)
+                    .hideOtherTemporary(primaryId)
+                    .withSurfacesHidden(false)
+            }
+            if (workspaceState.primary(next.name)?.presence == WorkspaceToolPresence.TEMPORARY) {
+                surfaceController.bringToFront(primaryId)
+            }
+            return
+        }
+
         workspaceState = workspaceState.openPrimary(next.name, next.descriptor.defaultBinding)
         if (workspaceMode == WorkspacePresentationMode.FIXED ||
             workspaceMode == WorkspacePresentationMode.PAGER_EXPERIMENTAL
@@ -234,7 +258,7 @@ fun ModernEditorScreen(
             return
         }
         workspaceState = workspaceState.withSurfacesHidden(false)
-        surfaceController.bringToFront(WorkspaceState.primaryInstanceId(next.name))
+        surfaceController.bringToFront(primaryId)
     }
 
     fun openPositionTarget(eventId: Long) {
@@ -560,6 +584,27 @@ fun ModernEditorScreen(
                     onCloseSearch = { searchOpen = false; viewModel.setQuery("") },
                     modifier = Modifier.weight(1f).fillMaxWidth().testTag("spatial-workspace"),
                 )
+            } else if (workspaceMode == WorkspacePresentationMode.TOOL_INSTANCES_EXPERIMENTAL) {
+                ToolInstanceWorkspace(
+                    state = state,
+                    viewModel = viewModel,
+                    issues = issues,
+                    workspaceState = workspaceState,
+                    onWorkspaceStateChange = { workspaceState = it },
+                    surfaceController = surfaceController,
+                    expandedEventId = expandedEventId,
+                    onExpandedChange = { expandedEventId = it },
+                    onImportFont = onImportFont,
+                    onSaveMkv = onSaveMkv,
+                    eventEditorStateHolder = eventEditorStateHolder,
+                    onOpenVideo = onOpenReferenceVideo,
+                    rendererEnabled = rendererEnabled,
+                    onEnableRenderer = onEnableRenderer,
+                    onOpenTool = ::openTool,
+                    searchOpen = searchOpen,
+                    onCloseSearch = { searchOpen = false; viewModel.setQuery("") },
+                    modifier = Modifier.weight(1f).fillMaxWidth().testTag("tool-instance-workspace"),
+                )
             } else BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().testTag("canvas-workspace")) {
                 val viewportWidth = maxWidth.value
                 val viewportHeight = maxHeight.value
@@ -727,6 +772,7 @@ fun ModernEditorScreen(
                 WorkspacePresentationMode.CANVAS_EXPERIMENTAL -> !workspaceState.surfacesHidden
                 WorkspacePresentationMode.PAGER_EXPERIMENTAL -> false
                 WorkspacePresentationMode.SPATIAL_EXPERIMENTAL -> false
+                WorkspacePresentationMode.TOOL_INSTANCES_EXPERIMENTAL -> false
             },
             modifier = Modifier.fillMaxSize().testTag("interaction-overlay"),
         )
