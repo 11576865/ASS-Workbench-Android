@@ -658,6 +658,7 @@ private fun FixedWorkspace(
     }
 
     var previewDensityName by rememberSaveable { mutableStateOf(PreviewDensity.FULL.name) }
+    var navigationGroupRequested by rememberSaveable { mutableStateOf(false) }
     val requestedPreview = runCatching { PreviewDensity.valueOf(previewDensityName) }
         .getOrDefault(PreviewDensity.FULL)
     val fixedTools = WorkbenchTool.entries.filter {
@@ -665,6 +666,7 @@ private fun FixedWorkspace(
     }
 
     fun selectTool(tool: WorkbenchTool) {
+        navigationGroupRequested = false
         compactPage = "EDITOR"
         onActiveTool(tool)
     }
@@ -727,12 +729,20 @@ private fun FixedWorkspace(
                 ) {
                     WorkbenchToolGroup.entries.forEach { group ->
                         FilterChip(
-                            selected = activeTool.group == group,
+                            selected = if (group == WorkbenchToolGroup.NAVIGATION) {
+                                navigationGroupRequested
+                            } else {
+                                !navigationGroupRequested && activeTool.group == group
+                            },
                             onClick = {
-                                val first = WorkbenchTool.entries.first {
-                                    it.group == group && it != WorkbenchTool.SUBTITLES
+                                if (group == WorkbenchToolGroup.NAVIGATION) {
+                                    navigationGroupRequested = true
+                                    compactPage = "LIST"
+                                } else {
+                                    WorkbenchTool.entries
+                                        .firstOrNull { it.group == group && it != WorkbenchTool.SUBTITLES }
+                                        ?.let(::selectTool)
                                 }
-                                selectTool(first)
                             },
                             label = { Text(group.title) },
                             modifier = Modifier.testTag("fixed-group-" + group.name),
@@ -1257,7 +1267,9 @@ private fun EventWorkspace(
     LaunchedEffect(state.focusedEventId, state.filteredEvents) {
         val focusedId = state.focusedEventId
         val index = state.filteredEvents.indexOfFirst { it.id == focusedId }
-        if (index >= 0) listState.animateScrollToItem(index)
+        if (index >= 0 && !listState.isScrollInProgress) {
+            listState.animateScrollToItem(index)
+        }
         if (expandedEventId != null && focusedId != null && expandedEventId != focusedId) {
             onExpandedChange(focusedId)
         }
