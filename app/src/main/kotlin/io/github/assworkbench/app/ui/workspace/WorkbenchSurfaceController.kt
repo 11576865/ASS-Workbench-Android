@@ -95,6 +95,13 @@ internal class WorkbenchSurfaceController(restored: List<WorkspaceSurfaceState> 
         surfaces[id] = old.copy(zOrder = next)
     }
 
+    fun restore(serialized: List<String>) {
+        resizeGestures.clear()
+        candidates.values.forEach { it.value = null }
+        surfaces.clear()
+        WorkspaceSurfacePersistence.decode(serialized).forEach { surfaces[it.instanceId] = it }
+    }
+
     fun save(): List<String> = WorkspaceSurfacePersistence.encode(surfaces.values)
 }
 
