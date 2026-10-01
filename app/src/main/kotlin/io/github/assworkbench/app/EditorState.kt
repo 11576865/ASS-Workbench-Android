@@ -40,6 +40,8 @@ data class EditorState(
     val query: String = "",
     val seekRequestMs: Long? = null,
     val seekRequestNonce: Long = 0L,
+    val currentFrameNumber: Long? = null,
+    val estimatedVideoFps: Double? = null,
     val canUndo: Boolean = false,
     val canRedo: Boolean = false,
     val dirty: Boolean = false,
