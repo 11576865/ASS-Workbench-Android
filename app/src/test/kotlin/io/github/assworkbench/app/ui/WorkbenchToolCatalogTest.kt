@@ -26,4 +26,16 @@ class WorkbenchToolCatalogTest {
         assertTrue(!WorkbenchTool.PROJECT.descriptor.eventBindable)
         assertTrue(!WorkbenchTool.FONTS.descriptor.canDuplicate)
     }
+
+    @Test
+    fun selectionToolsDefaultToSelectionBinding() {
+        assertEquals(
+            io.github.assworkbench.app.ui.workspace.WorkspaceBinding.FollowSelection,
+            WorkbenchTool.BATCH.descriptor.defaultBinding,
+        )
+        assertEquals(
+            io.github.assworkbench.app.ui.workspace.WorkspaceBinding.FollowFocus,
+            WorkbenchTool.POSITION.descriptor.defaultBinding,
+        )
+    }
 }

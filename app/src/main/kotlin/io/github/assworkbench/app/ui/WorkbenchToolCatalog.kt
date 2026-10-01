@@ -1,6 +1,7 @@
 package io.github.assworkbench.app.ui
 
 import io.github.assworkbench.app.ui.workspace.SurfaceGeometry
+import io.github.assworkbench.app.ui.workspace.WorkspaceBinding
 
 /** Task groups from the UI constitution. Tool names remain persistence keys. */
 internal enum class WorkbenchToolGroup(val title: String) {
@@ -33,6 +34,12 @@ internal data class ToolDescriptor(
     val preferredHost: ToolHostHint = ToolHostHint.SIDE_INSPECTOR,
 ) {
     val eventBindable: Boolean get() = supportsFollowFocus || supportsPinnedEvent
+    val defaultBinding: WorkspaceBinding
+        get() = if (supportsFollowSelection && contextKind == ToolContextKind.SELECTION) {
+            WorkspaceBinding.FollowSelection
+        } else {
+            WorkspaceBinding.FollowFocus
+        }
 }
 
 // Names are persistence keys. Reclassification must not rename them.

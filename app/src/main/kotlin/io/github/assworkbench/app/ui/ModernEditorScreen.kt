@@ -65,6 +65,8 @@ import io.github.assworkbench.app.ui.workspace.SurfaceGeometry
 import io.github.assworkbench.app.ui.workspace.FloatingWorkbenchSurface
 import io.github.assworkbench.app.ui.workspace.rememberWorkbenchSurfaceController
 import io.github.assworkbench.app.ui.workspace.WorkspaceBindingResolution
+import io.github.assworkbench.app.ui.workspace.WorkspaceEditScopeResolver
+import io.github.assworkbench.app.ui.workspace.WorkspaceEditScopeSummary
 import io.github.assworkbench.app.ui.workspace.WorkspaceState
 import io.github.assworkbench.app.ui.workspace.WorkspaceToolInstance
 import io.github.assworkbench.app.ui.workspace.resolve
@@ -220,7 +222,7 @@ fun ModernEditorScreen(
     }
 
     fun openTool(next: WorkbenchTool) {
-        workspaceState = workspaceState.openPrimary(next.name)
+        workspaceState = workspaceState.openPrimary(next.name, next.descriptor.defaultBinding)
         if (workspaceMode == WorkspacePresentationMode.FIXED) {
             fixedListRequested = next == WorkbenchTool.SUBTITLES
             fixedNavigationRevision += 1
@@ -460,14 +462,14 @@ fun ModernEditorScreen(
                         ?: WorkspaceToolInstance(
                             id = WorkspaceState.primaryInstanceId(fixedTool.name),
                             toolKey = fixedTool.name,
-                            binding = WorkspaceBinding.FollowFocus,
+                            binding = fixedTool.descriptor.defaultBinding,
                         ),
                     navigationRevision = fixedNavigationRevision,
                     listRequested = fixedListRequested,
                     onActiveTool = { tool ->
                         fixedToolName = tool.name
                         workspaceState = workspaceState
-                            .openPrimary(tool.name)
+                            .openPrimary(tool.name, tool.descriptor.defaultBinding)
                             .activate(WorkspaceState.primaryInstanceId(tool.name))
                     },
                     expandedEventId = expandedEventId,
@@ -1049,6 +1051,13 @@ private fun FloatingToolContent(
         boundEventId ?: expandedEventId ?: state.focusedEventId
     }
     val event = state.document.events.firstOrNull { it.id == contextualEventId }
+    val editScope = WorkspaceEditScopeResolver.resolve(
+        tool = tool,
+        instance = instance,
+        document = state.document,
+        focusedEventId = state.focusedEventId,
+        selectedEventIds = state.selectedEventIds,
+    )
     when (tool) {
         WorkbenchTool.SUBTITLES -> Column(Modifier.fillMaxSize()) {
             if (searchOpen) SearchStrip(state.query, viewModel::setQuery, onCloseSearch)
@@ -1060,14 +1069,18 @@ private fun FloatingToolContent(
         }
         WorkbenchTool.TEXT, WorkbenchTool.EFFECTS, WorkbenchTool.EVENT -> {
             if (event == null) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("先选择一条字幕")
+                Column(Modifier.fillMaxSize()) {
+                    editScope?.let { WorkspaceEditScopeBar(it) }
+                    Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        Text(if (editScope?.unresolved == true) "绑定目标已失效" else "先选择一条字幕")
+                    }
                 }
             } else {
                 Column(
                     Modifier.fillMaxSize().testTag("event-inspector").verticalScroll(rememberScrollState()).padding(12.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
+                    editScope?.let { WorkspaceEditScopeBar(it) }
                     Text("#${event.id} · ${tool.title}", style = MaterialTheme.typography.titleSmall)
                     if (tool == WorkbenchTool.TEXT) IconButton(onClick = onCloseText,
                         modifier = Modifier.testTag("event-collapse-${event.id}")) { Icon(Icons.Filled.Close, "收起正文工具") }
@@ -1086,30 +1099,96 @@ private fun FloatingToolContent(
         }
         WorkbenchTool.TIMELINE -> ModernTimelinePane(state, viewModel, Modifier.fillMaxSize())
         WorkbenchTool.FRAMES -> FrameTimingPane(state, viewModel, Modifier.fillMaxSize())
-        WorkbenchTool.KARAOKE -> KaraokePane(state, viewModel, Modifier.fillMaxSize())
-        WorkbenchTool.VECTOR_CLIP -> VectorClipPane(state, viewModel, Modifier.fillMaxSize())
+        WorkbenchTool.KARAOKE -> ScopedToolPane(editScope) { paneModifier ->
+            KaraokePane(state, viewModel, paneModifier)
+        }
+        WorkbenchTool.VECTOR_CLIP -> ScopedToolPane(editScope) { paneModifier ->
+            VectorClipPane(state, viewModel, paneModifier)
+        }
         WorkbenchTool.COMPATIBILITY -> CompatibilityPane(state, viewModel, Modifier.fillMaxSize())
         WorkbenchTool.FONT_REQUIREMENTS -> FontRequirementsPane(state, { onOpenTool(WorkbenchTool.FONTS) }, Modifier.fillMaxSize())
-        WorkbenchTool.STYLE -> StylePane(
-            state = state,
-            viewModel = viewModel,
-            modifier = Modifier.fillMaxSize(),
-            targetEventId = boundEventId,
-            unresolvedPinnedEventId = unresolvedPinnedEventId,
-        )
-        WorkbenchTool.POSITION -> PositionPane(
-            state = state,
-            viewModel = viewModel,
-            modifier = Modifier.fillMaxSize(),
-            targetEventId = boundEventId,
-            unresolvedPinnedEventId = unresolvedPinnedEventId,
-        )
+        WorkbenchTool.STYLE -> ScopedToolPane(editScope) { paneModifier ->
+            StylePane(
+                state = state,
+                viewModel = viewModel,
+                modifier = paneModifier,
+                targetEventId = boundEventId,
+                unresolvedPinnedEventId = unresolvedPinnedEventId,
+            )
+        }
+        WorkbenchTool.POSITION -> ScopedToolPane(editScope) { paneModifier ->
+            PositionPane(
+                state = state,
+                viewModel = viewModel,
+                modifier = paneModifier,
+                targetEventId = boundEventId,
+                unresolvedPinnedEventId = unresolvedPinnedEventId,
+            )
+        }
         WorkbenchTool.FONTS -> FontManagerPane(state, viewModel, onImportFont, Modifier.fillMaxSize())
         WorkbenchTool.QC -> AdvancedQcPane(state, viewModel, Modifier.fillMaxSize())
-        WorkbenchTool.BATCH -> RuleBatchPane(state, viewModel, Modifier.fillMaxSize())
+        WorkbenchTool.BATCH -> ScopedToolPane(editScope) { paneModifier ->
+            RuleBatchPane(state, viewModel, paneModifier)
+        }
         WorkbenchTool.PROJECT -> ProjectPane(state, viewModel, onSaveMkv, Modifier.fillMaxSize())
         WorkbenchTool.DIAGNOSTICS -> DiagnosticsPane(state, viewModel, Modifier.fillMaxSize())
         WorkbenchTool.CAPABILITIES -> WorkspaceToolDirectory(onOpenTool, Modifier.fillMaxSize())
+    }
+}
+
+@Composable
+private fun ScopedToolPane(
+    summary: WorkspaceEditScopeSummary?,
+    content: @Composable (Modifier) -> Unit,
+) {
+    Column(Modifier.fillMaxSize()) {
+        summary?.let { WorkspaceEditScopeBar(it) }
+        content(Modifier.weight(1f).fillMaxWidth())
+    }
+}
+
+@Composable
+private fun WorkspaceEditScopeBar(summary: WorkspaceEditScopeSummary) {
+    Surface(
+        modifier = Modifier.fillMaxWidth().testTag("edit-scope-bar"),
+        color = if (summary.unresolved) {
+            MaterialTheme.colorScheme.errorContainer
+        } else {
+            MaterialTheme.colorScheme.surfaceContainerHigh
+        },
+        border = BorderStroke(
+            1.dp,
+            if (summary.unresolved) MaterialTheme.colorScheme.error
+            else MaterialTheme.colorScheme.outlineVariant,
+        ),
+    ) {
+        Column(
+            Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 7.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(summary.who, style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
+                Text(summary.binding, style = MaterialTheme.typography.labelSmall)
+            }
+            Text(
+                "写入：${summary.where} · 影响 ${summary.howMany} 条",
+                style = MaterialTheme.typography.labelSmall,
+                color = if (summary.unresolved) MaterialTheme.colorScheme.onErrorContainer
+                else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            summary.detail?.let {
+                Text(
+                    it,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (summary.unresolved) MaterialTheme.colorScheme.onErrorContainer
+                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
     }
 }
 

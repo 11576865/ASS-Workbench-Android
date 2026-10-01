@@ -102,3 +102,18 @@ See `WORKSPACE_SURFACES_0.27.2.md` for exact scope and test coverage.
 - [ ] Explicit control-display gain presets and persisted interaction preferences.
 
 The Preview picker is a discovery surface, not a second renderer. libass remains visual authority; approximate anchor discovery is intentionally labeled as such.
+
+
+## Scope transparency phase — WHO / WHERE / HOW MANY
+
+- [x] Add a canonical UI resolver for mutating ToolInstance scope.
+- [x] Event tools expose the bound Event identity independently from global Focus.
+- [x] Shared Style editing reports the Style name and number of affected Events.
+- [x] Position / Effects / Vector Clip report Event Override as the write target.
+- [x] Batch defaults to FollowSelection and reports the selected object count.
+- [x] Unresolved pinned targets keep their former identity visible with affected count 0.
+- [x] Fixed and Canvas hosts consume the same derived scope explanation.
+- [ ] Extend scope metadata to Timeline trim, QC Quick Fix and container write-back actions whose mutation target is action-dependent.
+- [ ] Promote individual parameter Read Source / Write Target into the parameter model.
+
+The banner is derived state only. It must never become another owner of target identity, affected counts or editable ASS values.
