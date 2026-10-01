@@ -104,6 +104,10 @@ fun ModernEditorScreen(
     var saveConfirmOpen by remember { mutableStateOf(false) }
     var mkvConfirmOpen by remember { mutableStateOf(false) }
     var destructiveWorkspaceAction by remember { mutableStateOf<DestructiveWorkspaceAction?>(null) }
+    var workspaceModeName by rememberSaveable { mutableStateOf(WorkspacePresentationMode.FIXED.name) }
+    var fixedToolName by rememberSaveable { mutableStateOf(WorkbenchTool.SUBTITLES.name) }
+    val workspaceMode = WorkspacePresentationMode.valueOf(workspaceModeName)
+    val fixedTool = WorkbenchTool.entries.firstOrNull { it.name == fixedToolName } ?: WorkbenchTool.SUBTITLES
 
     val existingEventIds = remember(state.document.events) {
         state.document.events.asSequence().map { it.id }.toSet()
@@ -126,8 +130,12 @@ fun ModernEditorScreen(
     }
 
     fun openTool(next: WorkbenchTool) {
-        workspaceState = workspaceState.openPrimary(next.name).withSurfacesHidden(false)
-        surfaceController.bringToFront(WorkspaceState.primaryInstanceId(next.name))
+        if (workspaceMode == WorkspacePresentationMode.FIXED) {
+            fixedToolName = next.name
+        } else {
+            workspaceState = workspaceState.openPrimary(next.name).withSurfacesHidden(false)
+            surfaceController.bringToFront(WorkspaceState.primaryInstanceId(next.name))
+        }
     }
 
     fun toggleAllSurfaces() {
@@ -179,6 +187,14 @@ fun ModernEditorScreen(
                 },
                 onSaveMkv = onSaveMkv,
                 onTool = ::openTool,
+                workspaceMode = workspaceMode,
+                onWorkspaceModeToggle = {
+                    workspaceModeName = if (workspaceMode == WorkspacePresentationMode.FIXED) {
+                        WorkspacePresentationMode.CANVAS_EXPERIMENTAL.name
+                    } else {
+                        WorkspacePresentationMode.FIXED.name
+                    }
+                },
             )
             }
 
@@ -662,6 +678,8 @@ private fun ModernAppBar(
     onSave: () -> Unit,
     onSaveMkv: () -> Unit,
     onTool: (WorkbenchTool) -> Unit,
+    workspaceMode: WorkspacePresentationMode,
+    onWorkspaceModeToggle: () -> Unit,
 ) {
     var moreMenuOpen by remember { mutableStateOf(false) }
     Surface(tonalElevation = 2.dp) {
@@ -716,6 +734,19 @@ private fun ModernAppBar(
                         DropdownMenuItem(text = { Text("质量检查") }, leadingIcon = { Icon(Icons.Filled.ErrorOutline, null) }, onClick = { moreMenuOpen = false; onTool(WorkbenchTool.QC) })
                         DropdownMenuItem(text = { Text("项目") }, leadingIcon = { Icon(Icons.Filled.Info, null) }, onClick = { moreMenuOpen = false; onTool(WorkbenchTool.PROJECT) })
                         DropdownMenuItem(text = { Text("诊断") }, leadingIcon = { Icon(Icons.Filled.Tune, null) }, onClick = { moreMenuOpen = false; onTool(WorkbenchTool.DIAGNOSTICS) })
+                        Divider()
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    if (workspaceMode == WorkspacePresentationMode.FIXED)
+                                        "切换到实验性 Canvas UI"
+                                    else
+                                        "切换到固定 UI"
+                                )
+                            },
+                            leadingIcon = { Icon(Icons.Filled.DashboardCustomize, null) },
+                            onClick = { moreMenuOpen = false; onWorkspaceModeToggle() },
+                        )
                         Divider()
                         if (state.container.uri != null) DropdownMenuItem(text = { Text("保存为新 MKV") }, onClick = { moreMenuOpen = false; onSaveMkv() })
                     }
