@@ -54,4 +54,14 @@ class AdvancedEditingFoundationTest {
         val issues = SubtitleCompatibilityAnalyzer.inspect(doc, SubtitleCompatibilityProfile.SUBRIP)
         assertTrue(issues.any { it.code == "ASS_OVERRIDE_LOSS" })
     }
+
+    @Test
+    fun vectorClipPatchesOnePointWithoutNormalizingThePath() {
+        val raw = "{\\clip(2,m 0 0 l 100 0 l 100 100)}Hello"
+        val clips = AssVectorClipSemantic.inspect(raw)
+        assertEquals(1, clips.size)
+        assertEquals(3, clips.single().path.points.size)
+        val patched = AssVectorClipSemantic.patchPoint(raw, 0, 1, 120.0, 10.0)
+        assertEquals("{\\clip(2,m 0 0 l 120 10 l 100 100)}Hello", patched)
+    }
 }
