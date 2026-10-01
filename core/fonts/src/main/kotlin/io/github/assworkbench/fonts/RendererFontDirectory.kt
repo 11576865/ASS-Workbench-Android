@@ -14,7 +14,7 @@ import java.nio.file.StandardCopyOption
  * one source set from the renderer.
  */
 object RendererFontDirectory {
-    private val supportedExtensions = setOf("ttf", "otf")
+    private val supportedExtensions = setOf("ttf", "otf", "ttc", "otc")
 
     fun sync(
         targetDir: File,
