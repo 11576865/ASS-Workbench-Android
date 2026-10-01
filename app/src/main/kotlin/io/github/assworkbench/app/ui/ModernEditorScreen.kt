@@ -3690,7 +3690,12 @@ private fun QcPane(state: EditorState, viewModel: EditorViewModel, issues: List<
                     )
                     Column(Modifier.weight(1f)) {
                         Text("#${issue.eventId} · ${issue.message}")
-                        Text(issue.kind.name, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(issue.ruleId, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    issue.quickFix?.let { fix ->
+                        TextButton(onClick = { viewModel.applyQcQuickFix(issue) }) {
+                            Text(fix.label)
+                        }
                     }
                 }
                 Divider()
