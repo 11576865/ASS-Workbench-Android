@@ -9,6 +9,7 @@ import io.github.assworkbench.container.MatroskaScanResult
 import io.github.assworkbench.domain.AssCodec
 import io.github.assworkbench.domain.AssDocument
 import io.github.assworkbench.domain.AssDocumentEditing
+import io.github.assworkbench.domain.AssQuickFixExecutor
 import io.github.assworkbench.domain.AssTextDecoder
 import io.github.assworkbench.domain.AssTextEncoding
 import io.github.assworkbench.domain.EventOverrideEditor
@@ -658,6 +659,12 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         // succeeded". A write failure is reported in editor state instead of
         // unexpectedly opening Save As from the toolbar callback.
         return true
+    }
+
+    fun applyQuickFix(eventId: Long, fixId: String) {
+        editDocument("已应用 QC Quick Fix。") { document ->
+            AssQuickFixExecutor.apply(document, eventId, fixId)
+        }
     }
 
     fun setQuery(value: String) = _state.update { it.copy(query = value) }
