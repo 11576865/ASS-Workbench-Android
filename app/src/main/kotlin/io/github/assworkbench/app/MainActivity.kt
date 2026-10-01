@@ -86,6 +86,13 @@ class MainActivity : ComponentActivity() {
             .onFailure { viewModel.reportError("字幕保存失败", it) }
     }
 
+    private val exportSrtAs = registerForActivityResult(ActivityResultContracts.CreateDocument("application/x-subrip")) { uri ->
+        uri ?: return@registerForActivityResult
+        persist(uri, read = true, write = true)
+        runCatching { viewModel.exportSrtTo(uri) }
+            .onFailure { viewModel.reportError("SRT 导出失败", it) }
+    }
+
     private val saveWorkbenchProjectAs = registerForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
         uri ?: return@registerForActivityResult
         persist(uri, read = true, write = true)
@@ -181,6 +188,7 @@ class MainActivity : ComponentActivity() {
                                 saveWorkbenchProjectAs.launch(defaultProjectFileName(state.project.title))
                             }
                         },
+                        onExportSrt = { exportSrtAs.launch(defaultSrtFileName(state.project.title)) },
                         onSaveMkv = {
                             saveMkvAs.launch(defaultMkvFileName(state.container.name.ifBlank { state.project.title }))
                         },
@@ -236,5 +244,10 @@ class MainActivity : ComponentActivity() {
     private fun defaultProjectFileName(title: String): String {
         val stem = title.substringBeforeLast('.').ifBlank { "subtitle-project" }
         return "$stem.asswbproj"
+    }
+
+    private fun defaultSrtFileName(title: String): String {
+        val stem = title.substringBeforeLast('.').ifBlank { "subtitle" }
+        return "$stem.srt"
     }
 }
