@@ -16,6 +16,12 @@ sealed interface AssBatchFilter {
     data class LayerIs(val layer: Int) : AssBatchFilter {
         override fun matches(event: AssEvent, document: AssDocument) = event.layer == layer
     }
+    data class EventIds(val ids: Set<Long>) : AssBatchFilter {
+        override fun matches(event: AssEvent, document: AssDocument) = event.id in ids
+    }
+    data class CommentIs(val comment: Boolean) : AssBatchFilter {
+        override fun matches(event: AssEvent, document: AssDocument) = event.comment == comment
+    }
     data class HasTag(val tag: String) : AssBatchFilter {
         override fun matches(event: AssEvent, document: AssDocument) =
             Regex("""\\${Regex.escape(tag)}(?:[^A-Za-z]|$)""", RegexOption.IGNORE_CASE).containsMatchIn(event.text)
@@ -25,6 +31,12 @@ sealed interface AssBatchFilter {
     }
     data class And(val filters: List<AssBatchFilter>) : AssBatchFilter {
         override fun matches(event: AssEvent, document: AssDocument) = filters.all { it.matches(event, document) }
+    }
+    data class Or(val filters: List<AssBatchFilter>) : AssBatchFilter {
+        override fun matches(event: AssEvent, document: AssDocument) = filters.any { it.matches(event, document) }
+    }
+    data class Not(val filter: AssBatchFilter) : AssBatchFilter {
+        override fun matches(event: AssEvent, document: AssDocument) = !filter.matches(event, document)
     }
 }
 
@@ -43,6 +55,12 @@ sealed interface AssBatchAction {
     }
     data class SetLayer(val layer: Int) : AssBatchAction {
         override fun apply(event: AssEvent, document: AssDocument) = event.copy(layer = layer)
+    }
+    data class SetActor(val actor: String) : AssBatchAction {
+        override fun apply(event: AssEvent, document: AssDocument) = event.copy(name = actor)
+    }
+    data class SetComment(val comment: Boolean) : AssBatchAction {
+        override fun apply(event: AssEvent, document: AssDocument) = event.copy(comment = comment)
     }
     data class ReplacePlainText(val find: String, val replacement: String) : AssBatchAction {
         override fun apply(event: AssEvent, document: AssDocument): AssEvent {
