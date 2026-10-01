@@ -653,6 +653,7 @@ private fun WorkbenchPreview(
         seekRequestMs = state.seekRequestMs,
         seekRequestNonce = state.seekRequestNonce,
         onPosition = viewModel::setPlaybackPosition,
+        onFrameMetadata = viewModel::updateFrameMetadata,
         onRendererDiagnostics = viewModel::updateRendererDiagnostics,
         configDir = viewModel.rendererConfigDir(),
         fontsDir = viewModel.rendererFontsDir(),
