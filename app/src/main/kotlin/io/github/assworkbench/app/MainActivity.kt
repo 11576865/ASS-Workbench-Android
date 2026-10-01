@@ -167,7 +167,7 @@ class MainActivity : ComponentActivity() {
                         onOpenSubtitle = {
                             openSubtitle.launch(arrayOf("application/x-ass", "text/x-ass", "text/x-ssa", "application/x-subrip", "text/srt", "text/plain"))
                         },
-                        onImportFont = { importFont.launch(arrayOf("font/ttf", "font/otf", "application/x-font-ttf", "application/x-font-opentype", "application/octet-stream")) },
+                        onImportFont = { importFont.launch(arrayOf("font/ttf", "font/otf", "font/collection", "application/x-font-ttf", "application/x-font-opentype", "application/octet-stream")) },
                         onSave = {
                             if (!viewModel.saveCurrent()) saveSubtitleAs.launch(defaultFileName(state.project.title))
                         },
