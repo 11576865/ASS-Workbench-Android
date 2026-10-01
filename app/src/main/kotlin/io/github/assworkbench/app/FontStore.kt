@@ -10,6 +10,7 @@ import io.github.assworkbench.fonts.FontMetadata
 import io.github.assworkbench.fonts.FontOrigin
 import io.github.assworkbench.fonts.FontconfigPrepared
 import io.github.assworkbench.fonts.OpenTypeCmap
+import io.github.assworkbench.fonts.OpenTypeCollection
 import io.github.assworkbench.fonts.OpenTypeNameReader
 import io.github.assworkbench.fonts.RendererFontDirectory
 import java.io.File
@@ -53,21 +54,26 @@ class FontStore(private val context: Context) {
     fun listImported(): List<FontAsset> {
         importedCache?.let { return it }
         val scanned = (projectFontDir.listFiles()?.toList().orEmpty() + importedDir.listFiles()?.toList().orEmpty())
-            .filter { it.isFile && it.extension.lowercase() in setOf("ttf", "otf") }
+            .filter { it.isFile && it.extension.lowercase() in setOf("ttf", "otf", "ttc", "otc") }
             .distinctBy { it.absolutePath }
             .mapNotNull { file ->
                 runCatching {
                     val cacheKey = file.absolutePath
                     val bytes = fontBytesCache.computeIfAbsent(cacheKey) { file.readBytes() }
+                    val faceOffsets = OpenTypeCollection.faceOffsets(bytes)
+                    val faces = faceOffsets.mapNotNull { offset -> runCatching { OpenTypeNameReader.readAtOffset(bytes, offset) }.getOrNull() }
+                    val metadata = faces.firstOrNull() ?: OpenTypeNameReader.read(bytes)
                     FontAsset(
                         fileName = file.name,
                         sha256 = OpenTypeNameReader.sha256(bytes),
-                        metadata = OpenTypeNameReader.read(bytes),
+                        metadata = metadata,
                         origin = if (file.parentFile?.absolutePath == projectFontDir.absolutePath) {
                             FontOrigin.MKV_ATTACHMENT
                         } else {
                             FontOrigin.MANUAL
                         },
+                        collectionFaces = faces,
+                        collectionFaceOffsets = faceOffsets,
                     )
                 }.getOrNull()
             }
@@ -106,10 +112,16 @@ class FontStore(private val context: Context) {
     private fun importOne(uri: Uri): FontAsset {
         val originalName = queryName(uri) ?: "font"
         val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: error("无法读取字体")
-        val declaredExt = originalName.substringAfterLast('.', "").lowercase().takeIf { it in setOf("ttf", "otf") }
-        val ext = declaredExt ?: OpenTypeNameReader.singleFaceExtension(bytes)
-            ?: error("不支持的字体容器；当前仅接受单字体 TTF/OTF")
-        val metadata = OpenTypeNameReader.read(bytes)
+        val declaredExt = originalName.substringAfterLast('.', "").lowercase().takeIf { it in setOf("ttf", "otf", "ttc", "otc") }
+        val collectionOffsets = OpenTypeCollection.faceOffsets(bytes)
+        val ext = if (collectionOffsets.isNotEmpty()) {
+            OpenTypeCollection.extension(bytes, declaredExt) ?: "ttc"
+        } else {
+            declaredExt ?: OpenTypeNameReader.singleFaceExtension(bytes)
+                ?: error("不支持的字体容器")
+        }
+        val faces = collectionOffsets.map { OpenTypeNameReader.readAtOffset(bytes, it) }
+        val metadata = faces.firstOrNull() ?: OpenTypeNameReader.read(bytes)
         val sha = OpenTypeNameReader.sha256(bytes)
         val safeStem = safeFileStem(metadata.family)
         val target = File(importedDir, "${safeStem}-${sha.take(10)}.$ext")
@@ -120,7 +132,7 @@ class FontStore(private val context: Context) {
 
         // Do not replace the live fallback file while libass is active.
         // Imported fonts are discovered through the stable fonts directory.
-        return FontAsset(target.name, sha, metadata, FontOrigin.MANUAL)
+        return FontAsset(target.name, sha, metadata, FontOrigin.MANUAL, faces, collectionOffsets)
     }
 
     fun beginProjectFontSession(sessionId: Long, refresh: Boolean = true) {
@@ -135,9 +147,13 @@ class FontStore(private val context: Context) {
     fun importEmbeddedFont(sessionId: Long, fileName: String, bytes: ByteArray): FontAsset? =
         synchronized(projectFontLock) {
             if (sessionId != projectFontSessionId) return@synchronized null
-            val declaredExt = fileName.substringAfterLast('.', "").lowercase().takeIf { it in setOf("ttf", "otf") }
-            val ext = declaredExt ?: OpenTypeNameReader.singleFaceExtension(bytes) ?: return@synchronized null
-            val metadata = OpenTypeNameReader.read(bytes)
+            val declaredExt = fileName.substringAfterLast('.', "").lowercase().takeIf { it in setOf("ttf", "otf", "ttc", "otc") }
+            val collectionOffsets = OpenTypeCollection.faceOffsets(bytes)
+            val ext = if (collectionOffsets.isNotEmpty()) {
+                OpenTypeCollection.extension(bytes, declaredExt) ?: "ttc"
+            } else declaredExt ?: OpenTypeNameReader.singleFaceExtension(bytes) ?: return@synchronized null
+            val faces = collectionOffsets.map { OpenTypeNameReader.readAtOffset(bytes, it) }
+            val metadata = faces.firstOrNull() ?: OpenTypeNameReader.read(bytes)
             val sha = OpenTypeNameReader.sha256(bytes)
             val safeStem = safeFileStem(metadata.family)
             val target = File(projectFontDir, "${safeStem}-${sha.take(10)}.$ext")
@@ -146,7 +162,7 @@ class FontStore(private val context: Context) {
             invalidateImportedCache()
             syncRendererFontsLocked()
             // Keep the fallback file immutable during an active renderer session.
-            FontAsset(target.name, sha, metadata, FontOrigin.MKV_ATTACHMENT)
+            FontAsset(target.name, sha, metadata, FontOrigin.MKV_ATTACHMENT, faces, collectionOffsets)
         }
 
     fun fileFor(asset: FontAsset): File? {
@@ -204,11 +220,18 @@ class FontStore(private val context: Context) {
             .toArray()
             .toList()
 
+        val normalizedFamily = family.trim().lowercase()
+        val faceIndex = asset.collectionFaces.indexOfFirst { face ->
+            (face.aliases + face.rendererAliases + face.family + face.rendererFamily +
+                listOfNotNull(face.legacyFamily, face.typographicFamily, face.fullName, face.postScriptName))
+                .any { it.trim().lowercase() == normalizedFamily }
+        }
+        val sfntOffset = asset.collectionFaceOffsets.getOrNull(faceIndex.coerceAtLeast(0)) ?: 0
         return FontGlyphDiagnostic(
             requestedFamily = family,
-            matchedFamily = asset.metadata.family,
+            matchedFamily = asset.collectionFaces.getOrNull(faceIndex)?.family ?: asset.metadata.family,
             checkedCodePoints = cps.size,
-            missingCodePoints = OpenTypeCmap.missingCodePoints(bytes, cps, limit = 24),
+            missingCodePoints = OpenTypeCmap.missingCodePoints(bytes, cps, limit = 24, sfntOffset = sfntOffset),
         )
     }
 
