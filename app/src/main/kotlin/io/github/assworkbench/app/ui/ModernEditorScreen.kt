@@ -104,9 +104,8 @@ fun ModernEditorScreen(
     var saveConfirmOpen by remember { mutableStateOf(false) }
     var mkvConfirmOpen by remember { mutableStateOf(false) }
     var destructiveWorkspaceAction by remember { mutableStateOf<DestructiveWorkspaceAction?>(null) }
-    var workspaceModeName by rememberSaveable { mutableStateOf(WorkspacePresentationMode.FIXED.name) }
     var fixedToolName by rememberSaveable { mutableStateOf(WorkbenchTool.SUBTITLES.name) }
-    val workspaceMode = WorkspacePresentationMode.valueOf(workspaceModeName)
+    val workspaceMode = state.workspaceMode
     val fixedTool = WorkbenchTool.entries.firstOrNull { it.name == fixedToolName } ?: WorkbenchTool.SUBTITLES
 
     val existingEventIds = remember(state.document.events) {
@@ -189,11 +188,13 @@ fun ModernEditorScreen(
                 onTool = ::openTool,
                 workspaceMode = workspaceMode,
                 onWorkspaceModeToggle = {
-                    workspaceModeName = if (workspaceMode == WorkspacePresentationMode.FIXED) {
-                        WorkspacePresentationMode.CANVAS_EXPERIMENTAL.name
-                    } else {
-                        WorkspacePresentationMode.FIXED.name
-                    }
+                    viewModel.setWorkspaceMode(
+                        if (workspaceMode == WorkspacePresentationMode.FIXED) {
+                            WorkspacePresentationMode.CANVAS_EXPERIMENTAL
+                        } else {
+                            WorkspacePresentationMode.FIXED
+                        }
+                    )
                 },
             )
             }
