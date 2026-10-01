@@ -161,6 +161,37 @@ class EditorRegressionInstrumentedTest {
     }
 
     @Test
+    fun toolInstanceWorkspaceSupportsHideAndRestore() {
+        restoreRecovery()
+
+        composeRule.onNodeWithContentDescription("工具和更多操作").performClick()
+        composeRule.onNodeWithTag("workspace-mode-toggle").performClick()
+        composeRule.onNodeWithTag("ui-variant-use-TOOL_INSTANCES_EXPERIMENTAL")
+            .assertIsDisplayed()
+            .performClick()
+
+        composeRule.onNodeWithTag("tool-instance-workspace").assertIsDisplayed()
+        composeRule.onNodeWithTag("tool-instance-directory").assertIsDisplayed()
+
+        composeRule.onNodeWithTag("tool-instance-directory").performClick()
+        composeRule.waitUntil(5_000) {
+            composeRule.onAllNodesWithTag("surface-CAPABILITIES-primary", useUnmergedTree = true)
+                .fetchSemanticsNodes(atLeastOneRootRequired = false)
+                .isNotEmpty()
+        }
+
+        composeRule.onNodeWithTag("tool-hide-temporary").performClick()
+        composeRule.onNodeWithTag("tool-hidden-CAPABILITIES-primary").assertIsDisplayed()
+        composeRule.onNodeWithTag("tool-hidden-CAPABILITIES-primary").performClick()
+
+        composeRule.waitUntil(5_000) {
+            composeRule.onAllNodesWithTag("surface-CAPABILITIES-primary", useUnmergedTree = true)
+                .fetchSemanticsNodes(atLeastOneRootRequired = false)
+                .isNotEmpty()
+        }
+    }
+
+    @Test
     fun rawDraftSurvivesSwitchingBetweenEvents() {
         restoreRecovery()
 
