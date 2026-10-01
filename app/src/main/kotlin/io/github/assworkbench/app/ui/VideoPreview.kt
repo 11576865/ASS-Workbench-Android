@@ -1034,6 +1034,12 @@ private fun PreviewTargetPicker(
                         Column(Modifier.weight(1f)) {
                             Text("#${candidate.eventId} · ${candidate.styleName} · L${candidate.layer}")
                             Text(
+                                candidate.textLabel,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                maxLines = 1,
+                            )
+                            Text(
                                 when (candidate.confidence) {
                                     PreviewTargetConfidence.EXACT_ANCHOR -> "Anchor：ASS 明确坐标"
                                     PreviewTargetConfidence.APPROXIMATE_ANCHOR -> "Anchor：按对齐与边距推导"
