@@ -17,6 +17,8 @@ import io.github.assworkbench.app.EditorState
 import io.github.assworkbench.app.EditorViewModel
 import io.github.assworkbench.domain.*
 import io.github.assworkbench.fonts.FontMatchStatus
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 @Composable
 internal fun AdvancedQcPane(
@@ -28,50 +30,62 @@ internal fun AdvancedQcPane(
     var maxCpsText by rememberSaveable { mutableStateOf("25") }
     val profile = AssCompatibilityProfile.valueOf(profileName)
     val maxCps = maxCpsText.toDoubleOrNull()?.coerceIn(1.0, 100.0) ?: 25.0
-    val issues = remember(state.document, state.fontDiagnostics, state.fontGlyphDiagnostics, profile, maxCps) {
-        buildList {
-            addAll(
-                AssLinter.inspect(
-                    state.document,
-                    AssLintConfig(
-                        maxCps = maxCps,
-                        compatibilityProfile = profile.takeUnless { it == AssCompatibilityProfile.LIBASS_NATIVE },
-                    ),
+    val issues by produceState<List<AssLintIssue>>(
+        initialValue = emptyList(),
+        state.document,
+        state.fontDiagnostics,
+        state.fontGlyphDiagnostics,
+        profile,
+        maxCps,
+    ) {
+        val document = state.document
+        val fontDiagnostics = state.fontDiagnostics
+        val fontGlyphDiagnostics = state.fontGlyphDiagnostics
+        value = withContext(Dispatchers.Default) {
+            buildList {
+                addAll(
+                    AssLinter.inspect(
+                        document,
+                        AssLintConfig(
+                            maxCps = maxCps,
+                            compatibilityProfile = profile.takeUnless { it == AssCompatibilityProfile.LIBASS_NATIVE },
+                        ),
+                    )
                 )
-            )
-            state.fontDiagnostics.forEach { diagnostic ->
-                when (diagnostic.status) {
-                    FontMatchStatus.MISSING -> add(
+                fontDiagnostics.forEach { diagnostic ->
+                    when (diagnostic.status) {
+                        FontMatchStatus.MISSING -> add(
+                            AssLintIssue(
+                                eventId = null,
+                                code = "FONT.MISSING",
+                                category = AssLintCategory.FONT,
+                                severity = AssQcSeverity.ERROR,
+                                message = "缺少字体：" + diagnostic.requestedFamily,
+                            )
+                        )
+                        FontMatchStatus.FALLBACK_ONLY -> add(
+                            AssLintIssue(
+                                eventId = null,
+                                code = "FONT.FALLBACK",
+                                category = AssLintCategory.FONT,
+                                severity = AssQcSeverity.WARNING,
+                                message = diagnostic.requestedFamily + " 只能通过 fallback 渲染。",
+                            )
+                        )
+                        else -> Unit
+                    }
+                }
+                fontGlyphDiagnostics.values.forEach { glyph ->
+                    if (glyph.missingCodePoints.isNotEmpty()) add(
                         AssLintIssue(
                             eventId = null,
-                            code = "FONT.MISSING",
+                            code = "FONT.MISSING_GLYPH",
                             category = AssLintCategory.FONT,
                             severity = AssQcSeverity.ERROR,
-                            message = "缺少字体：" + diagnostic.requestedFamily,
+                            message = glyph.requestedFamily + " 缺少 " + glyph.missingCodePoints.size + " 个已检查字形。",
                         )
                     )
-                    FontMatchStatus.FALLBACK_ONLY -> add(
-                        AssLintIssue(
-                            eventId = null,
-                            code = "FONT.FALLBACK",
-                            category = AssLintCategory.FONT,
-                            severity = AssQcSeverity.WARNING,
-                            message = diagnostic.requestedFamily + " 只能通过 fallback 渲染。",
-                        )
-                    )
-                    else -> Unit
                 }
-            }
-            state.fontGlyphDiagnostics.values.forEach { glyph ->
-                if (glyph.missingCodePoints.isNotEmpty()) add(
-                    AssLintIssue(
-                        eventId = null,
-                        code = "FONT.MISSING_GLYPH",
-                        category = AssLintCategory.FONT,
-                        severity = AssQcSeverity.ERROR,
-                        message = glyph.requestedFamily + " 缺少 " + glyph.missingCodePoints.size + " 个已检查字形。",
-                    )
-                )
             }
         }
     }
