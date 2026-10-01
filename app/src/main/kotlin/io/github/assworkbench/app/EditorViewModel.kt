@@ -508,6 +508,74 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         launchWaveformAnalysis(uri)
     }
 
+
+    fun buildProjectFile(
+        workspaceMode: String,
+        workspaceState: List<String>,
+        surfaceState: List<String>,
+    ): String {
+        val snapshot = _state.value
+        return WorkbenchProjectCodec.encode(
+            WorkbenchProjectFile(
+                title = snapshot.project.title,
+                canonicalAss = AssCodec.write(snapshot.document),
+                subtitleFormat = snapshot.subtitleFormat,
+                sourceSubtitleUri = snapshot.project.subtitleUri,
+                referenceVideoUri = snapshot.project.videoUri,
+                sourceContainerUri = snapshot.container.uri,
+                sourceContainerTrack = snapshot.container.selectedTrackNumber,
+                workspaceMode = workspaceMode,
+                workspaceState = workspaceState,
+                surfaceState = surfaceState,
+            )
+        )
+    }
+
+    fun openProjectFile(text: String, projectUri: Uri? = null) {
+        val manifest = WorkbenchProjectCodec.decode(text)
+        clearPendingRecovery()
+        beginWorkspaceBoundary()
+        val document = AssCodec.parse(manifest.canonicalAss)
+        history.reset(document)
+        _state.update { previous ->
+            previous.copy(
+                project = previous.project.copy(
+                    title = manifest.title,
+                    subtitleUri = manifest.sourceSubtitleUri,
+                    videoUri = manifest.referenceVideoUri,
+                ),
+                document = document,
+                previewDocument = null,
+                subtitleLoaded = true,
+                subtitleTextEncoding = AssTextEncoding.UTF8,
+                subtitleFormat = manifest.subtitleFormat,
+                projectFileUri = projectUri?.toString(),
+                workspaceMode = manifest.workspaceMode,
+                workspaceRestoreState = manifest.workspaceState,
+                surfaceRestoreState = manifest.surfaceState,
+                workspaceRestoreNonce = previous.workspaceRestoreNonce + 1L,
+                selectedEventIds = emptySet(),
+                selectionAnchorId = null,
+                focusedEventId = document.events.firstOrNull()?.id,
+                dirty = false,
+                canUndo = false,
+                canRedo = false,
+                fontPackagingSelection = emptySet(),
+                container = ContainerBridgeState(),
+                status = "已打开 ASS Workbench Project · \${document.events.size} 条事件。" +
+                    if (manifest.sourceContainerUri != null) " 原 MKV 关联已记录；写回前需重新打开容器。" else "",
+            )
+        }
+        manifest.referenceVideoUri?.let { raw ->
+            runCatching { launchWaveformAnalysis(Uri.parse(raw)) }
+        }
+        refreshFontDiagnostics()
+    }
+
+    fun markProjectFileSaved(uri: Uri) {
+        _state.update { it.copy(projectFileUri = uri.toString(), status = "ASS Workbench Project 已保存。") }
+    }
+
     fun openSubtitle(uri: Uri) {
         clearPendingRecovery()
         beginWorkspaceBoundary()
