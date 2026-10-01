@@ -493,7 +493,7 @@ fun ModernEditorScreen(
                     rendererEnabled, onEnableRenderer,
                     onEditEventPosition = ::openPositionTarget,
                     interactionRegistry = if (workspaceState.surfacesHidden) null else interactionRegistry,
-                    viewportGesturesEnabled = activePositionInstance == null || workspaceState.surfacesHidden,
+                    viewportGesturesEnabled = positionEditEventId == null || workspaceState.surfacesHidden,
                     modifier = Modifier.fillMaxSize().testTag("preview-workspace"),
                 )
                 workspaceState.tools.forEachIndexed { index, instance ->
