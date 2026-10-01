@@ -755,7 +755,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 },
             )
         }
-        snapshot.videoUri?.let { launchWaveformAnalysis(Uri.parse(it)) }
+        snapshot.videoUri?.let { launchMediaAssist(Uri.parse(it)) }
         refreshFontDiagnostics()
         return sessionId
     }
@@ -2461,7 +2461,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             )
         }
         refreshFontDiagnostics()
-        snapshot.project.videoUri?.let { launchWaveformAnalysis(Uri.parse(it)) }
+        snapshot.project.videoUri?.let { launchMediaAssist(Uri.parse(it)) }
     }
 
     fun discardRecovery() {
