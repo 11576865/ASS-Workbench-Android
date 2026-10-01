@@ -45,6 +45,11 @@ internal fun FloatingWorkbenchSurface(
     onActivate: () -> Unit = {},
     onToggleBinding: (() -> Unit)? = null,
     onDuplicate: (() -> Unit)? = null,
+    stackTabs: List<Pair<String, String>> = emptyList(),
+    stackCandidates: List<Pair<String, String>> = emptyList(),
+    onSelectStackTab: ((String) -> Unit)? = null,
+    onStackWith: ((String) -> Unit)? = null,
+    onUnstack: (() -> Unit)? = null,
     content: @Composable () -> Unit,
 ) {
     BoxWithConstraints(modifier.fillMaxSize().zIndex(controller.z(id))) {
@@ -53,7 +58,29 @@ internal fun FloatingWorkbenchSurface(
         val viewportHeight = maxHeight.value
         val fallback = initialGeometry ?: SurfaceGeometry(initialOffset.x / density, initialOffset.y / density)
         val state = controller.state(id, fallback)
-        val geometry = state.geometry.inViewport(viewportWidth, viewportHeight)
+        val floatingGeometry = state.geometry.inViewport(viewportWidth, viewportHeight)
+        val dockWidth = floatingGeometry.width.coerceIn(
+            280f.coerceAtMost(viewportWidth),
+            480f.coerceAtMost(viewportWidth),
+        )
+        val geometry = when (state.presentation) {
+            SurfacePresentation.FLOATING -> floatingGeometry
+            SurfacePresentation.DOCK_LEFT -> SurfaceGeometry(
+                x = 0f, y = 0f, width = dockWidth, height = viewportHeight
+            )
+            SurfacePresentation.DOCK_RIGHT -> SurfaceGeometry(
+                x = (viewportWidth - dockWidth).coerceAtLeast(0f),
+                y = 0f,
+                width = dockWidth,
+                height = viewportHeight,
+            )
+            SurfacePresentation.MINIMIZED -> SurfaceGeometry(
+                x = floatingGeometry.x,
+                y = floatingGeometry.y,
+                width = floatingGeometry.width.coerceAtLeast(260f).coerceAtMost(viewportWidth),
+                height = 58f.coerceAtMost(viewportHeight),
+            ).inViewport(viewportWidth, viewportHeight)
+        }
         val candidate = remember(controller, id) { controller.candidate(id) }
         var resizing by remember { mutableStateOf(false) }
         val activate by rememberUpdatedState(onActivate)
@@ -97,8 +124,8 @@ internal fun FloatingWorkbenchSurface(
                     Row(
                         Modifier.fillMaxWidth().testTag("surface-drag-$testTagId")
                             .background(MaterialTheme.colorScheme.surfaceContainerHighest)
-                            .pointerInput(id, state.layoutLocked, geometry, density) {
-                                if (!state.layoutLocked) detectDragGestures(
+                            .pointerInput(id, state.layoutLocked, state.presentation, geometry, density) {
+                                if (!state.layoutLocked && state.presentation == SurfacePresentation.FLOATING) detectDragGestures(
                                     onDragStart = {
                                         controller.begin(id, fallback, geometry)
                                         controller.bringToFront(id, fallback)
@@ -124,10 +151,37 @@ internal fun FloatingWorkbenchSurface(
                                     style = MaterialTheme.typography.labelSmall)
                             }
                         }
+                        IconButton(
+                            onClick = { controller.toggleMinimize(id, fallback) },
+                            modifier = Modifier.testTag("surface-minimize-$testTagId"),
+                        ) {
+                            Icon(
+                                if (state.presentation == SurfacePresentation.MINIMIZED) Icons.Filled.OpenInFull
+                                else Icons.Filled.Minimize,
+                                contentDescription = if (state.presentation == SurfacePresentation.MINIMIZED) "恢复 $title" else "最小化 $title",
+                            )
+                        }
                         IconButton(onClick = onClose) {
                             Icon(Icons.Filled.Close, contentDescription = "收回 $title")
                         }
                     }
+                    if (state.presentation != SurfacePresentation.MINIMIZED && stackTabs.size > 1) {
+                        Row(
+                            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
+                                .background(MaterialTheme.colorScheme.surfaceContainerHighest),
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            stackTabs.forEach { (tabId, tabTitle) ->
+                                FilterChip(
+                                    selected = tabId == id,
+                                    onClick = { onSelectStackTab?.invoke(tabId) },
+                                    label = { Text(tabTitle, maxLines = 1) },
+                                    modifier = Modifier.testTag("surface-tab-" + tabId.replace(':', '-')),
+                                )
+                            }
+                        }
+                    }
+                    if (state.presentation != SurfacePresentation.MINIMIZED) {
                     // Actions remain reachable even in the compact presentation.
                     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
                         verticalAlignment = Alignment.CenterVertically) {
@@ -150,12 +204,45 @@ internal fun FloatingWorkbenchSurface(
                         IconButton(onClick = { controller.cycleSize(id, fallback) }, enabled = !state.layoutLocked) {
                             Icon(Icons.Filled.OpenInFull, contentDescription = "切换浮层尺寸")
                         }
+                        TextButton(onClick = {
+                            when (state.presentation) {
+                                SurfacePresentation.DOCK_LEFT, SurfacePresentation.DOCK_RIGHT ->
+                                    controller.undock(id, fallback)
+                                else -> controller.dock(id, SurfacePresentation.DOCK_LEFT, fallback)
+                            }
+                        }) { Text(if (state.presentation == SurfacePresentation.DOCK_LEFT) "浮动" else "左停靠") }
+                        TextButton(onClick = {
+                            when (state.presentation) {
+                                SurfacePresentation.DOCK_LEFT, SurfacePresentation.DOCK_RIGHT ->
+                                    controller.undock(id, fallback)
+                                else -> controller.dock(id, SurfacePresentation.DOCK_RIGHT, fallback)
+                            }
+                        }) { Text(if (state.presentation == SurfacePresentation.DOCK_RIGHT) "浮动" else "右停靠") }
+                        if (state.stackId != null) {
+                            TextButton(onClick = { onUnstack?.invoke() }) { Text("拆栈") }
+                        } else if (stackCandidates.isNotEmpty()) {
+                            var stackMenuOpen by remember { mutableStateOf(false) }
+                            Box {
+                                TextButton(onClick = { stackMenuOpen = true }) { Text("叠放…") }
+                                DropdownMenu(expanded = stackMenuOpen, onDismissRequest = { stackMenuOpen = false }) {
+                                    stackCandidates.forEach { (candidateId, candidateTitle) ->
+                                        DropdownMenuItem(
+                                            text = { Text(candidateTitle) },
+                                            onClick = {
+                                                stackMenuOpen = false
+                                                onStackWith?.invoke(candidateId)
+                                            },
+                                        )
+                                    }
+                                }
+                            }
+                        }
                         Text(if (state.layoutLocked) "布局已锁定" else state.sizeClass.label,
                             style = MaterialTheme.typography.labelSmall)
                     }
                     Box(Modifier.weight(1f).fillMaxWidth()) {
                         content()
-                        if (!state.layoutLocked) {
+                        if (!state.layoutLocked && state.presentation == SurfacePresentation.FLOATING) {
                             Icon(Icons.Filled.OpenInFull, contentDescription = "拖动调整窗口大小",
                                 modifier = Modifier.align(Alignment.BottomEnd)
                                     .testTag("surface-resize-$testTagId")
@@ -183,6 +270,7 @@ internal fun FloatingWorkbenchSurface(
                                         )
                                     }.padding(10.dp))
                         }
+                    }
                     }
                 }
             }
