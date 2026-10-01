@@ -86,14 +86,13 @@ class WorkbenchSurfaceControllerTest {
 
         controller.cycleDock("A", fallback)
         assertEquals(SurfaceDock.LEFT, controller.state("A", fallback).dock)
-        controller.toggleMinimized("A", fallback)
-        assertTrue(controller.state("A", fallback).minimized)
-
         controller.stackWithFront("B", SurfaceGeometry(80f, 90f))
         val group = controller.state("B", fallback).tabGroupId
         assertNotNull(group)
         assertEquals(group, controller.state("A", fallback).tabGroupId)
         assertEquals(2, controller.tabGroup("A").size)
+        controller.toggleMinimized("A", fallback)
+        assertTrue(controller.state("A", fallback).minimized)
 
         val restored = WorkbenchSurfaceController(WorkspaceSurfacePersistence.decode(controller.save()))
         assertEquals(SurfaceDock.LEFT, restored.state("A", fallback).dock)
