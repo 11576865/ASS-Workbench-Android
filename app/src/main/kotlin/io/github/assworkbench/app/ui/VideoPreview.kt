@@ -1175,7 +1175,7 @@ private fun PositionDragOverlay(
                         targetInWindow = target(originX!!, originY!!),
                         preferredOffsetPx = baseOffset + Offset(with(moveProxyDensity) { 76.dp.toPx() }, with(moveProxyDensity) { 68.dp.toPx() }),
                         onDragDelta = { delta ->
-                            directRotation = (displayRotation + delta.x * 0.35).coerceIn(-3600.0, 3600.0)
+                            directRotation = ((directRotation ?: displayRotation) + delta.x * 0.35).coerceIn(-3600.0, 3600.0)
                             onPreviewRotation(directRotation!!)
                         },
                         onCommit = { directRotation?.let(onCommitRotation) },
@@ -1394,7 +1394,7 @@ private fun PositionDragOverlay(
                 targetInWindow = target(originX ?: x, originY ?: y),
                 preferredOffsetPx = preferred + Offset(0f, with(proxyDensity) { 132.dp.toPx() }),
                 onDragDelta = { delta ->
-                    directRotation = (displayRotation + delta.x * 0.35).coerceIn(-3600.0, 3600.0)
+                    directRotation = ((directRotation ?: displayRotation) + delta.x * 0.35).coerceIn(-3600.0, 3600.0)
                     onPreviewRotation(directRotation!!)
                 },
                 onCommit = { directRotation?.let(onCommitRotation) },
@@ -1406,8 +1406,8 @@ private fun PositionDragOverlay(
                 targetInWindow = target(x, y),
                 preferredOffsetPx = preferred + Offset(with(proxyDensity) { 78.dp.toPx() }, 0f),
                 onDragDelta = { delta ->
-                    val sx = (displayScaleX + delta.x * 0.45).coerceIn(1.0, 1000.0)
-                    val syCandidate = (displayScaleY - delta.y * 0.45).coerceIn(1.0, 1000.0)
+                    val sx = ((directScaleX ?: displayScaleX) + delta.x * 0.45).coerceIn(1.0, 1000.0)
+                    val syCandidate = ((directScaleY ?: displayScaleY) - delta.y * 0.45).coerceIn(1.0, 1000.0)
                     if (scaleLocked) {
                         val merged = ((sx + syCandidate) / 2.0).coerceIn(1.0, 1000.0)
                         directScaleX = merged
@@ -1431,8 +1431,8 @@ private fun PositionDragOverlay(
                 targetInWindow = target(x, y),
                 preferredOffsetPx = preferred + Offset(with(proxyDensity) { 78.dp.toPx() }, with(proxyDensity) { 66.dp.toPx() }),
                 onDragDelta = { delta ->
-                    directShearX = (displayShearX + delta.x / 260f).coerceIn(-10.0, 10.0)
-                    directShearY = (displayShearY + delta.y / 260f).coerceIn(-10.0, 10.0)
+                    directShearX = ((directShearX ?: displayShearX) + delta.x / 260f).coerceIn(-10.0, 10.0)
+                    directShearY = ((directShearY ?: displayShearY) + delta.y / 260f).coerceIn(-10.0, 10.0)
                     onPreviewShear(directShearX!!, directShearY!!)
                 },
                 onCommit = {
