@@ -63,7 +63,9 @@ internal object PreviewTargetResolver {
         val geometry = AssGeometrySemantic.inspect(event.text)
         val resolved = when (geometry.positionMode) {
             AssPositionMode.POSITION -> geometry.position to PreviewTargetConfidence.EXACT_ANCHOR
-            AssPositionMode.MOVE -> movePoint(event, geometry.move, positionMs) to PreviewTargetConfidence.EXACT_ANCHOR
+            AssPositionMode.MOVE -> geometry.move?.let {
+                movePoint(event, it, positionMs) to PreviewTargetConfidence.EXACT_ANCHOR
+            } ?: (null to PreviewTargetConfidence.UNRESOLVED)
             AssPositionMode.INHERITED -> inheritedAnchor(document, event) to PreviewTargetConfidence.APPROXIMATE_ANCHOR
             AssPositionMode.CONFLICT -> null to PreviewTargetConfidence.UNRESOLVED
         }
@@ -81,10 +83,9 @@ internal object PreviewTargetResolver {
 
     private fun movePoint(
         event: AssEvent,
-        move: io.github.assworkbench.domain.AssMove?,
+        move: io.github.assworkbench.domain.AssMove,
         positionMs: Long,
-    ): AssPoint? {
-        move ?: return null
+    ): AssPoint {
         val eventDuration = (event.end.millis - event.start.millis).coerceAtLeast(1L).toDouble()
         val relative = (positionMs - event.start.millis).coerceAtLeast(0L).toDouble()
         val start = move.startMs ?: 0.0
