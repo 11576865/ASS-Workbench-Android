@@ -21,6 +21,9 @@ import io.github.assworkbench.domain.EventOverrideEditor
 import io.github.assworkbench.domain.AssGeometrySemantic
 import io.github.assworkbench.domain.AssClipRect
 import io.github.assworkbench.domain.AssAnimationSemantic
+import io.github.assworkbench.domain.AssVectorClipSemantic
+import io.github.assworkbench.domain.AssVectorClip
+import io.github.assworkbench.domain.KaraokeSemantic
 import io.github.assworkbench.domain.AssCompatibilityProfile
 import io.github.assworkbench.domain.AssComplexFade
 import io.github.assworkbench.domain.AssTransform
@@ -800,6 +803,24 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         }
         editDocument("批量规则已应用到 " + preview.affectedEventIds.size + " 条字幕。") { document ->
             BatchRuleEngine.preview(document, rule).document
+        }
+    }
+
+    fun setKaraokeTimings(eventId: Long, centiseconds: List<Int>) {
+        editDocument("已更新时间轴 Karaoke 音节。") { document ->
+            document.copy(events = document.events.map { event ->
+                if (event.id != eventId) event
+                else event.copy(text = KaraokeSemantic.retime(event.text, centiseconds))
+            })
+        }
+    }
+
+    fun setVectorClip(eventId: Long, clip: AssVectorClip) {
+        editDocument("已更新 Vector Clip。") { document ->
+            document.copy(events = document.events.map { event ->
+                if (event.id != eventId) event
+                else event.copy(text = AssVectorClipSemantic.patchLeading(event.text, clip))
+            })
         }
     }
 
