@@ -72,6 +72,11 @@ private enum class WorkbenchTool(val title: String) {
     PROJECT("项目"), DIAGNOSTICS("诊断"), CAPABILITIES("功能地图"),
 }
 
+private enum class WorkspacePresentationMode(val label: String) {
+    FIXED("固定 UI"),
+    CANVAS_EXPERIMENTAL("实验性 Canvas"),
+}
+
 private enum class DestructiveWorkspaceAction { OPEN_ASS, NEW_ASS }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -97,6 +102,18 @@ fun ModernEditorScreen(
     ) { mutableStateOf(WorkspaceState(surfacesHidden = true)) }
     val surfaceController = rememberWorkbenchSurfaceController()
     val interactionRegistry = rememberInteractionOverlayRegistry()
+    var workspaceModeName by rememberSaveable { mutableStateOf(state.workspaceMode) }
+    val workspaceMode = WorkspacePresentationMode.entries
+        .firstOrNull { it.name == workspaceModeName }
+        ?: WorkspacePresentationMode.FIXED
+
+    LaunchedEffect(state.workspaceRestoreNonce) {
+        if (state.workspaceRestoreNonce > 0L) {
+            workspaceModeName = state.workspaceMode
+            workspaceState = WorkspaceState.fromSaveableList(state.workspaceRestoreState)
+            surfaceController.restore(state.surfaceRestoreState)
+        }
+    }
     var expandedEventId by rememberSaveable { mutableStateOf<Long?>(null) }
     val eventEditorStateHolder = rememberSaveableStateHolder()
     var searchOpen by rememberSaveable { mutableStateOf(false) }
@@ -179,6 +196,14 @@ fun ModernEditorScreen(
                 },
                 onSaveMkv = onSaveMkv,
                 onTool = ::openTool,
+                workspaceMode = workspaceMode,
+                onToggleWorkspaceMode = {
+                    workspaceModeName = if (workspaceMode == WorkspacePresentationMode.FIXED) {
+                        WorkspacePresentationMode.CANVAS_EXPERIMENTAL.name
+                    } else {
+                        WorkspacePresentationMode.FIXED.name
+                    }
+                },
             )
             }
 
@@ -297,6 +322,7 @@ fun ModernEditorScreen(
             BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().testTag("canvas-workspace")) {
                 val viewportWidth = maxWidth.value
                 val viewportHeight = maxHeight.value
+                if (workspaceMode == WorkspacePresentationMode.CANVAS_EXPERIMENTAL) {
                 WorkbenchPreview(
                     state, viewModel, if (workspaceState.surfacesHidden) null else positionEditEventId,
                     onOpenReferenceVideo, { openTool(WorkbenchTool.TIMELINE) },
@@ -432,17 +458,134 @@ fun ModernEditorScreen(
                         ) { Icon(if (workspaceState.surfacesHidden) Icons.Filled.Layers else Icons.Filled.LayersClear, null) }
                     }
                 }
+                } else {
+                    FixedWorkbenchLayout(
+                        state = state,
+                        viewModel = viewModel,
+                        issues = issues,
+                        workspaceState = workspaceState,
+                        onWorkspaceStateChange = { workspaceState = it },
+                        expandedEventId = expandedEventId,
+                        onExpandedChange = { expandedEventId = it },
+                        eventEditorStateHolder = eventEditorStateHolder,
+                        searchOpen = searchOpen,
+                        onCloseSearch = { searchOpen = false; viewModel.setQuery("") },
+                        onOpenVideo = onOpenReferenceVideo,
+                        onOpenTimeline = { openTool(WorkbenchTool.TIMELINE) },
+                        onImportFont = onImportFont,
+                        onSaveMkv = onSaveMkv,
+                        rendererEnabled = rendererEnabled,
+                        onEnableRenderer = onEnableRenderer,
+                    )
+                }
             }
         }
 
         WindowInteractionOverlay(
             registry = interactionRegistry,
-            visible = !workspaceState.surfacesHidden,
+            visible = workspaceMode == WorkspacePresentationMode.CANVAS_EXPERIMENTAL && !workspaceState.surfacesHidden,
             modifier = Modifier.fillMaxSize().testTag("interaction-overlay"),
         )
         }
     }
 }
+}
+
+@Composable
+private fun FixedWorkbenchLayout(
+    state: EditorState,
+    viewModel: EditorViewModel,
+    issues: List<AssQcIssue>,
+    workspaceState: WorkspaceState,
+    onWorkspaceStateChange: (WorkspaceState) -> Unit,
+    expandedEventId: Long?,
+    onExpandedChange: (Long?) -> Unit,
+    eventEditorStateHolder: SaveableStateHolder,
+    searchOpen: Boolean,
+    onCloseSearch: () -> Unit,
+    onOpenVideo: () -> Unit,
+    onOpenTimeline: () -> Unit,
+    onImportFont: () -> Unit,
+    onSaveMkv: () -> Unit,
+    rendererEnabled: Boolean,
+    onEnableRenderer: () -> Unit,
+) {
+    BoxWithConstraints(Modifier.fillMaxSize().testTag("fixed-workspace")) {
+        val activeTool = workspaceState.activeInstanceId
+            ?.let { id -> workspaceState.tools.firstOrNull { it.id == id }?.toolKey }
+            ?.let { key -> WorkbenchTool.entries.firstOrNull { it.name == key } }
+            ?: WorkbenchTool.SUBTITLES
+        val instance = workspaceState.activeForTool(activeTool.name)
+            ?: WorkspaceToolInstance(WorkspaceState.primaryInstanceId(activeTool.name), activeTool.name)
+        val inspector: @Composable (Modifier) -> Unit = { modifier ->
+            Surface(modifier, tonalElevation = 2.dp) {
+                Column(Modifier.fillMaxSize()) {
+                    Row(
+                        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        WorkbenchTool.entries.filter { it != WorkbenchTool.CAPABILITIES }.forEach { tool ->
+                            FilterChip(
+                                selected = activeTool == tool,
+                                onClick = {
+                                    onWorkspaceStateChange(
+                                        workspaceState.openPrimary(tool.name).activate(WorkspaceState.primaryInstanceId(tool.name))
+                                    )
+                                },
+                                label = { Text(tool.title) },
+                            )
+                        }
+                    }
+                    Divider()
+                    FloatingToolContent(
+                        instance = instance,
+                        tool = activeTool,
+                        state = state,
+                        viewModel = viewModel,
+                        issues = issues,
+                        expandedEventId = expandedEventId,
+                        onExpandedChange = onExpandedChange,
+                        onImportFont = onImportFont,
+                        onSaveMkv = onSaveMkv,
+                        eventEditorStateHolder = eventEditorStateHolder,
+                        onOpenTool = { tool ->
+                            onWorkspaceStateChange(
+                                workspaceState.openPrimary(tool.name).activate(WorkspaceState.primaryInstanceId(tool.name))
+                            )
+                        },
+                        onCloseText = {
+                            onWorkspaceStateChange(workspaceState.openPrimary(WorkbenchTool.SUBTITLES.name))
+                        },
+                        searchOpen = searchOpen,
+                        onCloseSearch = onCloseSearch,
+                    )
+                }
+            }
+        }
+        if (maxWidth >= 900.dp) {
+            Row(Modifier.fillMaxSize()) {
+                WorkbenchPreview(
+                    state, viewModel, null, onOpenVideo, onOpenTimeline,
+                    rendererEnabled, onEnableRenderer,
+                    interactionRegistry = null,
+                    viewportGesturesEnabled = true,
+                    modifier = Modifier.weight(1f).fillMaxHeight(),
+                )
+                inspector(Modifier.widthIn(min = 380.dp, max = 520.dp).fillMaxHeight())
+            }
+        } else {
+            Column(Modifier.fillMaxSize()) {
+                WorkbenchPreview(
+                    state, viewModel, null, onOpenVideo, onOpenTimeline,
+                    rendererEnabled, onEnableRenderer,
+                    interactionRegistry = null,
+                    viewportGesturesEnabled = true,
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                )
+                inspector(Modifier.weight(1f).fillMaxWidth())
+            }
+        }
+    }
 }
 
 @Composable
@@ -662,6 +805,8 @@ private fun ModernAppBar(
     onSave: () -> Unit,
     onSaveMkv: () -> Unit,
     onTool: (WorkbenchTool) -> Unit,
+    workspaceMode: WorkspacePresentationMode,
+    onToggleWorkspaceMode: () -> Unit,
 ) {
     var moreMenuOpen by remember { mutableStateOf(false) }
     Surface(tonalElevation = 2.dp) {
@@ -716,6 +861,11 @@ private fun ModernAppBar(
                         DropdownMenuItem(text = { Text("质量检查") }, leadingIcon = { Icon(Icons.Filled.ErrorOutline, null) }, onClick = { moreMenuOpen = false; onTool(WorkbenchTool.QC) })
                         DropdownMenuItem(text = { Text("项目") }, leadingIcon = { Icon(Icons.Filled.Info, null) }, onClick = { moreMenuOpen = false; onTool(WorkbenchTool.PROJECT) })
                         DropdownMenuItem(text = { Text("诊断") }, leadingIcon = { Icon(Icons.Filled.Tune, null) }, onClick = { moreMenuOpen = false; onTool(WorkbenchTool.DIAGNOSTICS) })
+                        DropdownMenuItem(
+                            text = { Text("界面：${workspaceMode.label}") },
+                            leadingIcon = { Icon(Icons.Filled.ViewQuilt, null) },
+                            onClick = { moreMenuOpen = false; onToggleWorkspaceMode() },
+                        )
                         Divider()
                         if (state.container.uri != null) DropdownMenuItem(text = { Text("保存为新 MKV") }, onClick = { moreMenuOpen = false; onSaveMkv() })
                     }
