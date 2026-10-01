@@ -22,6 +22,8 @@ import io.github.assworkbench.domain.EventFormatClipboardOps
 import io.github.assworkbench.domain.EventFormatPasteMode
 import io.github.assworkbench.domain.FontBindingRewriter
 import io.github.assworkbench.domain.SubTime
+import io.github.assworkbench.domain.SrtCodec
+import io.github.assworkbench.domain.SubtitleSourceFormat
 import io.github.assworkbench.domain.UndoHistory
 import io.github.assworkbench.fonts.FontDiagnostics
 import io.github.assworkbench.fonts.FontPackagingPlanner
@@ -168,6 +170,8 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 project = it.project.copy(
                     title = "Untitled.ass",
                     subtitleUri = null,
+                    sourceSubtitleUri = null,
+                    sourceFormat = SubtitleSourceFormat.ASS,
                 ),
                 document = document,
                 previewDocument = null,
@@ -203,6 +207,8 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                     title = displayName(uri) ?: "Matroska project",
                     videoUri = uri.toString(),
                     subtitleUri = null,
+                    sourceSubtitleUri = null,
+                    sourceFormat = SubtitleSourceFormat.MKV_ASS,
                 ),
                 document = blank,
                 waveform = WaveformLiteState(
@@ -330,7 +336,12 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         history.reset(document)
         _state.update {
             it.copy(
-                project = it.project.copy(subtitleUri = null, title = it.container.name + " · " + track.displayName),
+                project = it.project.copy(
+                    subtitleUri = null,
+                    sourceSubtitleUri = it.container.uri,
+                    sourceFormat = SubtitleSourceFormat.MKV_ASS,
+                    title = it.container.name + " · " + track.displayName,
+                ),
                 document = document,
                 previewDocument = null,
                 subtitleLoaded = true,
@@ -511,27 +522,39 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         val bytes = app.contentResolver.openInputStream(uri)?.use { it.readBytes() }
             ?: error("无法读取字幕")
         val decoded = AssTextDecoder.decode(bytes)
-        val document = AssCodec.parse(decoded.text)
+        val name = displayName(uri) ?: "subtitle"
+        val isSrt = name.endsWith(".srt", ignoreCase = true)
+        val document = if (isSrt) SrtCodec.parse(decoded.text) else AssCodec.parse(decoded.text)
         history.reset(document)
         _state.update {
             it.copy(
-                project = it.project.copy(subtitleUri = uri.toString(), title = displayName(uri) ?: "ASS project"),
+                project = it.project.copy(
+                    subtitleUri = if (isSrt) null else uri.toString(),
+                    sourceSubtitleUri = uri.toString(),
+                    sourceFormat = if (isSrt) SubtitleSourceFormat.SRT else SubtitleSourceFormat.ASS,
+                    title = if (isSrt) name.substringBeforeLast('.').ifBlank { "subtitle" } + ".ass" else name,
+                ),
                 document = document,
                 previewDocument = null,
                 subtitleLoaded = true,
-                subtitleTextEncoding = decoded.encoding,
+                subtitleTextEncoding = if (isSrt) AssTextEncoding.UTF8 else decoded.encoding,
                 selectedEventIds = emptySet(),
                 selectionAnchorId = null,
                 focusedEventId = document.events.firstOrNull()?.id,
-                dirty = false,
+                dirty = isSrt,
                 canUndo = false,
                 canRedo = false,
                 fontPackagingSelection = emptySet(),
                 container = ContainerBridgeState(),
-                status = "已载入 ${document.events.size} 条 ASS 事件 · ${decoded.encoding.displayName}。",
+                status = if (isSrt) {
+                    "已导入 ${document.events.size} 条 SRT 字幕并转换为 ASS 工作文档；原 SRT 不会被覆盖，请另存为 ASS。"
+                } else {
+                    "已载入 ${document.events.size} 条 ASS 事件 · ${decoded.encoding.displayName}。"
+                },
             )
         }
         refreshFontDiagnostics()
+        if (isSrt) scheduleRecovery(document)
     }
 
     fun importFont(uri: Uri) {
