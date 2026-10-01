@@ -87,7 +87,7 @@ fun ModernEditorScreen(
     onImportFont: () -> Unit,
     onSave: () -> Unit,
     onSaveAs: () -> Unit,
-    onSaveWorkbenchProject: () -> Unit,
+    onSaveWorkbenchProject: (List<String>, List<String>) -> Unit,
     onExportSrt: () -> Unit,
     onSaveMkv: () -> Unit,
     rendererEnabled: Boolean,
@@ -100,6 +100,14 @@ fun ModernEditorScreen(
         ),
     ) { mutableStateOf(WorkspaceState(surfacesHidden = true)) }
     val surfaceController = rememberWorkbenchSurfaceController()
+    LaunchedEffect(state.projectFileUri, state.projectWorkspaceRows, state.projectSurfaceRows) {
+        if (state.projectWorkspaceRows.isNotEmpty()) {
+            workspaceState = WorkspaceState.fromSaveableList(state.projectWorkspaceRows)
+        }
+        if (state.projectSurfaceRows.isNotEmpty()) {
+            surfaceController.restore(state.projectSurfaceRows)
+        }
+    }
     val interactionRegistry = rememberInteractionOverlayRegistry()
     var expandedEventId by rememberSaveable { mutableStateOf<Long?>(null) }
     val eventEditorStateHolder = rememberSaveableStateHolder()
@@ -205,7 +213,9 @@ fun ModernEditorScreen(
                     if (state.project.subtitleUri == null) onSaveAs()
                     else saveConfirmOpen = true
                 },
-                onSaveWorkbenchProject = onSaveWorkbenchProject,
+                onSaveWorkbenchProject = {
+                    onSaveWorkbenchProject(workspaceState.toSaveableList(), surfaceController.save())
+                },
                 onExportSrt = onExportSrt,
                 onSaveMkv = onSaveMkv,
                 onTool = ::openTool,
