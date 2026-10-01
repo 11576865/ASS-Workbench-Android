@@ -113,6 +113,24 @@ internal class WorkbenchSurfaceController(restored: List<WorkspaceSurfaceState> 
         bringToFront(id)
     }
 
+    fun remove(id: String): String? {
+        cancel(id)
+        candidates.remove(id)
+        val removed = surfaces.remove(id) ?: return null
+        val group = removed.tabGroupId ?: return null
+        val survivors = surfaces.values.filter { it.tabGroupId == group }
+        if (survivors.isEmpty()) return null
+        if (survivors.size == 1) {
+            val survivor = survivors.single()
+            surfaces[survivor.instanceId] = survivor.copy(tabGroupId = null)
+            bringToFront(survivor.instanceId)
+            return survivor.instanceId
+        }
+        val survivor = survivors.maxBy { it.zOrder }.instanceId
+        bringToFront(survivor)
+        return survivor
+    }
+
     fun cycleSize(id: String, fallback: SurfaceGeometry) {
         val old = state(id, fallback)
         if (old.layoutLocked) return
