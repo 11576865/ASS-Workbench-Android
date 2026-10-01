@@ -161,6 +161,38 @@ class EditorRegressionInstrumentedTest {
     }
 
     @Test
+    fun subtitleObjectWorkspaceEntersDirectObjectMode() {
+        restoreRecovery()
+
+        composeRule.onNodeWithContentDescription("工具和更多操作").performClick()
+        composeRule.onNodeWithTag("workspace-mode-toggle").performClick()
+        composeRule.onNodeWithTag("ui-variant-use-SUBTITLE_OBJECT_EXPERIMENTAL")
+            .assertIsDisplayed()
+            .performClick()
+
+        composeRule.onNodeWithTag("subtitle-object-workspace").assertIsDisplayed()
+
+        composeRule.waitUntil(5_000) {
+            composeRule.onAllNodesWithTag("object-preview", useUnmergedTree = true)
+                .fetchSemanticsNodes(atLeastOneRootRequired = false)
+                .isNotEmpty() ||
+                composeRule.onAllNodesWithTag("object-script-canvas", useUnmergedTree = true)
+                    .fetchSemanticsNodes(atLeastOneRootRequired = false)
+                    .isNotEmpty()
+        }
+
+        val scriptNodes = composeRule.onAllNodesWithTag(
+            "object-script-canvas",
+            useUnmergedTree = true,
+        ).fetchSemanticsNodes(atLeastOneRootRequired = false)
+        if (scriptNodes.isNotEmpty()) {
+            composeRule.onNodeWithTag("object-script-canvas")
+                .performTouchInput { longClick(center) }
+            composeRule.onNodeWithTag("object-candidate-picker").assertIsDisplayed()
+        }
+    }
+
+    @Test
     fun rawDraftSurvivesSwitchingBetweenEvents() {
         restoreRecovery()
 
