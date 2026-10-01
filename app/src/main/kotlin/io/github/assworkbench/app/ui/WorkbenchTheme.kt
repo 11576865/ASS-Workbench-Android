@@ -1,28 +1,19 @@
 package io.github.assworkbench.app.ui
 
 import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.ui.graphics.Color
 
-/** Stable workbench palette: cool accent, neutral readable panels, distinct borders. */
-internal fun workbenchColors(dark: Boolean) = if (dark) darkColorScheme(
-    primary = Color(0xFF77D9DD), onPrimary = Color(0xFF003739),
-    primaryContainer = Color(0xFF164D53), onPrimaryContainer = Color(0xFFB6F4F6),
-    secondary = Color(0xFFB5C6F2), onSecondary = Color(0xFF1A2C52),
-    secondaryContainer = Color(0xFF283B60), onSecondaryContainer = Color(0xFFDCE5FF),
+/** The workspace has one dark presentation; system theme cannot change it. */
+internal fun workbenchColors() = darkColorScheme(
+    primary = Color(0xFF9F91FF), onPrimary = Color(0xFF211447),
+    primaryContainer = Color(0xFF35305C), onPrimaryContainer = Color(0xFFE9E1FF),
+    secondary = Color(0xFF8ED8DE), onSecondary = Color(0xFF00373B),
+    secondaryContainer = Color(0xFF193F48), onSecondaryContainer = Color(0xFFBCF1F4),
     tertiary = Color(0xFFE5BE83), onTertiary = Color(0xFF432D0C),
-    background = Color(0xFF0C111A), onBackground = Color(0xFFE5EBF5),
-    surface = Color(0xFF151D2A), onSurface = Color(0xFFE5EBF5),
-    surfaceVariant = Color(0xFF253247), onSurfaceVariant = Color(0xFFB7C5D8),
-    outline = Color(0xFF8293AB), outlineVariant = Color(0xFF354359),
-) else lightColorScheme(
-    primary = Color(0xFF006B72), onPrimary = Color.White,
-    primaryContainer = Color(0xFFC2F0F1), onPrimaryContainer = Color(0xFF00363B),
-    secondary = Color(0xFF425D8C), onSecondary = Color.White,
-    secondaryContainer = Color(0xFFD9E5FF), onSecondaryContainer = Color(0xFF142D52),
-    tertiary = Color(0xFF805600), onTertiary = Color.White,
-    background = Color(0xFFEDF2F8), onBackground = Color(0xFF142234),
-    surface = Color(0xFFFAFCFF), onSurface = Color(0xFF142234),
-    surfaceVariant = Color(0xFFE2EAF3), onSurfaceVariant = Color(0xFF42556D),
-    outline = Color(0xFF677D94), outlineVariant = Color(0xFFBECDD9),
+    background = Color(0xFF080B12), onBackground = Color(0xFFE8EBF5),
+    surface = Color(0xFF101521), onSurface = Color(0xFFE8EBF5),
+    surfaceVariant = Color(0xFF20273A), onSurfaceVariant = Color(0xFFBBC2D8),
+    surfaceContainer = Color(0xFF131A29), surfaceContainerHigh = Color(0xFF1A2133),
+    surfaceContainerHighest = Color(0xFF252D43),
+    outline = Color(0xFF818BA8), outlineVariant = Color(0xFF3B4563),
 )

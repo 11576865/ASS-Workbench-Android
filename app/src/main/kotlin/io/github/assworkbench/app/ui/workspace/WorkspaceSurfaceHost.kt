@@ -36,6 +36,7 @@ internal fun FloatingWorkbenchSurface(
     visible: Boolean,
     controller: WorkbenchSurfaceController,
     initialOffset: Offset,
+    initialGeometry: SurfaceGeometry? = null,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
     testTagId: String = id,
@@ -50,7 +51,7 @@ internal fun FloatingWorkbenchSurface(
         val density = LocalDensity.current.density
         val viewportWidth = maxWidth.value
         val viewportHeight = maxHeight.value
-        val fallback = SurfaceGeometry(initialOffset.x / density, initialOffset.y / density)
+        val fallback = initialGeometry ?: SurfaceGeometry(initialOffset.x / density, initialOffset.y / density)
         val state = controller.state(id, fallback)
         val geometry = state.geometry.inViewport(viewportWidth, viewportHeight)
         val candidate = remember(controller, id) { controller.candidate(id) }

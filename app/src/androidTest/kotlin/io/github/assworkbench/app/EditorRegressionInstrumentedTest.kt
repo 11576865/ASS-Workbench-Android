@@ -23,6 +23,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipe
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.performTextInput
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -107,12 +108,14 @@ class EditorRegressionInstrumentedTest {
         composeRule.onNodeWithTag("event-raw-1")
             .performTextInput(" SWITCH")
 
+        openTool("SUBTITLES")
         composeRule.onNodeWithTag("event-row-2")
             .performScrollTo()
             .performClick()
         composeRule.onNodeWithTag("event-raw-2")
             .assertIsDisplayed()
 
+        openTool("SUBTITLES")
         composeRule.onNodeWithTag("event-row-1")
             .performScrollTo()
             .performClick()
@@ -162,9 +165,10 @@ class EditorRegressionInstrumentedTest {
         restoreRecovery()
         composeRule.onNodeWithTag("event-row-1").performClick()
         composeRule.onNodeWithTag("event-raw-1").performTextInput(" WORKBENCH")
-        composeRule.onNodeWithTag("tool-EFFECTS").performScrollTo().performClick()
-        composeRule.onNodeWithTag("event-inspector").assertIsDisplayed()
-        composeRule.onNodeWithTag("tool-TEXT").performScrollTo().performClick()
+        openTool("EFFECTS")
+        composeRule.onNodeWithTag("surface-EFFECTS").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("收回 效果").performClick()
+        openTool("TEXT")
         composeRule.onNodeWithTag("event-raw-1").assertIsDisplayed()
         composeRule.activityRule.scenario.onActivity {
             it.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
@@ -190,15 +194,11 @@ class EditorRegressionInstrumentedTest {
             composeRule.waitForIdle()
             val preview = composeRule.onNodeWithTag("preview-workspace").fetchSemanticsNode().boundsInRoot
             val navigation = composeRule.onNodeWithTag("subtitle-navigation").fetchSemanticsNode().boundsInRoot
-            assertTrue("Landscape preview must be beside navigation", preview.right <= navigation.left)
-            val inspector = composeRule.onNodeWithTag("event-inspector").fetchSemanticsNode().boundsInRoot
-            val inspectorSeparatedHorizontally = inspector.left >= navigation.right
-            val inspectorSeparatedVertically = inspector.top >= navigation.bottom
-            assertTrue(
-                "Adaptive workbench must keep navigation and inspector non-overlapping",
-                inspectorSeparatedHorizontally || inspectorSeparatedVertically,
-            )
-            composeRule.onNodeWithTag("preview-divider").assertIsDisplayed()
+            val canvas = composeRule.onNodeWithTag("canvas-workspace").fetchSemanticsNode().boundsInRoot
+            assertEquals(canvas, preview)
+            assertTrue("Subtitle navigation must float over the canvas", navigation.left >= canvas.left && navigation.right <= canvas.right)
+            composeRule.onNodeWithTag("surface-TEXT").assertIsDisplayed()
+            composeRule.onNodeWithTag("preview-divider").assertDoesNotExist()
             captureLayout("tablet-landscape")
         } finally {
             automation.executeShellCommand("wm size reset").close()
@@ -231,7 +231,7 @@ class EditorRegressionInstrumentedTest {
     }
 
     @Test
-    fun experimentalSurfaceWorkspaceSupportsStackHideRestoreAndPreviewModes() {
+    fun canvasWorkspaceSupportsStackHideRestoreWithoutPreviewModes() {
         restoreRecovery()
 
         fun waitForSurface(tag: String) {
@@ -243,7 +243,7 @@ class EditorRegressionInstrumentedTest {
             }
         }
 
-        composeRule.onNodeWithTag("tool-POSITION").performScrollTo().performClick()
+        openTool("POSITION")
         waitForSurface("surface-POSITION")
         val dragHandle = composeRule.onNodeWithTag("surface-drag-POSITION")
         val before = dragHandle.fetchSemanticsNode().boundsInRoot
@@ -258,11 +258,11 @@ class EditorRegressionInstrumentedTest {
         val after = dragHandle.fetchSemanticsNode().boundsInRoot
         assertTrue("Floating surface drag handle should move the surface", after.left > before.left || after.top > before.top)
 
-        composeRule.onNodeWithTag("tool-STYLE").performScrollTo().performClick()
+        openTool("STYLE")
         waitForSurface("surface-STYLE")
 
-        composeRule.onNodeWithTag("tool-FONTS").performScrollTo().performClick()
-        composeRule.onNodeWithTag("tool-QC").performScrollTo().performClick()
+        openTool("FONTS")
+        openTool("QC")
         waitForSurface("surface-FONTS")
         waitForSurface("surface-QC")
 
@@ -282,24 +282,22 @@ class EditorRegressionInstrumentedTest {
         composeRule.onNodeWithTag("surface-POSITION").assertIsDisplayed()
         composeRule.onNodeWithTag("surface-FONTS").assertIsDisplayed()
 
-        composeRule.onNodeWithTag("preview-mode-FOCUS").performScrollTo().performClick()
         composeRule.onNodeWithTag("preview-workspace").assertIsDisplayed()
+        listOf("NORMAL", "FOCUS", "FLOATING", "MANIPULATION").forEach {
+            composeRule.onNodeWithTag("preview-mode-$it").assertDoesNotExist()
+        }
+        composeRule.onNodeWithTag("floating-preview").assertDoesNotExist()
+        composeRule.onNodeWithText("跟随系统").assertDoesNotExist()
+        composeRule.onNodeWithText("白天").assertDoesNotExist()
+        captureLayout("floating-workspace")
 
-        composeRule.onNodeWithTag("preview-mode-FLOATING").performScrollTo().performClick()
-        composeRule.waitForIdle()
-        composeRule.onNodeWithTag("floating-preview").assertIsDisplayed()
-        composeRule.onNodeWithTag("subtitle-navigation").assertIsDisplayed()
-
-        composeRule.onNodeWithTag("preview-mode-MANIPULATION").performScrollTo().performClick()
-        composeRule.onNodeWithTag("preview-workspace").assertIsDisplayed()
-        composeRule.onNodeWithTag("interaction-overlay").assertIsDisplayed()
     }
 
     @Test
     fun surfaceResizeAndLayoutLockSurviveRecreationWithoutChangingSubtitle() {
         restoreRecovery()
         val canonical = viewModel.state.value.document
-        composeRule.onNodeWithTag("tool-POSITION").performScrollTo().performClick()
+        openTool("POSITION")
         composeRule.waitForIdle()
         val surface = composeRule.onNodeWithTag("surface-POSITION")
         val before = surface.fetchSemanticsNode().boundsInRoot
@@ -388,6 +386,30 @@ class EditorRegressionInstrumentedTest {
             viewModel.state.value.subtitleLoaded &&
                 viewModel.state.value.document.events.size == 2
         }
+        composeRule.onNodeWithTag("surface-SUBTITLES").assertDoesNotExist()
+        captureLayout("clean-canvas")
+        openTool("SUBTITLES")
+    }
+
+    private fun hideKeyboard() {
+        composeRule.activityRule.scenario.onActivity { activity ->
+            activity.getSystemService(android.view.inputmethod.InputMethodManager::class.java)
+                .hideSoftInputFromWindow(activity.window.decorView.windowToken, 0)
+        }
+        composeRule.waitUntil(5_000) {
+            composeRule.activity.window.decorView.rootWindowInsets
+                ?.isVisible(android.view.WindowInsets.Type.ime()) != true
+        }
+        composeRule.waitForIdle()
+    }
+
+    private fun openTool(name: String) {
+        hideKeyboard()
+        composeRule.onNodeWithTag("workspace-tools").performClick()
+        composeRule.onNodeWithTag("tool-search").performTextReplacement(name)
+        hideKeyboard()
+        composeRule.onNodeWithTag("tool-$name").performScrollTo().performClick()
+        composeRule.waitForIdle()
     }
 
     private fun eventText(id: Long): String =
