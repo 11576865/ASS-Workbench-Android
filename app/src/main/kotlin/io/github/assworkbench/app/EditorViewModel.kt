@@ -789,6 +789,26 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         return true
     }
 
+    fun exportSrtTo(uri: Uri): Boolean {
+        val snapshot = _state.value
+        return runCatching {
+            val text = SrtCodec.write(snapshot.document)
+            app.contentResolver.openOutputStream(uri, "wt")?.bufferedWriter(Charsets.UTF_8)?.use { it.write(text) }
+                ?: error("无法写入 SRT")
+        }.fold(
+            onSuccess = {
+                _state.update {
+                    it.copy(status = "SRT 已导出；ASS 仍是当前可编辑主文档。")
+                }
+                true
+            },
+            onFailure = { error ->
+                reportError("SRT 导出失败", error)
+                false
+            },
+        )
+    }
+
     fun applyQuickFix(eventId: Long, fixId: String) {
         editDocument("已应用 QC Quick Fix。") { document ->
             AssQuickFixExecutor.apply(document, eventId, fixId)
