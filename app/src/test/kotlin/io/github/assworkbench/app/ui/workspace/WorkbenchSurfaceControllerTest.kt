@@ -65,6 +65,26 @@ class WorkbenchSurfaceControllerTest {
         assertTrue(controller.state("A", fallback).layoutLocked)
     }
 
+    @Test fun placementCyclesAndTabStacksShareCommittedGeometry() {
+        val controller = WorkbenchSurfaceController()
+        controller.ensure("A", fallback)
+        controller.ensure("B", SurfaceGeometry(400f, 30f))
+        controller.cyclePlacement("A", fallback)
+        assertEquals(SurfacePlacement.DOCK_RIGHT, controller.state("A", fallback).placement)
+
+        controller.bringToFront("B")
+        controller.stackWithFrontmost("A", fallback)
+        val a = controller.state("A", fallback)
+        val b = controller.state("B", fallback)
+        assertNotNull(a.stackId)
+        assertEquals(a.stackId, b.stackId)
+        assertEquals(b.geometry, a.geometry)
+
+        controller.unstack("A", fallback)
+        assertNull(controller.state("A", fallback).stackId)
+        assertEquals(SurfacePlacement.FLOATING, controller.state("A", fallback).placement)
+    }
+
     @Test fun restoredStackingDoesNotResetOnMountAndInstancesRemainIndependent() {
         val controller = WorkbenchSurfaceController(listOf(
             WorkspaceSurfaceState("A", fallback, zOrder = 10),
