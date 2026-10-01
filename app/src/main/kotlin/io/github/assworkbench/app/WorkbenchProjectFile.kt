@@ -15,6 +15,7 @@ data class WorkbenchProjectFile(
     val workspaceMode: String = "FIXED",
     val workspaceState: List<String> = emptyList(),
     val surfaceState: List<String> = emptyList(),
+    val fontPackagingSelection: List<String> = emptyList(),
 )
 
 object WorkbenchProjectCodec {
@@ -34,6 +35,7 @@ object WorkbenchProjectCodec {
         put("workspace_mode", project.workspaceMode)
         put("workspace_state", JSONArray(project.workspaceState))
         put("surface_state", JSONArray(project.surfaceState))
+        put("font_packaging_selection", JSONArray(project.fontPackagingSelection))
     }.toString(2)
 
     fun decode(text: String): WorkbenchProjectFile {
@@ -57,6 +59,7 @@ object WorkbenchProjectCodec {
             workspaceMode = json.optString("workspace_mode", "FIXED"),
             workspaceState = json.stringList("workspace_state"),
             surfaceState = json.stringList("surface_state"),
+            fontPackagingSelection = json.stringList("font_packaging_selection"),
         )
     }
 
