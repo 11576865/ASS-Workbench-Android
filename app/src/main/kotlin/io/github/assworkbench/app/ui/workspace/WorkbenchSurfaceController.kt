@@ -47,12 +47,22 @@ internal class WorkbenchSurfaceController(restored: List<WorkspaceSurfaceState> 
     fun commit(id: String, fallback: SurfaceGeometry) {
         candidate(id).value?.let { next ->
             // Tiny viewports may project below the canonical minimum.
-            val original = state(id, fallback).geometry
+            val originalState = state(id, fallback)
+            val original = originalState.geometry
             val valid = if (id in resizeGestures) next.copy(
                 width = next.width.coerceAtLeast(SurfaceGeometry.MIN_WIDTH),
                 height = next.height.coerceAtLeast(SurfaceGeometry.MIN_HEIGHT),
             ) else next.copy(width = original.width, height = original.height)
-            surfaces[id] = state(id, fallback).withGeometry(valid)
+            val updated = originalState.withGeometry(valid)
+            surfaces[id] = updated
+            originalState.stackId?.let { stack ->
+                surfaces.values.filter { it.stackId == stack && it.instanceId != id }.forEach { member ->
+                    surfaces[member.instanceId] = member.copy(
+                        geometry = updated.geometry,
+                        sizeClass = updated.sizeClass,
+                    )
+                }
+            }
         }
         cancel(id)
     }
@@ -79,6 +89,52 @@ internal class WorkbenchSurfaceController(restored: List<WorkspaceSurfaceState> 
 
     fun ensure(id: String, fallback: SurfaceGeometry) {
         if (id !in surfaces) bringToFront(id, fallback)
+    }
+
+    fun cyclePlacement(id: String, fallback: SurfaceGeometry) {
+        cancel(id)
+        val old = state(id, fallback)
+        val next = when (old.placement) {
+            SurfacePlacement.FLOATING -> SurfacePlacement.DOCK_RIGHT
+            SurfacePlacement.DOCK_RIGHT -> SurfacePlacement.DOCK_LEFT
+            SurfacePlacement.DOCK_LEFT -> SurfacePlacement.DOCK_BOTTOM
+            SurfacePlacement.DOCK_BOTTOM -> SurfacePlacement.MINIMIZED
+            SurfacePlacement.MINIMIZED -> SurfacePlacement.FLOATING
+        }
+        surfaces[id] = old.copy(placement = next)
+        bringToFront(id, fallback)
+    }
+
+    fun stackWithFrontmost(id: String, fallback: SurfaceGeometry) {
+        ensure(id, fallback)
+        val source = surfaces[id] ?: return
+        val target = surfaces.values
+            .filter { it.instanceId != id }
+            .maxByOrNull { it.zOrder }
+            ?: return
+        val stack = source.stackId ?: target.stackId ?: ("stack:" + listOf(id, target.instanceId).sorted().joinToString("|"))
+        surfaces[id] = source.copy(
+            geometry = target.geometry,
+            sizeClass = target.sizeClass,
+            placement = target.placement,
+            stackId = stack,
+        )
+        surfaces[target.instanceId] = target.copy(stackId = stack)
+        bringToFront(id)
+    }
+
+    fun unstack(id: String, fallback: SurfaceGeometry) {
+        cancel(id)
+        val old = state(id, fallback)
+        if (old.stackId == null) return
+        surfaces[id] = old.copy(stackId = null, placement = SurfacePlacement.FLOATING)
+    }
+
+    fun stackMembers(id: String): List<String> {
+        val stack = surfaces[id]?.stackId ?: return emptyList()
+        return surfaces.values.filter { it.stackId == stack }
+            .sortedBy { it.zOrder }
+            .map { it.instanceId }
     }
 
     fun z(id: String): Float = (surfaces[id]?.zOrder ?: 1).toFloat()
