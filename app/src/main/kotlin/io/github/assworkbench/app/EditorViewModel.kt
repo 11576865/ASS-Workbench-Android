@@ -92,6 +92,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         containerScan = null
         val epoch = workspaceEpoch.incrementAndGet()
         if (resetProjectFonts) fontStore.beginProjectFontSession(epoch, refresh = false)
+        _state.update { it.copy(workspaceSessionId = epoch) }
         return epoch
     }
 
@@ -211,6 +212,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                     subtitleUri = null,
                 ),
                 document = blank,
+                workspaceSessionId = scanEpoch,
                 waveform = WaveformLiteState(
                     sourceUri = uri.toString(),
                     status = WaveformLiteStatus.IDLE,
@@ -667,9 +669,9 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         )
     }
 
-    fun loadProjectSnapshot(snapshot: AssWorkbenchProjectSnapshot) {
+    fun loadProjectSnapshot(snapshot: AssWorkbenchProjectSnapshot): Long {
         clearPendingRecovery()
-        beginWorkspaceBoundary()
+        val sessionId = beginWorkspaceBoundary()
         cancelWaveformAnalysis()
         history.reset(snapshot.document)
         val eventIds = snapshot.document.events.mapTo(hashSetOf()) { it.id }
@@ -715,6 +717,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         }
         snapshot.videoUri?.let { launchWaveformAnalysis(Uri.parse(it)) }
         refreshFontDiagnostics()
+        return sessionId
     }
 
     fun applyQuickFix(issue: AssLintIssue) {
