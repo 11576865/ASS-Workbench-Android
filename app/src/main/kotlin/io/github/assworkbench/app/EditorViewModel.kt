@@ -526,6 +526,15 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         _state.update { it.copy(compatibilityProfile = profile) }
     }
 
+    fun updateProjectWorkspaceSnapshot(workspaceRows: List<String>, surfaceRows: List<String>) {
+        _state.update {
+            it.copy(
+                projectWorkspaceRows = workspaceRows,
+                projectSurfaceRows = surfaceRows,
+            )
+        }
+    }
+
     fun openWorkbenchProject(uri: Uri) {
         val text = app.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
             ?: error("无法读取 ASS Workbench 工程文件")
@@ -539,6 +548,9 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                     it.copy(
                         projectFileUri = uri.toString(),
                         workspaceMode = manifest.workspaceMode,
+                        compatibilityProfile = manifest.compatibilityProfile,
+                        projectWorkspaceRows = manifest.workspaceStateRows,
+                        projectSurfaceRows = manifest.surfaceStateRows,
                         status = "正在恢复 ASS Workbench MKV 工程……",
                     )
                 }
@@ -551,6 +563,9 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                     it.copy(
                         projectFileUri = uri.toString(),
                         workspaceMode = manifest.workspaceMode,
+                        compatibilityProfile = manifest.compatibilityProfile,
+                        projectWorkspaceRows = manifest.workspaceStateRows,
+                        projectSurfaceRows = manifest.surfaceStateRows,
                         project = it.project.copy(title = manifest.title),
                         status = "已恢复 ASS Workbench 工程。",
                     )
@@ -564,6 +579,9 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                     it.copy(
                         projectFileUri = uri.toString(),
                         workspaceMode = manifest.workspaceMode,
+                        compatibilityProfile = manifest.compatibilityProfile,
+                        projectWorkspaceRows = manifest.workspaceStateRows,
+                        projectSurfaceRows = manifest.surfaceStateRows,
                         project = it.project.copy(title = manifest.title),
                         status = "已恢复空白 ASS Workbench 工程。",
                     )
@@ -584,6 +602,9 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             mkvUri = snapshot.container.uri,
             mkvTrackNumber = snapshot.container.selectedTrackNumber,
             workspaceMode = snapshot.workspaceMode,
+            compatibilityProfile = snapshot.compatibilityProfile,
+            workspaceStateRows = snapshot.projectWorkspaceRows,
+            surfaceStateRows = snapshot.projectSurfaceRows,
             importedFontUris = snapshot.importedFonts.map { "font-sha:" + it.sha256 },
         )
         return runCatching {
