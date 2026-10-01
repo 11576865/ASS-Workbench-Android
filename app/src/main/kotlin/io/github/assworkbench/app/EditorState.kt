@@ -25,6 +25,8 @@ data class EditorState(
     val projectFileUri: String? = null,
     val workspaceMode: WorkspacePresentationMode = WorkspacePresentationMode.FIXED,
     val compatibilityProfile: AssCompatibilityProfile = AssCompatibilityProfile.LIBASS_NATIVE,
+    val projectWorkspaceRows: List<String> = emptyList(),
+    val projectSurfaceRows: List<String> = emptyList(),
     val document: AssDocument = AssDocument(),
     val previewDocument: AssDocument? = null,
     val waveform: WaveformLiteState = WaveformLiteState(),
