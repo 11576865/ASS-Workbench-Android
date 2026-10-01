@@ -111,6 +111,7 @@ internal fun VideoPreview(
     fontRevision: Long,
     initialPositionMs: Long,
     focusedEventId: Long?,
+    selectedAudioOrdinal: Int? = null,
     positionEditEventId: Long?,
     onPreviewEventPosition: (Double, Double) -> Unit,
     onSetEventPosition: (Double, Double) -> Unit,
@@ -211,6 +212,7 @@ internal fun VideoPreview(
             fontRevision = fontRevision,
             initialPositionMs = resumePositionMs,
             focusedEventId = focusedEventId,
+            selectedAudioOrdinal = selectedAudioOrdinal,
             positionEditEventId = positionEditEventId,
             onPreviewEventPosition = onPreviewEventPosition,
             onSetEventPosition = onSetEventPosition,
@@ -510,6 +512,7 @@ private fun AuthoritativeMpvPreview(
     fontRevision: Long,
     initialPositionMs: Long,
     focusedEventId: Long?,
+    selectedAudioOrdinal: Int?,
     positionEditEventId: Long?,
     onPreviewEventPosition: (Double, Double) -> Unit,
     onSetEventPosition: (Double, Double) -> Unit,
@@ -582,6 +585,14 @@ private fun AuthoritativeMpvPreview(
             "success",
             "client=" + mpv.clientName,
         )
+    }
+    LaunchedEffect(mpv, videoUri, selectedAudioOrdinal) {
+        if (!videoUri.isNullOrBlank() && selectedAudioOrdinal != null) {
+            // mpv audio track IDs are 1-based in the ordinary single-file case.
+            // The MediaExtractor catalog keeps ordinal selection stable for waveform
+            // analysis while this selects the corresponding playback track.
+            mpv.command("set", "aid", (selectedAudioOrdinal + 1).toString())
+        }
     }
     val playback by mpv.playback.collectAsState()
     val estimatedFrameNumber by remember(mpv) {
