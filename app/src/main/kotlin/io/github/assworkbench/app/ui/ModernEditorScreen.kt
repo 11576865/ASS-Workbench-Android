@@ -3710,7 +3710,114 @@ private fun BatchPane(state: EditorState, viewModel: EditorViewModel, modifier: 
     var pasteMenuOpen by remember { mutableStateOf(false) }
     Column(modifier.padding(WorkbenchDimens.Small), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("已选 ${state.selectedEventIds.size} 条", style = MaterialTheme.typography.titleSmall)
-        if (state.selectedEventIds.isEmpty()) { Text("长按字幕进入多选。"); return }
+
+        var ruleSelectedScope by rememberSaveable { mutableStateOf(false) }
+        var ruleStyle by rememberSaveable { mutableStateOf("") }
+        var ruleText by rememberSaveable { mutableStateOf("") }
+        var ruleTag by rememberSaveable { mutableStateOf("") }
+        var ruleMinDuration by rememberSaveable { mutableStateOf("") }
+        var ruleMaxDuration by rememberSaveable { mutableStateOf("") }
+        var actionShift by rememberSaveable { mutableStateOf("") }
+        var actionStyle by rememberSaveable { mutableStateOf("") }
+        var actionLayer by rememberSaveable { mutableStateOf("") }
+        var actionFind by rememberSaveable { mutableStateOf("") }
+        var actionReplace by rememberSaveable { mutableStateOf("") }
+        var actionCommentMode by rememberSaveable { mutableStateOf(0) }
+
+        fun currentRule(): BatchRule {
+            val actions = buildList<BatchAction> {
+                actionShift.toLongOrNull()?.takeIf { it != 0L }?.let { add(BatchAction.ShiftTime(it)) }
+                actionStyle.takeIf { it.isNotBlank() }?.let { add(BatchAction.SetStyle(it)) }
+                actionLayer.toIntOrNull()?.let { add(BatchAction.SetLayer(it)) }
+                when (actionCommentMode) {
+                    1 -> add(BatchAction.SetComment(false))
+                    2 -> add(BatchAction.SetComment(true))
+                }
+                if (actionFind.isNotEmpty()) add(BatchAction.ReplacePlainText(actionFind, actionReplace))
+            }
+            return BatchRule(
+                name = "UI rule",
+                predicate = BatchPredicate(
+                    styleEquals = ruleStyle.takeIf { it.isNotBlank() },
+                    textContains = ruleText.takeIf { it.isNotBlank() },
+                    requiredTag = ruleTag.takeIf { it.isNotBlank() },
+                    minDurationMs = ruleMinDuration.toLongOrNull(),
+                    maxDurationMs = ruleMaxDuration.toLongOrNull(),
+                ),
+                actions = actions,
+            )
+        }
+
+        Surface(
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.30f),
+            shape = MaterialTheme.shapes.medium,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Column(Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("规则批处理 · Scope → Filter → Action → Preview → Commit", style = MaterialTheme.typography.labelLarge)
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    FilterChip(
+                        selected = !ruleSelectedScope,
+                        onClick = { ruleSelectedScope = false },
+                        label = { Text("全部 Event") },
+                    )
+                    FilterChip(
+                        selected = ruleSelectedScope,
+                        onClick = { ruleSelectedScope = true },
+                        enabled = state.selectedEventIds.isNotEmpty(),
+                        label = { Text("当前选择") },
+                    )
+                    if (state.batchRulePreviewEventIds.isNotEmpty()) {
+                        Text("预览 ${state.batchRulePreviewEventIds.size} 条", style = MaterialTheme.typography.labelSmall)
+                    }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    OutlinedTextField(ruleStyle, { ruleStyle = it }, label = { Text("Filter Style") }, singleLine = true, modifier = Modifier.weight(1f))
+                    OutlinedTextField(ruleTag, { ruleTag = it }, label = { Text("含 tag，如 pos") }, singleLine = true, modifier = Modifier.weight(1f))
+                }
+                OutlinedTextField(ruleText, { ruleText = it }, label = { Text("正文包含") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    OutlinedTextField(ruleMinDuration, { ruleMinDuration = it }, label = { Text("最短 ms") }, singleLine = true, modifier = Modifier.weight(1f))
+                    OutlinedTextField(ruleMaxDuration, { ruleMaxDuration = it }, label = { Text("最长 ms") }, singleLine = true, modifier = Modifier.weight(1f))
+                }
+                Divider()
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    OutlinedTextField(actionShift, { actionShift = it }, label = { Text("平移 ms") }, singleLine = true, modifier = Modifier.weight(1f))
+                    OutlinedTextField(actionLayer, { actionLayer = it }, label = { Text("设 Layer") }, singleLine = true, modifier = Modifier.weight(1f))
+                }
+                OutlinedTextField(actionStyle, { actionStyle = it }, label = { Text("设 Style（留空不改）") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    FilterChip(selected = actionCommentMode == 0, onClick = { actionCommentMode = 0 }, label = { Text("不改类型") })
+                    FilterChip(selected = actionCommentMode == 1, onClick = { actionCommentMode = 1 }, label = { Text("Dialogue") })
+                    FilterChip(selected = actionCommentMode == 2, onClick = { actionCommentMode = 2 }, label = { Text("Comment") })
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    OutlinedTextField(actionFind, { actionFind = it }, label = { Text("查找正文") }, singleLine = true, modifier = Modifier.weight(1f))
+                    OutlinedTextField(actionReplace, { actionReplace = it }, label = { Text("替换") }, singleLine = true, modifier = Modifier.weight(1f))
+                }
+                val rule = currentRule()
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    OutlinedButton(
+                        onClick = { viewModel.previewBatchRule(rule, ruleSelectedScope) },
+                        enabled = rule.actions.isNotEmpty(),
+                        modifier = Modifier.weight(1f),
+                    ) { Text("预览差异") }
+                    Button(
+                        onClick = { viewModel.applyBatchRule(rule, ruleSelectedScope) },
+                        enabled = rule.actions.isNotEmpty(),
+                        modifier = Modifier.weight(1f),
+                    ) { Text("应用 · 单次 Undo") }
+                    if (state.batchRulePreviewEventIds.isNotEmpty()) {
+                        TextButton(onClick = viewModel::clearBatchRulePreview) { Text("取消预览") }
+                    }
+                }
+            }
+        }
+
+        if (state.selectedEventIds.isEmpty()) {
+            Text("没有选择字幕；上面的规则系统仍可作用于全部 Event。长按字幕可进入多选。")
+            return
+        }
         Box {
             OutlinedButton(onClick = { styleMenuOpen = true }, modifier = Modifier.fillMaxWidth()) {
                 Text("批量指定 Style")
