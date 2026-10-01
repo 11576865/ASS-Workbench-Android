@@ -107,9 +107,7 @@ class EditorRegressionInstrumentedTest {
 
         composeRule.onNodeWithContentDescription("工具和更多操作").performClick()
         composeRule.onNodeWithTag("workspace-mode-toggle").performClick()
-        composeRule.onNodeWithTag("ui-variant-use-PAGER_EXPERIMENTAL")
-            .assertIsDisplayed()
-            .performClick()
+        composeRule.onNodeWithTag("ui-variant-use-PAGER_EXPERIMENTAL").performScrollTo().performClick()
 
         composeRule.onNodeWithTag("pager-workspace").assertIsDisplayed()
         composeRule.onNodeWithTag("pager-page-preview").assertIsDisplayed()
@@ -143,9 +141,7 @@ class EditorRegressionInstrumentedTest {
 
         composeRule.onNodeWithContentDescription("工具和更多操作").performClick()
         composeRule.onNodeWithTag("workspace-mode-toggle").performClick()
-        composeRule.onNodeWithTag("ui-variant-use-SPATIAL_EXPERIMENTAL")
-            .assertIsDisplayed()
-            .performClick()
+        composeRule.onNodeWithTag("ui-variant-use-SPATIAL_EXPERIMENTAL").performScrollTo().performClick()
 
         composeRule.onNodeWithTag("spatial-workspace").assertIsDisplayed()
         composeRule.onNodeWithTag("spatial-overview").performClick()
@@ -166,9 +162,7 @@ class EditorRegressionInstrumentedTest {
 
         composeRule.onNodeWithContentDescription("工具和更多操作").performClick()
         composeRule.onNodeWithTag("workspace-mode-toggle").performClick()
-        composeRule.onNodeWithTag("ui-variant-use-SUBTITLE_OBJECT_EXPERIMENTAL")
-            .assertIsDisplayed()
-            .performClick()
+        composeRule.onNodeWithTag("ui-variant-use-SUBTITLE_OBJECT_EXPERIMENTAL").performScrollTo().performClick()
 
         composeRule.onNodeWithTag("subtitle-object-workspace").assertIsDisplayed()
 
@@ -187,7 +181,11 @@ class EditorRegressionInstrumentedTest {
         ).fetchSemanticsNodes(atLeastOneRootRequired = false)
         if (scriptNodes.isNotEmpty()) {
             composeRule.onNodeWithTag("object-script-canvas")
-                .performTouchInput { longClick(center) }
+                .performTouchInput {
+                    down(center)
+                    advanceEventTime(700L)
+                    up()
+                }
             composeRule.onNodeWithTag("object-candidate-picker").assertIsDisplayed()
         }
     }
