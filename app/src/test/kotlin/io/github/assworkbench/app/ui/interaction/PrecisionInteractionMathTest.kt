@@ -24,7 +24,8 @@ class PrecisionInteractionMathTest {
         )
         assertEquals(20f, result.delta.x, 0.001f)
         assertEquals(500f, result.verticalGuidePx ?: -1f, 0.001f)
-        assertEquals("水平中心", result.label)
+        assertEquals(300f, result.horizontalGuidePx ?: -1f, 0.001f)
+        assertEquals("水平中心 · 垂直中心", result.label)
     }
 
     @Test
