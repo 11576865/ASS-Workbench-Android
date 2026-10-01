@@ -31,6 +31,8 @@ data class FontAsset(
     val sha256: String,
     val metadata: FontMetadata,
     val origin: FontOrigin = FontOrigin.UNKNOWN,
+    val collectionFaces: List<FontMetadata> = emptyList(),
+    val collectionFaceOffsets: List<Int> = emptyList(),
 )
 
 enum class FontMatchStatus {
@@ -58,19 +60,17 @@ object FontDiagnostics {
             imported.forEach { asset ->
                 val metadata = asset.metadata
                 val rendererNames = (
-                    metadata.rendererAliases +
-                        metadata.rendererFamily +
-                        listOfNotNull(metadata.legacyFamily, metadata.fullName, metadata.postScriptName)
+                    face.rendererAliases +
+                        face.rendererFamily +
+                        listOfNotNull(face.legacyFamily, face.fullName, face.postScriptName)
                     )
-                    .filter { it.isNotBlank() }
-                    .map { it.trim().lowercase() }
-                    .toSet()
+            }.filter { it.isNotBlank() }.map { it.trim().lowercase() }.toSet()
 
                 rendererNames.forEach { name ->
                     put(name, Match(metadata.rendererFamily, rendererExact = true))
                 }
 
-                (metadata.aliases + metadata.family + listOfNotNull(metadata.typographicFamily))
+                faceMetadata.flatMap { face -> face.aliases + face.family + listOfNotNull(face.typographicFamily) }
                     .filter { it.isNotBlank() }
                     .forEach { alias ->
                         putIfAbsent(alias.trim().lowercase(), Match(metadata.rendererFamily, rendererExact = false))
@@ -112,19 +112,21 @@ object FontDiagnostics {
         if (requested.isEmpty()) return false
 
         val metadata = asset.metadata
-        val names = (
-            metadata.rendererAliases +
-                metadata.aliases +
-                metadata.family +
-                metadata.rendererFamily +
+        val faces = if (asset.collectionFaces.isEmpty()) listOf(metadata) else asset.collectionFaces
+        val names = faces.flatMap { face ->
+            (
+            face.rendererAliases +
+                face.aliases +
+                face.family +
+                face.rendererFamily +
                 listOfNotNull(
-                    metadata.legacyFamily,
-                    metadata.typographicFamily,
-                    metadata.fullName,
-                    metadata.postScriptName,
+                    face.legacyFamily,
+                    face.typographicFamily,
+                    face.fullName,
+                    face.postScriptName,
                 )
             )
-            .asSequence()
+        }.asSequence()
             .map { it.trim().lowercase() }
             .filter { it.isNotEmpty() }
             .toSet()
