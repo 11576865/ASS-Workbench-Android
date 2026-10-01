@@ -166,8 +166,7 @@ class EditorRegressionInstrumentedTest {
         composeRule.onNodeWithTag("event-row-1").performClick()
         composeRule.onNodeWithTag("event-raw-1").performTextInput(" WORKBENCH")
         openTool("EFFECTS")
-        composeRule.onNodeWithTag("surface-EFFECTS").assertIsDisplayed()
-        composeRule.onNodeWithContentDescription("收回 效果").performClick()
+        composeRule.onNodeWithTag("fixed-inspector").assertIsDisplayed()
         openTool("TEXT")
         composeRule.onNodeWithTag("event-raw-1").assertIsDisplayed()
         composeRule.activityRule.scenario.onActivity {
@@ -194,10 +193,11 @@ class EditorRegressionInstrumentedTest {
             composeRule.waitForIdle()
             val preview = composeRule.onNodeWithTag("preview-workspace").fetchSemanticsNode().boundsInRoot
             val navigation = composeRule.onNodeWithTag("subtitle-navigation").fetchSemanticsNode().boundsInRoot
-            val canvas = composeRule.onNodeWithTag("canvas-workspace").fetchSemanticsNode().boundsInRoot
-            assertEquals(canvas, preview)
-            assertTrue("Subtitle navigation must float over the canvas", navigation.left >= canvas.left && navigation.right <= canvas.right)
-            composeRule.onNodeWithTag("surface-TEXT").assertIsDisplayed()
+            val inspector = composeRule.onNodeWithTag("fixed-inspector").fetchSemanticsNode().boundsInRoot
+            val fixed = composeRule.onNodeWithTag("fixed-workspace").fetchSemanticsNode().boundsInRoot
+            assertTrue("Preview must remain inside fixed workspace", preview.left >= fixed.left && preview.right <= fixed.right)
+            assertTrue("Navigation and inspector must not overlap", navigation.right <= inspector.left || navigation.bottom <= inspector.top)
+            composeRule.onNodeWithTag("canvas-workspace").assertDoesNotExist()
             composeRule.onNodeWithTag("preview-divider").assertDoesNotExist()
             captureLayout("tablet-landscape")
         } finally {
@@ -233,6 +233,7 @@ class EditorRegressionInstrumentedTest {
     @Test
     fun canvasWorkspaceSupportsStackHideRestoreWithoutPreviewModes() {
         restoreRecovery()
+        switchToCanvas()
 
         fun waitForSurface(tag: String) {
             composeRule.waitUntil(timeoutMillis = 10_000) {
@@ -296,6 +297,7 @@ class EditorRegressionInstrumentedTest {
     @Test
     fun surfaceResizeAndLayoutLockSurviveRecreationWithoutChangingSubtitle() {
         restoreRecovery()
+        switchToCanvas()
         val canonical = viewModel.state.value.document
         openTool("POSITION")
         composeRule.waitForIdle()
@@ -403,8 +405,32 @@ class EditorRegressionInstrumentedTest {
         composeRule.waitForIdle()
     }
 
+    private fun switchToCanvas() {
+        hideKeyboard()
+        composeRule.onNodeWithContentDescription("工具和更多操作").performClick()
+        composeRule.onNodeWithTag("workspace-mode-toggle").performClick()
+        composeRule.waitUntil(10_000) {
+            composeRule.onAllNodesWithTag("canvas-workspace", useUnmergedTree = true)
+                .fetchSemanticsNodes(atLeastOneRootRequired = false)
+                .isNotEmpty()
+        }
+    }
+
     private fun openTool(name: String) {
         hideKeyboard()
+        val fixedWorkspace = composeRule.onAllNodesWithTag("fixed-workspace", useUnmergedTree = true)
+            .fetchSemanticsNodes(atLeastOneRootRequired = false)
+            .isNotEmpty()
+        if (fixedWorkspace) {
+            if (name == "SUBTITLES") return
+            val fixedTool = composeRule.onAllNodesWithTag("fixed-tool-$name", useUnmergedTree = true)
+                .fetchSemanticsNodes(atLeastOneRootRequired = false)
+            if (fixedTool.isNotEmpty()) {
+                composeRule.onNodeWithTag("fixed-tool-$name").performScrollTo().performClick()
+                composeRule.waitForIdle()
+                return
+            }
+        }
         composeRule.onNodeWithTag("workspace-tools").performClick()
         composeRule.onNodeWithTag("tool-search").performTextReplacement(name)
         hideKeyboard()
