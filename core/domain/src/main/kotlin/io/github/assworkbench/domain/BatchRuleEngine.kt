@@ -37,7 +37,7 @@ object BatchRuleEngine {
     ): BatchRulePreview {
         val styleNames = document.styles.map { it.name }.toSet()
         rule.actions.filterIsInstance<BatchAction.SetStyle>().forEach {
-            require(it.style in styleNames) { "Style 不存在：\${it.style}" }
+            require(it.style in styleNames) { "Style 不存在：${it.style}" }
         }
 
         val affected = linkedSetOf<Long>()
