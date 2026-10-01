@@ -72,4 +72,15 @@ class WorkspaceStateTest {
 
         assertEquals(state, restored)
     }
+
+    @Test
+    fun sessionNamespaceRoundTripAndRebindAreExplicit() {
+        val state = WorkspaceState(sessionId = 41L)
+            .openPrimary("POSITION")
+            .updateBinding(WorkspaceState.primaryInstanceId("POSITION"), WorkspaceBinding.PinnedEvent(7))
+        val restored = WorkspaceState.fromSaveableList(state.toSaveableList())
+        assertEquals(41L, restored.sessionId)
+        assertEquals(99L, restored.forSession(99L).sessionId)
+        assertEquals(WorkspaceBinding.PinnedEvent(7), restored.primary("POSITION")!!.binding)
+    }
 }
