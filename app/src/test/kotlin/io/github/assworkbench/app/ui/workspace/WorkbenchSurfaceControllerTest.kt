@@ -79,4 +79,30 @@ class WorkbenchSurfaceControllerTest {
         val restored = WorkbenchSurfaceController(WorkspaceSurfacePersistence.decode(controller.save()))
         assertEquals(controller.save(), restored.save())
     }
+    @Test fun dockMinimizeAndTabStackPersistIndependently() {
+        val controller = WorkbenchSurfaceController()
+        controller.ensure("A", fallback)
+        controller.ensure("B", SurfaceGeometry(80f, 90f))
+
+        controller.cycleDock("A", fallback)
+        assertEquals(SurfaceDock.LEFT, controller.state("A", fallback).dock)
+        controller.toggleMinimized("A", fallback)
+        assertTrue(controller.state("A", fallback).minimized)
+
+        controller.stackWithFront("B", SurfaceGeometry(80f, 90f))
+        val group = controller.state("B", fallback).tabGroupId
+        assertNotNull(group)
+        assertEquals(group, controller.state("A", fallback).tabGroupId)
+        assertEquals(2, controller.tabGroup("A").size)
+
+        val restored = WorkbenchSurfaceController(WorkspaceSurfacePersistence.decode(controller.save()))
+        assertEquals(SurfaceDock.LEFT, restored.state("A", fallback).dock)
+        assertTrue(restored.state("A", fallback).minimized)
+        assertEquals(group, restored.state("B", fallback).tabGroupId)
+
+        restored.unstack("B", fallback)
+        assertNull(restored.state("B", fallback).tabGroupId)
+        assertEquals(group, restored.state("A", fallback).tabGroupId)
+    }
+
 }
