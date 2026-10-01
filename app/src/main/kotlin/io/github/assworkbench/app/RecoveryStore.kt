@@ -6,6 +6,9 @@ import io.github.assworkbench.domain.AssDocument
 import io.github.assworkbench.domain.AssTextEncoding
 import io.github.assworkbench.domain.SubtitleProject
 import java.io.File
+import java.io.FileOutputStream
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import java.util.Base64
 
 data class RecoverySnapshot(
@@ -29,7 +32,9 @@ class RecoveryStore(context: Context) {
     fun write(project: SubtitleProject, document: AssDocument, textEncoding: AssTextEncoding) {
         val tmpAss = File(dir, "latest.ass.tmp")
         val tmpMeta = File(dir, "latest.meta.tmp")
-        tmpAss.writeText(AssCodec.write(document), Charsets.UTF_8)
+        val assText = AssCodec.write(document)
+        io.github.assworkbench.domain.AssRoundTripVerifier.requireEquivalent(document, assText)
+        writeSynced(tmpAss, assText.toByteArray(Charsets.UTF_8))
         val lines = listOf(
             encode(project.title),
             encode(project.subtitleUri.orEmpty()),
@@ -37,11 +42,14 @@ class RecoveryStore(context: Context) {
             project.splitRatio.toString(),
             textEncoding.storageValue(),
         )
-        tmpMeta.writeText(lines.joinToString("\n"), Charsets.UTF_8)
-        if (assFile.exists()) assFile.delete()
-        if (metaFile.exists()) metaFile.delete()
-        tmpAss.renameTo(assFile)
-        tmpMeta.renameTo(metaFile)
+        writeSynced(tmpMeta, lines.joinToString("\n").toByteArray(Charsets.UTF_8))
+
+        // Validate both staged files before replacing the last known-good journal.
+        AssCodec.parse(tmpAss.readText(Charsets.UTF_8))
+        readMetaFile(tmpMeta)
+
+        replaceAtomically(tmpAss, assFile)
+        replaceAtomically(tmpMeta, metaFile)
     }
 
     @Synchronized
@@ -85,10 +93,31 @@ class RecoveryStore(context: Context) {
         AssTextEncoding.UTF16_BE -> "utf16-be"
     }
 
-    private fun readMeta(): List<String> {
-        if (!metaFile.isFile) return emptyList()
-        return metaFile.readLines(Charsets.UTF_8).mapIndexed { index, line ->
+    private fun readMeta(): List<String> =
+        if (!metaFile.isFile) emptyList() else readMetaFile(metaFile)
+
+    private fun readMetaFile(file: File): List<String> =
+        file.readLines(Charsets.UTF_8).mapIndexed { index, line ->
             if (index < 3) decode(line) else line
+        }
+
+    private fun writeSynced(file: File, bytes: ByteArray) {
+        FileOutputStream(file).use { output ->
+            output.write(bytes)
+            output.fd.sync()
+        }
+    }
+
+    private fun replaceAtomically(source: File, target: File) {
+        runCatching {
+            Files.move(
+                source.toPath(),
+                target.toPath(),
+                StandardCopyOption.ATOMIC_MOVE,
+                StandardCopyOption.REPLACE_EXISTING,
+            )
+        }.getOrElse {
+            Files.move(source.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING)
         }
     }
 
