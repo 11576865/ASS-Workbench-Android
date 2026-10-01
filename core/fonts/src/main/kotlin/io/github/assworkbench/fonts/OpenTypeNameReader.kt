@@ -8,12 +8,15 @@ import java.security.MessageDigest
 object OpenTypeNameReader {
     private const val NAME_TABLE = 0x6E616D65
 
-    fun read(bytes: ByteArray): FontMetadata {
-        require(bytes.size >= 12) { "Font file is too small" }
+    fun read(bytes: ByteArray): FontMetadata = readAtOffset(bytes, 0)
+
+    fun readAtOffset(bytes: ByteArray, sfntOffset: Int): FontMetadata {
+        require(sfntOffset >= 0 && sfntOffset + 12 <= bytes.size) { "Font file is too small" }
         val b = ByteBuffer.wrap(bytes).order(ByteOrder.BIG_ENDIAN)
+        b.position(sfntOffset)
         b.int
         val numTables = b.short.toInt() and 0xFFFF
-        require(bytes.size >= 12 + numTables * 16) { "Invalid sfnt table directory" }
+        require(sfntOffset.toLong() + 12L + numTables.toLong() * 16L <= bytes.size.toLong()) { "Invalid sfnt table directory" }
 
         // sfnt offset table is 12 bytes. After numTables come searchRange,
         // entrySelector and rangeShift (6 bytes) before the first 16-byte table record.
