@@ -9,6 +9,8 @@ import io.github.assworkbench.container.MatroskaScanResult
 import io.github.assworkbench.domain.AssCodec
 import io.github.assworkbench.domain.WorkspacePresentationMode
 import io.github.assworkbench.domain.AssWorkbenchProjectManifest
+import io.github.assworkbench.domain.BatchRule
+import io.github.assworkbench.domain.BatchRuleEngine
 import io.github.assworkbench.domain.AssWorkbenchProjectCodec
 import io.github.assworkbench.domain.AssDocument
 import io.github.assworkbench.domain.AssDocumentEditing
@@ -787,6 +789,17 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     fun applyQuickFix(eventId: Long, fixId: String) {
         editDocument("已应用 QC Quick Fix。") { document ->
             AssQuickFixExecutor.apply(document, eventId, fixId)
+        }
+    }
+
+    fun applyBatchRule(rule: BatchRule) {
+        val preview = BatchRuleEngine.preview(_state.value.document, rule)
+        if (preview.affectedEventIds.isEmpty()) {
+            _state.update { it.copy(status = "批量规则没有匹配任何 Event。") }
+            return
+        }
+        editDocument("批量规则已应用到 " + preview.affectedEventIds.size + " 条字幕。") { document ->
+            BatchRuleEngine.preview(document, rule).document
         }
     }
 
