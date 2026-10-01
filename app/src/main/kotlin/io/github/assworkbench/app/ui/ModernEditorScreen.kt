@@ -41,6 +41,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -93,8 +94,8 @@ fun ModernEditorScreen(
     onSaveMkv: () -> Unit,
     rendererEnabled: Boolean,
     onEnableRenderer: () -> Unit,
-    appearance: WorkbenchAppearance,
-    onAppearanceChange: (WorkbenchAppearance) -> Unit,
+    appearance: WorkbenchAppearance = WorkbenchAppearance.SYSTEM,
+    onAppearanceChange: (WorkbenchAppearance) -> Unit = {},
 ) {
     var workspaceState by rememberSaveable(
         stateSaver = listSaver(
