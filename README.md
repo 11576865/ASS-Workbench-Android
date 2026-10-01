@@ -2,9 +2,9 @@
 
 A touch-first, raw-preserving ASS workbench for Android — evolving from subtitle editing into a professional mobile subtitle engineering environment.
 
-**Current release candidate: 0.27.1 / versionCode 30**
+**Current development candidate: 0.29.0 / versionCode 33**
 
-0.26 was the internal construction and hardening cycle. **0.27.0** is the first packaged product candidate. Physical-device validation follows the 0.27.0 publication; fixes found on real hardware will ship as **0.27.1, 0.27.2, ...** rather than holding the 0.27.0 version number open.
+0.29 expands the stabilized ASS core into a two-presentation engineering workbench: a fixed production UI and an experimental object-centric Canvas UI. Both presentations operate on the same canonical `AssDocument`, undo history, renderer, QC and container bridge.
 
 See [docs/ABOUT.md](docs/ABOUT.md) for the longer-term direction, [docs/ROADMAP-0.26.md](docs/ROADMAP-0.26.md) for release semantics, and [docs/HARDENING-0.27.md](docs/HARDENING-0.27.md) / [docs/DEVICE-TEST-0.27.md](docs/DEVICE-TEST-0.27.md) for the current handoff gate.
 
@@ -23,6 +23,20 @@ The editor follows several core rules:
 - structured tools should rewrite the smallest owned span rather than normalize whole Event text.
 - portrait is the primary workflow layout; landscape is the precision visual layout.
 - standalone ASS and MKV projects remain distinct workflows over the same ASS document core.
+
+## 0.29 engineering workbench
+
+- **Fixed UI** is the default, predictable production workspace.
+- **Canvas UI (experimental)** keeps floating tool instances, object bindings and the rotating spatial rod.
+- Canvas surfaces support docking, minimization and tab stacking without moving ASS state into the layout layer.
+- `.asswb` project snapshots retain the canonical ASS document plus media/container references and workspace/surface state.
+- QC grows into an ASS linter with compatibility profiles and explicit, undoable Quick Fixes.
+- Frame timing supports CFR and VFR timebases while ASS remains time-based on disk.
+- Rule-based batch editing follows Filter → Transform → Preview → one-transaction Commit.
+- Karaoke (`\\k` / `\\kf` / `\\ko` / `\\kt`) and vector-clip editing are first-class tool domains.
+- Font requirements are derived from actually referenced Styles, inline `\\fn`, and `\\rStyle` resets.
+- SRT can be imported into the canonical ASS model and explicitly exported; unsupported ASS presentation features are never silently destroyed merely because SRT cannot represent them.
+- Font subsetting is deliberately not part of ASS Workbench. Complete-font packaging remains a container-resource function.
 
 ## 0.27.1 adaptive workbench UI
 
