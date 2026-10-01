@@ -7,6 +7,7 @@ import android.util.Base64
 import android.util.Log
 import java.io.ByteArrayOutputStream
 import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.onRoot
@@ -64,6 +65,14 @@ class EditorRegressionInstrumentedTest {
         recoveryStore.clear()
     }
 
+    private fun selectUiVariant(tag: String) {
+        composeRule.onNodeWithTag(tag)
+            .performScrollTo()
+            .assertIsDisplayed()
+            .performClick()
+        composeRule.waitForIdle()
+    }
+
     @Test
     fun recoveryEntryRestoresAndCollapsedRawDraftSurvives() {
         restoreRecovery()
@@ -107,9 +116,7 @@ class EditorRegressionInstrumentedTest {
 
         composeRule.onNodeWithContentDescription("工具和更多操作").performClick()
         composeRule.onNodeWithTag("workspace-mode-toggle").performClick()
-        composeRule.onNodeWithTag("ui-variant-use-PAGER_EXPERIMENTAL")
-            .assertIsDisplayed()
-            .performClick()
+        selectUiVariant("ui-variant-use-PAGER_EXPERIMENTAL")
 
         composeRule.onNodeWithTag("pager-workspace").assertIsDisplayed()
         composeRule.onNodeWithTag("pager-page-preview").assertIsDisplayed()
@@ -143,9 +150,7 @@ class EditorRegressionInstrumentedTest {
 
         composeRule.onNodeWithContentDescription("工具和更多操作").performClick()
         composeRule.onNodeWithTag("workspace-mode-toggle").performClick()
-        composeRule.onNodeWithTag("ui-variant-use-SPATIAL_EXPERIMENTAL")
-            .assertIsDisplayed()
-            .performClick()
+        selectUiVariant("ui-variant-use-SPATIAL_EXPERIMENTAL")
 
         composeRule.onNodeWithTag("spatial-workspace").assertIsDisplayed()
         composeRule.onNodeWithTag("spatial-overview").performClick()
@@ -158,6 +163,24 @@ class EditorRegressionInstrumentedTest {
         composeRule.onNodeWithTag("spatial-navigation-mode").performClick()
         composeRule.onNodeWithTag("spatial-focus-subtitles").performClick()
         composeRule.onNodeWithTag("spatial-node-subtitles").assertIsDisplayed()
+    }
+
+    @Test
+    fun precisionLensWorkspaceShowsPrecisionControls() {
+        restoreRecovery()
+
+        composeRule.onNodeWithContentDescription("工具和更多操作").performClick()
+        composeRule.onNodeWithTag("workspace-mode-toggle").performClick()
+        selectUiVariant("ui-variant-use-PRECISION_LENS_EXPERIMENTAL")
+
+        composeRule.onNodeWithTag("precision-lens-workspace").assertIsDisplayed()
+        composeRule.onNodeWithTag("precision-controls").assertIsDisplayed()
+        composeRule.onNodeWithTag("precision-gain-COARSE").assertIsDisplayed()
+        composeRule.onNodeWithTag("precision-gain-FINE").assertIsDisplayed()
+        composeRule.onNodeWithTag("precision-lens-LOCAL_FOCUS").assertIsDisplayed()
+        composeRule.onNodeWithTag("precision-lens-FLOATING_LENS").assertIsDisplayed()
+        composeRule.onNodeWithTag("precision-snap-toggle").assertIsDisplayed()
+        composeRule.onNodeWithTag("precision-snap-bypass").assertIsDisplayed()
     }
 
     @Test
@@ -507,7 +530,7 @@ class EditorRegressionInstrumentedTest {
         composeRule.onNodeWithContentDescription("工具和更多操作").performClick()
         composeRule.onNodeWithTag("workspace-mode-toggle").performClick()
         composeRule.onNodeWithTag("ui-variant-lab").assertIsDisplayed()
-        composeRule.onNodeWithTag("ui-variant-use-CANVAS_EXPERIMENTAL").performClick()
+        selectUiVariant("ui-variant-use-CANVAS_EXPERIMENTAL")
         composeRule.waitUntil(10_000) {
             composeRule.onAllNodesWithTag("canvas-workspace", useUnmergedTree = true)
                 .fetchSemanticsNodes(atLeastOneRootRequired = false)
