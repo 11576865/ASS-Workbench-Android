@@ -14,7 +14,6 @@ internal data class SurfaceGeometry(
     fun inViewport(viewportWidth: Float, viewportHeight: Float): SurfaceGeometry {
         val availableWidth = viewportWidth.takeIf { it.isFinite() && it > 0f } ?: 1f
         val availableHeight = viewportHeight.takeIf { it.isFinite() && it > 0f } ?: 1f
-        // Projected candidates may be smaller than the canonical minimum in split-screen.
         val safe = if (listOf(x, y, width, height).all { it.isFinite() } && width > 0f && height > 0f)
             this else SurfaceGeometry()
         val w = safe.width.coerceAtMost(availableWidth)
@@ -51,35 +50,55 @@ internal enum class SurfaceSizeClass(val label: String) {
     }
 }
 
+internal enum class SurfacePresentation {
+    FLOATING,
+    DOCK_LEFT,
+    DOCK_RIGHT,
+    MINIMIZED,
+}
+
 internal data class WorkspaceSurfaceState(
     val instanceId: String,
     val geometry: SurfaceGeometry = SurfaceGeometry(),
     val sizeClass: SurfaceSizeClass = SurfaceSizeClass.STANDARD,
     val layoutLocked: Boolean = false,
     val zOrder: Int = 1,
+    val presentation: SurfacePresentation = SurfacePresentation.FLOATING,
+    val stackId: String? = null,
 ) {
     fun withGeometry(next: SurfaceGeometry): WorkspaceSurfaceState =
-        if (layoutLocked || !next.isValid()) this
+        if (layoutLocked || presentation != SurfacePresentation.FLOATING || !next.isValid()) this
         else copy(geometry = next, sizeClass = SurfaceSizeClass.forGeometry(next))
 }
 
 /** Versioned private editor state; deliberately has no subtitle binding or parameter values. */
 internal object WorkspaceSurfacePersistence {
-    private const val VERSION = "surface-v1"
+    private const val VERSION = "surface-v2"
+    private const val LEGACY_VERSION = "surface-v1"
     private const val SEPARATOR = '\u001f'
 
     fun encode(surfaces: Collection<WorkspaceSurfaceState>): List<String> =
         listOf(VERSION) + surfaces.map {
-            listOf(it.instanceId, it.geometry.x, it.geometry.y, it.geometry.width,
-                it.geometry.height, it.sizeClass.name, it.layoutLocked, it.zOrder)
-                .joinToString(SEPARATOR.toString())
+            listOf(
+                it.instanceId,
+                it.geometry.x,
+                it.geometry.y,
+                it.geometry.width,
+                it.geometry.height,
+                it.sizeClass.name,
+                it.layoutLocked,
+                it.zOrder,
+                it.presentation.name,
+                it.stackId.orEmpty(),
+            ).joinToString(SEPARATOR.toString())
         }
 
     fun decode(values: List<String>): List<WorkspaceSurfaceState> {
-        if (values.firstOrNull() != VERSION) return emptyList()
+        val version = values.firstOrNull()
+        if (version != VERSION && version != LEGACY_VERSION) return emptyList()
         return values.drop(1).mapNotNull { row ->
             val parts = row.split(SEPARATOR)
-            if (parts.size != 8 || parts[0].isBlank()) return@mapNotNull null
+            if (parts.size !in setOf(8, 10) || parts[0].isBlank()) return@mapNotNull null
             val numbers = parts.slice(1..4).map { it.toFloatOrNull() ?: return@mapNotNull null }
             val geometry = SurfaceGeometry(numbers[0], numbers[1], numbers[2], numbers[3])
             if (!geometry.isValid()) return@mapNotNull null
@@ -88,7 +107,22 @@ internal object WorkspaceSurfacePersistence {
             val locked = parts[6].toBooleanStrictOrNull() ?: return@mapNotNull null
             val z = parts[7].toIntOrNull()?.takeIf { it in 1..1_000_000 }
                 ?: return@mapNotNull null
-            WorkspaceSurfaceState(parts[0], geometry, sizeClass, locked, z)
+            val presentation = if (parts.size >= 10) {
+                SurfacePresentation.entries.firstOrNull { it.name == parts[8] }
+                    ?: SurfacePresentation.FLOATING
+            } else {
+                SurfacePresentation.FLOATING
+            }
+            val stackId = parts.getOrNull(9)?.takeIf(String::isNotBlank)
+            WorkspaceSurfaceState(
+                instanceId = parts[0],
+                geometry = geometry,
+                sizeClass = sizeClass,
+                layoutLocked = locked,
+                zOrder = z,
+                presentation = presentation,
+                stackId = stackId,
+            )
         }.distinctBy { it.instanceId }
     }
 }
