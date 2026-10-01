@@ -389,7 +389,26 @@ fun ModernEditorScreen(
                 )
             }
 
-            BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().testTag("canvas-workspace")) {
+            if (workspaceMode == WorkspacePresentationMode.FIXED) {
+                FixedWorkspace(
+                    state = state,
+                    viewModel = viewModel,
+                    issues = issues,
+                    activeTool = fixedTool,
+                    onActiveTool = { fixedToolName = it.name },
+                    expandedEventId = expandedEventId,
+                    onExpandedChange = { expandedEventId = it },
+                    onImportFont = onImportFont,
+                    onSaveMkv = onSaveMkv,
+                    eventEditorStateHolder = eventEditorStateHolder,
+                    onOpenVideo = onOpenReferenceVideo,
+                    rendererEnabled = rendererEnabled,
+                    onEnableRenderer = onEnableRenderer,
+                    searchOpen = searchOpen,
+                    onCloseSearch = { searchOpen = false; viewModel.setQuery("") },
+                    modifier = Modifier.weight(1f).fillMaxWidth().testTag("fixed-workspace"),
+                )
+            } else BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().testTag("canvas-workspace")) {
                 val viewportWidth = maxWidth.value
                 val viewportHeight = maxHeight.value
                 WorkbenchPreview(
@@ -403,7 +422,16 @@ fun ModernEditorScreen(
                 workspaceState.tools.forEachIndexed { index, instance ->
                     val surfaceTool = WorkbenchTool.entries.firstOrNull { it.name == instance.toolKey }
                         ?: return@forEachIndexed
-                    val visible = !workspaceState.surfacesHidden
+                    val groupIds = surfaceController.tabGroup(instance.id)
+                    val activeTabId = surfaceController.activeTab(instance.id)
+                    val visible = !workspaceState.surfacesHidden && activeTabId == instance.id
+                    val tabTitles = groupIds.mapNotNull { groupId ->
+                        workspaceState.tools.firstOrNull { it.id == groupId }?.let { grouped ->
+                            WorkbenchTool.entries.firstOrNull { it.name == grouped.toolKey }?.let { groupedTool ->
+                                groupId to groupedTool.title
+                            }
+                        }
+                    }
                     val eventBound = surfaceTool == WorkbenchTool.STYLE ||
                         surfaceTool == WorkbenchTool.POSITION
                     val bindingResolution = instance.binding.resolve(
@@ -463,6 +491,11 @@ fun ModernEditorScreen(
                             }
                         } else {
                             null
+                        },
+                        tabTitles = tabTitles,
+                        onSelectTab = { tabId ->
+                            surfaceController.activateTab(tabId)
+                            workspaceState = workspaceState.activate(tabId)
                         },
                         onDuplicate = if (eventBound) {
                             {
@@ -530,11 +563,13 @@ fun ModernEditorScreen(
             }
         }
 
-        WindowInteractionOverlay(
-            registry = interactionRegistry,
-            visible = !workspaceState.surfacesHidden,
-            modifier = Modifier.fillMaxSize().testTag("interaction-overlay"),
-        )
+        if (workspaceMode == WorkspacePresentationMode.CANVAS_EXPERIMENTAL) {
+            WindowInteractionOverlay(
+                registry = interactionRegistry,
+                visible = !workspaceState.surfacesHidden,
+                modifier = Modifier.fillMaxSize().testTag("interaction-overlay"),
+            )
+        }
         }
     }
 }
@@ -697,6 +732,11 @@ private fun FloatingToolContent(
             }
         }
         WorkbenchTool.TIMELINE -> ModernTimelinePane(state, viewModel, Modifier.fillMaxSize())
+        WorkbenchTool.FRAMES -> FrameTimingPane(state, viewModel, Modifier.fillMaxSize())
+        WorkbenchTool.KARAOKE -> KaraokePane(state, viewModel, Modifier.fillMaxSize())
+        WorkbenchTool.VECTOR_CLIP -> VectorClipPane(state, viewModel, Modifier.fillMaxSize())
+        WorkbenchTool.COMPATIBILITY -> CompatibilityPane(state, viewModel, Modifier.fillMaxSize())
+        WorkbenchTool.FONT_REQUIREMENTS -> FontRequirementsPane(state, viewModel, Modifier.fillMaxSize())
         WorkbenchTool.STYLE -> StylePane(
             state = state,
             viewModel = viewModel,
@@ -712,8 +752,8 @@ private fun FloatingToolContent(
             unresolvedPinnedEventId = unresolvedPinnedEventId,
         )
         WorkbenchTool.FONTS -> FontManagerPane(state, viewModel, onImportFont, Modifier.fillMaxSize())
-        WorkbenchTool.QC -> QcPane(state, viewModel, issues, Modifier.fillMaxSize())
-        WorkbenchTool.BATCH -> BatchPane(state, viewModel, Modifier.fillMaxSize())
+        WorkbenchTool.QC -> AdvancedQcPane(state, viewModel, Modifier.fillMaxSize())
+        WorkbenchTool.BATCH -> RuleBatchPane(state, viewModel, Modifier.fillMaxSize())
         WorkbenchTool.PROJECT -> ProjectPane(state, viewModel, onSaveMkv, Modifier.fillMaxSize())
         WorkbenchTool.DIAGNOSTICS -> DiagnosticsPane(state, viewModel, Modifier.fillMaxSize())
         WorkbenchTool.CAPABILITIES -> WorkspaceToolDirectory(onOpenTool, Modifier.fillMaxSize())
