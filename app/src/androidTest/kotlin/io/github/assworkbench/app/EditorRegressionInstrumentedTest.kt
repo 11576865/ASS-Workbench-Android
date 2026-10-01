@@ -7,6 +7,7 @@ import android.util.Base64
 import android.util.Log
 import java.io.ByteArrayOutputStream
 import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.onRoot
@@ -64,6 +65,26 @@ class EditorRegressionInstrumentedTest {
         recoveryStore.clear()
     }
 
+    private fun selectUiVariant(tag: String) {
+        repeat(10) {
+            try {
+                composeRule.onNodeWithTag(tag).assertIsDisplayed().performClick()
+                return
+            } catch (_: AssertionError) {
+                composeRule.onNodeWithTag("ui-variant-list").performTouchInput {
+                    val travel = size.height * 0.58f
+                    swipe(
+                        start = Offset(center.x, center.y + travel / 2f),
+                        end = Offset(center.x, center.y - travel / 2f),
+                        durationMillis = 240,
+                    )
+                }
+                composeRule.waitForIdle()
+            }
+        }
+        composeRule.onNodeWithTag(tag).assertIsDisplayed().performClick()
+    }
+
     @Test
     fun recoveryEntryRestoresAndCollapsedRawDraftSurvives() {
         restoreRecovery()
@@ -107,7 +128,7 @@ class EditorRegressionInstrumentedTest {
 
         composeRule.onNodeWithContentDescription("工具和更多操作").performClick()
         composeRule.onNodeWithTag("workspace-mode-toggle").performClick()
-        composeRule.onNodeWithTag("ui-variant-use-PAGER_EXPERIMENTAL").performClick()
+        selectUiVariant("ui-variant-use-PAGER_EXPERIMENTAL")
 
         composeRule.onNodeWithTag("pager-workspace").assertIsDisplayed()
         composeRule.onNodeWithTag("pager-page-preview").assertIsDisplayed()
@@ -141,7 +162,7 @@ class EditorRegressionInstrumentedTest {
 
         composeRule.onNodeWithContentDescription("工具和更多操作").performClick()
         composeRule.onNodeWithTag("workspace-mode-toggle").performClick()
-        composeRule.onNodeWithTag("ui-variant-use-SPATIAL_EXPERIMENTAL").performClick()
+        selectUiVariant("ui-variant-use-SPATIAL_EXPERIMENTAL")
 
         composeRule.onNodeWithTag("spatial-workspace").assertIsDisplayed()
         composeRule.onNodeWithTag("spatial-overview").performClick()
@@ -162,7 +183,7 @@ class EditorRegressionInstrumentedTest {
 
         composeRule.onNodeWithContentDescription("工具和更多操作").performClick()
         composeRule.onNodeWithTag("workspace-mode-toggle").performClick()
-        composeRule.onNodeWithTag("ui-variant-use-GLASS_LAYERED_EXPERIMENTAL").performClick()
+        selectUiVariant("ui-variant-use-GLASS_LAYERED_EXPERIMENTAL")
 
         composeRule.onNodeWithTag("glass-layered-workspace").assertIsDisplayed()
         composeRule.onNodeWithTag("glass-control-deck").assertIsDisplayed()
@@ -520,7 +541,7 @@ class EditorRegressionInstrumentedTest {
         composeRule.onNodeWithContentDescription("工具和更多操作").performClick()
         composeRule.onNodeWithTag("workspace-mode-toggle").performClick()
         composeRule.onNodeWithTag("ui-variant-lab").assertIsDisplayed()
-        composeRule.onNodeWithTag("ui-variant-use-CANVAS_EXPERIMENTAL").performClick()
+        selectUiVariant("ui-variant-use-CANVAS_EXPERIMENTAL")
         composeRule.waitUntil(10_000) {
             composeRule.onAllNodesWithTag("canvas-workspace", useUnmergedTree = true)
                 .fetchSemanticsNodes(atLeastOneRootRequired = false)
