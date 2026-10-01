@@ -3524,7 +3524,20 @@ private fun QcPane(state: EditorState, viewModel: EditorViewModel, issues: List<
                     )
                     Column(Modifier.weight(1f)) {
                         Text("#${issue.eventId} · ${issue.message}")
-                        Text(issue.kind.name, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(issue.ruleId, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        if (issue.quickFixes.isNotEmpty()) {
+                            Row(
+                                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            ) {
+                                issue.quickFixes.forEach { fix ->
+                                    AssistChip(
+                                        onClick = { viewModel.applyQuickFix(issue.eventId, fix.id) },
+                                        label = { Text("Quick Fix · " + fix.label) },
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
                 Divider()
