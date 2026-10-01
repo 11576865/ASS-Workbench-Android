@@ -60,7 +60,7 @@ object BatchRuleEngine {
             val needle = predicate.requiredTag.trim().removePrefix("\\").lowercase()
             val has = AssInlineSyntax.analyze(event.text).tokens.any {
                 it.kind == AssInlineTokenKind.OVERRIDE &&
-                    it.text.lowercase().contains("\\\${needle}")
+                    it.text.lowercase().contains("\\${needle}")
             }
             if (!has) return false
         }
