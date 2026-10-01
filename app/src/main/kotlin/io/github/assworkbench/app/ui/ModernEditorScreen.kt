@@ -85,7 +85,7 @@ private enum class WorkspacePresentationMode(val title: String) {
     CANVAS_EXPERIMENTAL("实验性 Canvas"),
 }
 
-private enum class DestructiveWorkspaceAction { OPEN_ASS, NEW_ASS }
+private enum class DestructiveWorkspaceAction { OPEN_ASS, OPEN_PROJECT, NEW_ASS }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -276,7 +276,13 @@ fun ModernEditorScreen(
                 onTool = ::openTool,
                 workspaceMode = workspaceMode,
                 onToggleWorkspaceMode = ::toggleWorkspaceMode,
-                onOpenProject = { openProjectLauncher.launch(arrayOf("application/json", "text/plain", "*/*")) },
+                onOpenProject = {
+                    if (state.dirty) {
+                        destructiveWorkspaceAction = DestructiveWorkspaceAction.OPEN_PROJECT
+                    } else {
+                        openProjectLauncher.launch(arrayOf("application/json", "text/plain", "*/*"))
+                    }
+                },
                 onSaveProject = { saveProjectLauncher.launch(projectFileName()) },
                 onExportSrt = { exportSrtLauncher.launch(srtFileName()) },
             )
@@ -373,7 +379,9 @@ fun ModernEditorScreen(
                         Text(
                             when (action) {
                                 DestructiveWorkspaceAction.OPEN_ASS ->
-                                    "当前字幕有未保存修改。继续打开另一份 ASS 会丢弃当前未保存内容与对应恢复日志。"
+                                    "当前字幕有未保存修改。继续打开另一份 ASS / SRT 会丢弃当前未保存内容与对应恢复日志。"
+                                DestructiveWorkspaceAction.OPEN_PROJECT ->
+                                    "当前字幕有未保存修改。继续打开 Workbench Project 会替换当前文档与工作区，并丢弃当前未保存内容与对应恢复日志。"
                                 DestructiveWorkspaceAction.NEW_ASS ->
                                     "当前字幕有未保存修改。继续新建空白 ASS 会丢弃当前未保存内容与对应恢复日志。"
                             }
@@ -384,6 +392,8 @@ fun ModernEditorScreen(
                             destructiveWorkspaceAction = null
                             when (action) {
                                 DestructiveWorkspaceAction.OPEN_ASS -> onOpenSubtitle()
+                                DestructiveWorkspaceAction.OPEN_PROJECT ->
+                                    openProjectLauncher.launch(arrayOf("application/json", "text/plain", "*/*"))
                                 DestructiveWorkspaceAction.NEW_ASS -> viewModel.newSubtitleProject()
                             }
                         }) { Text("放弃修改并继续") }
@@ -517,8 +527,13 @@ fun ModernEditorScreen(
                         },
                         onClose = {
                             if (surfaceTool == WorkbenchTool.TEXT) expandedEventId = null
-                            workspaceState = workspaceState.closeInstance(instance.id).let {
-                                if (it.tools.isEmpty()) it.withSurfacesHidden(true) else it
+                            val survivingTabId = surfaceController.remove(instance.id)
+                            workspaceState = workspaceState.closeInstance(instance.id).let { closed ->
+                                val activated = survivingTabId
+                                    ?.takeIf { survivor -> closed.tools.any { it.id == survivor } }
+                                    ?.let(closed::activate)
+                                    ?: closed
+                                if (activated.tools.isEmpty()) activated.withSurfacesHidden(true) else activated
                             }
                         },
                         modifier = Modifier.fillMaxSize(),
@@ -688,7 +703,7 @@ private fun FixedWorkspace(
                         onOpenTimeline = { onActiveTool(WorkbenchTool.TIMELINE) },
                         rendererEnabled = rendererEnabled,
                         onEnableRenderer = onEnableRenderer,
-                        viewportGesturesEnabled = activeTool == WorkbenchTool.POSITION,
+                        viewportGesturesEnabled = activeTool != WorkbenchTool.POSITION,
                         modifier = Modifier.weight(1.15f).fillMaxHeight().testTag("preview-workspace"),
                     )
                     VerticalDivider()
@@ -708,7 +723,7 @@ private fun FixedWorkspace(
                         onOpenTimeline = { onActiveTool(WorkbenchTool.TIMELINE) },
                         rendererEnabled = rendererEnabled,
                         onEnableRenderer = onEnableRenderer,
-                        viewportGesturesEnabled = activeTool == WorkbenchTool.POSITION,
+                        viewportGesturesEnabled = activeTool != WorkbenchTool.POSITION,
                         modifier = Modifier.weight(0.42f).fillMaxWidth().testTag("preview-workspace"),
                     )
                     HorizontalDivider()
