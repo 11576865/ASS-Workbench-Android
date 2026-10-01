@@ -697,6 +697,199 @@ fun ModernEditorScreen(
 }
 }
 
+private enum class PagerWorkspacePage(val title: String) {
+    SUBTITLES("字幕"),
+    PREVIEW("预览"),
+    TOOL("工具"),
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun PagerWorkspace(
+    state: EditorState,
+    viewModel: EditorViewModel,
+    issues: List<AssQcIssue>,
+    activeTool: WorkbenchTool,
+    instance: WorkspaceToolInstance,
+    onActiveTool: (WorkbenchTool) -> Unit,
+    expandedEventId: Long?,
+    onExpandedChange: (Long?) -> Unit,
+    onImportFont: () -> Unit,
+    onSaveMkv: () -> Unit,
+    eventEditorStateHolder: SaveableStateHolder,
+    onOpenVideo: () -> Unit,
+    rendererEnabled: Boolean,
+    onEnableRenderer: () -> Unit,
+    onEditEventPosition: (Long) -> Unit,
+    searchOpen: Boolean,
+    onCloseSearch: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val pages = PagerWorkspacePage.entries
+    val pagerState = rememberPagerState(initialPage = PagerWorkspacePage.PREVIEW.ordinal) {
+        pages.size
+    }
+    val scope = rememberCoroutineScope()
+
+    fun showPage(page: PagerWorkspacePage) {
+        scope.launch { pagerState.animateScrollToPage(page.ordinal) }
+    }
+
+    fun selectTool(tool: WorkbenchTool) {
+        if (tool == WorkbenchTool.SUBTITLES) {
+            showPage(PagerWorkspacePage.SUBTITLES)
+            return
+        }
+        onActiveTool(tool)
+        showPage(PagerWorkspacePage.TOOL)
+    }
+
+    LaunchedEffect(activeTool) {
+        if (pagerState.currentPage == PagerWorkspacePage.TOOL.ordinal) {
+            pagerState.scrollToPage(PagerWorkspacePage.TOOL.ordinal)
+        }
+    }
+
+    Column(modifier) {
+        HorizontalPager(
+            state = pagerState,
+            modifier = Modifier.weight(1f).fillMaxWidth(),
+            beyondViewportPageCount = 1,
+        ) { pageIndex ->
+            when (pages[pageIndex]) {
+                PagerWorkspacePage.SUBTITLES -> {
+                    Column(Modifier.fillMaxSize().testTag("pager-page-subtitles")) {
+                        if (searchOpen) {
+                            SearchStrip(state.query, viewModel::setQuery, onCloseSearch)
+                        }
+                        EventWorkspace(
+                            state = state,
+                            viewModel = viewModel,
+                            issuesByEvent = issues.groupBy { it.eventId },
+                            expandedEventId = expandedEventId,
+                            onExpandedChange = { next ->
+                                onExpandedChange(next)
+                                if (next != null) {
+                                    onActiveTool(WorkbenchTool.TEXT)
+                                    showPage(PagerWorkspacePage.TOOL)
+                                }
+                            },
+                            onTool = ::selectTool,
+                            eventEditorStateHolder = eventEditorStateHolder,
+                            tool = WorkbenchTool.TEXT,
+                            modifier = Modifier.fillMaxSize(),
+                        ) { }
+                    }
+                }
+
+                PagerWorkspacePage.PREVIEW -> {
+                    WorkbenchPreview(
+                        state = state,
+                        viewModel = viewModel,
+                        positionEditEventId = null,
+                        onOpenVideo = onOpenVideo,
+                        onOpenTimeline = {
+                            onActiveTool(WorkbenchTool.TIMELINE)
+                            showPage(PagerWorkspacePage.TOOL)
+                        },
+                        rendererEnabled = rendererEnabled,
+                        onEnableRenderer = onEnableRenderer,
+                        onEditEventPosition = { eventId ->
+                            onEditEventPosition(eventId)
+                            onActiveTool(WorkbenchTool.POSITION)
+                            showPage(PagerWorkspacePage.TOOL)
+                        },
+                        viewportGesturesEnabled = true,
+                        modifier = Modifier.fillMaxSize().testTag("pager-page-preview"),
+                    )
+                }
+
+                PagerWorkspacePage.TOOL -> {
+                    Column(Modifier.fillMaxSize().testTag("pager-page-tool")) {
+                        Surface(
+                            tonalElevation = 2.dp,
+                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        ) {
+                            Row(
+                                Modifier.fillMaxWidth()
+                                    .horizontalScroll(rememberScrollState())
+                                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                AssistChip(
+                                    onClick = { selectTool(WorkbenchTool.CAPABILITIES) },
+                                    label = { Text("全部工具") },
+                                    leadingIcon = { Icon(Icons.Filled.Apps, null, Modifier.size(18.dp)) },
+                                    modifier = Modifier.testTag("pager-all-tools"),
+                                )
+                                WorkbenchTool.entries
+                                    .filter {
+                                        it.group == activeTool.group &&
+                                            it != WorkbenchTool.SUBTITLES &&
+                                            it != WorkbenchTool.CAPABILITIES
+                                    }
+                                    .forEach { tool ->
+                                        FilterChip(
+                                            selected = tool == activeTool,
+                                            onClick = { selectTool(tool) },
+                                            label = { Text(tool.title) },
+                                            modifier = Modifier.testTag("pager-tool-" + tool.name),
+                                        )
+                                    }
+                            }
+                        }
+                        FloatingToolContent(
+                            instance = instance,
+                            tool = activeTool,
+                            state = state,
+                            viewModel = viewModel,
+                            issues = issues,
+                            expandedEventId = expandedEventId,
+                            onExpandedChange = onExpandedChange,
+                            onImportFont = onImportFont,
+                            onSaveMkv = onSaveMkv,
+                            eventEditorStateHolder = eventEditorStateHolder,
+                            onOpenTool = ::selectTool,
+                            onCloseText = {
+                                onExpandedChange(null)
+                                showPage(PagerWorkspacePage.SUBTITLES)
+                            },
+                            searchOpen = searchOpen,
+                            onCloseSearch = onCloseSearch,
+                        )
+                    }
+                }
+            }
+        }
+
+        NavigationBar(
+            modifier = Modifier.fillMaxWidth().testTag("pager-navigation"),
+            tonalElevation = 3.dp,
+        ) {
+            pages.forEach { page ->
+                val selected = pagerState.currentPage == page.ordinal
+                NavigationBarItem(
+                    selected = selected,
+                    onClick = { showPage(page) },
+                    icon = {
+                        Icon(
+                            when (page) {
+                                PagerWorkspacePage.SUBTITLES -> Icons.Filled.Subtitles
+                                PagerWorkspacePage.PREVIEW -> Icons.Filled.Movie
+                                PagerWorkspacePage.TOOL -> Icons.Filled.Tune
+                            },
+                            contentDescription = page.title,
+                        )
+                    },
+                    label = { Text(page.title) },
+                    modifier = Modifier.testTag("pager-nav-" + page.name),
+                )
+            }
+        }
+    }
+}
+
 @Composable
 private fun FixedWorkspace(
     state: EditorState,
