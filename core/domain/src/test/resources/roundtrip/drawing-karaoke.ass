@@ -1,0 +1,14 @@
+[Script Info]
+ScriptType: v4.00+
+PlayResX: 1280
+PlayResY: 720
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,Arial,42,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,0,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 4,0:00:00.00,0:00:04.00,Default,,0,0,0,,{\an7\pos(100,100)\p1\pbo2}m 0 0 l 200 0 200 100 0 100{\p0}
+Dialogue: 0,0:00:05.00,0:00:08.00,Default,singer,0,0,0,karaoke,{\k20}你{\kf30}好{\ko15}世{\kt90}界
+Dialogue: 1,0:00:08.00,0:00:10.00,Default,,0,0,0,,{\clip(m 0 0 l 100 0 100 100 0 100)}Vector clip
