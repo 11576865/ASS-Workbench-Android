@@ -10,6 +10,7 @@ class UiVariantRegistryTest {
     fun registryContainsExistingPresentations() {
         assertTrue(UiVariantRegistry.entries.contains(WorkspacePresentationMode.FIXED))
         assertTrue(UiVariantRegistry.entries.contains(WorkspacePresentationMode.CANVAS_EXPERIMENTAL))
+        assertTrue(UiVariantRegistry.entries.contains(WorkspacePresentationMode.PAGER_EXPERIMENTAL))
     }
 
     @Test
@@ -21,6 +22,10 @@ class UiVariantRegistryTest {
         assertSame(
             WorkspacePresentationMode.CANVAS_EXPERIMENTAL,
             UiVariantRegistry.resolve("CANVAS_EXPERIMENTAL"),
+        )
+        assertSame(
+            WorkspacePresentationMode.PAGER_EXPERIMENTAL,
+            UiVariantRegistry.resolve("PAGER_EXPERIMENTAL"),
         )
     }
 
