@@ -795,8 +795,8 @@ private fun AuthoritativeMpvPreview(
                                     val positionMs = ((playback.positionSeconds ?: (lastReportedPositionMs / 1000.0)) * 1000.0)
                                         .toLong()
                                         .coerceAtLeast(0L)
-                                    val playX = offset.x / size.width.coerceAtLeast(1) * document.playResX
-                                    val playY = offset.y / size.height.coerceAtLeast(1) * document.playResY
+                                    val playX = (offset.x / size.width.coerceAtLeast(1) * document.playResX).toDouble()
+                                    val playY = (offset.y / size.height.coerceAtLeast(1) * document.playResY).toDouble()
                                     targetCandidates = PreviewTargetResolver.candidates(
                                         document = document,
                                         positionMs = positionMs,
