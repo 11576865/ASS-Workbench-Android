@@ -184,7 +184,7 @@ fun TypesettingPanel(
     }
 
     DisposableEffect(style.name) {
-        onDispose { viewModel.clearTransientPreview() }
+        onDispose { viewModel.clearTransientPreview("style:${style.name}") }
     }
 
     when (styleManageMode) {
@@ -502,7 +502,7 @@ fun TypesettingPanel(
                         color = androidx.compose.material3.MaterialTheme.colorScheme.tertiary,
                     )
                     OutlinedButton(
-                        onClick = viewModel::clearFocusedStyleOverrides,
+                        onClick = { focusedEvent?.id?.let(viewModel::clearEventStyleOverrides) },
                         modifier = Modifier.fillMaxWidth(),
                     ) { Text("清除覆盖，改由 Style 控制") }
                 }
