@@ -1581,7 +1581,9 @@ private fun InlineEffectsEditor(event: AssEvent, playbackPositionMs: Long, viewM
     }
     fun commitVisual() { viewModel.applyEventVisualEffects(event.id, blur.toDoubleOrNull(), softEntry) }
 
-    DisposableEffect(event.id) { onDispose { viewModel.clearTransientPreview() } }
+    DisposableEffect(event.id) {
+        onDispose { viewModel.clearTransientPreview("effects:${event.id}") }
+    }
 
     Surface(
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.38f),
@@ -3157,7 +3159,7 @@ private fun PositionPane(
     }
 
     DisposableEffect(event.id) {
-        onDispose { viewModel.clearTransientPreview() }
+        onDispose { viewModel.clearTransientPreview("geometry:${event.id}") }
     }
 
     var sectionName by rememberSaveable { mutableStateOf(PositionSection.PLACEMENT.name) }
