@@ -55,6 +55,7 @@ import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import io.github.assworkbench.app.AssWorkbenchProjectSnapshot
@@ -71,6 +72,9 @@ import io.github.assworkbench.app.ui.interaction.rememberInteractionOverlayRegis
 import io.github.assworkbench.app.ui.workspace.WorkspaceBinding
 import io.github.assworkbench.app.ui.workspace.SurfaceGeometry
 import io.github.assworkbench.app.ui.workspace.FloatingWorkbenchSurface
+import io.github.assworkbench.app.ui.workspace.WorkbenchSurfaceController
+import io.github.assworkbench.app.ui.workspace.WorkspaceToolPresence
+import io.github.assworkbench.app.ui.workspace.ToolContentDensity
 import io.github.assworkbench.app.ui.workspace.rememberWorkbenchSurfaceController
 import io.github.assworkbench.app.ui.workspace.WorkspaceBindingResolution
 import io.github.assworkbench.app.ui.workspace.WorkspaceEditScopeResolver
@@ -225,6 +229,28 @@ fun ModernEditorScreen(
     }
 
     fun openTool(next: WorkbenchTool) {
+        val primaryId = WorkspaceState.primaryInstanceId(next.name)
+        if (workspaceMode == WorkspacePresentationMode.TOOL_INSTANCES_EXPERIMENTAL) {
+            val existing = workspaceState.primary(next.name)
+            workspaceState = if (
+                existing != null &&
+                workspaceState.activeInstanceId == primaryId &&
+                existing.presence == WorkspaceToolPresence.TEMPORARY
+            ) {
+                workspaceState.updatePresence(primaryId, WorkspaceToolPresence.HIDDEN)
+            } else {
+                workspaceState
+                    .openPrimary(next.name, next.descriptor.defaultBinding)
+                    .updatePresence(primaryId, WorkspaceToolPresence.TEMPORARY)
+                    .hideOtherTemporary(primaryId)
+                    .withSurfacesHidden(false)
+            }
+            if (workspaceState.primary(next.name)?.presence == WorkspaceToolPresence.TEMPORARY) {
+                surfaceController.bringToFront(primaryId)
+            }
+            return
+        }
+
         workspaceState = workspaceState.openPrimary(next.name, next.descriptor.defaultBinding)
         if (workspaceMode == WorkspacePresentationMode.FIXED ||
             workspaceMode == WorkspacePresentationMode.PAGER_EXPERIMENTAL
@@ -235,7 +261,7 @@ fun ModernEditorScreen(
             return
         }
         workspaceState = workspaceState.withSurfacesHidden(false)
-        surfaceController.bringToFront(WorkspaceState.primaryInstanceId(next.name))
+        surfaceController.bringToFront(primaryId)
     }
 
     fun openPositionTarget(eventId: Long) {
@@ -561,6 +587,27 @@ fun ModernEditorScreen(
                     onCloseSearch = { searchOpen = false; viewModel.setQuery("") },
                     modifier = Modifier.weight(1f).fillMaxWidth().testTag("spatial-workspace"),
                 )
+            } else if (workspaceMode == WorkspacePresentationMode.TOOL_INSTANCES_EXPERIMENTAL) {
+                ToolInstanceWorkspace(
+                    state = state,
+                    viewModel = viewModel,
+                    issues = issues,
+                    workspaceState = workspaceState,
+                    onWorkspaceStateChange = { workspaceState = it },
+                    surfaceController = surfaceController,
+                    expandedEventId = expandedEventId,
+                    onExpandedChange = { expandedEventId = it },
+                    onImportFont = onImportFont,
+                    onSaveMkv = onSaveMkv,
+                    eventEditorStateHolder = eventEditorStateHolder,
+                    onOpenVideo = onOpenReferenceVideo,
+                    rendererEnabled = rendererEnabled,
+                    onEnableRenderer = onEnableRenderer,
+                    onOpenTool = ::openTool,
+                    searchOpen = searchOpen,
+                    onCloseSearch = { searchOpen = false; viewModel.setQuery("") },
+                    modifier = Modifier.weight(1f).fillMaxWidth().testTag("tool-instance-workspace"),
+                )
             } else if (workspaceMode == WorkspacePresentationMode.PRECISION_LENS_EXPERIMENTAL) {
                 PrecisionLensWorkspace(
                     state = state,
@@ -740,6 +787,7 @@ fun ModernEditorScreen(
                 WorkspacePresentationMode.PAGER_EXPERIMENTAL -> false
                 WorkspacePresentationMode.SPATIAL_EXPERIMENTAL -> false
                 WorkspacePresentationMode.PRECISION_LENS_EXPERIMENTAL -> false
+                WorkspacePresentationMode.TOOL_INSTANCES_EXPERIMENTAL -> false
             },
             modifier = Modifier.fillMaxSize().testTag("interaction-overlay"),
         )
@@ -751,6 +799,309 @@ fun ModernEditorScreen(
         }
     }
 }
+}
+
+@Composable
+private fun ToolInstanceWorkspace(
+    state: EditorState,
+    viewModel: EditorViewModel,
+    issues: List<AssQcIssue>,
+    workspaceState: WorkspaceState,
+    onWorkspaceStateChange: (WorkspaceState) -> Unit,
+    surfaceController: WorkbenchSurfaceController,
+    expandedEventId: Long?,
+    onExpandedChange: (Long?) -> Unit,
+    onImportFont: () -> Unit,
+    onSaveMkv: () -> Unit,
+    eventEditorStateHolder: SaveableStateHolder,
+    onOpenVideo: () -> Unit,
+    rendererEnabled: Boolean,
+    onEnableRenderer: () -> Unit,
+    onOpenTool: (WorkbenchTool) -> Unit,
+    searchOpen: Boolean,
+    onCloseSearch: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val existingEventIds = remember(state.document.events) {
+        state.document.events.asSequence().map { it.id }.toSet()
+    }
+    val temporaryIds = workspaceState.tools
+        .filter { it.presence == WorkspaceToolPresence.TEMPORARY }
+        .map { it.id }
+        .toSet()
+
+    fun hideTemporaryTools() {
+        var next = workspaceState
+        temporaryIds.forEach { id ->
+            next = next.updatePresence(id, WorkspaceToolPresence.HIDDEN)
+        }
+        onWorkspaceStateChange(next)
+    }
+
+    Box(
+        modifier
+            .background(MaterialTheme.colorScheme.surfaceContainerLowest)
+            .pointerInput(temporaryIds) {
+                detectTapGestures(onTap = { hideTemporaryTools() })
+            }
+    ) {
+        WorkbenchPreview(
+            state = state,
+            viewModel = viewModel,
+            positionEditEventId = null,
+            onOpenVideo = onOpenVideo,
+            onOpenTimeline = { onOpenTool(WorkbenchTool.TIMELINE) },
+            rendererEnabled = rendererEnabled,
+            onEnableRenderer = onEnableRenderer,
+            viewportGesturesEnabled = true,
+            modifier = Modifier.fillMaxSize().testTag("tool-instance-preview"),
+        )
+
+        workspaceState.tools.forEachIndexed { index, instance ->
+            val tool = WorkbenchTool.entries.firstOrNull { it.name == instance.toolKey }
+                ?: return@forEachIndexed
+            val groupIds = surfaceController.tabGroup(instance.id)
+            val activeTabId = surfaceController.activeTab(instance.id)
+            val visible = instance.presence != WorkspaceToolPresence.HIDDEN &&
+                instance.presence != WorkspaceToolPresence.BOOKMARKED &&
+                activeTabId == instance.id
+            val bindingResolution = instance.binding.resolve(
+                focusedEventId = state.focusedEventId,
+                selectedEventIds = state.selectedEventIds,
+                existingEventIds = existingEventIds,
+            )
+            val unresolved = bindingResolution is WorkspaceBindingResolution.UnresolvedPinnedEvent
+            val bindingLabel = when (val binding = instance.binding) {
+                WorkspaceBinding.FollowFocus ->
+                    state.focusedEventId?.let { "跟随焦点 · #$it" } ?: "跟随焦点"
+                WorkspaceBinding.FollowSelection ->
+                    if (state.selectedEventIds.isEmpty()) "跟随选择 · 空"
+                    else "跟随选择 · ${state.selectedEventIds.size} 条"
+                is WorkspaceBinding.PinnedEvent ->
+                    if (unresolved) "固定 #${binding.eventId} · 已失效"
+                    else "固定 #${binding.eventId}"
+            }
+            val tabTitles = groupIds.mapNotNull { id ->
+                workspaceState.tools.firstOrNull { it.id == id }?.let { grouped ->
+                    WorkbenchTool.entries.firstOrNull { it.name == grouped.toolKey }
+                        ?.let { groupedTool -> id to groupedTool.title }
+                }
+            }
+            val tagId = instance.id.replace(':', '-')
+
+            FloatingWorkbenchSurface(
+                id = instance.id,
+                testTagId = tagId,
+                title = tool.title + if (instance.id.endsWith(":primary")) "" else " · " + instance.id.substringAfterLast(':'),
+                bindingLabel = bindingLabel,
+                bindingPinned = instance.binding is WorkspaceBinding.PinnedEvent,
+                visible = visible,
+                controller = surfaceController,
+                initialOffset = Offset.Zero,
+                initialGeometry = tool.initialGeometry(
+                    18f + (index % 4) * 34f,
+                    24f + (index % 5) * 30f,
+                ),
+                onActivate = {
+                    onWorkspaceStateChange(workspaceState.activate(instance.id))
+                },
+                onToggleBinding = if (tool.descriptor.eventBindable) {
+                    {
+                        val nextBinding = when (instance.binding) {
+                            is WorkspaceBinding.PinnedEvent -> WorkspaceBinding.FollowFocus
+                            else -> state.focusedEventId
+                                ?.let(WorkspaceBinding::PinnedEvent)
+                                ?: WorkspaceBinding.FollowFocus
+                        }
+                        onWorkspaceStateChange(
+                            workspaceState.updateBinding(instance.id, nextBinding).activate(instance.id)
+                        )
+                    }
+                } else null,
+                onDuplicate = if (tool.descriptor.canDuplicate) {
+                    {
+                        workspaceState.newSibling(instance.id)?.let { sibling ->
+                            val copy = sibling.copy(
+                                presence = WorkspaceToolPresence.RESIDENT,
+                                contentDensity = instance.contentDensity,
+                            )
+                            onWorkspaceStateChange(
+                                workspaceState.addInstance(copy).activate(copy.id)
+                            )
+                            surfaceController.bringToFront(copy.id, tool.initialGeometry(52f, 58f))
+                        }
+                    }
+                } else null,
+                onDuplicateFollowFocus = if (tool.descriptor.canDuplicate) {
+                    {
+                        workspaceState.newSibling(instance.id)?.let { sibling ->
+                            val copy = sibling.copy(
+                                binding = WorkspaceBinding.FollowFocus,
+                                presence = WorkspaceToolPresence.RESIDENT,
+                                contentDensity = instance.contentDensity,
+                            )
+                            onWorkspaceStateChange(
+                                workspaceState.addInstance(copy).activate(copy.id)
+                            )
+                            surfaceController.bringToFront(copy.id, tool.initialGeometry(72f, 74f))
+                        }
+                    }
+                } else null,
+                presenceLabel = instance.presence.label,
+                contentDensityLabel = instance.contentDensity.label,
+                onToggleResident = {
+                    val nextPresence = if (instance.presence == WorkspaceToolPresence.RESIDENT) {
+                        WorkspaceToolPresence.TEMPORARY
+                    } else {
+                        WorkspaceToolPresence.RESIDENT
+                    }
+                    onWorkspaceStateChange(
+                        workspaceState.updatePresence(instance.id, nextPresence)
+                    )
+                },
+                onBookmark = {
+                    onWorkspaceStateChange(
+                        workspaceState.updatePresence(instance.id, WorkspaceToolPresence.BOOKMARKED)
+                    )
+                },
+                onCycleContentDensity = {
+                    onWorkspaceStateChange(workspaceState.cycleContentDensity(instance.id))
+                },
+                onRelink = if (unresolved && state.focusedEventId != null) {
+                    {
+                        onWorkspaceStateChange(
+                            workspaceState
+                                .updateBinding(
+                                    instance.id,
+                                    WorkspaceBinding.PinnedEvent(state.focusedEventId),
+                                )
+                                .activate(instance.id)
+                        )
+                    }
+                } else null,
+                tabTitles = tabTitles,
+                onSelectTab = { tabId ->
+                    surfaceController.activateTab(tabId)
+                    onWorkspaceStateChange(workspaceState.activate(tabId))
+                },
+                onClose = {
+                    val surviving = surfaceController.remove(instance.id)
+                    var next = workspaceState.closeInstance(instance.id)
+                    if (surviving != null) next = next.activate(surviving)
+                    onWorkspaceStateChange(next)
+                },
+                modifier = Modifier.fillMaxSize(),
+            ) {
+                val baseDensity = LocalDensity.current
+                val factor = when (instance.contentDensity) {
+                    ToolContentDensity.COMPACT -> 0.86f
+                    ToolContentDensity.STANDARD -> 1f
+                    ToolContentDensity.PRECISION -> 1.12f
+                }
+                CompositionLocalProvider(
+                    LocalDensity provides Density(
+                        density = baseDensity.density * factor,
+                        fontScale = baseDensity.fontScale,
+                    )
+                ) {
+                    FloatingToolContent(
+                        instance = instance,
+                        tool = tool,
+                        state = state,
+                        viewModel = viewModel,
+                        issues = issues,
+                        expandedEventId = expandedEventId,
+                        onExpandedChange = onExpandedChange,
+                        onImportFont = onImportFont,
+                        onSaveMkv = onSaveMkv,
+                        eventEditorStateHolder = eventEditorStateHolder,
+                        onOpenTool = onOpenTool,
+                        onCloseText = { onExpandedChange(null) },
+                        searchOpen = searchOpen,
+                        onCloseSearch = onCloseSearch,
+                    )
+                }
+            }
+        }
+
+        val bookmarked = workspaceState.tools.filter {
+            it.presence == WorkspaceToolPresence.BOOKMARKED
+        }
+        if (bookmarked.isNotEmpty()) {
+            Column(
+                Modifier.align(Alignment.CenterEnd)
+                    .padding(end = 6.dp)
+                    .testTag("tool-bookmark-rail"),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+                horizontalAlignment = Alignment.End,
+            ) {
+                bookmarked.forEach { instance ->
+                    val tool = WorkbenchTool.entries.firstOrNull { it.name == instance.toolKey }
+                        ?: return@forEach
+                    AssistChip(
+                        onClick = {
+                            val next = workspaceState
+                                .updatePresence(instance.id, WorkspaceToolPresence.RESIDENT)
+                                .activate(instance.id)
+                            onWorkspaceStateChange(next)
+                            surfaceController.bringToFront(instance.id, tool.initialGeometry(44f, 44f))
+                        },
+                        label = { Text(tool.title) },
+                        leadingIcon = { Icon(Icons.Filled.Bookmark, null, Modifier.size(18.dp)) },
+                        modifier = Modifier.testTag("tool-bookmark-" + instance.id.replace(':', '-')),
+                    )
+                }
+            }
+        }
+
+        val hidden = workspaceState.tools.filter {
+            it.presence == WorkspaceToolPresence.HIDDEN
+        }
+        Surface(
+            modifier = Modifier.align(Alignment.BottomCenter).padding(10.dp),
+            shape = RoundedCornerShape(22.dp),
+            tonalElevation = 5.dp,
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        ) {
+            Row(
+                Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                AssistChip(
+                    onClick = { onOpenTool(WorkbenchTool.CAPABILITIES) },
+                    label = { Text("工具") },
+                    leadingIcon = { Icon(Icons.Filled.Apps, null, Modifier.size(18.dp)) },
+                    modifier = Modifier.testTag("tool-instance-directory"),
+                )
+                if (temporaryIds.isNotEmpty()) {
+                    AssistChip(
+                        onClick = ::hideTemporaryTools,
+                        label = { Text("收回临时") },
+                        leadingIcon = { Icon(Icons.Filled.KeyboardHide, null, Modifier.size(18.dp)) },
+                        modifier = Modifier.testTag("tool-hide-temporary"),
+                    )
+                }
+                hidden.forEach { instance ->
+                    val tool = WorkbenchTool.entries.firstOrNull { it.name == instance.toolKey }
+                        ?: return@forEach
+                    AssistChip(
+                        onClick = {
+                            val next = workspaceState
+                                .updatePresence(instance.id, WorkspaceToolPresence.TEMPORARY)
+                                .hideOtherTemporary(instance.id)
+                                .activate(instance.id)
+                            onWorkspaceStateChange(next)
+                            surfaceController.bringToFront(instance.id, tool.initialGeometry(34f, 42f))
+                        },
+                        label = { Text(tool.title) },
+                        leadingIcon = { Icon(Icons.Filled.Visibility, null, Modifier.size(18.dp)) },
+                        modifier = Modifier.testTag("tool-hidden-" + instance.id.replace(':', '-')),
+                    )
+                }
+            }
+        }
+    }
 }
 
 @Composable
