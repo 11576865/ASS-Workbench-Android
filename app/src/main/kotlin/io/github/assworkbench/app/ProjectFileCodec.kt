@@ -26,12 +26,13 @@ data class AssWorkbenchProjectSnapshot(
 
 object ProjectFileCodec {
     const val EXTENSION = ".asswb"
-    private const val SCHEMA_VERSION = 1
+    private const val SCHEMA_VERSION = 2
 
     fun encode(snapshot: AssWorkbenchProjectSnapshot): String = JSONObject().apply {
         put("schema_version", SCHEMA_VERSION)
         put("title", snapshot.title)
         put("ass", AssCodec.write(snapshot.document))
+        put("event_ids", JSONArray(snapshot.document.events.map { it.id }))
         put("video_uri", snapshot.videoUri ?: JSONObject.NULL)
         put("subtitle_uri", snapshot.subtitleUri ?: JSONObject.NULL)
         put("container_uri", snapshot.containerUri ?: JSONObject.NULL)
@@ -47,7 +48,8 @@ object ProjectFileCodec {
 
     fun decode(text: String): AssWorkbenchProjectSnapshot {
         val json = JSONObject(text)
-        require(json.getInt("schema_version") == SCHEMA_VERSION) {
+        val schemaVersion = json.getInt("schema_version")
+        require(schemaVersion in 1..SCHEMA_VERSION) {
             "不支持的 ASS Workbench Project schema"
         }
         fun nullableString(key: String): String? =
@@ -56,13 +58,30 @@ object ProjectFileCodec {
             val array = json.optJSONArray(key) ?: return emptyList()
             return buildList { repeat(array.length()) { add(array.getString(it)) } }
         }
-        val selected = buildSet {
+        val parsedDocument = AssCodec.parse(json.getString("ass"))
+        val document = if (schemaVersion >= 2) {
+            val ids = buildList {
+                val array = json.optJSONArray("event_ids") ?: error("Project 缺少 event_ids")
+                repeat(array.length()) { add(array.getLong(it)) }
+            }
+            require(ids.size == parsedDocument.events.size && ids.distinct().size == ids.size) {
+                "Project event_ids 与 ASS Events 不一致"
+            }
+            parsedDocument.copy(
+                events = parsedDocument.events.mapIndexed { index, event -> event.copy(id = ids[index]) },
+            )
+        } else {
+            parsedDocument
+        }
+        val selected = if (schemaVersion >= 2) buildSet {
             val array = json.optJSONArray("selected_event_ids")
             if (array != null) repeat(array.length()) { add(array.getLong(it)) }
+        } else {
+            emptySet()
         }
         return AssWorkbenchProjectSnapshot(
             title = json.optString("title", "Project"),
-            document = AssCodec.parse(json.getString("ass")),
+            document = document,
             videoUri = nullableString("video_uri"),
             subtitleUri = nullableString("subtitle_uri"),
             containerUri = nullableString("container_uri"),
@@ -72,11 +91,11 @@ object ProjectFileCodec {
                 .getOrDefault(AssTextEncoding.UTF8),
             sourceFormat = runCatching { SubtitleSourceFormat.valueOf(json.optString("source_format")) }
                 .getOrDefault(SubtitleSourceFormat.PROJECT),
-            focusedEventId = if (json.has("focused_event_id") && !json.isNull("focused_event_id"))
+            focusedEventId = if (schemaVersion >= 2 && json.has("focused_event_id") && !json.isNull("focused_event_id"))
                 json.getLong("focused_event_id") else null,
             selectedEventIds = selected,
             workspaceMode = json.optString("workspace_mode", "FIXED"),
-            workspaceState = strings("workspace_state"),
+            workspaceState = if (schemaVersion >= 2) strings("workspace_state") else emptyList(),
             surfaceState = strings("surface_state"),
         )
     }
