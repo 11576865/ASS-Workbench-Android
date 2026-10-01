@@ -22,6 +22,9 @@ import io.github.assworkbench.domain.EventFormatClipboardOps
 import io.github.assworkbench.domain.EventFormatPasteMode
 import io.github.assworkbench.domain.FontBindingRewriter
 import io.github.assworkbench.domain.SubTime
+import io.github.assworkbench.domain.SubtitleDocumentFormat
+import io.github.assworkbench.domain.SubRipCodec
+import io.github.assworkbench.domain.WebVttCodec
 import io.github.assworkbench.domain.UndoHistory
 import io.github.assworkbench.fonts.FontDiagnostics
 import io.github.assworkbench.fonts.FontPackagingPlanner
@@ -511,15 +514,26 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         val bytes = app.contentResolver.openInputStream(uri)?.use { it.readBytes() }
             ?: error("无法读取字幕")
         val decoded = AssTextDecoder.decode(bytes)
-        val document = AssCodec.parse(decoded.text)
+        val name = displayName(uri) ?: "subtitle.ass"
+        val format = when {
+            name.endsWith(".srt", ignoreCase = true) -> SubtitleDocumentFormat.SRT
+            name.endsWith(".vtt", ignoreCase = true) -> SubtitleDocumentFormat.WEBVTT
+            else -> SubtitleDocumentFormat.ASS
+        }
+        val document = when (format) {
+            SubtitleDocumentFormat.ASS -> AssCodec.parse(decoded.text)
+            SubtitleDocumentFormat.SRT -> SubRipCodec.parse(decoded.text)
+            SubtitleDocumentFormat.WEBVTT -> WebVttCodec.parse(decoded.text)
+        }
         history.reset(document)
         _state.update {
             it.copy(
-                project = it.project.copy(subtitleUri = uri.toString(), title = displayName(uri) ?: "ASS project"),
+                project = it.project.copy(subtitleUri = uri.toString(), title = name),
                 document = document,
                 previewDocument = null,
                 subtitleLoaded = true,
                 subtitleTextEncoding = decoded.encoding,
+                subtitleFormat = format,
                 selectedEventIds = emptySet(),
                 selectionAnchorId = null,
                 focusedEventId = document.events.firstOrNull()?.id,
@@ -528,7 +542,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 canRedo = false,
                 fontPackagingSelection = emptySet(),
                 container = ContainerBridgeState(),
-                status = "已载入 ${document.events.size} 条 ASS 事件 · ${decoded.encoding.displayName}。",
+                status = "已载入 ${document.events.size} 条字幕事件 · ${format.name} · ${decoded.encoding.displayName}。",
             )
         }
         refreshFontDiagnostics()
@@ -597,7 +611,11 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     fun saveTo(uri: Uri): Boolean {
         val snapshot = _state.value
         return runCatching {
-            val text = AssCodec.write(snapshot.document)
+            val text = when (snapshot.subtitleFormat) {
+                SubtitleDocumentFormat.ASS -> AssCodec.write(snapshot.document)
+                SubtitleDocumentFormat.SRT -> SubRipCodec.write(snapshot.document)
+                SubtitleDocumentFormat.WEBVTT -> WebVttCodec.write(snapshot.document)
+            }
             val bytes = snapshot.subtitleTextEncoding.encode(text)
             app.contentResolver.openOutputStream(uri, "wt")?.use { it.write(bytes) }
                 ?: error("无法写入字幕")
@@ -610,7 +628,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                         dirty = false,
                         recoveryAvailable = false,
                         recoveryLabel = "",
-                        status = "ASS 已保存。",
+                        status = snapshot.subtitleFormat.name + " 已保存。",
                     )
                 }
                 true
