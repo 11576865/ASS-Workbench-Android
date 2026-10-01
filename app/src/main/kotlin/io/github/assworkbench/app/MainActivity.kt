@@ -183,7 +183,8 @@ class MainActivity : ComponentActivity() {
                             if (!viewModel.saveCurrent()) saveSubtitleAs.launch(defaultFileName(state.project.title))
                         },
                         onSaveAs = { saveSubtitleAs.launch(defaultFileName(state.project.title)) },
-                        onSaveWorkbenchProject = {
+                        onSaveWorkbenchProject = { workspaceRows, surfaceRows ->
+                            viewModel.updateProjectWorkspaceSnapshot(workspaceRows, surfaceRows)
                             if (!viewModel.saveCurrentWorkbenchProject()) {
                                 saveWorkbenchProjectAs.launch(defaultProjectFileName(state.project.title))
                             }
