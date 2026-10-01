@@ -310,6 +310,26 @@ fun ModernEditorScreen(
                 )
             }
 
+            if (workspaceMode == WorkspacePresentationMode.FIXED) {
+                FixedWorkspaceContent(
+                    state = state,
+                    viewModel = viewModel,
+                    tool = fixedTool,
+                    issues = issues,
+                    expandedEventId = expandedEventId,
+                    onExpandedChange = { expandedEventId = it },
+                    onImportFont = onImportFont,
+                    onSaveMkv = onSaveMkv,
+                    eventEditorStateHolder = eventEditorStateHolder,
+                    onOpenTool = ::openTool,
+                    onOpenVideo = onOpenReferenceVideo,
+                    rendererEnabled = rendererEnabled,
+                    onEnableRenderer = onEnableRenderer,
+                    searchOpen = searchOpen,
+                    onCloseSearch = { searchOpen = false; viewModel.setQuery("") },
+                    modifier = Modifier.weight(1f).fillMaxWidth().testTag("fixed-workspace"),
+                )
+            } else {
             BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().testTag("canvas-workspace")) {
                 val viewportWidth = maxWidth.value
                 val viewportHeight = maxHeight.value
@@ -449,16 +469,107 @@ fun ModernEditorScreen(
                     }
                 }
             }
+            }
         }
 
         WindowInteractionOverlay(
             registry = interactionRegistry,
-            visible = !workspaceState.surfacesHidden,
+            visible = workspaceMode == WorkspacePresentationMode.CANVAS_EXPERIMENTAL && !workspaceState.surfacesHidden,
             modifier = Modifier.fillMaxSize().testTag("interaction-overlay"),
         )
         }
     }
 }
+}
+
+@Composable
+private fun FixedWorkspaceContent(
+    state: EditorState,
+    viewModel: EditorViewModel,
+    tool: WorkbenchTool,
+    issues: List<AssQcIssue>,
+    expandedEventId: Long?,
+    onExpandedChange: (Long?) -> Unit,
+    onImportFont: () -> Unit,
+    onSaveMkv: () -> Unit,
+    eventEditorStateHolder: SaveableStateHolder,
+    onOpenTool: (WorkbenchTool) -> Unit,
+    onOpenVideo: () -> Unit,
+    rendererEnabled: Boolean,
+    onEnableRenderer: () -> Unit,
+    searchOpen: Boolean,
+    onCloseSearch: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier) {
+        Row(
+            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            WorkbenchTool.entries.filter { it != WorkbenchTool.CAPABILITIES }.forEach { entry ->
+                FilterChip(
+                    selected = tool == entry,
+                    onClick = { onOpenTool(entry) },
+                    label = { Text(entry.title) },
+                )
+            }
+        }
+        Divider()
+        BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
+            val wide = maxWidth >= 760.dp
+            val inspector: @Composable (Modifier) -> Unit = { inspectorModifier ->
+                Surface(inspectorModifier, tonalElevation = 2.dp) {
+                    FloatingToolContent(
+                        instance = WorkspaceToolInstance(
+                            id = "fixed:" + tool.name,
+                            toolKey = tool.name,
+                            binding = WorkspaceBinding.FollowFocus,
+                        ),
+                        tool = tool,
+                        state = state,
+                        viewModel = viewModel,
+                        issues = issues,
+                        expandedEventId = expandedEventId,
+                        onExpandedChange = onExpandedChange,
+                        onImportFont = onImportFont,
+                        onSaveMkv = onSaveMkv,
+                        eventEditorStateHolder = eventEditorStateHolder,
+                        onOpenTool = onOpenTool,
+                        onCloseText = { onExpandedChange(null) },
+                        searchOpen = searchOpen,
+                        onCloseSearch = onCloseSearch,
+                    )
+                }
+            }
+            val preview: @Composable (Modifier) -> Unit = { previewModifier ->
+                WorkbenchPreview(
+                    state = state,
+                    viewModel = viewModel,
+                    positionEditEventId = if (tool == WorkbenchTool.POSITION) state.focusedEventId else null,
+                    onOpenVideo = onOpenVideo,
+                    onOpenTimeline = { onOpenTool(WorkbenchTool.TIMELINE) },
+                    rendererEnabled = rendererEnabled,
+                    onEnableRenderer = onEnableRenderer,
+                    interactionRegistry = null,
+                    viewportGesturesEnabled = tool == WorkbenchTool.POSITION,
+                    modifier = previewModifier,
+                )
+            }
+            if (wide) {
+                Row(Modifier.fillMaxSize()) {
+                    preview(Modifier.weight(0.60f).fillMaxHeight())
+                    VerticalDivider()
+                    inspector(Modifier.weight(0.40f).fillMaxHeight())
+                }
+            } else {
+                Column(Modifier.fillMaxSize()) {
+                    preview(Modifier.weight(0.46f).fillMaxWidth())
+                    Divider()
+                    inspector(Modifier.weight(0.54f).fillMaxWidth())
+                }
+            }
+        }
+    }
 }
 
 @Composable
