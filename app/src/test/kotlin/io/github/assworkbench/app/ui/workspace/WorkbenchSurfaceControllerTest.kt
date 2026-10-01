@@ -79,6 +79,19 @@ class WorkbenchSurfaceControllerTest {
         val restored = WorkbenchSurfaceController(WorkspaceSurfacePersistence.decode(controller.save()))
         assertEquals(controller.save(), restored.save())
     }
+    @Test fun removingActiveTabKeepsSurvivingTabVisible() {
+        val controller = WorkbenchSurfaceController()
+        controller.ensure("A", fallback)
+        controller.ensure("B", SurfaceGeometry(80f, 90f))
+        controller.stackWithFront("B", SurfaceGeometry(80f, 90f))
+        controller.activateTab("B")
+        assertEquals("B", controller.activeTab("A"))
+        assertEquals("A", controller.remove("B"))
+        assertEquals(listOf("A"), controller.tabGroup("A"))
+        assertEquals("A", controller.activeTab("A"))
+        assertNull(controller.state("A", fallback).tabGroupId)
+    }
+
     @Test fun dockMinimizeAndTabStackPersistIndependently() {
         val controller = WorkbenchSurfaceController()
         controller.ensure("A", fallback)
