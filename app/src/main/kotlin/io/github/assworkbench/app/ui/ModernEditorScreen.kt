@@ -258,7 +258,7 @@ fun ModernEditorScreen(
         fixedToolName = toolKey
         if (workspaceMode == WorkspacePresentationMode.CANVAS_EXPERIMENTAL) {
             workspaceState = workspaceState.withSurfacesHidden(false)
-            workspaceState.activeInstanceId?.let(surfaceController::bringToFront)
+            workspaceState.activeInstanceId?.let { id -> surfaceController.bringToFront(id) }
         }
     }
 
