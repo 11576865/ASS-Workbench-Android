@@ -27,6 +27,11 @@ internal enum class WorkspacePresentationMode(
         status = UiVariantStatus.EXPERIMENTAL,
         description = "以预览为底层，多个工具作为可移动 Surface 叠加与组织。",
     ),
+    PAGER_EXPERIMENTAL(
+        title = "聚焦翻页工作台",
+        status = UiVariantStatus.EXPERIMENTAL,
+        description = "字幕、预览、当前工具三页切换；一次只把一个主要任务放到前台。",
+    ),
 }
 
 /**
