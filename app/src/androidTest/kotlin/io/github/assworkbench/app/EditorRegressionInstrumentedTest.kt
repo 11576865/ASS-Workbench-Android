@@ -447,6 +447,8 @@ class EditorRegressionInstrumentedTest {
         hideKeyboard()
         composeRule.onNodeWithContentDescription("工具和更多操作").performClick()
         composeRule.onNodeWithTag("workspace-mode-toggle").performClick()
+        composeRule.onNodeWithTag("ui-variant-lab").assertIsDisplayed()
+        composeRule.onNodeWithTag("ui-variant-use-CANVAS_EXPERIMENTAL").performClick()
         composeRule.waitUntil(10_000) {
             composeRule.onAllNodesWithTag("canvas-workspace", useUnmergedTree = true)
                 .fetchSemanticsNodes(atLeastOneRootRequired = false)

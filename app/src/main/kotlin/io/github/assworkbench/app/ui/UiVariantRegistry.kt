@@ -1,0 +1,46 @@
+package io.github.assworkbench.app.ui
+
+/**
+ * Registry entry for a complete editor presentation.
+ *
+ * Persistence intentionally uses enum names because existing .asswb project files
+ * already store FIXED / CANVAS_EXPERIMENTAL in workspace_mode.
+ */
+internal enum class UiVariantStatus(val label: String) {
+    STABLE("稳定"),
+    EXPERIMENTAL("实验"),
+    ARCHIVED("归档"),
+}
+
+internal enum class WorkspacePresentationMode(
+    val title: String,
+    val status: UiVariantStatus,
+    val description: String,
+) {
+    FIXED(
+        title = "固定工作台",
+        status = UiVariantStatus.STABLE,
+        description = "预览、字幕导航与当前工具采用稳定的自适应固定布局。",
+    ),
+    CANVAS_EXPERIMENTAL(
+        title = "自由 Canvas",
+        status = UiVariantStatus.EXPERIMENTAL,
+        description = "以预览为底层，多个工具作为可移动 Surface 叠加与组织。",
+    ),
+}
+
+/**
+ * Single registration point for all editor UI variants.
+ *
+ * New presentations should be added here and rendered by ModernEditorScreen.
+ * Keeping discovery metadata centralized lets UI Lab grow without replacing
+ * or silently deleting older presentations.
+ */
+internal object UiVariantRegistry {
+    val entries: List<WorkspacePresentationMode> = WorkspacePresentationMode.entries
+
+    val default: WorkspacePresentationMode = WorkspacePresentationMode.FIXED
+
+    fun resolve(persistedName: String?): WorkspacePresentationMode =
+        WorkspacePresentationMode.entries.firstOrNull { it.name == persistedName } ?: default
+}
