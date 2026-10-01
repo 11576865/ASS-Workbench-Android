@@ -9,6 +9,8 @@ import io.github.assworkbench.container.MatroskaScanResult
 import io.github.assworkbench.domain.AssCodec
 import io.github.assworkbench.domain.AssDocument
 import io.github.assworkbench.domain.AssDocumentEditing
+import io.github.assworkbench.domain.AssQcIssue
+import io.github.assworkbench.domain.AssQualityFixes
 import io.github.assworkbench.domain.AssTextDecoder
 import io.github.assworkbench.domain.AssTextEncoding
 import io.github.assworkbench.domain.EventOverrideEditor
@@ -668,6 +670,14 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 }
             }
         }
+    }
+
+    fun applyQcQuickFix(issue: AssQcIssue) {
+        if (issue.quickFix == null) return
+        editDocument("已执行 QC Quick Fix：${issue.quickFix.label}") { doc ->
+            AssQualityFixes.apply(doc, issue)
+        }
+        focusEvent(issue.eventId, seek = false)
     }
 
     fun reportError(prefix: String, error: Throwable) {
