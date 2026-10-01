@@ -4011,8 +4011,11 @@ private fun FontManagerPane(
                             FontOrigin.MKV_ATTACHMENT -> "MKV 附件"
                             FontOrigin.UNKNOWN -> "来源未知"
                         }
+                        val collectionLabel = if (font.collectionFaces.isNotEmpty()) {
+                            " · Collection " + font.collectionFaces.size + " faces"
+                        } else ""
                         Text(
-                            font.metadata.rendererFamily + " · " + originLabel +
+                            font.metadata.rendererFamily + collectionLabel + " · " + originLabel +
                                 if (requested) " · ASS 已请求" else " · 无显式请求",
                             style = MaterialTheme.typography.labelSmall,
                             color = if (
@@ -4039,15 +4042,26 @@ private fun FontManagerPane(
                         }
                     }
                     if (style != null) {
-                        TextButton(
-                            onClick = {
-                                viewModel.setStyleFont(
-                                    style.name,
-                                    font.metadata.rendererFamily,
-                                )
-                            },
-                        ) {
-                            Text("用于 " + style.name)
+                        if (font.collectionFaces.isEmpty()) {
+                            TextButton(
+                                onClick = { viewModel.setStyleFont(style.name, font.metadata.rendererFamily) },
+                            ) { Text("用于 " + style.name) }
+                        } else {
+                            var facesOpen by remember(font.sha256) { mutableStateOf(false) }
+                            Box {
+                                TextButton(onClick = { facesOpen = true }) { Text("选择 Face") }
+                                DropdownMenu(facesOpen, { facesOpen = false }) {
+                                    font.collectionFaces.forEachIndexed { faceIndex, face ->
+                                        DropdownMenuItem(
+                                            text = { Text((faceIndex + 1).toString() + " · " + face.rendererFamily) },
+                                            onClick = {
+                                                viewModel.setStyleFont(style.name, face.rendererFamily)
+                                                facesOpen = false
+                                            },
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
                 }
