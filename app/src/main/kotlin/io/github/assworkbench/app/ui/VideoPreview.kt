@@ -78,6 +78,7 @@ import io.github.assworkbench.fonts.RendererLogParser
 import io.github.assworkbench.app.ui.interaction.ClearInteractionOwnerOnDispose
 import io.github.assworkbench.app.ui.interaction.InteractionOverlayRegistry
 import io.github.assworkbench.app.ui.interaction.InteractionProxySpec
+import io.github.assworkbench.app.ui.interaction.TouchScalePolicy
 import io.github.assworkbench.app.ui.preview.PreviewTargetCandidate
 import io.github.assworkbench.app.ui.preview.PreviewTargetConfidence
 import io.github.assworkbench.app.ui.preview.PreviewTargetResolver
@@ -1638,21 +1639,16 @@ private fun PositionDragOverlay(
                 targetInWindow = target(x, y),
                 preferredOffsetPx = preferred + Offset(with(proxyDensity) { 78.dp.toPx() }, 0f),
                 onDragDelta = { delta ->
-                    val baseX = (directScaleX ?: displayScaleX).coerceAtLeast(1.0)
-                    val baseY = (directScaleY ?: displayScaleY).coerceAtLeast(1.0)
-                    val sx = (baseX + delta.x * 0.45).coerceIn(1.0, 1000.0)
-                    val syCandidate = (baseY - delta.y * 0.45).coerceIn(1.0, 1000.0)
-                    if (scaleLocked) {
-                        val factorX = sx / baseX
-                        val factorY = syCandidate / baseY
-                        val factor = ((factorX + factorY) / 2.0).coerceIn(0.01, 10.0)
-                        directScaleX = (baseX * factor).coerceIn(1.0, 1000.0)
-                        directScaleY = (baseY * factor).coerceIn(1.0, 1000.0)
-                    } else {
-                        directScaleX = sx
-                        directScaleY = syCandidate
-                    }
-                    onPreviewScale(directScaleX!!, directScaleY!!)
+                    val next = TouchScalePolicy.xy(
+                        baseX = directScaleX ?: displayScaleX,
+                        baseY = directScaleY ?: displayScaleY,
+                        deltaX = delta.x * 0.45,
+                        deltaY = -delta.y * 0.45,
+                        locked = scaleLocked,
+                    )
+                    directScaleX = next.x
+                    directScaleY = next.y
+                    onPreviewScale(next.x, next.y)
                 },
                 onCommit = {
                     if (directScaleX != null && directScaleY != null) {
@@ -1667,16 +1663,15 @@ private fun PositionDragOverlay(
                 targetInWindow = target(x, y),
                 preferredOffsetPx = preferred + Offset(with(proxyDensity) { 78.dp.toPx() }, 0f),
                 onDragDelta = { delta ->
-                    val baseX = (directScaleX ?: displayScaleX).coerceAtLeast(1.0)
-                    val baseY = (directScaleY ?: displayScaleY).coerceAtLeast(1.0)
-                    val nextX = (baseX + delta.x * 0.45).coerceIn(1.0, 1000.0)
-                    directScaleX = nextX
-                    directScaleY = if (scaleLocked) {
-                        (baseY * (nextX / baseX)).coerceIn(1.0, 1000.0)
-                    } else {
-                        baseY
-                    }
-                    onPreviewScale(directScaleX!!, directScaleY!!)
+                    val next = TouchScalePolicy.x(
+                        baseX = directScaleX ?: displayScaleX,
+                        baseY = directScaleY ?: displayScaleY,
+                        deltaX = delta.x * 0.45,
+                        locked = scaleLocked,
+                    )
+                    directScaleX = next.x
+                    directScaleY = next.y
+                    onPreviewScale(next.x, next.y)
                 },
                 onCommit = {
                     if (directScaleX != null) onCommitScale(directScaleX!!, directScaleY ?: displayScaleY)
@@ -1689,16 +1684,15 @@ private fun PositionDragOverlay(
                 targetInWindow = target(x, y),
                 preferredOffsetPx = preferred + Offset(with(proxyDensity) { 78.dp.toPx() }, 0f),
                 onDragDelta = { delta ->
-                    val baseX = (directScaleX ?: displayScaleX).coerceAtLeast(1.0)
-                    val baseY = (directScaleY ?: displayScaleY).coerceAtLeast(1.0)
-                    val nextY = (baseY - delta.y * 0.45).coerceIn(1.0, 1000.0)
-                    directScaleY = nextY
-                    directScaleX = if (scaleLocked) {
-                        (baseX * (nextY / baseY)).coerceIn(1.0, 1000.0)
-                    } else {
-                        baseX
-                    }
-                    onPreviewScale(directScaleX!!, directScaleY!!)
+                    val next = TouchScalePolicy.y(
+                        baseX = directScaleX ?: displayScaleX,
+                        baseY = directScaleY ?: displayScaleY,
+                        deltaY = -delta.y * 0.45,
+                        locked = scaleLocked,
+                    )
+                    directScaleX = next.x
+                    directScaleY = next.y
+                    onPreviewScale(next.x, next.y)
                 },
                 onCommit = {
                     if (directScaleY != null) onCommitScale(directScaleX ?: displayScaleX, directScaleY!!)
