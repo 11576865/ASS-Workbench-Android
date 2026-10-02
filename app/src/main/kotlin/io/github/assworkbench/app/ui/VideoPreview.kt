@@ -128,6 +128,10 @@ internal fun VideoPreview(
     onSetEventMove: (Double, Double, Double, Double) -> Unit,
     onPreviewEventOrigin: (Double, Double) -> Unit,
     onSetEventOrigin: (Double, Double) -> Unit,
+    onPreviewEventRotationX: (Double) -> Unit,
+    onSetEventRotationX: (Double) -> Unit,
+    onPreviewEventRotationY: (Double) -> Unit,
+    onSetEventRotationY: (Double) -> Unit,
     onPreviewEventRotation: (Double) -> Unit,
     onSetEventRotation: (Double) -> Unit,
     scaleLocked: Boolean,
@@ -230,6 +234,10 @@ internal fun VideoPreview(
             onSetEventMove = onSetEventMove,
             onPreviewEventOrigin = onPreviewEventOrigin,
             onSetEventOrigin = onSetEventOrigin,
+            onPreviewEventRotationX = onPreviewEventRotationX,
+            onSetEventRotationX = onSetEventRotationX,
+            onPreviewEventRotationY = onPreviewEventRotationY,
+            onSetEventRotationY = onSetEventRotationY,
             onPreviewEventRotation = onPreviewEventRotation,
             onSetEventRotation = onSetEventRotation,
             scaleLocked = scaleLocked,
@@ -531,6 +539,10 @@ private fun AuthoritativeMpvPreview(
     onSetEventMove: (Double, Double, Double, Double) -> Unit,
     onPreviewEventOrigin: (Double, Double) -> Unit,
     onSetEventOrigin: (Double, Double) -> Unit,
+    onPreviewEventRotationX: (Double) -> Unit,
+    onSetEventRotationX: (Double) -> Unit,
+    onPreviewEventRotationY: (Double) -> Unit,
+    onSetEventRotationY: (Double) -> Unit,
     onPreviewEventRotation: (Double) -> Unit,
     onSetEventRotation: (Double) -> Unit,
     scaleLocked: Boolean,
@@ -948,6 +960,10 @@ private fun AuthoritativeMpvPreview(
                         onCommitMove = onSetEventMove,
                         onPreviewOrigin = onPreviewEventOrigin,
                         onCommitOrigin = onSetEventOrigin,
+                        onPreviewRotationX = onPreviewEventRotationX,
+                        onCommitRotationX = onSetEventRotationX,
+                        onPreviewRotationY = onPreviewEventRotationY,
+                        onCommitRotationY = onSetEventRotationY,
                         onPreviewRotation = onPreviewEventRotation,
                         onCommitRotation = onSetEventRotation,
                         scaleLocked = scaleLocked,
@@ -1116,6 +1132,10 @@ private fun PositionDragOverlay(
     onCommitMove: (Double, Double, Double, Double) -> Unit,
     onPreviewOrigin: (Double, Double) -> Unit,
     onCommitOrigin: (Double, Double) -> Unit,
+    onPreviewRotationX: (Double) -> Unit,
+    onCommitRotationX: (Double) -> Unit,
+    onPreviewRotationY: (Double) -> Unit,
+    onCommitRotationY: (Double) -> Unit,
     onPreviewRotation: (Double) -> Unit,
     onCommitRotation: (Double) -> Unit,
     scaleLocked: Boolean,
@@ -1155,7 +1175,11 @@ private fun PositionDragOverlay(
     var y by remember(event.id, event.text) { mutableStateOf(geometry.position?.y ?: baseY) }
     var originX by remember(event.id, event.text) { mutableStateOf(geometry.origin?.x) }
     var originY by remember(event.id, event.text) { mutableStateOf(geometry.origin?.y) }
+    var directRotationX by remember(event.id, event.text) { mutableStateOf<Double?>(null) }
+    var directRotationY by remember(event.id, event.text) { mutableStateOf<Double?>(null) }
     var directRotation by remember(event.id, event.text) { mutableStateOf<Double?>(null) }
+    val displayRotationX = directRotationX ?: renderGeometry.rotationX ?: 0.0
+    val displayRotationY = directRotationY ?: renderGeometry.rotationY ?: 0.0
     val displayRotation = directRotation ?: renderGeometry.rotationZ ?: style?.angle ?: 0.0
     var directScaleX by remember(event.id, event.text) { mutableStateOf<Double?>(null) }
     var directScaleY by remember(event.id, event.text) { mutableStateOf<Double?>(null) }
@@ -1532,6 +1556,8 @@ private fun PositionDragOverlay(
                 y = geometry.position?.y ?: baseY
                 originX = geometry.origin?.x
                 originY = geometry.origin?.y
+                directRotationX = null
+                directRotationY = null
                 directRotation = null
                 directScaleX = null
                 directScaleY = null
@@ -1583,17 +1609,45 @@ private fun PositionDragOverlay(
                 onCancel = ::cancelDraft,
             )
             handles += InteractionProxySpec(
+                id = "$proxyOwner-rotation-x",
+                label = "转 X",
+                targetInWindow = target(originX ?: x, originY ?: y),
+                preferredOffsetPx = preferred + Offset(0f, with(proxyDensity) { 132.dp.toPx() }),
+                onDragDelta = { delta ->
+                    directRotationX = ((directRotationX ?: displayRotationX) + delta.x * 0.35).coerceIn(-3600.0, 3600.0)
+                    onPreviewRotationX(directRotationX!!)
+                },
+                onCommit = { directRotationX?.let(onCommitRotationX) },
+                onCancel = ::cancelDraft,
+            )
+            handles += InteractionProxySpec(
+                id = "$proxyOwner-rotation-y",
+                label = "转 Y",
+                targetInWindow = target(originX ?: x, originY ?: y),
+                preferredOffsetPx = preferred + Offset(0f, with(proxyDensity) { 132.dp.toPx() }),
+                onDragDelta = { delta ->
+                    directRotationY = ((directRotationY ?: displayRotationY) + delta.x * 0.35).coerceIn(-3600.0, 3600.0)
+                    onPreviewRotationY(directRotationY!!)
+                },
+                onCommit = { directRotationY?.let(onCommitRotationY) },
+                onCancel = ::cancelDraft,
+            )
+            handles += InteractionProxySpec(
                 id = "$proxyOwner-scale",
-                label = "缩放",
+                label = "缩放 XY",
                 targetInWindow = target(x, y),
                 preferredOffsetPx = preferred + Offset(with(proxyDensity) { 78.dp.toPx() }, 0f),
                 onDragDelta = { delta ->
-                    val sx = ((directScaleX ?: displayScaleX) + delta.x * 0.45).coerceIn(1.0, 1000.0)
-                    val syCandidate = ((directScaleY ?: displayScaleY) - delta.y * 0.45).coerceIn(1.0, 1000.0)
+                    val baseX = (directScaleX ?: displayScaleX).coerceAtLeast(1.0)
+                    val baseY = (directScaleY ?: displayScaleY).coerceAtLeast(1.0)
+                    val sx = (baseX + delta.x * 0.45).coerceIn(1.0, 1000.0)
+                    val syCandidate = (baseY - delta.y * 0.45).coerceIn(1.0, 1000.0)
                     if (scaleLocked) {
-                        val merged = ((sx + syCandidate) / 2.0).coerceIn(1.0, 1000.0)
-                        directScaleX = merged
-                        directScaleY = merged
+                        val factorX = sx / baseX
+                        val factorY = syCandidate / baseY
+                        val factor = ((factorX + factorY) / 2.0).coerceIn(0.01, 10.0)
+                        directScaleX = (baseX * factor).coerceIn(1.0, 1000.0)
+                        directScaleY = (baseY * factor).coerceIn(1.0, 1000.0)
                     } else {
                         directScaleX = sx
                         directScaleY = syCandidate
@@ -1604,6 +1658,36 @@ private fun PositionDragOverlay(
                     if (directScaleX != null && directScaleY != null) {
                         onCommitScale(directScaleX!!, directScaleY!!)
                     }
+                },
+                onCancel = ::cancelDraft,
+            )
+            handles += InteractionProxySpec(
+                id = "$proxyOwner-scale-x",
+                label = "缩放 X",
+                targetInWindow = target(x, y),
+                preferredOffsetPx = preferred + Offset(with(proxyDensity) { 78.dp.toPx() }, 0f),
+                onDragDelta = { delta ->
+                    directScaleX = ((directScaleX ?: displayScaleX) + delta.x * 0.45).coerceIn(1.0, 1000.0)
+                    directScaleY = directScaleY ?: displayScaleY
+                    onPreviewScale(directScaleX!!, directScaleY!!)
+                },
+                onCommit = {
+                    if (directScaleX != null) onCommitScale(directScaleX!!, directScaleY ?: displayScaleY)
+                },
+                onCancel = ::cancelDraft,
+            )
+            handles += InteractionProxySpec(
+                id = "$proxyOwner-scale-y",
+                label = "缩放 Y",
+                targetInWindow = target(x, y),
+                preferredOffsetPx = preferred + Offset(with(proxyDensity) { 78.dp.toPx() }, 0f),
+                onDragDelta = { delta ->
+                    directScaleX = directScaleX ?: displayScaleX
+                    directScaleY = ((directScaleY ?: displayScaleY) - delta.y * 0.45).coerceIn(1.0, 1000.0)
+                    onPreviewScale(directScaleX!!, directScaleY!!)
+                },
+                onCommit = {
+                    if (directScaleY != null) onCommitScale(directScaleX ?: displayScaleX, directScaleY!!)
                 },
                 onCancel = ::cancelDraft,
             )
@@ -1905,7 +1989,7 @@ private fun PositionDragOverlay(
             drawCircle(guideColor.copy(alpha = 0.9f), 5.dp.toPx(), fayHandle, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2.dp.toPx()))
         }
         Text(
-            "pos ${x.toInt()},${y.toInt()}" + (if (originX != null) " · org ${originX!!.toInt()},${originY!!.toInt()}" else "") + " · rot ${displayRotation.toInt()}° · scale ${displayScaleX.toInt()}×${displayScaleY.toInt()}% · shear ${"%.2f".format(java.util.Locale.US, displayShearX)},${"%.2f".format(java.util.Locale.US, displayShearY)} · 拖动操控杆",
+            "pos ${x.toInt()},${y.toInt()}" + (if (originX != null) " · org ${originX!!.toInt()},${originY!!.toInt()}" else "") + " · rot ${displayRotationX.toInt()}/${displayRotationY.toInt()}/${displayRotation.toInt()}° · scale ${displayScaleX.toInt()}×${displayScaleY.toInt()}% · shear ${"%.2f".format(java.util.Locale.US, displayShearX)},${"%.2f".format(java.util.Locale.US, displayShearY)} · 拖动操控杆",
             modifier = Modifier
                 .align(Alignment.TopStart)
                 .background(Color.Black.copy(alpha = 0.55f))
