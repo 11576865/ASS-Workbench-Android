@@ -96,6 +96,10 @@ internal fun ClearInteractionOwnerOnDispose(
 @Composable
 internal fun WindowInteractionOverlay(
     registry: InteractionOverlayRegistry,
+    scaleLocked: Boolean = false,
+    onScaleLockedChange: (Boolean) -> Unit = {},
+    scaleSnapStep: Double? = null,
+    onScaleSnapStepChange: (Double?) -> Unit = {},
     visible: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
@@ -253,6 +257,29 @@ internal fun WindowInteractionOverlay(
                                     modifier = Modifier.testTag("rod-scale-axis-$axis"),
                                 )
                             }
+                            FilterChip(
+                                selected = scaleLocked,
+                                onClick = { onScaleLockedChange(!scaleLocked); orbitOnly = false },
+                                label = { Text(if (scaleLocked) "比例锁" else "独立") },
+                                modifier = Modifier.testTag("rod-scale-lock"),
+                            )
+                            FilterChip(
+                                selected = scaleSnapStep != null,
+                                onClick = {
+                                    val next = when (scaleSnapStep?.toInt()) {
+                                        null -> 5.0
+                                        5 -> 10.0
+                                        10 -> 25.0
+                                        else -> null
+                                    }
+                                    onScaleSnapStepChange(next)
+                                    orbitOnly = false
+                                },
+                                label = {
+                                    Text(scaleSnapStep?.let { "吸附 ${it.toInt()}%" } ?: "吸附关")
+                                },
+                                modifier = Modifier.testTag("rod-scale-snap"),
+                            )
                         }
                         if (mode == RodMode.ROTATION) {
                             listOf("X", "Y", "Z").forEach { axis ->
