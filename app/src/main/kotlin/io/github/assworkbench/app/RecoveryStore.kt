@@ -18,18 +18,27 @@ data class RecoverySnapshot(
 )
 
 class RecoveryStore(context: Context) {
+    companion object {
+        // Multiple EditorViewModel/Activity instances may address the same journal
+        // during recreation or instrumentation. Instance-level @Synchronized is
+        // insufficient because each RecoveryStore has a different monitor.
+        private val journalLock = Any()
+    }
+
     private val dir = File(context.filesDir, "recovery").apply { mkdirs() }
     private val assFile = File(dir, "latest.ass")
     private val metaFile = File(dir, "latest.meta")
 
-    @Synchronized
-    fun exists(): Boolean = assFile.isFile && metaFile.isFile
+    fun exists(): Boolean = synchronized(journalLock) {
+        assFile.isFile && metaFile.isFile
+    }
 
-    @Synchronized
-    fun label(): String = readMeta().getOrNull(0).orEmpty().ifBlank { "未保存字幕工程" }
+    fun label(): String = synchronized(journalLock) {
+        readMeta().getOrNull(0).orEmpty().ifBlank { "未保存字幕工程" }
+    }
 
-    @Synchronized
-    fun write(project: SubtitleProject, document: AssDocument, textEncoding: AssTextEncoding) {
+    fun write(project: SubtitleProject, document: AssDocument, textEncoding: AssTextEncoding) =
+        synchronized(journalLock) {
         val tmpAss = File(dir, "latest.ass.tmp")
         val tmpMeta = File(dir, "latest.meta.tmp")
         val assText = AssCodec.write(document)
@@ -52,10 +61,9 @@ class RecoveryStore(context: Context) {
         replaceAtomically(tmpMeta, metaFile)
     }
 
-    @Synchronized
-    fun read(): RecoverySnapshot? {
-        if (!exists()) return null
-        return runCatching {
+    fun read(): RecoverySnapshot? = synchronized(journalLock) {
+        if (!assFile.isFile || !metaFile.isFile) return@synchronized null
+        runCatching {
             val meta = readMeta()
             val project = SubtitleProject(
                 title = meta.getOrNull(0).orEmpty().ifBlank { "Recovered ASS" },
@@ -71,8 +79,7 @@ class RecoveryStore(context: Context) {
         }.getOrNull()
     }
 
-    @Synchronized
-    fun clear() {
+    fun clear() = synchronized(journalLock) {
         assFile.delete()
         metaFile.delete()
         File(dir, "latest.ass.tmp").delete()
