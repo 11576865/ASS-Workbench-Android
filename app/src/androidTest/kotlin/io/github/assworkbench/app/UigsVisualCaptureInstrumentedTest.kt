@@ -3,7 +3,6 @@ package io.github.assworkbench.app
 import android.graphics.Bitmap
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
-import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
@@ -101,23 +100,6 @@ class UigsVisualCaptureInstrumentedTest {
         composeRule.waitForIdle()
         composeRule.onNodeWithTag("fixed-inspector", useUnmergedTree = true)
             .assertIsDisplayed()
-    }
-
-    private fun switchPresentation(variant: String, rootTag: String) {
-        composeRule.onNodeWithContentDescription("工具和更多操作").performClick()
-        composeRule.onNodeWithTag("workspace-mode-toggle").performClick()
-        composeRule.onNodeWithTag("ui-variant-lab").assertIsDisplayed()
-        composeRule.onNodeWithTag("ui-variant-use-$variant")
-            .performScrollTo()
-            .assertIsDisplayed()
-            .performClick()
-        composeRule.waitUntil(timeoutMillis = 10_000) {
-            composeRule.onAllNodesWithTag(rootTag, useUnmergedTree = true)
-                .fetchSemanticsNodes(atLeastOneRootRequired = false)
-                .isNotEmpty()
-        }
-        composeRule.onNodeWithTag(rootTag, useUnmergedTree = true).assertIsDisplayed()
-        composeRule.waitForIdle()
     }
 
     private fun captureDisplay(fileName: String) {
