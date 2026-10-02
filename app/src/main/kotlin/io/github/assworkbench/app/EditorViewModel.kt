@@ -1237,6 +1237,11 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         _state.update { it.copy(geometryScaleLocked = locked) }
     }
 
+    fun setGeometryScaleSnapStep(step: Double?) {
+        val normalized = step?.takeIf { it.isFinite() && it > 0.0 }?.coerceIn(1.0, 100.0)
+        _state.update { it.copy(geometryScaleSnapStep = normalized) }
+    }
+
     fun previewFocusedScale(scaleX: Double, scaleY: Double) {
         val state = _state.value
         val id = state.focusedEventId ?: return
