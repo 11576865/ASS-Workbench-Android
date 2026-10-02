@@ -6,6 +6,8 @@ import android.graphics.Bitmap
 import android.util.Base64
 import android.util.Log
 import java.io.ByteArrayOutputStream
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.atomic.AtomicReference
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.SemanticsNodeInteraction
@@ -499,6 +501,47 @@ class EditorRegressionInstrumentedTest {
         assertEquals(resized.width, restored.width, 1f)
         assertEquals(resized.height, restored.height, 1f)
         assertEquals(canonical, viewModel.state.value.document)
+    }
+
+    @Test
+    fun recoveryStoreSerializesCrossInstanceClearAndWrite() {
+        val writer = RecoveryStore(application)
+        val clearer = RecoveryStore(application)
+        val document = AssDocument(
+            events = listOf(
+                AssEvent(
+                    id = 1L,
+                    start = SubTime(0L),
+                    end = SubTime(1_000L),
+                    text = "cross-instance recovery race",
+                )
+            )
+        )
+        val project = SubtitleProject(title = "Recovery race")
+        val failure = AtomicReference<Throwable?>(null)
+
+        repeat(32) {
+            val gate = CountDownLatch(1)
+            val writeThread = Thread {
+                gate.await()
+                runCatching {
+                    writer.write(project, document, AssTextEncoding.UTF8)
+                }.onFailure { failure.compareAndSet(null, it) }
+            }
+            val clearThread = Thread {
+                gate.await()
+                runCatching {
+                    clearer.clear()
+                }.onFailure { failure.compareAndSet(null, it) }
+            }
+            writeThread.start()
+            clearThread.start()
+            gate.countDown()
+            writeThread.join()
+            clearThread.join()
+        }
+
+        failure.get()?.let { throw AssertionError("Cross-instance recovery I/O must be serialized", it) }
     }
 
     @Test
