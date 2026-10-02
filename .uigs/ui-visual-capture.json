@@ -46,6 +46,60 @@
       "assertions": {
         "image_orientation": "landscape"
       }
+    },
+    {
+      "id": "ASS.STYLE_TOOL.FIXTURE_LANDSCAPE",
+      "surface_ids": [
+        "ASS.TOOL.STYLE",
+        "ASS.WORKSPACE.EDIT_SCOPE_EXPLANATION",
+        "ASS.WORKSPACE.EDITOR_SHELL"
+      ],
+      "adapter": "android-emulator-screencap",
+      "evidence_level": "production-rendered",
+      "build": {
+        "task": ":app:connectedDebugAndroidTest",
+        "test_class": "io.github.assworkbench.app.UigsVisualCaptureInstrumentedTest"
+      },
+      "package": "io.github.assworkbench.app",
+      "activity": "io.github.assworkbench.app/.EditorRegressionHostActivity",
+      "device": {
+        "api_level": 35,
+        "target": "google_apis",
+        "arch": "x86_64",
+        "profile": "pixel_6",
+        "logical_size": {
+          "width": 1600,
+          "height": 1000
+        },
+        "density": 240,
+        "locale": "zh-CN",
+        "font_scale": 1,
+        "orientation": "landscape"
+      },
+      "fixture": {
+        "kind": "debug-regression-host",
+        "source": "EditorRegressionHostActivity.seedRecovery",
+        "state": "restore deterministic two-line ASS fixture; focus Event 1; default fixed Style tool"
+      },
+      "ready": {
+        "test_tag": "fixed-workspace",
+        "settle_ms": 500
+      },
+      "source_dependencies": [
+        "app/src/debug/kotlin/io/github/assworkbench/app/EditorRegressionHostActivity.kt",
+        "app/src/main/kotlin/io/github/assworkbench/app/ui/ModernEditorScreen.kt",
+        "app/src/main/kotlin/io/github/assworkbench/app/ui/workspace/WorkspaceEditScope.kt",
+        "app/src/androidTest/kotlin/io/github/assworkbench/app/UigsVisualCaptureInstrumentedTest.kt"
+      ],
+      "output_name": "ASS.STYLE_TOOL.FIXTURE_LANDSCAPE.png",
+      "limitations": [
+        "Uses the debug-only regression host to inject deterministic app state, while rendering the production ModernEditorScreen and EditorViewModel.",
+        "Renderer is disabled in this state; video/libass runtime pixels require a separate renderer-backed capture.",
+        "The screenshot is captured from Android UiAutomation at full-display compositor level."
+      ],
+      "assertions": {
+        "image_orientation": "landscape"
+      }
     }
   ]
 }
