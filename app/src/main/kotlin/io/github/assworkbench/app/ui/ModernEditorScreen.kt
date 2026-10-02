@@ -827,6 +827,10 @@ fun ModernEditorScreen(
 
         WindowInteractionOverlay(
             registry = interactionRegistry,
+            scaleLocked = state.geometryScaleLocked,
+            onScaleLockedChange = viewModel::setGeometryScaleLocked,
+            scaleSnapStep = state.geometryScaleSnapStep,
+            onScaleSnapStepChange = viewModel::setGeometryScaleSnapStep,
             visible = when (workspaceMode) {
                 WorkspacePresentationMode.FIXED -> fixedTool == WorkbenchTool.POSITION
                 WorkspacePresentationMode.CANVAS_EXPERIMENTAL -> !workspaceState.surfacesHidden
@@ -842,6 +846,10 @@ fun ModernEditorScreen(
         )
         PrecisionInteractionOverlay(
             registry = interactionRegistry,
+            scaleLocked = state.geometryScaleLocked,
+            onScaleLockedChange = viewModel::setGeometryScaleLocked,
+            scaleSnapStep = state.geometryScaleSnapStep,
+            onScaleSnapStepChange = viewModel::setGeometryScaleSnapStep,
             visible = workspaceMode == WorkspacePresentationMode.PRECISION_LENS_EXPERIMENTAL,
             modifier = Modifier.fillMaxSize(),
         )
@@ -1531,6 +1539,23 @@ private fun PrecisionLensWorkspace(
                     AssistChip(
                         onClick = { viewModel.setGeometryScaleLocked(!state.geometryScaleLocked) },
                         label = { Text(if (state.geometryScaleLocked) "XY 缩放锁定" else "XY 独立缩放") },
+                    )
+                    AssistChip(
+                        onClick = {
+                            val next = when (state.geometryScaleSnapStep?.toInt()) {
+                                null -> 5.0
+                                5 -> 10.0
+                                10 -> 25.0
+                                else -> null
+                            }
+                            viewModel.setGeometryScaleSnapStep(next)
+                        },
+                        label = {
+                            Text(
+                                state.geometryScaleSnapStep?.let { "缩放吸附 ${it.toInt()}%" }
+                                    ?: "缩放吸附关闭"
+                            )
+                        },
                     )
                     AssistChip(
                         onClick = { viewModel.clearTransientPreview() },
@@ -3582,6 +3607,7 @@ private fun WorkbenchPreview(
             positionEditEventId?.let { viewModel.setEventRotationZ(it, angle) }
         },
         scaleLocked = state.geometryScaleLocked,
+        scaleSnapStep = state.geometryScaleSnapStep,
         onPreviewEventScale = { sx, sy ->
             positionEditEventId?.let { viewModel.previewEventScale(it, sx, sy) }
         },
