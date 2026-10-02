@@ -3998,14 +3998,16 @@ private fun EventWorkspace(
     modifier: Modifier = Modifier,
     supportingPane: @Composable () -> Unit,
 ) {
-    val selectionMode = state.selectedEventIds.isNotEmpty()
+    val uiState = state.toEditorUiState()
+    val uiActions = remember(viewModel) { EditorViewModelUiActions(viewModel) }
+    val selectionMode = uiState.selection.eventIds.isNotEmpty()
     val listState = rememberLazyListState()
     // Expanded rows leave composition when they are collapsed or when focus moves.
     // Keep their uncommitted input buffers in a holder owned by the workspace so
     // collapse/switch/scroll does not destroy drafts before "应用正文".
     val rangeScrollScope = rememberCoroutineScope()
-    LaunchedEffect(state.focusedEventId, state.filteredEvents) {
-        val focusedId = state.focusedEventId
+    LaunchedEffect(uiState.focus.eventId, state.filteredEvents) {
+        val focusedId = uiState.focus.eventId
         val index = state.filteredEvents.indexOfFirst { it.id == focusedId }
         if (index >= 0 && !listState.isScrollInProgress) {
             listState.animateScrollToItem(index)
@@ -4086,19 +4088,19 @@ private fun EventWorkspace(
         ) {
             items(state.filteredEvents, key = { it.id }) { event ->
                 ModernEventRow(
-                    event, event.id == state.focusedEventId, false,
-                    event.id in state.selectedEventIds, selectionMode, issuesByEvent[event.id].orEmpty(),
+                    event, event.id == uiState.focus.eventId, false,
+                    event.id in uiState.selection.eventIds, selectionMode, issuesByEvent[event.id].orEmpty(),
                     state, viewModel, eventEditorStateHolder,
                     {
-                        if (selectionMode) viewModel.toggleSelected(event.id)
+                        if (selectionMode) uiActions.toggleSelection(event.id)
                         else {
-                            viewModel.focusEvent(event.id, seek = true)
+                            uiActions.focusEvent(event.id, seek = true)
                             onExpandedChange(if (expandedEventId == event.id) null else event.id)
                         }
                     },
                     {
-                        if (event.id !in state.selectedEventIds) {
-                            viewModel.toggleSelected(event.id)
+                        if (event.id !in uiState.selection.eventIds) {
+                            uiActions.toggleSelection(event.id)
                         }
                     },
                     { onExpandedChange(null) },
