@@ -15,6 +15,7 @@ class UiVariantRegistryTest {
         assertTrue(UiVariantRegistry.entries.contains(WorkspacePresentationMode.PRECISION_LENS_EXPERIMENTAL))
         assertTrue(UiVariantRegistry.entries.contains(WorkspacePresentationMode.TOOL_INSTANCES_EXPERIMENTAL))
         assertTrue(UiVariantRegistry.entries.contains(WorkspacePresentationMode.GLASS_LAYERED_EXPERIMENTAL))
+        assertTrue(UiVariantRegistry.entries.contains(WorkspacePresentationMode.EDGE_BOOKMARK_EXPERIMENTAL))
     }
 
     @Test
@@ -46,6 +47,10 @@ class UiVariantRegistryTest {
         assertSame(
             WorkspacePresentationMode.GLASS_LAYERED_EXPERIMENTAL,
             UiVariantRegistry.resolve("GLASS_LAYERED_EXPERIMENTAL"),
+        )
+        assertSame(
+            WorkspacePresentationMode.EDGE_BOOKMARK_EXPERIMENTAL,
+            UiVariantRegistry.resolve("EDGE_BOOKMARK_EXPERIMENTAL"),
         )
     }
 
