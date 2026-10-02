@@ -120,4 +120,60 @@ class EditorUiContractTest {
         assertFalse(ui.preview.active)
         assertEquals(null, ui.preview.ownerId)
     }
+    @Test
+    fun resourceAndContainerProjectionStaysBoundedAndCopiesDiagnostics() {
+        val rendererDiagnostics = mutableListOf(
+            "Preview subtitle：sid=1",
+            "Font match：Noto Sans",
+        )
+        val state = EditorState(
+            rendererDiagnostics = rendererDiagnostics,
+            fallbackFontFamily = "Noto Sans CJK SC",
+            fontRevision = 7L,
+            fontImportBusy = true,
+            fontPackagingSelection = linkedSetOf("font-a", "font-b"),
+            container = ContainerBridgeState(
+                uri = "content://container/private.mkv",
+                name = "fixture.mkv",
+                loading = true,
+                tracks = listOf(
+                    ContainerTrackUi(2L, "Signs", "eng", 12),
+                    ContainerTrackUi(4L, "Dialogue", "jpn", 28),
+                ),
+                selectedTrackNumber = 4L,
+                extractedFontCount = 3,
+                skippedAttachmentCount = 1,
+                writeBackAvailable = true,
+                writeBackBusy = true,
+                error = "fixture error",
+            ),
+        )
+
+        val ui = state.toEditorUiState()
+
+        assertEquals(0, ui.resources.importedFontCount)
+        assertTrue(ui.resources.fontImportBusy)
+        assertEquals(7L, ui.resources.fontRevision)
+        assertEquals(2, ui.resources.packagingSelectionCount)
+        assertEquals("Noto Sans CJK SC", ui.resources.fallbackFontFamily)
+        assertEquals(
+            listOf("Preview subtitle：sid=1", "Font match：Noto Sans"),
+            ui.resources.rendererDiagnostics,
+        )
+
+        assertTrue(ui.container.attached)
+        assertEquals("fixture.mkv", ui.container.name)
+        assertTrue(ui.container.loading)
+        assertEquals(2, ui.container.trackCount)
+        assertEquals(4L, ui.container.selectedTrackNumber)
+        assertEquals(3, ui.container.extractedFontCount)
+        assertEquals(1, ui.container.skippedAttachmentCount)
+        assertTrue(ui.container.writeBackAvailable)
+        assertTrue(ui.container.writeBackBusy)
+        assertEquals("fixture error", ui.container.error)
+
+        rendererDiagnostics += "late mutation"
+        assertFalse("late mutation" in ui.resources.rendererDiagnostics)
+    }
+
 }
