@@ -100,17 +100,32 @@ internal fun WindowInteractionOverlay(
     modifier: Modifier = Modifier,
 ) {
     var modeName by rememberSaveable { mutableStateOf(RodMode.POSITION.name) }
+    var scaleAxis by rememberSaveable { mutableStateOf("XY") }
+    var rotationAxis by rememberSaveable { mutableStateOf("Z") }
     var orbitOnly by rememberSaveable { mutableStateOf(false) }
     val angles = remember { mutableStateMapOf<String, Float>() }
     if (!visible) return
     val mode = RodMode.valueOf(modeName)
+    val selectedSuffix = when (mode) {
+        RodMode.SCALE -> when (scaleAxis) {
+            "X" -> "scale-x"
+            "Y" -> "scale-y"
+            else -> "scale"
+        }
+        RodMode.ROTATION -> when (rotationAxis) {
+            "X" -> "rotation-x"
+            "Y" -> "rotation-y"
+            else -> "rotation"
+        }
+        else -> mode.suffix
+    }
     BoxWithConstraints(modifier.fillMaxSize()) {
         var rootOrigin by remember { mutableStateOf(Offset.Zero) }
         val allHandles = registry.handles
-        // Four semantic adapters share one physical rod and one placement.
+        // Semantic adapters share one physical rod; axis choice is explicit on touch.
         val positionHandles = allHandles.filter { it.id.startsWith("position-") }
         val handles = allHandles.filter {
-            !it.id.startsWith("position-") || it.id.endsWith("-${mode.suffix}") || it.id.endsWith("-org")
+            !it.id.startsWith("position-") || it.id.endsWith("-$selectedSuffix") || it.id.endsWith("-org")
         }
         val activeId = registry.activeHandleId
         val density = androidx.compose.ui.platform.LocalDensity.current
@@ -224,6 +239,26 @@ internal fun WindowInteractionOverlay(
                         RodMode.entries.forEach { entry ->
                             FilterChip(selected = mode == entry, onClick = { modeName = entry.name; orbitOnly = false },
                                 label = { Text(entry.label) }, modifier = Modifier.testTag("rod-mode-${entry.name}"))
+                        }
+                        if (mode == RodMode.SCALE) {
+                            listOf("X", "Y", "XY").forEach { axis ->
+                                FilterChip(
+                                    selected = scaleAxis == axis,
+                                    onClick = { scaleAxis = axis; orbitOnly = false },
+                                    label = { Text(axis) },
+                                    modifier = Modifier.testTag("rod-scale-axis-$axis"),
+                                )
+                            }
+                        }
+                        if (mode == RodMode.ROTATION) {
+                            listOf("X", "Y", "Z").forEach { axis ->
+                                FilterChip(
+                                    selected = rotationAxis == axis,
+                                    onClick = { rotationAxis = axis; orbitOnly = false },
+                                    label = { Text(axis) },
+                                    modifier = Modifier.testTag("rod-rotation-axis-$axis"),
+                                )
+                            }
                         }
                         FilterChip(selected = orbitOnly, onClick = { orbitOnly = !orbitOnly },
                             label = { Text("仅转杆") }, modifier = Modifier.testTag("rod-orbit-only"))
