@@ -6,6 +6,9 @@ package io.github.assworkbench.app
  * Slice A covers document summary, Focus, Selection and Undo/Redo.
  * Slice B adds a presentation-neutral current-object projection so Workspace
  * Binding resolution does not have to reach back into arbitrary EditorState fields.
+ * Slice C exposes only transient-preview ownership metadata plus cancellation;
+ * canonical commits remain domain intents owned by EditorViewModel rather than a
+ * generic "commit arbitrary preview document" UI operation.
  * Presentations should not bypass this boundary by depending on unrelated
  * EditorViewModel internals.
  */
@@ -14,6 +17,7 @@ internal data class EditorUiState(
     val focus: EditorUiFocusState,
     val selection: EditorUiSelectionState,
     val objects: EditorUiObjectState,
+    val preview: EditorUiPreviewState,
     val history: EditorUiHistoryState,
     val workspaceSessionId: Long,
 )
@@ -46,6 +50,17 @@ internal data class EditorUiObjectState(
     val currentEvent: EditorUiEventIdentity?,
 )
 
+/**
+ * Presentation-neutral lease over the single transient preview channel.
+ *
+ * This deliberately does not expose previewDocument: transient rendering is not
+ * a second canonical document and presentations must not commit it generically.
+ */
+internal data class EditorUiPreviewState(
+    val active: Boolean,
+    val ownerId: String?,
+)
+
 internal data class EditorUiHistoryState(
     val canUndo: Boolean,
     val canRedo: Boolean,
@@ -61,6 +76,7 @@ internal interface EditorUiActions {
     fun focusEvent(id: Long, seek: Boolean = true)
     fun toggleSelection(id: Long)
     fun clearSelection()
+    fun clearTransientPreview(ownerId: String? = null)
     fun undo()
     fun redo()
 }
@@ -93,6 +109,10 @@ internal fun EditorState.toEditorUiState(): EditorUiState =
                     )
                 },
         ),
+        preview = EditorUiPreviewState(
+            active = previewDocument != null,
+            ownerId = previewOwnerId.takeIf { previewDocument != null },
+        ),
         history = EditorUiHistoryState(
             canUndo = canUndo,
             canRedo = canRedo,
@@ -113,6 +133,10 @@ internal class EditorViewModelUiActions(
 
     override fun clearSelection() {
         viewModel.clearSelection()
+    }
+
+    override fun clearTransientPreview(ownerId: String?) {
+        viewModel.clearTransientPreview(ownerId)
     }
 
     override fun undo() {
