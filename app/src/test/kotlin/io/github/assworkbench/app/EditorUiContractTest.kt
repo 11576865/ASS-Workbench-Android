@@ -10,7 +10,7 @@ import org.junit.Test
 
 class EditorUiContractTest {
     @Test
-    fun sliceAProjectionPreservesStableEditorSemanticsWithoutAliasingSelection() {
+    fun projectionPreservesStableEditorAndCurrentObjectSemanticsWithoutAliasing() {
         val selected = linkedSetOf(1L, 2L)
         val document = AssDocument(
             scriptInfo = linkedMapOf(
@@ -29,6 +29,8 @@ class EditorUiContractTest {
                     id = 2L,
                     start = SubTime(2_100),
                     end = SubTime(3_000),
+                    layer = 3,
+                    style = "Signs",
                     text = "two",
                 ),
             ),
@@ -55,11 +57,16 @@ class EditorUiContractTest {
         assertEquals(2L, ui.focus.eventId)
         assertEquals(setOf(1L, 2L), ui.selection.eventIds)
         assertEquals(1L, ui.selection.anchorId)
+        assertEquals(setOf(1L, 2L), ui.objects.existingEventIds)
+        assertEquals(2L, ui.objects.currentEvent?.id)
+        assertEquals("Signs", ui.objects.currentEvent?.styleName)
+        assertEquals(3, ui.objects.currentEvent?.layer)
         assertTrue(ui.history.canUndo)
         assertFalse(ui.history.canRedo)
         assertEquals(42L, ui.workspaceSessionId)
 
         selected += 99L
         assertFalse(99L in ui.selection.eventIds)
+        assertFalse(99L in ui.objects.existingEventIds)
     }
 }

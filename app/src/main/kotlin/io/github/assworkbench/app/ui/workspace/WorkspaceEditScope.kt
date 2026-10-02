@@ -1,5 +1,6 @@
 package io.github.assworkbench.app.ui.workspace
 
+import io.github.assworkbench.app.EditorUiState
 import io.github.assworkbench.app.ui.WorkbenchTool
 import io.github.assworkbench.domain.AssDocument
 
@@ -24,20 +25,11 @@ internal object WorkspaceEditScopeResolver {
         tool: WorkbenchTool,
         instance: WorkspaceToolInstance,
         document: AssDocument,
-        focusedEventId: Long?,
-        selectedEventIds: Set<Long>,
+        editorUiState: EditorUiState,
     ): WorkspaceEditScopeSummary? {
-        val existingIds = document.events.asSequence().map { it.id }.toSet()
-        val bindingResolution = instance.binding.resolve(
-            focusedEventId = focusedEventId,
-            selectedEventIds = selectedEventIds,
-            existingEventIds = existingIds,
-        )
-        val bindingLabel = when (val binding = instance.binding) {
-            WorkspaceBinding.FollowFocus -> "FollowFocus"
-            WorkspaceBinding.FollowSelection -> "FollowSelection"
-            is WorkspaceBinding.PinnedEvent -> "Pinned #${binding.eventId}"
-        }
+        val bindingState = instance.resolveUiBinding(editorUiState)
+        val bindingResolution = bindingState.resolution
+        val bindingLabel = bindingState.label
 
         if (bindingResolution is WorkspaceBindingResolution.UnresolvedPinnedEvent) {
             return WorkspaceEditScopeSummary(

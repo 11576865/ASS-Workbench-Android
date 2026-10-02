@@ -3,9 +3,14 @@ package io.github.assworkbench.app
 import android.graphics.Bitmap
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import io.github.assworkbench.app.ui.WorkbenchTool
 import java.io.FileOutputStream
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -29,7 +34,7 @@ class UigsVisualCaptureInstrumentedTest {
         get() = composeRule.activity.editorViewModel
 
     @Test
-    fun captureStyleToolFixtureLandscape() {
+    fun captureFixedToolFixturesLandscape() {
         composeRule.runOnUiThread {
             composeRule.activity.restoreDeterministicFixture()
         }
@@ -43,7 +48,6 @@ class UigsVisualCaptureInstrumentedTest {
         }
 
         viewModel.focusEvent(1L, seek = false)
-
         composeRule.waitUntil(timeoutMillis = 5_000) {
             viewModel.state.value.focusedEventId == 1L
         }
@@ -51,11 +55,89 @@ class UigsVisualCaptureInstrumentedTest {
             .assertIsDisplayed()
         composeRule.waitForIdle()
 
+        captureDisplay("ASS.STYLE_TOOL.FIXTURE_LANDSCAPE.png")
+
+        val tools = listOf(
+            WorkbenchTool.TEXT,
+            WorkbenchTool.EVENT,
+            WorkbenchTool.BATCH,
+            WorkbenchTool.TIMELINE,
+            WorkbenchTool.FRAMES,
+            WorkbenchTool.POSITION,
+            WorkbenchTool.VECTOR_CLIP,
+            WorkbenchTool.EFFECTS,
+            WorkbenchTool.KARAOKE,
+            WorkbenchTool.FONTS,
+            WorkbenchTool.FONT_REQUIREMENTS,
+            WorkbenchTool.QC,
+            WorkbenchTool.COMPATIBILITY,
+            WorkbenchTool.DIAGNOSTICS,
+            WorkbenchTool.PROJECT,
+            WorkbenchTool.CAPABILITIES,
+        )
+        for (tool in tools) {
+            openFixedTool(tool)
+            captureDisplay("ASS.${tool.name}_TOOL.FIXTURE_LANDSCAPE.png")
+        }
+
+        openFixedTool(WorkbenchTool.POSITION)
+        switchPresentation("CANVAS_EXPERIMENTAL", "canvas-workspace")
+        composeRule.waitUntil(timeoutMillis = 10_000) {
+            composeRule.onAllNodesWithTag("rod-handle-position-1-pos", useUnmergedTree = true)
+                .fetchSemanticsNodes(atLeastOneRootRequired = false)
+                .isNotEmpty()
+        }
+        composeRule.onNodeWithTag("rod-handle-position-1-pos", useUnmergedTree = true)
+            .assertIsDisplayed()
+        captureDisplay("ASS.CANVAS.POSITION_INTERACTION.FIXTURE_LANDSCAPE.png")
+    }
+
+    private fun openFixedTool(tool: WorkbenchTool) {
+        if (tool == WorkbenchTool.CAPABILITIES) {
+            composeRule.onNodeWithTag("workspace-tools")
+                .assertIsDisplayed()
+                .performClick()
+            composeRule.waitForIdle()
+            composeRule.onNodeWithTag("tool-search")
+                .assertIsDisplayed()
+            return
+        }
+
+        composeRule.onNodeWithTag("fixed-group-${tool.group.name}")
+            .performScrollTo()
+            .performClick()
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("fixed-tool-${tool.name}")
+            .performScrollTo()
+            .performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("fixed-inspector", useUnmergedTree = true)
+            .assertIsDisplayed()
+    }
+
+    private fun switchPresentation(variant: String, rootTag: String) {
+        composeRule.onNodeWithContentDescription("工具和更多操作").performClick()
+        composeRule.onNodeWithTag("workspace-mode-toggle").performClick()
+        composeRule.onNodeWithTag("ui-variant-lab").assertIsDisplayed()
+        composeRule.onNodeWithTag("ui-variant-use-$variant")
+            .performScrollTo()
+            .assertIsDisplayed()
+            .performClick()
+        composeRule.waitUntil(timeoutMillis = 10_000) {
+            composeRule.onAllNodesWithTag(rootTag, useUnmergedTree = true)
+                .fetchSemanticsNodes(atLeastOneRootRequired = false)
+                .isNotEmpty()
+        }
+        composeRule.onNodeWithTag(rootTag, useUnmergedTree = true).assertIsDisplayed()
+        composeRule.waitForIdle()
+    }
+
+    private fun captureDisplay(fileName: String) {
+        composeRule.waitForIdle()
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val bitmap = instrumentation.uiAutomation.takeScreenshot()
-        val target = instrumentation.targetContext.filesDir
-            .resolve("uigs-style-tool-fixture-landscape.png")
-
+        val target = instrumentation.targetContext.filesDir.resolve(fileName)
         FileOutputStream(target).use { stream ->
             assertTrue(
                 "Android compositor screenshot must encode as PNG",
@@ -63,7 +145,6 @@ class UigsVisualCaptureInstrumentedTest {
             )
         }
         bitmap.recycle()
-
         assertTrue(
             "UIGS capture must produce a non-empty app-private PNG",
             target.isFile && target.length() > 0L,
