@@ -120,7 +120,7 @@ class AssCodecTest {
 
             [Events]
             Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text, VendorID
-            Dialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,{\\clip(0,0,320,180)}Hello, world,vendor-42
+            Dialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,{\clip(0,0,320,180)}Hello, world,vendor-42
         """.trimIndent()
 
         val parsed = AssCodec.parse(source)
