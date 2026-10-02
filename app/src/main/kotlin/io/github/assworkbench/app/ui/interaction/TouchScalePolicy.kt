@@ -34,9 +34,13 @@ internal object TouchScalePolicy {
         return if (locked) scaled(x0, y0, y1 / y0) else TouchScaleValue(x0, y1)
     }
 
-    private fun scaled(baseX: Double, baseY: Double, factor: Double): TouchScaleValue =
-        TouchScaleValue(
-            x = (baseX * factor.coerceIn(0.01, 10.0)).coerceIn(MIN, MAX),
-            y = (baseY * factor.coerceIn(0.01, 10.0)).coerceIn(MIN, MAX),
+    private fun scaled(baseX: Double, baseY: Double, factor: Double): TouchScaleValue {
+        val minFactor = maxOf(MIN / baseX, MIN / baseY)
+        val maxFactor = minOf(MAX / baseX, MAX / baseY)
+        val safeFactor = factor.coerceIn(minFactor, maxFactor)
+        return TouchScaleValue(
+            x = baseX * safeFactor,
+            y = baseY * safeFactor,
         )
+    }
 }
