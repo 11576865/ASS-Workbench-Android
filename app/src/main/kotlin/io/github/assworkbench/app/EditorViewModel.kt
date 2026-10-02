@@ -9,6 +9,7 @@ import io.github.assworkbench.container.MatroskaScanResult
 import io.github.assworkbench.domain.AssCodec
 import io.github.assworkbench.domain.AssDocument
 import io.github.assworkbench.domain.AssDocumentEditing
+import io.github.assworkbench.domain.AssRoundTripVerifier
 import io.github.assworkbench.domain.AssTextDecoder
 import io.github.assworkbench.domain.AssTextEncoding
 import io.github.assworkbench.domain.SrtCodec
@@ -411,6 +412,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             return
         }
         val saveEpoch = workspaceEpoch.get()
+        val sourceAssTrackNumbers = containerScan?.subtitleTracks?.map { it.number }
         val operationId = writeBackSerial.incrementAndGet()
         val sourceUri = snapshot.container.uri?.let(Uri::parse) ?: run {
             reportError("MKV 写回失败", IllegalStateException("没有已打开的 MKV 工程"))
@@ -474,6 +476,29 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                             output = result,
                             fonts = packageFiles,
                         )
+
+                        // Validate the complete remux product before exposing it to
+                        // the user-selected destination. The original MKV is never
+                        // overwritten by this workflow.
+                        val verifiedScan = result.inputStream().buffered().use { input ->
+                            MatroskaReader().scan(input, retainAttachments = false)
+                        }
+                        val verifiedTrack = verifiedScan.subtitleTracks
+                            .firstOrNull { it.number == trackNumber }
+                            ?: error("写回验证失败：目标 ASS 轨不存在")
+                        val verifiedDocument = AssCodec.parse(verifiedTrack.toAss())
+                        val roundTrip = AssRoundTripVerifier.compare(
+                            AssRoundTripVerifier.snapshot(snapshot.document),
+                            AssRoundTripVerifier.snapshot(verifiedDocument),
+                        )
+                        require(roundTrip.equivalent) {
+                            "写回验证失败：" + roundTrip.summary
+                        }
+                        sourceAssTrackNumbers?.let { sourceTracks ->
+                            require(verifiedScan.subtitleTracks.map { it.number } == sourceTracks) {
+                                "写回验证失败：ASS 轨身份或顺序发生变化"
+                            }
+                        }
 
                         app.contentResolver.openOutputStream(outputUri, "w")?.use { output ->
                             result.inputStream().buffered().use { input -> input.copyTo(output, 1024 * 1024) }
@@ -667,12 +692,15 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     fun saveTo(uri: Uri): Boolean {
         val snapshot = _state.value
         return runCatching {
-            val text = AssCodec.write(snapshot.document)
-            val bytes = snapshot.subtitleTextEncoding.encode(text)
-            app.contentResolver.openOutputStream(uri, "wt")?.use { it.write(bytes) }
-                ?: error("无法写入字幕")
+            SafeSubtitleSave.write(
+                resolver = app.contentResolver,
+                cacheDir = app.cacheDir,
+                uri = uri,
+                document = snapshot.document,
+                encoding = snapshot.subtitleTextEncoding,
+            )
         }.fold(
-            onSuccess = {
+            onSuccess = { result ->
                 clearPendingRecovery()
                 _state.update {
                     it.copy(
@@ -681,7 +709,9 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                         dirty = false,
                         recoveryAvailable = false,
                         recoveryLabel = "",
-                        status = "ASS 已保存。",
+                        status = "ASS 已安全保存并回读验证 · " +
+                            (result.bytesWritten / 1024L).coerceAtLeast(1L) + " KiB · " +
+                            result.verifiedEncoding.displayName + "。",
                     )
                 }
                 true
