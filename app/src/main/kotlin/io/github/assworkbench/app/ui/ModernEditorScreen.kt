@@ -5323,7 +5323,7 @@ private fun AddTransformCard(
 
 @Composable
 private fun ModernTimelinePane(state: EditorState, viewModel: EditorViewModel, modifier: Modifier = Modifier, compact: Boolean = false) {
-    val zoomStepsMs = listOf(5_000L, 10_000L, 30_000L, 60_000L, 120_000L)
+    val zoomStepsMs = listOf(500L, 1_000L, 2_000L, 5_000L, 10_000L, 30_000L, 60_000L, 120_000L)
     var windowDurationMs by rememberSaveable { mutableLongStateOf(30_000L) }
     var viewportCenterMs by rememberSaveable { mutableLongStateOf(viewModel.playbackPositionMs.value) }
     var followPlayhead by rememberSaveable { mutableStateOf(true) }
@@ -5377,9 +5377,8 @@ private fun ModernTimelinePane(state: EditorState, viewModel: EditorViewModel, m
     }
     val activeSnapStrength = TimelineSnapStrength.entries
         .firstOrNull { it.name == snapStrength } ?: TimelineSnapStrength.NORMAL
-    val zoomIndex = zoomStepsMs.indices.minByOrNull { index ->
-        kotlin.math.abs(zoomStepsMs[index] - windowDurationMs)
-    } ?: 0
+    val zoomInTarget = zoomStepsMs.lastOrNull { it < windowDurationMs }
+    val zoomOutTarget = zoomStepsMs.firstOrNull { it > windowDurationMs }
     val timelineWindowLabel = if (windowDurationMs % 1000L == 0L) {
         "${windowDurationMs / 1000L}s"
     } else {
@@ -5411,12 +5410,12 @@ private fun ModernTimelinePane(state: EditorState, viewModel: EditorViewModel, m
                 label = { Text("跟随播放头") },
             )
             OutlinedButton(
-                onClick = { if (zoomIndex > 0) windowDurationMs = zoomStepsMs[zoomIndex - 1] },
-                enabled = zoomIndex > 0,
+                onClick = { zoomInTarget?.let { windowDurationMs = it } },
+                enabled = zoomInTarget != null,
             ) { Text("放大") }
             OutlinedButton(
-                onClick = { if (zoomIndex < zoomStepsMs.lastIndex) windowDurationMs = zoomStepsMs[zoomIndex + 1] },
-                enabled = zoomIndex < zoomStepsMs.lastIndex,
+                onClick = { zoomOutTarget?.let { windowDurationMs = it } },
+                enabled = zoomOutTarget != null,
             ) { Text("缩小") }
             Text(timelineWindowLabel, style = MaterialTheme.typography.labelMedium)
             if (!followPlayhead) {
