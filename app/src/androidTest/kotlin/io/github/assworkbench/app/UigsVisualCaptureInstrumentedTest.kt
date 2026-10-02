@@ -4,7 +4,6 @@ import android.graphics.Bitmap
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import java.io.FileOutputStream
@@ -31,13 +30,16 @@ class UigsVisualCaptureInstrumentedTest {
 
     @Test
     fun captureStyleToolFixtureLandscape() {
-        composeRule.onNodeWithTag("recovery-restore")
-            .assertIsDisplayed()
-            .performClick()
+        composeRule.runOnUiThread {
+            composeRule.activity.restoreDeterministicFixture()
+        }
 
         composeRule.waitUntil(timeoutMillis = 10_000) {
-            viewModel.state.value.subtitleLoaded &&
-                viewModel.state.value.document.events.size == 2
+            val state = viewModel.state.value
+            state.subtitleLoaded &&
+                state.document.events.size == 2 &&
+                state.document.events.firstOrNull { it.id == 1L }?.text == "Recovered line" &&
+                state.document.events.firstOrNull { it.id == 2L }?.text == "Second recovered line"
         }
 
         viewModel.focusEvent(1L, seek = false)
