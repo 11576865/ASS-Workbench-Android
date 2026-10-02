@@ -52,8 +52,11 @@ object AssRoundTripVerifier {
         events = document.events.map { event ->
             AssSemanticEvent(
                 layer = event.layer,
-                start = event.start,
-                end = event.end,
+                // ASS timestamps persist centiseconds only. Editor operations may
+                // temporarily carry millisecond precision, so compare the semantic
+                // value that the ASS format can actually store.
+                start = normalizeAssTime(event.start),
+                end = normalizeAssTime(event.end),
                 style = event.style,
                 name = event.name,
                 marginL = event.marginL,
@@ -100,6 +103,9 @@ object AssRoundTripVerifier {
         }
         return AssRoundTripReport(mismatches.isEmpty(), mismatches)
     }
+
+    private fun normalizeAssTime(time: SubTime): SubTime =
+        SubTime((time.millis / 10L) * 10L)
 
     private fun normalizeEdgeBlankLines(lines: List<String>): List<String> {
         var first = 0
