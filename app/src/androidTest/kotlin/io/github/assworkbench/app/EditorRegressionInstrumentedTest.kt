@@ -196,6 +196,37 @@ class EditorRegressionInstrumentedTest {
     }
 
     @Test
+    fun edgeBookmarkWorkspaceOpensFourEdgeLayersAndBookmarks() {
+        restoreRecovery()
+
+        composeRule.onNodeWithContentDescription("工具和更多操作").performClick()
+        composeRule.onNodeWithTag("workspace-mode-toggle").performClick()
+        selectUiVariant("ui-variant-use-EDGE_BOOKMARK_EXPERIMENTAL")
+
+        composeRule.onNodeWithTag("edge-bookmark-workspace").assertIsDisplayed()
+        composeRule.onNodeWithTag("edge-bookmark-left").assertIsDisplayed()
+        composeRule.onNodeWithTag("edge-bookmark-right").assertIsDisplayed()
+        composeRule.onNodeWithTag("edge-handle-top").assertIsDisplayed()
+        composeRule.onNodeWithTag("edge-handle-bottom").assertIsDisplayed()
+        composeRule.onNodeWithTag("edge-handle-left").assertIsDisplayed()
+        composeRule.onNodeWithTag("edge-handle-right").assertIsDisplayed()
+
+        composeRule.onNodeWithTag("edge-handle-top").performClick()
+        composeRule.waitUntil(5_000) {
+            composeRule.onAllNodesWithTag("edge-layer-top", useUnmergedTree = true)
+                .fetchSemanticsNodes(atLeastOneRootRequired = false)
+                .isNotEmpty()
+        }
+
+        composeRule.onNodeWithTag("edge-handle-bottom").performClick()
+        composeRule.waitUntil(5_000) {
+            composeRule.onAllNodesWithTag("edge-layer-bottom", useUnmergedTree = true)
+                .fetchSemanticsNodes(atLeastOneRootRequired = false)
+                .isNotEmpty()
+        }
+    }
+
+    @Test
     fun glassLayeredWorkspaceExposesMaterialAndPerformanceControls() {
         restoreRecovery()
 
