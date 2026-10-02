@@ -49,6 +49,19 @@ class UigsAdditionalVisualCaptureInstrumentedTest {
     }
 
     @Test
+    fun captureToolInstancesWorkspaceFixtureLandscape() {
+        restoreFixture()
+        switchPresentation("TOOL_INSTANCES_EXPERIMENTAL", "tool-instance-workspace")
+        composeRule.onNodeWithTag("tool-instance-directory").assertIsDisplayed().performClick()
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithTag("surface-CAPABILITIES-primary", useUnmergedTree = true)
+                .fetchSemanticsNodes(atLeastOneRootRequired = false)
+                .isNotEmpty()
+        }
+        captureDisplay("ASS.TOOL_INSTANCES.WORKSPACE.FIXTURE_LANDSCAPE.png")
+    }
+
+    @Test
     fun captureRendererBackedPreviewPositionLandscape() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val targetContext = instrumentation.targetContext
