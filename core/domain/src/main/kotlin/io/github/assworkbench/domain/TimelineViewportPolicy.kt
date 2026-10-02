@@ -20,6 +20,29 @@ object TimelineViewportPolicy {
         }
     }
 
+    /**
+     * Keep the temporal point under the touch centroid stable while the viewport duration changes.
+     *
+     * [anchorFraction] is the horizontal touch position in the old viewport, from 0.0 (left)
+     * to 1.0 (right). This is presentation-neutral timeline math; callers decide gesture policy.
+     */
+    fun zoomCenterAroundAnchor(
+        currentCenterMs: Long,
+        oldWindowDurationMs: Long,
+        newWindowDurationMs: Long,
+        anchorFraction: Float,
+    ): Long {
+        val oldDuration = oldWindowDurationMs.coerceAtLeast(1L)
+        val newDuration = newWindowDurationMs.coerceAtLeast(1L)
+        val fraction = if (anchorFraction.isFinite()) anchorFraction.coerceIn(0f, 1f) else 0.5f
+        val oldHalf = oldDuration / 2.0
+        val oldStart = currentCenterMs.toDouble() - oldHalf
+        val anchorTime = oldStart + oldDuration.toDouble() * fraction
+        val newCenter = anchorTime + newDuration.toDouble() * (0.5 - fraction)
+        val minimum = newDuration / 2.0
+        return kotlin.math.round(newCenter.coerceAtLeast(minimum)).toLong()
+    }
+
     fun panCenter(
         currentCenterMs: Long,
         dragAmountPx: Float,
