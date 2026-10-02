@@ -109,6 +109,32 @@ class AssCodecTest {
     }
 
     @Test
+    fun preservesCommaTextWhenCustomColumnsFollowText() {
+        val source = """
+            [Script Info]
+            ScriptType: v4.00+
+
+            [V4+ Styles]
+            Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+            Style: Default,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&H64000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+            [Events]
+            Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text, VendorID
+            Dialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,{\clip(0,0,320,180)}Hello, world,vendor-42
+        """.trimIndent()
+
+        val parsed = AssCodec.parse(source)
+        val event = parsed.events.single()
+        assertEquals("{\\clip(0,0,320,180)}Hello, world", event.text)
+        assertEquals("vendor-42", event.extraFields["vendorid"])
+
+        val output = AssCodec.write(parsed)
+        val again = AssCodec.parse(output)
+        assertEquals(event.text, again.events.single().text)
+        assertEquals("vendor-42", again.events.single().extraFields["vendorid"])
+    }
+
+    @Test
     fun undoHistoryIsBoundedAndRedoable() {
         val history = UndoHistory(1, limit = 3)
         history.commit(2)

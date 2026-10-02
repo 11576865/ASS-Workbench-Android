@@ -202,7 +202,7 @@ object AssCodec {
                 }
                 line.startsWith("Dialogue:", ignoreCase = true) || line.startsWith("Comment:", ignoreCase = true) -> {
                     val comment = line.startsWith("Comment:", ignoreCase = true)
-                    val values = splitCsvLimit(line.substringAfter(':'), format.size)
+                    val values = splitEventFields(line.substringAfter(':'), format)
                     val map = format.zip(values).associate { it.first.lowercase(Locale.ROOT) to it.second.trim() }
                     val start = runCatching { SubTime.parseAss(map["start"].orEmpty()) }.getOrElse { SubTime.ZERO }
                     val end = runCatching { SubTime.parseAss(map["end"].orEmpty()) }.getOrElse { start }
@@ -279,6 +279,53 @@ object AssCodec {
         "effect" -> e.effect
         "text" -> e.text
         else -> e.extraFields[field.lowercase(Locale.ROOT)].orEmpty()
+    }
+
+    /**
+     * Event Text is the one ASS field that routinely contains literal commas.
+     * Standard ASS keeps Text last, but preserved vendor/custom columns may
+     * legally appear after it in the observed Format line. In that case,
+     * consume fields before Text from the left and trailing custom fields from
+     * the right so commas inside Text stay part of the subtitle payload.
+     */
+    private fun splitEventFields(value: String, format: List<String>): List<String> {
+        val textIndex = format.indexOfFirst { it.equals("Text", ignoreCase = true) }
+        if (textIndex < 0 || textIndex == format.lastIndex) {
+            return splitCsvLimit(value, format.size)
+        }
+
+        val prefix = ArrayList<String>(textIndex)
+        var remaining = value
+        repeat(textIndex) {
+            val comma = remaining.indexOf(',')
+            if (comma < 0) {
+                prefix += remaining
+                remaining = ""
+            } else {
+                prefix += remaining.substring(0, comma)
+                remaining = remaining.substring(comma + 1)
+            }
+        }
+
+        val suffixCount = format.size - textIndex - 1
+        val suffix = ArrayDeque<String>()
+        repeat(suffixCount) {
+            val comma = remaining.lastIndexOf(',')
+            if (comma < 0) {
+                suffix.addFirst(remaining)
+                remaining = ""
+            } else {
+                suffix.addFirst(remaining.substring(comma + 1))
+                remaining = remaining.substring(0, comma)
+            }
+        }
+
+        return buildList(format.size) {
+            addAll(prefix)
+            add(remaining)
+            addAll(suffix)
+            while (size < format.size) add("")
+        }
     }
 
     private fun splitCsvLimit(value: String, fieldCount: Int): List<String> {
