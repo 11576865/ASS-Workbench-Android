@@ -52,6 +52,11 @@ internal enum class WorkspacePresentationMode(
         status = UiVariantStatus.EXPERIMENTAL,
         description = "工具以独立透明/磨砂/实底层叠加在预览上；支持真实背景模糊、层概览与临时看穿。",
     ),
+    TIMELINE_DOCK_EXPERIMENTAL(
+        title = "常驻时间轴工作台",
+        status = UiVariantStatus.EXPERIMENTAL,
+        description = "预览与紧凑时间轴始终同场；时间轴可展开、恢复并调节高度，复用真实事件、波形与吸附语义。",
+    ),
 }
 
 /**
