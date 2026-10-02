@@ -1281,13 +1281,18 @@ private fun PositionDragOverlay(
         val moveProxyDensity = androidx.compose.ui.platform.LocalDensity.current
         var moveOverlayOrigin by remember(event.id) { mutableStateOf(Offset.Zero) }
         var moveOverlaySize by remember(event.id) { mutableStateOf(IntSize.Zero) }
+        // Read layout state during composition so onGloballyPositioned invalidates this scope.
+        // Reading it only inside SideEffect does not register a Compose state dependency,
+        // which can leave the interaction registry unpublished until an unrelated recompose.
+        val publishedMoveOverlayOrigin = moveOverlayOrigin
+        val publishedMoveOverlaySize = moveOverlaySize
         SideEffect {
             val registry = interactionRegistry
-            if (registry != null && moveOverlaySize.width > 0 && moveOverlaySize.height > 0) {
-                val w = moveOverlaySize.width.toFloat()
-                val h = moveOverlaySize.height.toFloat()
+            if (registry != null && publishedMoveOverlaySize.width > 0 && publishedMoveOverlaySize.height > 0) {
+                val w = publishedMoveOverlaySize.width.toFloat()
+                val h = publishedMoveOverlaySize.height.toFloat()
                 fun target(px: Double, py: Double): Offset =
-                    moveOverlayOrigin + Offset(
+                    publishedMoveOverlayOrigin + Offset(
                         (px / document.playResX.coerceAtLeast(1) * w).toFloat(),
                         (py / document.playResY.coerceAtLeast(1) * h).toFloat(),
                     )
@@ -1514,13 +1519,16 @@ private fun PositionDragOverlay(
     var overlaySizePx by remember(event.id) { mutableStateOf(IntSize.Zero) }
     val playResXProxy = document.playResX.coerceAtLeast(1)
     val playResYProxy = document.playResY.coerceAtLeast(1)
+    // Layout coordinates must participate in composition invalidation before SideEffect.
+    val publishedOverlayOriginInWindow = overlayOriginInWindow
+    val publishedOverlaySizePx = overlaySizePx
     SideEffect {
         val registry = interactionRegistry
-        if (registry != null && overlaySizePx.width > 0 && overlaySizePx.height > 0) {
-            val w = overlaySizePx.width.toFloat()
-            val h = overlaySizePx.height.toFloat()
+        if (registry != null && publishedOverlaySizePx.width > 0 && publishedOverlaySizePx.height > 0) {
+            val w = publishedOverlaySizePx.width.toFloat()
+            val h = publishedOverlaySizePx.height.toFloat()
             fun target(px: Double, py: Double): Offset =
-                overlayOriginInWindow + Offset(
+                publishedOverlayOriginInWindow + Offset(
                     (px / playResXProxy * w).toFloat(),
                     (py / playResYProxy * h).toFloat(),
                 )
@@ -1940,15 +1948,17 @@ private fun RectClipOverlay(
     val clipProxyDensity = androidx.compose.ui.platform.LocalDensity.current
     var clipOverlayOrigin by remember(event.id) { mutableStateOf(Offset.Zero) }
     var clipOverlaySize by remember(event.id) { mutableStateOf(IntSize.Zero) }
+    val publishedClipOverlayOrigin = clipOverlayOrigin
+    val publishedClipOverlaySize = clipOverlaySize
     SideEffect {
         val registry = interactionRegistry
-        if (registry != null && clipOverlaySize.width > 0 && clipOverlaySize.height > 0) {
-            val w = clipOverlaySize.width.toFloat()
-            val h = clipOverlaySize.height.toFloat()
+        if (registry != null && publishedClipOverlaySize.width > 0 && publishedClipOverlaySize.height > 0) {
+            val w = publishedClipOverlaySize.width.toFloat()
+            val h = publishedClipOverlaySize.height.toFloat()
             val playResX = document.playResX.coerceAtLeast(1)
             val playResY = document.playResY.coerceAtLeast(1)
             fun target(px: Double, py: Double): Offset =
-                clipOverlayOrigin + Offset(
+                publishedClipOverlayOrigin + Offset(
                     (px / playResX * w).toFloat(),
                     (py / playResY * h).toFloat(),
                 )
