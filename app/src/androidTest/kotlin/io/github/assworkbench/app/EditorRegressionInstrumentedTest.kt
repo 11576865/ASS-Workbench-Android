@@ -195,6 +195,23 @@ class EditorRegressionInstrumentedTest {
     }
 
     @Test
+    fun glassLayeredWorkspaceExposesMaterialAndPerformanceControls() {
+        restoreRecovery()
+
+        composeRule.onNodeWithContentDescription("工具和更多操作").performClick()
+        composeRule.onNodeWithTag("workspace-mode-toggle").performClick()
+        selectUiVariant("ui-variant-use-GLASS_LAYERED_EXPERIMENTAL")
+
+        composeRule.onNodeWithTag("glass-layered-workspace").assertIsDisplayed()
+        composeRule.onNodeWithTag("glass-control-deck").assertIsDisplayed()
+        composeRule.onNodeWithTag("glass-performance-QUALITY").assertIsDisplayed().performClick()
+        composeRule.onNodeWithTag("glass-performance-LOW_COST").assertIsDisplayed().performClick()
+        composeRule.onNodeWithTag("glass-alpha").assertIsDisplayed()
+        composeRule.onNodeWithTag("glass-blur").assertIsDisplayed()
+        composeRule.onNodeWithTag("glass-layer-overview").assertIsDisplayed()
+    }
+
+    @Test
     fun precisionLensWorkspaceShowsPrecisionControls() {
         restoreRecovery()
 
