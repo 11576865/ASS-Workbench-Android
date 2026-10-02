@@ -1,0 +1,450 @@
+{
+  "schema_version": 1,
+  "project": "ASS-Workbench-Android",
+  "repository": "11576865/ASS-Workbench-Android",
+  "platform": "android-compose",
+  "authority": "this repository",
+  "surface_count": 23,
+  "surfaces": [
+    {
+      "id": "ASS.TOOL.SUBTITLES",
+      "kind": "tool",
+      "name": "字幕导航",
+      "group": "NAVIGATION",
+      "status": "implemented",
+      "intent": "列表、搜索、Focus 与 Selection",
+      "implementation_effect": "列表、搜索、Focus 与 Selection",
+      "source_refs": [
+        {
+          "path": "app/src/main/kotlin/io/github/assworkbench/app/ui/WorkbenchToolCatalog.kt",
+          "anchor": "WorkbenchTool.SUBTITLES"
+        }
+      ],
+      "patterns": [],
+      "visual_evidence": []
+    },
+    {
+      "id": "ASS.TOOL.TEXT",
+      "kind": "tool",
+      "name": "正文",
+      "group": "TEXT_EVENT",
+      "status": "implemented",
+      "intent": "Event Text、局部 override 与换行",
+      "implementation_effect": "Event Text、局部 override 与换行",
+      "source_refs": [
+        {
+          "path": "app/src/main/kotlin/io/github/assworkbench/app/ui/WorkbenchToolCatalog.kt",
+          "anchor": "WorkbenchTool.TEXT"
+        }
+      ],
+      "patterns": [
+        "UIGS.WORKSPACE.EXPLICIT_TOOL_BINDING",
+        "UIGS.WORKSPACE.SCOPE_TRANSPARENCY"
+      ],
+      "visual_evidence": []
+    },
+    {
+      "id": "ASS.TOOL.EVENT",
+      "kind": "tool",
+      "name": "事件结构",
+      "group": "TEXT_EVENT",
+      "status": "implemented",
+      "intent": "Layer、Actor、Dialogue/Comment 与结构操作",
+      "implementation_effect": "Layer、Actor、Dialogue/Comment 与结构操作",
+      "source_refs": [
+        {
+          "path": "app/src/main/kotlin/io/github/assworkbench/app/ui/WorkbenchToolCatalog.kt",
+          "anchor": "WorkbenchTool.EVENT"
+        }
+      ],
+      "patterns": [
+        "UIGS.WORKSPACE.EXPLICIT_TOOL_BINDING",
+        "UIGS.WORKSPACE.SCOPE_TRANSPARENCY"
+      ],
+      "visual_evidence": []
+    },
+    {
+      "id": "ASS.TOOL.BATCH",
+      "kind": "tool",
+      "name": "批量规则",
+      "group": "BATCH",
+      "status": "implemented",
+      "intent": "Filter → Transform → Preview → Commit",
+      "implementation_effect": "Filter → Transform → Preview → Commit",
+      "source_refs": [
+        {
+          "path": "app/src/main/kotlin/io/github/assworkbench/app/ui/WorkbenchToolCatalog.kt",
+          "anchor": "WorkbenchTool.BATCH"
+        }
+      ],
+      "patterns": [
+        "UIGS.WORKSPACE.SCOPE_TRANSPARENCY"
+      ],
+      "visual_evidence": []
+    },
+    {
+      "id": "ASS.TOOL.TIMELINE",
+      "kind": "tool",
+      "name": "时间轴",
+      "group": "TIME",
+      "status": "implemented",
+      "intent": "区间、播放头、波形、吸附与重叠/间隙",
+      "implementation_effect": "区间、播放头、波形、吸附与重叠/间隙",
+      "source_refs": [
+        {
+          "path": "app/src/main/kotlin/io/github/assworkbench/app/ui/WorkbenchToolCatalog.kt",
+          "anchor": "WorkbenchTool.TIMELINE"
+        }
+      ],
+      "patterns": [],
+      "visual_evidence": []
+    },
+    {
+      "id": "ASS.TOOL.FRAMES",
+      "kind": "tool",
+      "name": "帧时间",
+      "group": "TIME",
+      "status": "implemented",
+      "intent": "视频 PTS、CFR/VFR 与帧对齐",
+      "implementation_effect": "视频 PTS、CFR/VFR 与帧对齐",
+      "source_refs": [
+        {
+          "path": "app/src/main/kotlin/io/github/assworkbench/app/ui/WorkbenchToolCatalog.kt",
+          "anchor": "WorkbenchTool.FRAMES"
+        }
+      ],
+      "patterns": [],
+      "visual_evidence": []
+    },
+    {
+      "id": "ASS.TOOL.STYLE",
+      "kind": "tool",
+      "name": "样式",
+      "group": "TYPESETTING",
+      "status": "implemented",
+      "intent": "共享 Style 的字体、颜色、描边、字距与布局",
+      "implementation_effect": "共享 Style 的字体、颜色、描边、字距与布局",
+      "source_refs": [
+        {
+          "path": "app/src/main/kotlin/io/github/assworkbench/app/ui/WorkbenchToolCatalog.kt",
+          "anchor": "WorkbenchTool.STYLE"
+        }
+      ],
+      "patterns": [
+        "UIGS.WORKSPACE.EXPLICIT_TOOL_BINDING",
+        "UIGS.WORKSPACE.SCOPE_TRANSPARENCY"
+      ],
+      "visual_evidence": []
+    },
+    {
+      "id": "ASS.TOOL.POSITION",
+      "kind": "tool",
+      "name": "位置与几何",
+      "group": "TYPESETTING",
+      "status": "implemented",
+      "intent": "Event 位置、运动、原点、变换与裁剪",
+      "implementation_effect": "Event 位置、运动、原点、变换与裁剪",
+      "source_refs": [
+        {
+          "path": "app/src/main/kotlin/io/github/assworkbench/app/ui/WorkbenchToolCatalog.kt",
+          "anchor": "WorkbenchTool.POSITION"
+        }
+      ],
+      "patterns": [
+        "UIGS.WORKSPACE.EXPLICIT_TOOL_BINDING",
+        "UIGS.WORKSPACE.SCOPE_TRANSPARENCY",
+        "UIGS.INTERACTION.DISCOVERY_OVERLAY"
+      ],
+      "visual_evidence": []
+    },
+    {
+      "id": "ASS.TOOL.VECTOR_CLIP",
+      "kind": "tool",
+      "name": "矢量裁剪",
+      "group": "TYPESETTING",
+      "status": "implemented",
+      "intent": "检查并编辑已有矢量裁剪路径",
+      "implementation_effect": "检查并编辑已有矢量裁剪路径",
+      "source_refs": [
+        {
+          "path": "app/src/main/kotlin/io/github/assworkbench/app/ui/WorkbenchToolCatalog.kt",
+          "anchor": "WorkbenchTool.VECTOR_CLIP"
+        }
+      ],
+      "patterns": [
+        "UIGS.WORKSPACE.SCOPE_TRANSPARENCY"
+      ],
+      "visual_evidence": []
+    },
+    {
+      "id": "ASS.TOOL.EFFECTS",
+      "kind": "tool",
+      "name": "效果与动画",
+      "group": "EFFECTS",
+      "status": "implemented",
+      "intent": "淡入淡出、Blur 与 Transform",
+      "implementation_effect": "淡入淡出、Blur 与 Transform",
+      "source_refs": [
+        {
+          "path": "app/src/main/kotlin/io/github/assworkbench/app/ui/WorkbenchToolCatalog.kt",
+          "anchor": "WorkbenchTool.EFFECTS"
+        }
+      ],
+      "patterns": [
+        "UIGS.WORKSPACE.SCOPE_TRANSPARENCY"
+      ],
+      "visual_evidence": []
+    },
+    {
+      "id": "ASS.TOOL.KARAOKE",
+      "kind": "tool",
+      "name": "卡拉 OK",
+      "group": "EFFECTS",
+      "status": "implemented",
+      "intent": "音节时长与高亮标签",
+      "implementation_effect": "音节时长与高亮标签",
+      "source_refs": [
+        {
+          "path": "app/src/main/kotlin/io/github/assworkbench/app/ui/WorkbenchToolCatalog.kt",
+          "anchor": "WorkbenchTool.KARAOKE"
+        }
+      ],
+      "patterns": [
+        "UIGS.WORKSPACE.SCOPE_TRANSPARENCY"
+      ],
+      "visual_evidence": []
+    },
+    {
+      "id": "ASS.TOOL.FONTS",
+      "kind": "tool",
+      "name": "字体管理",
+      "group": "RESOURCES",
+      "status": "implemented",
+      "intent": "导入资源、字形覆盖、绑定与封装选择",
+      "implementation_effect": "导入资源、字形覆盖、绑定与封装选择",
+      "source_refs": [
+        {
+          "path": "app/src/main/kotlin/io/github/assworkbench/app/ui/WorkbenchToolCatalog.kt",
+          "anchor": "WorkbenchTool.FONTS"
+        }
+      ],
+      "patterns": [],
+      "visual_evidence": []
+    },
+    {
+      "id": "ASS.TOOL.FONT_REQUIREMENTS",
+      "kind": "tool",
+      "name": "字体依赖",
+      "group": "RESOURCES",
+      "status": "implemented",
+      "intent": "ASS 实际请求、缺失资源与依赖诊断",
+      "implementation_effect": "ASS 实际请求、缺失资源与依赖诊断",
+      "source_refs": [
+        {
+          "path": "app/src/main/kotlin/io/github/assworkbench/app/ui/WorkbenchToolCatalog.kt",
+          "anchor": "WorkbenchTool.FONT_REQUIREMENTS"
+        }
+      ],
+      "patterns": [],
+      "visual_evidence": []
+    },
+    {
+      "id": "ASS.TOOL.QC",
+      "kind": "tool",
+      "name": "质量检查",
+      "group": "VALIDATION",
+      "status": "implemented",
+      "intent": "Linter、时间与文本问题",
+      "implementation_effect": "Linter、时间与文本问题",
+      "source_refs": [
+        {
+          "path": "app/src/main/kotlin/io/github/assworkbench/app/ui/WorkbenchToolCatalog.kt",
+          "anchor": "WorkbenchTool.QC"
+        }
+      ],
+      "patterns": [],
+      "visual_evidence": []
+    },
+    {
+      "id": "ASS.TOOL.COMPATIBILITY",
+      "kind": "tool",
+      "name": "兼容性",
+      "group": "VALIDATION",
+      "status": "implemented",
+      "intent": "不同播放环境的 ASS 支持风险",
+      "implementation_effect": "不同播放环境的 ASS 支持风险",
+      "source_refs": [
+        {
+          "path": "app/src/main/kotlin/io/github/assworkbench/app/ui/WorkbenchToolCatalog.kt",
+          "anchor": "WorkbenchTool.COMPATIBILITY"
+        }
+      ],
+      "patterns": [],
+      "visual_evidence": []
+    },
+    {
+      "id": "ASS.TOOL.DIAGNOSTICS",
+      "kind": "tool",
+      "name": "运行诊断",
+      "group": "VALIDATION",
+      "status": "implemented",
+      "intent": "有效值、构建身份、renderer 与运行日志",
+      "implementation_effect": "有效值、构建身份、renderer 与运行日志",
+      "source_refs": [
+        {
+          "path": "app/src/main/kotlin/io/github/assworkbench/app/ui/WorkbenchToolCatalog.kt",
+          "anchor": "WorkbenchTool.DIAGNOSTICS"
+        }
+      ],
+      "patterns": [],
+      "visual_evidence": []
+    },
+    {
+      "id": "ASS.TOOL.PROJECT",
+      "kind": "tool",
+      "name": "工程与封装",
+      "group": "PROJECT",
+      "status": "implemented",
+      "intent": "工程概况、保存对象、MKV 轨道与写回",
+      "implementation_effect": "工程概况、保存对象、MKV 轨道与写回",
+      "source_refs": [
+        {
+          "path": "app/src/main/kotlin/io/github/assworkbench/app/ui/WorkbenchToolCatalog.kt",
+          "anchor": "WorkbenchTool.PROJECT"
+        }
+      ],
+      "patterns": [],
+      "visual_evidence": []
+    },
+    {
+      "id": "ASS.TOOL.CAPABILITIES",
+      "kind": "tool",
+      "name": "工具目录",
+      "group": "WORKSPACE",
+      "status": "implemented",
+      "intent": "查找工具、呈现能力与工作区入口",
+      "implementation_effect": "查找工具、呈现能力与工作区入口",
+      "source_refs": [
+        {
+          "path": "app/src/main/kotlin/io/github/assworkbench/app/ui/WorkbenchToolCatalog.kt",
+          "anchor": "WorkbenchTool.CAPABILITIES"
+        }
+      ],
+      "patterns": [
+        "UIGS.NAVIGATION.CAPABILITY_CATALOG"
+      ],
+      "visual_evidence": []
+    },
+    {
+      "id": "ASS.WORKSPACE.TOOL_INSTANCE_BINDING",
+      "kind": "workspace-mechanism",
+      "name": "工具实例绑定",
+      "group": "WORKSPACE",
+      "status": "implemented",
+      "intent": "同一种工具可存在多个实例并独立绑定 Focus/Selection/Pinned Event。",
+      "implementation_effect": "不同 pinned Event 可形成 sibling ToolInstance；失效 pinned target 保持 unresolved 而不是静默回退 Focus。",
+      "source_refs": [
+        {
+          "path": "app/src/main/kotlin/io/github/assworkbench/app/ui/workspace/WorkspaceModel.kt",
+          "anchor": "WorkspaceToolInstance / WorkspaceBinding / openPinnedEvent"
+        }
+      ],
+      "patterns": [
+        "UIGS.WORKSPACE.EXPLICIT_TOOL_BINDING"
+      ],
+      "tests": [
+        "app/src/test/kotlin/io/github/assworkbench/app/ui/workspace/WorkspaceStateTest.kt"
+      ],
+      "visual_evidence": []
+    },
+    {
+      "id": "ASS.WORKSPACE.EDIT_SCOPE_EXPLANATION",
+      "kind": "workspace-mechanism",
+      "name": "编辑作用域解释",
+      "group": "WORKSPACE",
+      "status": "implemented",
+      "intent": "在修改前解释 WHO / WHERE / HOW MANY。",
+      "implementation_effect": "Style 可显示共享影响数量；Event 工具显示绑定 Event；失效目标显示 0 和 unresolved。",
+      "source_refs": [
+        {
+          "path": "app/src/main/kotlin/io/github/assworkbench/app/ui/workspace/WorkspaceEditScope.kt",
+          "anchor": "WorkspaceEditScopeResolver"
+        }
+      ],
+      "patterns": [
+        "UIGS.WORKSPACE.SCOPE_TRANSPARENCY"
+      ],
+      "tests": [
+        "app/src/test/kotlin/io/github/assworkbench/app/ui/workspace/WorkspaceEditScopeResolverTest.kt"
+      ],
+      "visual_evidence": []
+    },
+    {
+      "id": "ASS.WORKSPACE.FLOATING_SURFACE_GEOMETRY",
+      "kind": "workspace-mechanism",
+      "name": "浮动工具表面几何",
+      "group": "WORKSPACE",
+      "status": "implemented",
+      "intent": "让工具表面可拖动/缩放，同时区分瞬态候选与可恢复布局。",
+      "implementation_effect": "拖动/缩放取消不污染已提交几何；viewport clamp 不覆盖较大的保存布局；仅 committed geometry 序列化。",
+      "source_refs": [
+        {
+          "path": "app/src/main/kotlin/io/github/assworkbench/app/ui/workspace/WorkbenchSurfaceController.kt",
+          "anchor": "WorkbenchSurfaceController"
+        },
+        {
+          "path": "app/src/main/kotlin/io/github/assworkbench/app/ui/workspace/WorkspaceSurface.kt",
+          "anchor": "SurfaceGeometry / WorkspaceSurfacePersistence"
+        }
+      ],
+      "patterns": [
+        "UIGS.WORKSPACE.TRANSIENT_COMMITTED_SURFACE_GEOMETRY"
+      ],
+      "tests": [
+        "app/src/test/kotlin/io/github/assworkbench/app/ui/workspace/WorkbenchSurfaceControllerTest.kt"
+      ],
+      "visual_evidence": []
+    },
+    {
+      "id": "ASS.WORKSPACE.INTERACTION_OVERLAY",
+      "kind": "overlay",
+      "name": "预览交互覆盖层",
+      "group": "WORKSPACE",
+      "status": "implemented",
+      "intent": "在预览上承载对象发现与精确控制代理，同时不成为第二渲染器。",
+      "implementation_effect": "固定与 Canvas presentation 可共享一套 InteractionOverlayRegistry；代理支持 drag/commit/cancel。",
+      "source_refs": [
+        {
+          "path": "app/src/main/kotlin/io/github/assworkbench/app/ui/interaction/WorkspaceInteractionOverlay.kt",
+          "anchor": "InteractionOverlayRegistry / WindowInteractionOverlay"
+        }
+      ],
+      "patterns": [
+        "UIGS.INTERACTION.DISCOVERY_OVERLAY"
+      ],
+      "tests": [
+        "app/src/androidTest/kotlin/io/github/assworkbench/app/RodInteractionInstrumentedTest.kt"
+      ],
+      "visual_evidence": []
+    },
+    {
+      "id": "ASS.PREVIEW.VIDEO",
+      "kind": "preview",
+      "name": "视频与 ASS 预览",
+      "group": "WORKSPACE",
+      "status": "implemented",
+      "intent": "以 authoritative renderer 为视觉校验表面，并接入语义交互代理。",
+      "implementation_effect": "预览可显示 renderer 结果并支持定位/发现交互；交互几何不被宣称为精确 glyph bbox。",
+      "source_refs": [
+        {
+          "path": "app/src/main/kotlin/io/github/assworkbench/app/ui/VideoPreview.kt",
+          "anchor": "VideoPreview"
+        }
+      ],
+      "patterns": [
+        "UIGS.INTERACTION.DISCOVERY_OVERLAY"
+      ],
+      "visual_evidence": []
+    }
+  ]
+}
