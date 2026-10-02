@@ -12,6 +12,7 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
@@ -70,6 +71,9 @@ import io.github.assworkbench.app.ui.interaction.InteractionOverlayRegistry
 import io.github.assworkbench.app.ui.interaction.PrecisionInteractionOverlay
 import io.github.assworkbench.app.ui.interaction.WindowInteractionOverlay
 import io.github.assworkbench.app.ui.interaction.rememberInteractionOverlayRegistry
+import io.github.assworkbench.app.ui.preview.PreviewTargetCandidate
+import io.github.assworkbench.app.ui.preview.PreviewTargetConfidence
+import io.github.assworkbench.app.ui.preview.PreviewTargetResolver
 import io.github.assworkbench.app.ui.workspace.WorkspaceBinding
 import io.github.assworkbench.app.ui.workspace.SurfaceGeometry
 import io.github.assworkbench.app.ui.workspace.FloatingWorkbenchSurface
@@ -639,6 +643,23 @@ fun ModernEditorScreen(
                     interactionRegistry = interactionRegistry,
                     modifier = Modifier.weight(1f).fillMaxWidth().testTag("precision-lens-workspace"),
                 )
+            } else if (workspaceMode == WorkspacePresentationMode.SUBTITLE_OBJECT_EXPERIMENTAL) {
+                SubtitleObjectWorkspace(
+                    state = state,
+                    viewModel = viewModel,
+                    issues = issues,
+                    workspaceState = workspaceState,
+                    onWorkspaceStateChange = { workspaceState = it },
+                    expandedEventId = expandedEventId,
+                    onExpandedChange = { expandedEventId = it },
+                    onImportFont = onImportFont,
+                    onSaveMkv = onSaveMkv,
+                    eventEditorStateHolder = eventEditorStateHolder,
+                    onOpenVideo = onOpenReferenceVideo,
+                    rendererEnabled = rendererEnabled,
+                    onEnableRenderer = onEnableRenderer,
+                    modifier = Modifier.weight(1f).fillMaxWidth().testTag("subtitle-object-workspace"),
+                )
             } else BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().testTag("canvas-workspace")) {
                 val viewportWidth = maxWidth.value
                 val viewportHeight = maxHeight.value
@@ -809,6 +830,7 @@ fun ModernEditorScreen(
                 WorkspacePresentationMode.PRECISION_LENS_EXPERIMENTAL -> false
                 WorkspacePresentationMode.TOOL_INSTANCES_EXPERIMENTAL -> false
                 WorkspacePresentationMode.GLASS_LAYERED_EXPERIMENTAL -> false
+                WorkspacePresentationMode.SUBTITLE_OBJECT_EXPERIMENTAL -> false
             },
             modifier = Modifier.fillMaxSize().testTag("interaction-overlay"),
         )
@@ -1519,6 +1541,650 @@ private fun PrecisionLensWorkspace(
                         onClick = { viewModel.focusEvent(event.id, seek = false) },
                         label = { Text("保持对象焦点") },
                     )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SubtitleObjectWorkspace(
+    state: EditorState,
+    viewModel: EditorViewModel,
+    issues: List<AssQcIssue>,
+    workspaceState: WorkspaceState,
+    onWorkspaceStateChange: (WorkspaceState) -> Unit,
+    expandedEventId: Long?,
+    onExpandedChange: (Long?) -> Unit,
+    onImportFont: () -> Unit,
+    onSaveMkv: () -> Unit,
+    eventEditorStateHolder: SaveableStateHolder,
+    onOpenVideo: () -> Unit,
+    rendererEnabled: Boolean,
+    onEnableRenderer: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val playbackPositionMs by viewModel.playbackPositionMs.collectAsState()
+    var frozenPick by remember { mutableStateOf<PreviewObjectPick?>(null) }
+    var selectedObjectId by rememberSaveable { mutableStateOf<Long?>(state.focusedEventId) }
+    var referenceObjectId by rememberSaveable { mutableStateOf<Long?>(null) }
+    var activeToolName by rememberSaveable { mutableStateOf<String?>(null) }
+    var relationOpen by rememberSaveable { mutableStateOf(false) }
+    var candidatePickerOpen by remember { mutableStateOf(false) }
+
+    val selectedEvent = selectedObjectId?.let { id ->
+        state.document.events.firstOrNull { it.id == id }
+    }
+    val selectedCandidate = frozenPick?.candidates?.firstOrNull { it.eventId == selectedObjectId }
+
+    fun selectObject(id: Long, pick: PreviewObjectPick? = frozenPick) {
+        if (state.document.events.none { it.id == id }) return
+        selectedObjectId = id
+        frozenPick = pick
+        candidatePickerOpen = false
+        viewModel.focusEvent(id, seek = false)
+    }
+
+    fun acceptPick(pick: PreviewObjectPick) {
+        frozenPick = pick
+        val reliable = pick.candidates.filter { it.confidence != PreviewTargetConfidence.UNRESOLVED }
+        if (pick.candidates.size == 1 && reliable.size == 1) {
+            selectObject(pick.candidates.single().eventId, pick)
+        } else {
+            candidatePickerOpen = true
+        }
+    }
+
+    fun openObjectTool(tool: WorkbenchTool) {
+        val id = selectedObjectId ?: return
+        viewModel.focusEvent(id, seek = false)
+        val next = if (tool.descriptor.supportsPinnedEvent) {
+            workspaceState.openPinnedEvent(tool.name, id)
+        } else {
+            workspaceState.openPrimary(tool.name, tool.descriptor.defaultBinding)
+        }
+        onWorkspaceStateChange(next)
+        activeToolName = tool.name
+    }
+
+    val activeTool = activeToolName?.let { key ->
+        WorkbenchTool.entries.firstOrNull { it.name == key }
+    }
+    val activeInstance = activeTool?.let { tool ->
+        workspaceState.activeForTool(tool.name)
+            ?: WorkspaceToolInstance(
+                id = WorkspaceState.primaryInstanceId(tool.name),
+                toolKey = tool.name,
+                binding = if (tool.descriptor.supportsPinnedEvent && selectedObjectId != null) {
+                    WorkspaceBinding.PinnedEvent(selectedObjectId!!)
+                } else {
+                    tool.descriptor.defaultBinding
+                },
+            )
+    }
+
+    BoxWithConstraints(
+        modifier.background(MaterialTheme.colorScheme.surfaceContainerLowest)
+    ) {
+        if (state.project.videoUri != null) {
+            WorkbenchPreview(
+                state = state,
+                viewModel = viewModel,
+                positionEditEventId = null,
+                onOpenVideo = onOpenVideo,
+                onOpenTimeline = { openObjectTool(WorkbenchTool.TIMELINE) },
+                rendererEnabled = rendererEnabled,
+                onEnableRenderer = onEnableRenderer,
+                viewportGesturesEnabled = true,
+                onObjectLongPress = ::acceptPick,
+                modifier = Modifier.fillMaxSize().testTag("object-preview"),
+            )
+        } else {
+            ScriptObjectCanvas(
+                state = state,
+                positionMs = frozenPick?.frozenPositionMs ?: playbackPositionMs,
+                selectedEventId = selectedObjectId,
+                onObjectPick = ::acceptPick,
+                onOpenVideo = onOpenVideo,
+                modifier = Modifier.fillMaxSize().testTag("object-script-canvas"),
+            )
+        }
+
+        selectedEvent?.let { event ->
+            val fractionX = selectedCandidate?.anchor?.let {
+                (it.x / state.document.playResX.coerceAtLeast(1)).toFloat()
+            } ?: frozenPick?.viewportFractionX ?: 0.5f
+            val fractionY = selectedCandidate?.anchor?.let {
+                (it.y / state.document.playResY.coerceAtLeast(1)).toFloat()
+            } ?: frozenPick?.viewportFractionY ?: 0.72f
+            val hudX = (maxWidth * fractionX.coerceIn(0.08f, 0.80f))
+            val hudY = (maxHeight * fractionY.coerceIn(0.10f, 0.72f))
+
+            Surface(
+                modifier = Modifier
+                    .offset(x = hudX, y = hudY)
+                    .widthIn(max = 320.dp)
+                    .testTag("object-capability-hud"),
+                shape = RoundedCornerShape(22.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.96f),
+                tonalElevation = 5.dp,
+                shadowElevation = 8.dp,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.55f)),
+            ) {
+                Column(
+                    Modifier.padding(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                "#${event.id} · ${event.style} · L${event.layer}",
+                                style = MaterialTheme.typography.labelLarge,
+                            )
+                            Text(
+                                "${event.start.toAss()} — ${event.end.toAss()}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        if (state.selectedEventIds.isNotEmpty()) {
+                            AssistChip(
+                                onClick = {},
+                                enabled = false,
+                                label = { Text("${state.selectedEventIds.size} 选中") },
+                            )
+                        }
+                    }
+                    Row(
+                        Modifier.horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        ObjectCapabilityButton("文字", Icons.Filled.TextFields) { openObjectTool(WorkbenchTool.TEXT) }
+                        ObjectCapabilityButton("字体", Icons.Filled.FontDownload) { openObjectTool(WorkbenchTool.FONTS) }
+                        ObjectCapabilityButton("排版", Icons.Filled.FormatColorText) { openObjectTool(WorkbenchTool.STYLE) }
+                        ObjectCapabilityButton("位置", Icons.Filled.OpenWith) { openObjectTool(WorkbenchTool.POSITION) }
+                        ObjectCapabilityButton("旋转", Icons.Filled.RotateRight) { openObjectTool(WorkbenchTool.POSITION) }
+                        ObjectCapabilityButton("时间", Icons.Filled.Timeline) { openObjectTool(WorkbenchTool.TIMELINE) }
+                        ObjectCapabilityButton("效果", Icons.Filled.AutoAwesome) { openObjectTool(WorkbenchTool.EFFECTS) }
+                        ObjectCapabilityButton("Raw", Icons.Filled.Code) { openObjectTool(WorkbenchTool.TEXT) }
+                        ObjectCapabilityButton("检查", Icons.Filled.FactCheck) { openObjectTool(WorkbenchTool.QC) }
+                    }
+                    Row(
+                        Modifier.horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        FilterChip(
+                            selected = event.id in state.selectedEventIds,
+                            onClick = { viewModel.toggleSelected(event.id) },
+                            label = { Text("多选") },
+                            leadingIcon = { Icon(Icons.Filled.SelectAll, null, Modifier.size(18.dp)) },
+                            modifier = Modifier.testTag("object-multiselect"),
+                        )
+                        FilterChip(
+                            selected = referenceObjectId == event.id,
+                            onClick = {
+                                referenceObjectId = if (referenceObjectId == event.id) null else event.id
+                            },
+                            label = { Text("固定参考") },
+                            leadingIcon = { Icon(Icons.Filled.PushPin, null, Modifier.size(18.dp)) },
+                            modifier = Modifier.testTag("object-reference-pin"),
+                        )
+                        AssistChip(
+                            onClick = { relationOpen = !relationOpen },
+                            label = { Text("关系") },
+                            leadingIcon = { Icon(Icons.Filled.AccountTree, null, Modifier.size(18.dp)) },
+                            modifier = Modifier.testTag("object-relations"),
+                        )
+                    }
+                }
+            }
+        }
+
+        if (state.selectedEventIds.size > 1) {
+            Surface(
+                modifier = Modifier.align(Alignment.TopCenter)
+                    .padding(top = 8.dp)
+                    .testTag("object-group-controls"),
+                shape = RoundedCornerShape(20.dp),
+                color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.96f),
+                tonalElevation = 4.dp,
+            ) {
+                Row(
+                    Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    Text("${state.selectedEventIds.size} 个对象", style = MaterialTheme.typography.labelLarge)
+                    IconButton(onClick = { viewModel.nudgeSelectedObjects(-8.0, 0.0) }) {
+                        Icon(Icons.Filled.ArrowBack, "选中对象左移")
+                    }
+                    IconButton(onClick = { viewModel.nudgeSelectedObjects(8.0, 0.0) }) {
+                        Icon(Icons.Filled.ArrowForward, "选中对象右移")
+                    }
+                    IconButton(onClick = { viewModel.nudgeSelectedObjects(0.0, -8.0) }) {
+                        Icon(Icons.Filled.ArrowUpward, "选中对象上移")
+                    }
+                    IconButton(onClick = { viewModel.nudgeSelectedObjects(0.0, 8.0) }) {
+                        Icon(Icons.Filled.ArrowDownward, "选中对象下移")
+                    }
+                    TextButton(onClick = { openObjectTool(WorkbenchTool.BATCH) }) { Text("统一参数") }
+                    TextButton(onClick = viewModel::clearSelection) { Text("清除") }
+                }
+            }
+        }
+
+        referenceObjectId?.let { refId ->
+            val ref = state.document.events.firstOrNull { it.id == refId }
+            if (ref != null && ref.id != selectedObjectId) {
+                Surface(
+                    modifier = Modifier.align(Alignment.TopStart)
+                        .padding(8.dp)
+                        .fillMaxWidth(0.62f)
+                        .testTag("object-reference-card"),
+                    color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.94f),
+                    shape = RoundedCornerShape(18.dp),
+                ) {
+                    Row(
+                        Modifier.padding(10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(Icons.Filled.PushPin, null)
+                        Column(Modifier.weight(1f).padding(horizontal = 8.dp)) {
+                            Text("参考对象 #${ref.id} · ${ref.style}", style = MaterialTheme.typography.labelLarge)
+                            Text(
+                                AssInlineSyntax.visibleText(ref.text).take(56),
+                                style = MaterialTheme.typography.bodySmall,
+                                maxLines = 1,
+                            )
+                        }
+                        TextButton(onClick = { selectObject(ref.id) }) { Text("转到") }
+                    }
+                }
+            }
+        }
+
+        frozenPick?.let { pick ->
+            Surface(
+                modifier = Modifier.align(Alignment.BottomStart)
+                    .padding(8.dp)
+                    .testTag("object-frozen-time"),
+                color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.92f),
+                shape = RoundedCornerShape(16.dp),
+            ) {
+                Text(
+                    "命中冻结：${SubTime(pick.frozenPositionMs).toAss()}",
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                    style = MaterialTheme.typography.labelMedium,
+                )
+            }
+        }
+
+        if (candidatePickerOpen) {
+            ObjectCandidatePicker(
+                pick = frozenPick,
+                document = state.document,
+                onSelect = { selectObject(it, frozenPick) },
+                onDismiss = { candidatePickerOpen = false },
+                modifier = Modifier.align(Alignment.Center).testTag("object-candidate-picker"),
+            )
+        }
+
+        if (relationOpen && selectedEvent != null) {
+            ObjectRelationPanel(
+                document = state.document,
+                event = selectedEvent,
+                onFocusEvent = { id -> selectObject(id) },
+                onOpenStyle = { openObjectTool(WorkbenchTool.STYLE) },
+                onDismiss = { relationOpen = false },
+                modifier = Modifier.align(Alignment.CenterEnd)
+                    .fillMaxHeight(0.78f)
+                    .fillMaxWidth(0.78f)
+                    .testTag("object-relation-panel"),
+            )
+        }
+
+        if (activeTool != null && activeInstance != null) {
+            Surface(
+                modifier = Modifier.align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .fillMaxHeight(0.48f)
+                    .testTag("object-tool-panel"),
+                shape = RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                tonalElevation = 6.dp,
+                shadowElevation = 8.dp,
+            ) {
+                Column(Modifier.fillMaxSize()) {
+                    Row(
+                        Modifier.fillMaxWidth().height(46.dp).padding(horizontal = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            activeTool.title + (selectedObjectId?.let { " · #$it" } ?: ""),
+                            style = MaterialTheme.typography.titleSmall,
+                            modifier = Modifier.weight(1f),
+                        )
+                        IconButton(onClick = { activeToolName = null }) {
+                            Icon(Icons.Filled.Close, "关闭对象工具")
+                        }
+                    }
+                    HorizontalDivider()
+                    FloatingToolContent(
+                        instance = activeInstance,
+                        tool = activeTool,
+                        state = state,
+                        viewModel = viewModel,
+                        issues = issues,
+                        expandedEventId = expandedEventId,
+                        onExpandedChange = onExpandedChange,
+                        onImportFont = onImportFont,
+                        onSaveMkv = onSaveMkv,
+                        eventEditorStateHolder = eventEditorStateHolder,
+                        onOpenTool = ::openObjectTool,
+                        onCloseText = { activeToolName = null },
+                        searchOpen = false,
+                        onCloseSearch = {},
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ObjectCapabilityButton(
+    label: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    onClick: () -> Unit,
+) {
+    AssistChip(
+        onClick = onClick,
+        label = { Text(label) },
+        leadingIcon = { Icon(icon, null, Modifier.size(18.dp)) },
+    )
+}
+
+@Composable
+private fun ScriptObjectCanvas(
+    state: EditorState,
+    positionMs: Long,
+    selectedEventId: Long?,
+    onObjectPick: (PreviewObjectPick) -> Unit,
+    onOpenVideo: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    BoxWithConstraints(
+        modifier.background(MaterialTheme.colorScheme.surfaceContainerLowest)
+            .pointerInput(state.document, positionMs) {
+                detectTapGestures(
+                    onLongPress = { offset ->
+                        val x = offset.x / size.width.coerceAtLeast(1) * state.document.playResX
+                        val y = offset.y / size.height.coerceAtLeast(1) * state.document.playResY
+                        val candidates = PreviewTargetResolver.candidates(
+                            document = state.document,
+                            positionMs = positionMs,
+                            x = x.toDouble(),
+                            y = y.toDouble(),
+                        )
+                        onObjectPick(
+                            PreviewObjectPick(
+                                frozenPositionMs = positionMs,
+                                playX = x.toDouble(),
+                                playY = y.toDouble(),
+                                viewportFractionX = offset.x / size.width.coerceAtLeast(1),
+                                viewportFractionY = offset.y / size.height.coerceAtLeast(1),
+                                candidates = candidates,
+                            )
+                        )
+                    }
+                )
+            }
+    ) {
+        Canvas(Modifier.fillMaxSize()) {
+            val gridColor = Color.Gray.copy(alpha = 0.20f)
+            val centerColor = Color.Gray.copy(alpha = 0.46f)
+            for (i in 1 until 10) {
+                val x = size.width * i / 10f
+                drawLine(gridColor, Offset(x, 0f), Offset(x, size.height), 1f)
+            }
+            for (i in 1 until 10) {
+                val y = size.height * i / 10f
+                drawLine(gridColor, Offset(0f, y), Offset(size.width, y), 1f)
+            }
+            drawLine(centerColor, Offset(size.width / 2f, 0f), Offset(size.width / 2f, size.height), 2f)
+            drawLine(centerColor, Offset(0f, size.height / 2f), Offset(size.width, size.height / 2f), 2f)
+        }
+
+        Text(
+            "脚本坐标 ${state.document.playResX} × ${state.document.playResY} · 无视频对象模式",
+            modifier = Modifier.align(Alignment.TopCenter).padding(10.dp),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+
+        val active = state.document.activeEvents(SubTime(positionMs))
+        active.forEach { event ->
+            val candidate = PreviewTargetResolver.candidates(
+                document = state.document,
+                positionMs = positionMs,
+                x = state.document.playResX / 2.0,
+                y = state.document.playResY / 2.0,
+                limit = state.document.events.size.coerceAtLeast(1),
+            ).firstOrNull { it.eventId == event.id }
+            val anchor = candidate?.anchor ?: return@forEach
+            val x = maxWidth * (anchor.x / state.document.playResX.coerceAtLeast(1)).toFloat().coerceIn(0f, 0.92f)
+            val y = maxHeight * (anchor.y / state.document.playResY.coerceAtLeast(1)).toFloat().coerceIn(0f, 0.92f)
+            Surface(
+                modifier = Modifier.offset(x, y)
+                    .combinedClickable(
+                        onClick = {
+                            onObjectPick(
+                                PreviewObjectPick(
+                                    frozenPositionMs = positionMs,
+                                    playX = anchor.x,
+                                    playY = anchor.y,
+                                    viewportFractionX = (anchor.x / state.document.playResX.coerceAtLeast(1)).toFloat(),
+                                    viewportFractionY = (anchor.y / state.document.playResY.coerceAtLeast(1)).toFloat(),
+                                    candidates = listOfNotNull(candidate),
+                                )
+                            )
+                        },
+                        onLongClick = {
+                            val candidates = PreviewTargetResolver.candidates(
+                                state.document,
+                                positionMs,
+                                anchor.x,
+                                anchor.y,
+                            )
+                            onObjectPick(
+                                PreviewObjectPick(
+                                    positionMs,
+                                    anchor.x,
+                                    anchor.y,
+                                    (anchor.x / state.document.playResX.coerceAtLeast(1)).toFloat(),
+                                    (anchor.y / state.document.playResY.coerceAtLeast(1)).toFloat(),
+                                    candidates,
+                                )
+                            )
+                        },
+                    )
+                    .testTag("script-object-${event.id}"),
+                shape = RoundedCornerShape(12.dp),
+                color = if (event.id == selectedEventId) {
+                    MaterialTheme.colorScheme.primaryContainer
+                } else {
+                    MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.90f)
+                },
+                border = BorderStroke(
+                    1.dp,
+                    if (event.id == selectedEventId) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.outlineVariant,
+                ),
+            ) {
+                Text(
+                    "#${event.id} " + AssInlineSyntax.visibleText(event.text).take(36),
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+                    style = MaterialTheme.typography.labelSmall,
+                    maxLines = 1,
+                )
+            }
+        }
+
+        TextButton(
+            onClick = onOpenVideo,
+            modifier = Modifier.align(Alignment.BottomEnd).padding(8.dp),
+        ) {
+            Icon(Icons.Filled.Movie, null, Modifier.size(18.dp))
+            Spacer(Modifier.width(4.dp))
+            Text("加入参考视频")
+        }
+    }
+}
+
+@Composable
+private fun ObjectCandidatePicker(
+    pick: PreviewObjectPick?,
+    document: AssDocument,
+    onSelect: (Long) -> Unit,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val candidates = pick?.candidates.orEmpty()
+    Surface(
+        modifier = modifier.fillMaxWidth(0.92f),
+        shape = RoundedCornerShape(24.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+        tonalElevation = 8.dp,
+        shadowElevation = 10.dp,
+    ) {
+        Column(
+            Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("选择字幕对象", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        if (candidates.isEmpty()) {
+                            "这个触点没有可靠的字形归属；显示当前时刻候选，不伪装成像素命中。"
+                        } else {
+                            "候选冻结于 ${pick?.frozenPositionMs?.let { SubTime(it).toAss() } ?: "—"}"
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                IconButton(onClick = onDismiss) { Icon(Icons.Filled.Close, "关闭对象候选") }
+            }
+            if (candidates.isEmpty()) {
+                Text("当前时刻没有可选择 Dialogue。")
+            }
+            candidates.forEach { candidate ->
+                val event = document.events.firstOrNull { it.id == candidate.eventId }
+                Surface(
+                    modifier = Modifier.fillMaxWidth()
+                        .clickable { onSelect(candidate.eventId) }
+                        .testTag("object-candidate-${candidate.eventId}"),
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    border = BorderStroke(
+                        1.dp,
+                        when (candidate.confidence) {
+                            PreviewTargetConfidence.EXACT_ANCHOR -> MaterialTheme.colorScheme.primary
+                            PreviewTargetConfidence.APPROXIMATE_ANCHOR -> MaterialTheme.colorScheme.tertiary
+                            PreviewTargetConfidence.UNRESOLVED -> MaterialTheme.colorScheme.error
+                        }.copy(alpha = 0.55f),
+                    ),
+                ) {
+                    Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Text(
+                            "#${candidate.eventId} · ${candidate.styleName} · Layer ${candidate.layer}",
+                            style = MaterialTheme.typography.labelLarge,
+                        )
+                        Text(candidate.textLabel, maxLines = 2, style = MaterialTheme.typography.bodySmall)
+                        Text(
+                            event?.let { "${it.start.toAss()} — ${it.end.toAss()}" } ?: "时间未知",
+                            style = MaterialTheme.typography.labelSmall,
+                        )
+                        Text(
+                            when (candidate.confidence) {
+                                PreviewTargetConfidence.EXACT_ANCHOR -> "明确 ASS anchor；仍不是 libass 字形边界命中"
+                                PreviewTargetConfidence.APPROXIMATE_ANCHOR -> "按 Style 对齐与 Margin 推导 anchor"
+                                PreviewTargetConfidence.UNRESOLVED -> "无法可靠定位，只作为同一时刻候选"
+                            },
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ObjectRelationPanel(
+    document: AssDocument,
+    event: AssEvent,
+    onFocusEvent: (Long) -> Unit,
+    onOpenStyle: () -> Unit,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val references = remember(document.events, event.style) {
+        document.events.filter { it.style == event.style }
+    }
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(topStart = 26.dp, bottomStart = 26.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        tonalElevation = 7.dp,
+        shadowElevation = 9.dp,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+    ) {
+        Column(Modifier.fillMaxSize().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Filled.AccountTree, null)
+                Text("对象关系", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f).padding(start = 8.dp))
+                IconButton(onClick = onDismiss) { Icon(Icons.Filled.Close, "关闭对象关系") }
+            }
+            Surface(
+                modifier = Modifier.fillMaxWidth().clickable(onClick = onOpenStyle),
+                color = MaterialTheme.colorScheme.primaryContainer,
+                shape = RoundedCornerShape(16.dp),
+            ) {
+                Column(Modifier.padding(10.dp)) {
+                    Text("Event #${event.id} → Style ${event.style}", style = MaterialTheme.typography.labelLarge)
+                    Text(
+                        "共享 Style 被 ${references.size} 个 Event 引用；事件级 override 仍属于各自 Event Text。",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
+            Text("引用同一 Style 的 Event", style = MaterialTheme.typography.titleSmall)
+            LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                items(references, key = { it.id }) { ref ->
+                    Surface(
+                        modifier = Modifier.fillMaxWidth().clickable { onFocusEvent(ref.id) },
+                        shape = RoundedCornerShape(14.dp),
+                        color = if (ref.id == event.id) {
+                            MaterialTheme.colorScheme.secondaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.surfaceContainer
+                        },
+                    ) {
+                        Column(Modifier.padding(8.dp)) {
+                            Text("#${ref.id} · L${ref.layer}", style = MaterialTheme.typography.labelLarge)
+                            Text(
+                                AssInlineSyntax.visibleText(ref.text).take(70),
+                                maxLines = 2,
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -2302,6 +2968,7 @@ private fun WorkbenchPreview(
     onVideoAspectRatio: (Float) -> Unit = {},
     interactionRegistry: InteractionOverlayRegistry? = null,
     viewportGesturesEnabled: Boolean = false,
+    onObjectLongPress: ((PreviewObjectPick) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     VideoPreview(
@@ -2378,6 +3045,7 @@ private fun WorkbenchPreview(
         onVideoAspectRatio = onVideoAspectRatio,
         interactionRegistry = interactionRegistry,
         viewportGesturesEnabled = viewportGesturesEnabled,
+        onObjectLongPress = onObjectLongPress,
         modifier = modifier,
     )
 }
