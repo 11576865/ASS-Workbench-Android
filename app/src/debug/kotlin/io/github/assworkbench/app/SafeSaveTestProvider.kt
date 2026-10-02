@@ -81,13 +81,15 @@ class SafeSaveTestProvider : ContentProvider() {
         val target = targetFile(uri)
         val columns = projection ?: arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE)
         return MatrixCursor(columns).apply {
-            addRow(columns.map { column ->
-                when (column) {
-                    OpenableColumns.DISPLAY_NAME -> target.name
-                    OpenableColumns.SIZE -> target.length()
-                    else -> null
+            addRow(
+                Array<Any?>(columns.size) { index ->
+                    when (columns[index]) {
+                        OpenableColumns.DISPLAY_NAME -> target.name
+                        OpenableColumns.SIZE -> target.length()
+                        else -> null
+                    }
                 }
-            }.toTypedArray())
+            )
         }
     }
 
