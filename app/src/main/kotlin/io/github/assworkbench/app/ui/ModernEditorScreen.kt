@@ -83,12 +83,10 @@ import io.github.assworkbench.app.ui.workspace.WorkbenchSurfaceController
 import io.github.assworkbench.app.ui.workspace.WorkspaceToolPresence
 import io.github.assworkbench.app.ui.workspace.ToolContentDensity
 import io.github.assworkbench.app.ui.workspace.rememberWorkbenchSurfaceController
-import io.github.assworkbench.app.ui.workspace.WorkspaceBindingResolution
 import io.github.assworkbench.app.ui.workspace.WorkspaceEditScopeResolver
 import io.github.assworkbench.app.ui.workspace.WorkspaceEditScopeSummary
 import io.github.assworkbench.app.ui.workspace.WorkspaceState
 import io.github.assworkbench.app.ui.workspace.WorkspaceToolInstance
-import io.github.assworkbench.app.ui.workspace.resolve
 import io.github.assworkbench.app.ui.workspace.resolveUiBinding
 import io.github.assworkbench.domain.*
 import io.github.assworkbench.fonts.FontDiagnostics
