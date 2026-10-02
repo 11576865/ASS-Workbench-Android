@@ -29,6 +29,7 @@ import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.performTextInput
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.lifecycle.Lifecycle
 import io.github.assworkbench.app.ui.WorkbenchTool
 import io.github.assworkbench.domain.AssDocument
 import io.github.assworkbench.domain.AssEvent
@@ -550,6 +551,41 @@ class EditorRegressionInstrumentedTest {
         assertTrue(viewModel.state.value.dirty)
         assertTrue(recoveryStore.exists())
         assertTrue(viewModel.state.value.status.startsWith("字幕保存失败："))
+    }
+
+    @Test
+    fun dirtyCanonicalSurvivesBackgroundResume() {
+        restoreRecovery()
+        viewModel.updateEventText(1L, "Recovered line BACKGROUND")
+        val before = viewModel.state.value.document
+
+        composeRule.activityRule.scenario.moveToState(Lifecycle.State.CREATED)
+        composeRule.activityRule.scenario.moveToState(Lifecycle.State.RESUMED)
+        composeRule.waitForIdle()
+
+        viewModel = composeRule.activity.editorViewModel
+        assertEquals(before, viewModel.state.value.document)
+        assertTrue(viewModel.state.value.dirty)
+        composeRule.waitUntil(10_000) {
+            recoveryStore.read()?.document?.events?.firstOrNull { it.id == 1L }?.text ==
+                "Recovered line BACKGROUND"
+        }
+    }
+
+    @Test
+    fun repeatedActivityRecreationDoesNotMutateDirtyDocument() {
+        restoreRecovery()
+        viewModel.updateEventText(1L, "{\\bord3}Recovered line RECREATE")
+        viewModel.setEventPosition(1L, 640.0, 360.0)
+        val before = viewModel.state.value.document
+
+        repeat(3) {
+            composeRule.activityRule.scenario.recreate()
+            composeRule.waitForIdle()
+            viewModel = composeRule.activity.editorViewModel
+            assertEquals(before, viewModel.state.value.document)
+            assertTrue(viewModel.state.value.dirty)
+        }
     }
 
     private fun restoreRecovery() {
