@@ -52,6 +52,11 @@ internal enum class WorkspacePresentationMode(
         status = UiVariantStatus.EXPERIMENTAL,
         description = "工具以独立透明/磨砂/实底层叠加在预览上；支持真实背景模糊、层概览与临时看穿。",
     ),
+    SUBTITLE_OBJECT_EXPERIMENTAL(
+        title = "字幕对象工作台",
+        status = UiVariantStatus.EXPERIMENTAL,
+        description = "长按画面冻结命中时刻并选择字幕对象；能力围绕对象展开，并保留候选置信与关系信息。",
+    ),
 }
 
 /**
