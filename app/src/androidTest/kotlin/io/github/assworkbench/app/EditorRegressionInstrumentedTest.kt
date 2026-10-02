@@ -341,6 +341,20 @@ class EditorRegressionInstrumentedTest {
         composeRule.waitUntil(10_000) {
             composeRule.activity.resources.configuration.screenWidthDp < 1200
         }
+
+        // Responsive relayout is allowed to return the compact workspace to its list page.
+        // Re-enter the same Event explicitly so this regression verifies draft persistence
+        // rather than depending on which compact page happens to be active after wm reset.
+        eventRow(1L)
+            .performScrollTo()
+            .assertIsDisplayed()
+            .performClick()
+        composeRule.waitUntil(10_000) {
+            composeRule.onAllNodesWithTag("event-raw-1", useUnmergedTree = true)
+                .fetchSemanticsNodes(atLeastOneRootRequired = false)
+                .isNotEmpty()
+        }
+
         composeRule.onNodeWithText("应用正文").performScrollTo().performClick()
         composeRule.waitUntil(5_000) { eventText(1L) == "Recovered line WORKBENCH" }
         composeRule.activityRule.scenario.onActivity {
