@@ -643,6 +643,23 @@ fun ModernEditorScreen(
                     interactionRegistry = interactionRegistry,
                     modifier = Modifier.weight(1f).fillMaxWidth().testTag("precision-lens-workspace"),
                 )
+            } else if (workspaceMode == WorkspacePresentationMode.EDGE_BOOKMARK_EXPERIMENTAL) {
+                EdgeBookmarkWorkspace(
+                    state = state,
+                    viewModel = viewModel,
+                    issues = issues,
+                    workspaceState = workspaceState,
+                    onWorkspaceStateChange = { workspaceState = it },
+                    expandedEventId = expandedEventId,
+                    onExpandedChange = { expandedEventId = it },
+                    onImportFont = onImportFont,
+                    onSaveMkv = onSaveMkv,
+                    eventEditorStateHolder = eventEditorStateHolder,
+                    onOpenVideo = onOpenReferenceVideo,
+                    rendererEnabled = rendererEnabled,
+                    onEnableRenderer = onEnableRenderer,
+                    modifier = Modifier.weight(1f).fillMaxWidth().testTag("edge-bookmark-workspace"),
+                )
             } else if (workspaceMode == WorkspacePresentationMode.SUBTITLE_OBJECT_EXPERIMENTAL) {
                 SubtitleObjectWorkspace(
                     state = state,
@@ -831,6 +848,7 @@ fun ModernEditorScreen(
                 WorkspacePresentationMode.TOOL_INSTANCES_EXPERIMENTAL -> false
                 WorkspacePresentationMode.GLASS_LAYERED_EXPERIMENTAL -> false
                 WorkspacePresentationMode.SUBTITLE_OBJECT_EXPERIMENTAL -> false
+                WorkspacePresentationMode.EDGE_BOOKMARK_EXPERIMENTAL -> false
             },
             modifier = Modifier.fillMaxSize().testTag("interaction-overlay"),
         )
@@ -1542,6 +1560,570 @@ private fun PrecisionLensWorkspace(
                         label = { Text("保持对象焦点") },
                     )
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun EdgeBookmarkWorkspace(
+    state: EditorState,
+    viewModel: EditorViewModel,
+    issues: List<AssQcIssue>,
+    workspaceState: WorkspaceState,
+    onWorkspaceStateChange: (WorkspaceState) -> Unit,
+    expandedEventId: Long?,
+    onExpandedChange: (Long?) -> Unit,
+    onImportFont: () -> Unit,
+    onSaveMkv: () -> Unit,
+    eventEditorStateHolder: SaveableStateHolder,
+    onOpenVideo: () -> Unit,
+    rendererEnabled: Boolean,
+    onEnableRenderer: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var edgeState by remember {
+        mutableStateOf(
+            EdgeWorkspaceState(
+                left = EdgePanelState(open = false, resident = false, extentFraction = 0.36f),
+                right = EdgePanelState(open = true, resident = false, extentFraction = 0.40f),
+                top = EdgePanelState(open = false, resident = false, extentFraction = 0.28f),
+                bottom = EdgePanelState(open = false, resident = true, extentFraction = 0.34f),
+                bookmarks = listOf(
+                    EdgeBookmark(
+                        instanceId = WorkspaceState.primaryInstanceId(WorkbenchTool.SUBTITLES.name),
+                        toolKey = WorkbenchTool.SUBTITLES.name,
+                        side = EdgeDockSide.LEFT,
+                        groupName = "导航",
+                        order = 0,
+                    ),
+                    EdgeBookmark(
+                        instanceId = WorkspaceState.primaryInstanceId(WorkbenchTool.STYLE.name),
+                        toolKey = WorkbenchTool.STYLE.name,
+                        side = EdgeDockSide.RIGHT,
+                        groupName = "排版",
+                        order = 0,
+                    ),
+                ),
+                activeBookmarkId = WorkspaceState.primaryInstanceId(WorkbenchTool.STYLE.name),
+            )
+        )
+    }
+    var bookmarkInfo by remember { mutableStateOf<EdgeBookmark?>(null) }
+
+    LaunchedEffect(Unit) {
+        var next = workspaceState
+        next = next.openPrimary(WorkbenchTool.SUBTITLES.name, WorkbenchTool.SUBTITLES.descriptor.defaultBinding)
+        next = next.openPrimary(WorkbenchTool.STYLE.name, WorkbenchTool.STYLE.descriptor.defaultBinding)
+        onWorkspaceStateChange(next.activate(WorkspaceState.primaryInstanceId(WorkbenchTool.STYLE.name)))
+    }
+
+    fun sideFor(tool: WorkbenchTool): EdgeDockSide = when (tool.group) {
+        WorkbenchToolGroup.NAVIGATION,
+        WorkbenchToolGroup.RESOURCES,
+        WorkbenchToolGroup.VALIDATION -> EdgeDockSide.LEFT
+        WorkbenchToolGroup.TIME -> EdgeDockSide.BOTTOM
+        WorkbenchToolGroup.PROJECT -> EdgeDockSide.TOP
+        else -> EdgeDockSide.RIGHT
+    }
+
+    fun openEdgeTool(tool: WorkbenchTool) {
+        val id = WorkspaceState.primaryInstanceId(tool.name)
+        val side = sideFor(tool)
+        val nextWorkspace = workspaceState
+            .openPrimary(tool.name, tool.descriptor.defaultBinding)
+            .activate(id)
+        onWorkspaceStateChange(nextWorkspace)
+        edgeState = edgeState
+            .addOrActivateBookmark(id, tool.name, side)
+            .updatePanel(side, edgeState.panel(side).copy(open = true))
+    }
+
+    fun activeInstance(): WorkspaceToolInstance? {
+        val bookmark = edgeState.activeBookmarkId
+            ?.let { id -> edgeState.bookmarks.firstOrNull { it.instanceId == id } }
+            ?: return null
+        return workspaceState.tools.firstOrNull { it.id == bookmark.instanceId }
+            ?: WorkspaceToolInstance(
+                id = bookmark.instanceId,
+                toolKey = bookmark.toolKey,
+                binding = WorkbenchTool.valueOf(bookmark.toolKey).descriptor.defaultBinding,
+            )
+    }
+
+    BoxWithConstraints(modifier.background(MaterialTheme.colorScheme.surfaceContainerLowest)) {
+        val viewportWidthPx = with(LocalDensity.current) { maxWidth.toPx() }.coerceAtLeast(1f)
+        val viewportHeightPx = with(LocalDensity.current) { maxHeight.toPx() }.coerceAtLeast(1f)
+
+        WorkbenchPreview(
+            state = state,
+            viewModel = viewModel,
+            positionEditEventId = null,
+            onOpenVideo = onOpenVideo,
+            onOpenTimeline = { edgeState = edgeState.updatePanel(EdgeDockSide.BOTTOM, edgeState.bottom.copy(open = true)) },
+            rendererEnabled = rendererEnabled,
+            onEnableRenderer = onEnableRenderer,
+            viewportGesturesEnabled = true,
+            modifier = Modifier.fillMaxSize().testTag("edge-preview"),
+        )
+
+        EdgeBookmarkRail(
+            side = EdgeDockSide.LEFT,
+            bookmarks = edgeState.bookmarks.filter { it.side == EdgeDockSide.LEFT },
+            activeId = edgeState.activeBookmarkId,
+            onActivate = { bookmark ->
+                edgeState = edgeState.copy(activeBookmarkId = bookmark.instanceId)
+                    .updatePanel(EdgeDockSide.LEFT, edgeState.left.copy(open = true))
+                onWorkspaceStateChange(workspaceState.activate(bookmark.instanceId))
+            },
+            onLongPress = { bookmarkInfo = it },
+            onMove = { id, delta ->
+                edgeState = edgeState.moveBookmark(id, EdgeDockSide.LEFT, delta)
+            },
+            onCrossSide = { id ->
+                edgeState = edgeState.moveBookmark(id, EdgeDockSide.RIGHT)
+            },
+            modifier = Modifier.align(Alignment.CenterStart).testTag("edge-bookmark-left"),
+        )
+
+        EdgeBookmarkRail(
+            side = EdgeDockSide.RIGHT,
+            bookmarks = edgeState.bookmarks.filter { it.side == EdgeDockSide.RIGHT },
+            activeId = edgeState.activeBookmarkId,
+            onActivate = { bookmark ->
+                edgeState = edgeState.copy(activeBookmarkId = bookmark.instanceId)
+                    .updatePanel(EdgeDockSide.RIGHT, edgeState.right.copy(open = true))
+                onWorkspaceStateChange(workspaceState.activate(bookmark.instanceId))
+            },
+            onLongPress = { bookmarkInfo = it },
+            onMove = { id, delta ->
+                edgeState = edgeState.moveBookmark(id, EdgeDockSide.RIGHT, delta)
+            },
+            onCrossSide = { id ->
+                edgeState = edgeState.moveBookmark(id, EdgeDockSide.LEFT)
+            },
+            modifier = Modifier.align(Alignment.CenterEnd).testTag("edge-bookmark-right"),
+        )
+
+        EdgeHandle(
+            side = EdgeDockSide.TOP,
+            open = edgeState.top.open,
+            resident = edgeState.top.resident,
+            label = "项目",
+            icon = Icons.Filled.FolderOpen,
+            onToggle = { edgeState = edgeState.togglePanel(EdgeDockSide.TOP) },
+            onToggleResident = { edgeState = edgeState.toggleResident(EdgeDockSide.TOP) },
+            onDragFraction = { delta ->
+                edgeState = edgeState.resizePanel(EdgeDockSide.TOP, delta / viewportHeightPx)
+            },
+            onDragEnd = { edgeState = edgeState.snapPanel(EdgeDockSide.TOP) },
+            modifier = Modifier.align(Alignment.TopCenter).testTag("edge-handle-top"),
+        )
+
+        EdgeHandle(
+            side = EdgeDockSide.BOTTOM,
+            open = edgeState.bottom.open,
+            resident = edgeState.bottom.resident,
+            label = "时间",
+            icon = Icons.Filled.Timeline,
+            onToggle = { edgeState = edgeState.togglePanel(EdgeDockSide.BOTTOM) },
+            onToggleResident = { edgeState = edgeState.toggleResident(EdgeDockSide.BOTTOM) },
+            onDragFraction = { delta ->
+                edgeState = edgeState.resizePanel(EdgeDockSide.BOTTOM, -delta / viewportHeightPx)
+            },
+            onDragEnd = { edgeState = edgeState.snapPanel(EdgeDockSide.BOTTOM) },
+            modifier = Modifier.align(Alignment.BottomCenter).testTag("edge-handle-bottom"),
+        )
+
+        EdgeHandle(
+            side = EdgeDockSide.LEFT,
+            open = edgeState.left.open,
+            resident = edgeState.left.resident,
+            label = "导航",
+            icon = Icons.Filled.MenuOpen,
+            onToggle = { edgeState = edgeState.togglePanel(EdgeDockSide.LEFT) },
+            onToggleResident = { edgeState = edgeState.toggleResident(EdgeDockSide.LEFT) },
+            onDragFraction = { delta ->
+                edgeState = edgeState.resizePanel(EdgeDockSide.LEFT, delta / viewportWidthPx)
+            },
+            onDragEnd = { edgeState = edgeState.snapPanel(EdgeDockSide.LEFT) },
+            modifier = Modifier.align(Alignment.CenterStart).padding(start = 50.dp).testTag("edge-handle-left"),
+        )
+
+        EdgeHandle(
+            side = EdgeDockSide.RIGHT,
+            open = edgeState.right.open,
+            resident = edgeState.right.resident,
+            label = "参数",
+            icon = Icons.Filled.Tune,
+            onToggle = { edgeState = edgeState.togglePanel(EdgeDockSide.RIGHT) },
+            onToggleResident = { edgeState = edgeState.toggleResident(EdgeDockSide.RIGHT) },
+            onDragFraction = { delta ->
+                edgeState = edgeState.resizePanel(EdgeDockSide.RIGHT, -delta / viewportWidthPx)
+            },
+            onDragEnd = { edgeState = edgeState.snapPanel(EdgeDockSide.RIGHT) },
+            modifier = Modifier.align(Alignment.CenterEnd).padding(end = 50.dp).testTag("edge-handle-right"),
+        )
+
+        if (edgeState.top.open) {
+            EdgeLayerPanel(
+                side = EdgeDockSide.TOP,
+                extentFraction = edgeState.top.extentFraction,
+                resident = edgeState.top.resident,
+                onClose = { edgeState = edgeState.updatePanel(EdgeDockSide.TOP, edgeState.top.copy(open = false)) },
+                modifier = Modifier.align(Alignment.TopCenter).testTag("edge-layer-top"),
+            ) {
+                ProjectPane(state, viewModel, onSaveMkv, Modifier.fillMaxSize())
+            }
+        }
+
+        if (edgeState.bottom.open) {
+            EdgeLayerPanel(
+                side = EdgeDockSide.BOTTOM,
+                extentFraction = edgeState.bottom.extentFraction,
+                resident = edgeState.bottom.resident,
+                onClose = { edgeState = edgeState.updatePanel(EdgeDockSide.BOTTOM, edgeState.bottom.copy(open = false)) },
+                modifier = Modifier.align(Alignment.BottomCenter).testTag("edge-layer-bottom"),
+            ) {
+                ModernTimelinePane(state, viewModel, Modifier.fillMaxSize())
+            }
+        }
+
+        if (edgeState.left.open) {
+            EdgeLayerPanel(
+                side = EdgeDockSide.LEFT,
+                extentFraction = edgeState.left.extentFraction,
+                resident = edgeState.left.resident,
+                onClose = { edgeState = edgeState.updatePanel(EdgeDockSide.LEFT, edgeState.left.copy(open = false)) },
+                modifier = Modifier.align(Alignment.CenterStart).padding(start = 50.dp).testTag("edge-layer-left"),
+            ) {
+                Column(Modifier.fillMaxSize()) {
+                    Text("对象 / 样式 / 资源 / 问题", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(10.dp))
+                    Row(
+                        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        listOf(
+                            WorkbenchTool.SUBTITLES,
+                            WorkbenchTool.STYLE,
+                            WorkbenchTool.FONTS,
+                            WorkbenchTool.QC,
+                        ).forEach { tool ->
+                            AssistChip(
+                                onClick = { openEdgeTool(tool) },
+                                label = { Text(tool.title) },
+                            )
+                        }
+                    }
+                    val instance = activeInstance()
+                    val tool = instance?.let { WorkbenchTool.entries.firstOrNull { candidate -> candidate.name == it.toolKey } }
+                    if (instance != null && tool != null && sideFor(tool) == EdgeDockSide.LEFT) {
+                        FloatingToolContent(
+                            instance = instance,
+                            tool = tool,
+                            state = state,
+                            viewModel = viewModel,
+                            issues = issues,
+                            expandedEventId = expandedEventId,
+                            onExpandedChange = onExpandedChange,
+                            onImportFont = onImportFont,
+                            onSaveMkv = onSaveMkv,
+                            eventEditorStateHolder = eventEditorStateHolder,
+                            onOpenTool = ::openEdgeTool,
+                            onCloseText = { onExpandedChange(null) },
+                            searchOpen = false,
+                            onCloseSearch = {},
+                        )
+                    } else {
+                        Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                            Text("从左侧书签或导航入口选择工具")
+                        }
+                    }
+                }
+            }
+        }
+
+        if (edgeState.right.open) {
+            EdgeLayerPanel(
+                side = EdgeDockSide.RIGHT,
+                extentFraction = edgeState.right.extentFraction,
+                resident = edgeState.right.resident,
+                onClose = { edgeState = edgeState.updatePanel(EdgeDockSide.RIGHT, edgeState.right.copy(open = false)) },
+                modifier = Modifier.align(Alignment.CenterEnd).padding(end = 50.dp).testTag("edge-layer-right"),
+            ) {
+                Column(Modifier.fillMaxSize()) {
+                    Text("参数工具", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(10.dp))
+                    Row(
+                        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        listOf(
+                            WorkbenchTool.STYLE,
+                            WorkbenchTool.POSITION,
+                            WorkbenchTool.EFFECTS,
+                            WorkbenchTool.TEXT,
+                        ).forEach { tool ->
+                            AssistChip(
+                                onClick = { openEdgeTool(tool) },
+                                label = { Text(tool.title) },
+                            )
+                        }
+                    }
+                    val instance = activeInstance()
+                    val tool = instance?.let { WorkbenchTool.entries.firstOrNull { candidate -> candidate.name == it.toolKey } }
+                    if (instance != null && tool != null && sideFor(tool) == EdgeDockSide.RIGHT) {
+                        FloatingToolContent(
+                            instance = instance,
+                            tool = tool,
+                            state = state,
+                            viewModel = viewModel,
+                            issues = issues,
+                            expandedEventId = expandedEventId,
+                            onExpandedChange = onExpandedChange,
+                            onImportFont = onImportFont,
+                            onSaveMkv = onSaveMkv,
+                            eventEditorStateHolder = eventEditorStateHolder,
+                            onOpenTool = ::openEdgeTool,
+                            onCloseText = { onExpandedChange(null) },
+                            searchOpen = false,
+                            onCloseSearch = {},
+                        )
+                    } else {
+                        Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                            Text("从右侧书签或参数入口选择工具")
+                        }
+                    }
+                }
+            }
+        }
+
+        bookmarkInfo?.let { bookmark ->
+            val tool = WorkbenchTool.entries.firstOrNull { it.name == bookmark.toolKey }
+            val instance = workspaceState.tools.firstOrNull { it.id == bookmark.instanceId }
+            AlertDialog(
+                onDismissRequest = { bookmarkInfo = null },
+                title = { Text(tool?.title ?: bookmark.toolKey) },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text("实例：${bookmark.instanceId}")
+                        Text("分组：${bookmark.groupName.ifBlank { "未分组" }}")
+                        Text(
+                            when (val binding = instance?.binding) {
+                                WorkspaceBinding.FollowFocus -> "绑定：跟随焦点"
+                                WorkspaceBinding.FollowSelection -> "绑定：跟随选择"
+                                is WorkspaceBinding.PinnedEvent -> "绑定：Event #${binding.eventId}"
+                                null -> "绑定：实例尚未打开"
+                            }
+                        )
+                        Text("长按拖动书签可排序；横向拖过轨道可移动到另一侧。")
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { bookmarkInfo = null }) { Text("关闭") }
+                },
+            )
+        }
+    }
+}
+
+@Composable
+private fun EdgeBookmarkRail(
+    side: EdgeDockSide,
+    bookmarks: List<EdgeBookmark>,
+    activeId: String?,
+    onActivate: (EdgeBookmark) -> Unit,
+    onLongPress: (EdgeBookmark) -> Unit,
+    onMove: (String, Int) -> Unit,
+    onCrossSide: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val ordered = bookmarks.sortedBy { it.order }
+    Surface(
+        modifier = modifier.width(50.dp),
+        shape = RoundedCornerShape(if (side == EdgeDockSide.LEFT) 0.dp else 18.dp),
+        tonalElevation = 4.dp,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+    ) {
+        Column(
+            Modifier.fillMaxWidth().padding(vertical = 6.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            val grouped = ordered.groupBy { it.toolKey }
+            grouped.forEach { (toolKey, group) ->
+                val active = group.firstOrNull { it.instanceId == activeId } ?: group.first()
+                val tool = WorkbenchTool.entries.firstOrNull { it.name == toolKey }
+                Box(
+                    Modifier
+                        .size(42.dp)
+                        .combinedClickable(
+                            onClick = { onActivate(active) },
+                            onLongClick = { onLongPress(active) },
+                        )
+                        .pointerInput(active.instanceId, active.order, active.side) {
+                            var totalX = 0f
+                            var totalY = 0f
+                            detectDragGesturesAfterLongPress(
+                                onDragStart = { onLongPress(active) },
+                                onDrag = { change, delta ->
+                                    change.consume()
+                                    totalX += delta.x
+                                    totalY += delta.y
+                                },
+                                onDragEnd = {
+                                    if (kotlin.math.abs(totalX) > 70f) {
+                                        onCrossSide(active.instanceId)
+                                    } else if (kotlin.math.abs(totalY) > 36f) {
+                                        onMove(active.instanceId, if (totalY > 0f) 1 else -1)
+                                    }
+                                },
+                            )
+                        }
+                        .testTag("edge-bookmark-" + active.instanceId.replace(':', '-')),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        when (tool) {
+                            WorkbenchTool.SUBTITLES -> Icons.Filled.Subtitles
+                            WorkbenchTool.STYLE -> Icons.Filled.FormatColorText
+                            WorkbenchTool.POSITION -> Icons.Filled.OpenWith
+                            WorkbenchTool.TIMELINE -> Icons.Filled.Timeline
+                            WorkbenchTool.FONTS -> Icons.Filled.FontDownload
+                            WorkbenchTool.QC -> Icons.Filled.FactCheck
+                            else -> Icons.Filled.Apps
+                        },
+                        contentDescription = tool?.title ?: toolKey,
+                        tint = if (activeId == active.instanceId) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                    )
+                    if (group.size > 1) {
+                        Surface(
+                            modifier = Modifier.align(Alignment.TopEnd),
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.primaryContainer,
+                        ) {
+                            Text(
+                                group.size.toString(),
+                                style = MaterialTheme.typography.labelSmall,
+                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun EdgeHandle(
+    side: EdgeDockSide,
+    open: Boolean,
+    resident: Boolean,
+    label: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    onToggle: () -> Unit,
+    onToggleResident: () -> Unit,
+    onDragFraction: (Float) -> Unit,
+    onDragEnd: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier
+            .pointerInput(side) {
+                detectDragGestures(
+                    onDrag = { change, delta ->
+                        change.consume()
+                        onDragFraction(
+                            if (side == EdgeDockSide.LEFT || side == EdgeDockSide.RIGHT) delta.x else delta.y
+                        )
+                    },
+                    onDragEnd = onDragEnd,
+                    onDragCancel = onDragEnd,
+                )
+            },
+        shape = RoundedCornerShape(18.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+        tonalElevation = 5.dp,
+        border = BorderStroke(
+            1.dp,
+            if (open) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
+        ),
+    ) {
+        Row(
+            Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            IconButton(
+                onClick = onToggle,
+                modifier = Modifier
+                    .size(38.dp)
+                    .testTag("edge-toggle-" + side.name.lowercase()),
+            ) {
+                Icon(icon, contentDescription = if (open) "收起$label" else "展开$label")
+            }
+            Text(label, style = MaterialTheme.typography.labelSmall)
+            IconButton(onClick = onToggleResident, modifier = Modifier.size(34.dp)) {
+                Icon(
+                    if (resident) Icons.Filled.PushPin else Icons.Filled.PushPin,
+                    contentDescription = if (resident) "取消驻留$label" else "驻留$label",
+                    tint = if (resident) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun EdgeLayerPanel(
+    side: EdgeDockSide,
+    extentFraction: Float,
+    resident: Boolean,
+    onClose: () -> Unit,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
+    BoxWithConstraints(modifier.fillMaxSize()) {
+        val panelModifier = when (side) {
+            EdgeDockSide.LEFT, EdgeDockSide.RIGHT ->
+                Modifier.fillMaxHeight().width(maxWidth * extentFraction)
+            EdgeDockSide.TOP, EdgeDockSide.BOTTOM ->
+                Modifier.fillMaxWidth().height(maxHeight * extentFraction)
+        }
+        Surface(
+            modifier = panelModifier,
+            shape = RoundedCornerShape(20.dp),
+            tonalElevation = if (resident) 5.dp else 8.dp,
+            shadowElevation = if (resident) 3.dp else 8.dp,
+            color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = if (resident) 0.98f else 0.94f),
+            border = BorderStroke(
+                1.dp,
+                if (resident) MaterialTheme.colorScheme.primary.copy(alpha = 0.55f)
+                else MaterialTheme.colorScheme.outlineVariant,
+            ),
+        ) {
+            Column(Modifier.fillMaxSize()) {
+                Row(
+                    Modifier.fillMaxWidth().height(42.dp).padding(horizontal = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(Icons.Filled.DragHandle, null)
+                    Text(
+                        if (resident) "驻留边层" else "临时边层",
+                        style = MaterialTheme.typography.labelMedium,
+                        modifier = Modifier.weight(1f).padding(start = 6.dp),
+                    )
+                    IconButton(onClick = onClose, modifier = Modifier.size(36.dp)) {
+                        Icon(Icons.Filled.Close, "关闭边层")
+                    }
+                }
+                HorizontalDivider()
+                Box(Modifier.weight(1f).fillMaxWidth()) { content() }
             }
         }
     }
