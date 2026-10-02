@@ -42,6 +42,11 @@ internal enum class WorkspacePresentationMode(
         status = UiVariantStatus.EXPERIMENTAL,
         description = "围绕字幕几何操纵杆加入局部放大、粗细调、吸附预告、触觉反馈与实时读数。",
     ),
+    TOOL_INSTANCES_EXPERIMENTAL(
+        title = "工具实例工作台",
+        status = UiVariantStatus.EXPERIMENTAL,
+        description = "同一工具可多实例；临时、驻留、侧书签和隐藏状态彼此独立，绑定与局部现场随实例保留。",
+    ),
 }
 
 /**

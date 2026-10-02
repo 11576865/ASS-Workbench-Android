@@ -13,6 +13,7 @@ class UiVariantRegistryTest {
         assertTrue(UiVariantRegistry.entries.contains(WorkspacePresentationMode.PAGER_EXPERIMENTAL))
         assertTrue(UiVariantRegistry.entries.contains(WorkspacePresentationMode.SPATIAL_EXPERIMENTAL))
         assertTrue(UiVariantRegistry.entries.contains(WorkspacePresentationMode.PRECISION_LENS_EXPERIMENTAL))
+        assertTrue(UiVariantRegistry.entries.contains(WorkspacePresentationMode.TOOL_INSTANCES_EXPERIMENTAL))
     }
 
     @Test
@@ -36,6 +37,10 @@ class UiVariantRegistryTest {
         assertSame(
             WorkspacePresentationMode.PRECISION_LENS_EXPERIMENTAL,
             UiVariantRegistry.resolve("PRECISION_LENS_EXPERIMENTAL"),
+        )
+        assertSame(
+            WorkspacePresentationMode.TOOL_INSTANCES_EXPERIMENTAL,
+            UiVariantRegistry.resolve("TOOL_INSTANCES_EXPERIMENTAL"),
         )
     }
 

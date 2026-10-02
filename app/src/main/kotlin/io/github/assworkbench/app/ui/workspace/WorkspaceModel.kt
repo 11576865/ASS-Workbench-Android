@@ -35,10 +35,27 @@ internal fun WorkspaceBinding.resolve(
     }
 }
 
+internal enum class WorkspaceToolPresence(val label: String) {
+    TEMPORARY("临时"),
+    RESIDENT("驻留"),
+    BOOKMARKED("侧书签"),
+    HIDDEN("已收回"),
+}
+
+internal enum class ToolContentDensity(val label: String) {
+    COMPACT("紧凑"),
+    STANDARD("标准"),
+    PRECISION("精确");
+
+    fun next(): ToolContentDensity = entries[(ordinal + 1) % entries.size]
+}
+
 internal data class WorkspaceToolInstance(
     val id: String,
     val toolKey: String,
     val binding: WorkspaceBinding = WorkspaceBinding.FollowFocus,
+    val presence: WorkspaceToolPresence = WorkspaceToolPresence.TEMPORARY,
+    val contentDensity: ToolContentDensity = ToolContentDensity.STANDARD,
 )
 
 internal data class WorkspaceState(
@@ -115,6 +132,44 @@ internal data class WorkspaceState(
         return copy(tools = tools + instance)
     }
 
+    fun updatePresence(
+        instanceId: String,
+        presence: WorkspaceToolPresence,
+    ): WorkspaceState = copy(
+        tools = tools.map { instance ->
+            if (instance.id == instanceId) instance.copy(presence = presence) else instance
+        },
+        activeInstanceId = if (presence == WorkspaceToolPresence.HIDDEN ||
+            presence == WorkspaceToolPresence.BOOKMARKED
+        ) {
+            if (activeInstanceId == instanceId) tools.firstOrNull {
+                it.id != instanceId && it.presence == WorkspaceToolPresence.RESIDENT
+            }?.id else activeInstanceId
+        } else {
+            instanceId
+        },
+    )
+
+    fun cycleContentDensity(instanceId: String): WorkspaceState = copy(
+        tools = tools.map { instance ->
+            if (instance.id == instanceId) {
+                instance.copy(contentDensity = instance.contentDensity.next())
+            } else {
+                instance
+            }
+        },
+    )
+
+    fun hideOtherTemporary(exceptId: String): WorkspaceState = copy(
+        tools = tools.map { instance ->
+            if (instance.id != exceptId && instance.presence == WorkspaceToolPresence.TEMPORARY) {
+                instance.copy(presence = WorkspaceToolPresence.HIDDEN)
+            } else {
+                instance
+            }
+        },
+    )
+
     fun newSibling(sourceId: String): WorkspaceToolInstance? {
         val source = tools.firstOrNull { it.id == sourceId } ?: return null
         var ordinal = 2
@@ -188,13 +243,16 @@ internal data class WorkspaceState(
                     instance.toolKey,
                     bindingCode,
                     bindingArgument,
+                    instance.presence.name,
+                    instance.contentDensity.name,
                 ).joinToString(SEPARATOR)
             )
         }
     }
 
     companion object {
-        private const val SCHEMA_VERSION = "workspace-v2"
+        private const val SCHEMA_VERSION = "workspace-v3"
+        private const val V2_SCHEMA_VERSION = "workspace-v2"
         private const val LEGACY_SCHEMA_VERSION = "workspace-v1"
         private const val SEPARATOR = "\u001F"
 
@@ -203,15 +261,21 @@ internal data class WorkspaceState(
 
         fun fromSaveableList(values: List<String>): WorkspaceState {
             val version = values.firstOrNull()
-            if (version != SCHEMA_VERSION && version != LEGACY_SCHEMA_VERSION) return WorkspaceState()
+            if (version != SCHEMA_VERSION && version != V2_SCHEMA_VERSION &&
+                version != LEGACY_SCHEMA_VERSION
+            ) return WorkspaceState()
 
             val hidden = values.getOrNull(1) == "1"
             val serializedActive = values.getOrNull(2)?.takeIf(String::isNotBlank)
-            val sessionId = if (version == SCHEMA_VERSION) values.getOrNull(3)?.toLongOrNull() else null
-            val toolStart = if (version == SCHEMA_VERSION) 4 else 3
+            val sessionId = if (version == SCHEMA_VERSION || version == V2_SCHEMA_VERSION) {
+                values.getOrNull(3)?.toLongOrNull()
+            } else {
+                null
+            }
+            val toolStart = if (version == SCHEMA_VERSION || version == V2_SCHEMA_VERSION) 4 else 3
             val restoredTools = values.drop(toolStart).mapNotNull { encoded ->
                 val fields = encoded.split(SEPARATOR)
-                if (fields.size != 4) return@mapNotNull null
+                if (fields.size != 4 && fields.size != 6) return@mapNotNull null
 
                 val binding = when (fields[2]) {
                     "focus" -> WorkspaceBinding.FollowFocus
@@ -224,6 +288,12 @@ internal data class WorkspaceState(
                     id = fields[0],
                     toolKey = fields[1],
                     binding = binding,
+                    presence = fields.getOrNull(4)
+                        ?.let { name -> WorkspaceToolPresence.entries.firstOrNull { it.name == name } }
+                        ?: WorkspaceToolPresence.TEMPORARY,
+                    contentDensity = fields.getOrNull(5)
+                        ?.let { name -> ToolContentDensity.entries.firstOrNull { it.name == name } }
+                        ?: ToolContentDensity.STANDARD,
                 )
             }.distinctBy { it.id }
 
