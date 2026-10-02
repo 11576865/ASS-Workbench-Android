@@ -1,5 +1,7 @@
 package io.github.assworkbench.app.ui.workspace
 
+import io.github.assworkbench.app.EditorState
+import io.github.assworkbench.app.toEditorUiState
 import io.github.assworkbench.app.ui.WorkbenchTool
 import io.github.assworkbench.domain.AssDocument
 import io.github.assworkbench.domain.AssEvent
@@ -35,8 +37,7 @@ class WorkspaceEditScopeResolverTest {
             WorkbenchTool.STYLE,
             instance,
             document,
-            focusedEventId = 87,
-            selectedEventIds = emptySet(),
+            editorUiState = uiState(focusedEventId = 87),
         )!!
 
         assertEquals("Style · Default", summary.who)
@@ -58,8 +59,7 @@ class WorkspaceEditScopeResolverTest {
             WorkbenchTool.POSITION,
             instance,
             document,
-            focusedEventId = 87,
-            selectedEventIds = emptySet(),
+            editorUiState = uiState(focusedEventId = 87),
         )!!
 
         assertEquals("Event #41", summary.who)
@@ -79,8 +79,7 @@ class WorkspaceEditScopeResolverTest {
             WorkbenchTool.POSITION,
             instance,
             document,
-            focusedEventId = 41,
-            selectedEventIds = emptySet(),
+            editorUiState = uiState(focusedEventId = 41),
         )!!
 
         assertTrue(summary.unresolved)
@@ -100,14 +99,26 @@ class WorkspaceEditScopeResolverTest {
             WorkbenchTool.BATCH,
             instance,
             document,
-            focusedEventId = 87,
-            selectedEventIds = setOf(41, 42),
+            editorUiState = uiState(
+                focusedEventId = 87,
+                selectedEventIds = setOf(41, 42),
+            ),
         )!!
 
         assertEquals("已选 2 条 Event", summary.who)
         assertEquals("批量 Event 变换", summary.where)
         assertEquals(2, summary.howMany)
     }
+
+    private fun uiState(
+        focusedEventId: Long?,
+        selectedEventIds: Set<Long> = emptySet(),
+    ) = EditorState(
+        document = document,
+        focusedEventId = focusedEventId,
+        selectedEventIds = selectedEventIds,
+        workspaceSessionId = 7L,
+    ).toEditorUiState()
 
     @Test
     fun nonMutatingDirectoryHasNoEditScopeBanner() {
@@ -121,8 +132,7 @@ class WorkspaceEditScopeResolverTest {
                 WorkbenchTool.CAPABILITIES,
                 instance,
                 document,
-                focusedEventId = 41,
-                selectedEventIds = emptySet(),
+                editorUiState = uiState(focusedEventId = 41),
             ),
         )
     }

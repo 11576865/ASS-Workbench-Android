@@ -3,14 +3,17 @@ package io.github.assworkbench.app
 /**
  * Stable, presentation-neutral slice of editor state.
  *
- * Slice A intentionally covers only document identity/summary, Focus, Selection,
- * and Undo/Redo. Later slices may extend the contract, but presentations should
- * not bypass this boundary by depending on unrelated EditorViewModel internals.
+ * Slice A covers document summary, Focus, Selection and Undo/Redo.
+ * Slice B adds a presentation-neutral current-object projection so Workspace
+ * Binding resolution does not have to reach back into arbitrary EditorState fields.
+ * Presentations should not bypass this boundary by depending on unrelated
+ * EditorViewModel internals.
  */
 internal data class EditorUiState(
     val document: EditorUiDocumentSummary,
     val focus: EditorUiFocusState,
     val selection: EditorUiSelectionState,
+    val objects: EditorUiObjectState,
     val history: EditorUiHistoryState,
     val workspaceSessionId: Long,
 )
@@ -30,6 +33,17 @@ internal data class EditorUiFocusState(
 internal data class EditorUiSelectionState(
     val eventIds: Set<Long>,
     val anchorId: Long?,
+)
+
+internal data class EditorUiEventIdentity(
+    val id: Long,
+    val styleName: String,
+    val layer: Int,
+)
+
+internal data class EditorUiObjectState(
+    val existingEventIds: Set<Long>,
+    val currentEvent: EditorUiEventIdentity?,
 )
 
 internal data class EditorUiHistoryState(
@@ -66,6 +80,18 @@ internal fun EditorState.toEditorUiState(): EditorUiState =
         selection = EditorUiSelectionState(
             eventIds = selectedEventIds.toSet(),
             anchorId = selectionAnchorId,
+        ),
+        objects = EditorUiObjectState(
+            existingEventIds = document.events.mapTo(linkedSetOf()) { it.id },
+            currentEvent = focusedEventId
+                ?.let { id -> document.events.firstOrNull { it.id == id } }
+                ?.let { event ->
+                    EditorUiEventIdentity(
+                        id = event.id,
+                        styleName = event.style,
+                        layer = event.layer,
+                    )
+                },
         ),
         history = EditorUiHistoryState(
             canUndo = canUndo,

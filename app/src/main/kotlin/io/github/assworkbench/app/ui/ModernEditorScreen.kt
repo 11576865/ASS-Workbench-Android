@@ -83,12 +83,11 @@ import io.github.assworkbench.app.ui.workspace.WorkbenchSurfaceController
 import io.github.assworkbench.app.ui.workspace.WorkspaceToolPresence
 import io.github.assworkbench.app.ui.workspace.ToolContentDensity
 import io.github.assworkbench.app.ui.workspace.rememberWorkbenchSurfaceController
-import io.github.assworkbench.app.ui.workspace.WorkspaceBindingResolution
 import io.github.assworkbench.app.ui.workspace.WorkspaceEditScopeResolver
 import io.github.assworkbench.app.ui.workspace.WorkspaceEditScopeSummary
 import io.github.assworkbench.app.ui.workspace.WorkspaceState
 import io.github.assworkbench.app.ui.workspace.WorkspaceToolInstance
-import io.github.assworkbench.app.ui.workspace.resolve
+import io.github.assworkbench.app.ui.workspace.resolveUiBinding
 import io.github.assworkbench.domain.*
 import io.github.assworkbench.fonts.FontDiagnostics
 import io.github.assworkbench.fonts.FontOrigin
@@ -215,20 +214,10 @@ fun ModernEditorScreen(
     fun srtFileName(): String =
         state.project.title.substringBeforeLast('.').ifBlank { "subtitle" } + ".srt"
 
-    val existingEventIds = remember(state.document.events) {
-        state.document.events.asSequence().map { it.id }.toSet()
-    }
+    val editorUiState = state.toEditorUiState()
     val activePositionInstance = workspaceState.activeForTool(WorkbenchTool.POSITION.name)
-    val activePositionResolution = activePositionInstance?.binding?.resolve(
-        focusedEventId = state.focusedEventId,
-        selectedEventIds = state.selectedEventIds,
-        existingEventIds = existingEventIds,
-    )
-    val positionEditEventId = when {
-        activePositionInstance != null ->
-            (activePositionResolution as? WorkspaceBindingResolution.Event)?.eventId
-        else -> null
-    }
+    val activePositionBinding = activePositionInstance?.resolveUiBinding(editorUiState)
+    val positionEditEventId = activePositionBinding?.eventId
     val issues by produceState<List<AssQcIssue>>(initialValue = emptyList(), state.document) {
         value = withContext(Dispatchers.Default) {
             AssQualityCheck.inspect(state.document)
@@ -272,7 +261,7 @@ fun ModernEditorScreen(
     }
 
     fun openPositionTarget(eventId: Long) {
-        if (eventId !in existingEventIds) return
+        if (eventId !in editorUiState.objects.existingEventIds) return
         viewModel.focusEvent(eventId, seek = false)
         val toolKey = WorkbenchTool.POSITION.name
         workspaceState = workspaceState.openPinnedEvent(toolKey, eventId)
@@ -705,21 +694,18 @@ fun ModernEditorScreen(
                         }
                     }
                     val eventBound = surfaceTool.descriptor.eventBindable
-                    val bindingResolution = instance.binding.resolve(
-                        focusedEventId = state.focusedEventId,
-                        selectedEventIds = state.selectedEventIds,
-                        existingEventIds = existingEventIds,
-                    )
+                    val bindingState = instance.resolveUiBinding(editorUiState)
                     val bindingLabel = if (eventBound) {
                         when (val binding = instance.binding) {
                             WorkspaceBinding.FollowFocus ->
-                                state.focusedEventId?.let { "跟随 #$it" } ?: "跟随焦点"
+                                editorUiState.focus.eventId?.let { "跟随 #$it" } ?: "跟随焦点"
                             WorkspaceBinding.FollowSelection -> "跟随选择"
-                            is WorkspaceBinding.PinnedEvent -> when (bindingResolution) {
-                                is WorkspaceBindingResolution.UnresolvedPinnedEvent ->
+                            is WorkspaceBinding.PinnedEvent ->
+                                if (bindingState.unresolvedPinnedEventId != null) {
                                     "固定 #${binding.eventId} · 已失效"
-                                else -> "固定 #${binding.eventId}"
-                            }
+                                } else {
+                                    "固定 #${binding.eventId}"
+                                }
                         }
                     } else {
                         null
@@ -891,9 +877,7 @@ private fun GlassLayeredWorkspace(
     val materials = remember { mutableStateMapOf<String, GlassMaterial>() }
     val offsets = remember { mutableStateMapOf<String, IntOffset>() }
 
-    val existingEventIds = remember(state.document.events) {
-        state.document.events.asSequence().map { it.id }.toSet()
-    }
+    val editorUiState = state.toEditorUiState()
 
     Box(modifier.background(MaterialTheme.colorScheme.surfaceContainerLowest)) {
         WorkbenchPreview(
@@ -923,18 +907,15 @@ private fun GlassLayeredWorkspace(
                 activeLayer = active,
                 deemphasized = workspaceState.activeInstanceId != null && !active,
             )
-            val bindingResolution = instance.binding.resolve(
-                focusedEventId = state.focusedEventId,
-                selectedEventIds = state.selectedEventIds,
-                existingEventIds = existingEventIds,
-            )
+            val bindingState = instance.resolveUiBinding(editorUiState)
             val bindingLabel = when (val binding = instance.binding) {
                 WorkspaceBinding.FollowFocus ->
-                    state.focusedEventId?.let { "跟随 #$it" } ?: "跟随焦点"
+                    editorUiState.focus.eventId?.let { "跟随 #$it" } ?: "跟随焦点"
                 WorkspaceBinding.FollowSelection ->
-                    if (state.selectedEventIds.isEmpty()) "跟随选择" else "选择 ${state.selectedEventIds.size} 条"
+                    if (editorUiState.selection.eventIds.isEmpty()) "跟随选择"
+                    else "选择 ${editorUiState.selection.eventIds.size} 条"
                 is WorkspaceBinding.PinnedEvent ->
-                    if (bindingResolution is WorkspaceBindingResolution.UnresolvedPinnedEvent) {
+                    if (bindingState.unresolvedPinnedEventId != null) {
                         "固定 #${binding.eventId} · 已失效"
                     } else {
                         "固定 #${binding.eventId}"
@@ -1146,9 +1127,7 @@ private fun ToolInstanceWorkspace(
     onCloseSearch: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val existingEventIds = remember(state.document.events) {
-        state.document.events.asSequence().map { it.id }.toSet()
-    }
+    val editorUiState = state.toEditorUiState()
     val temporaryIds = workspaceState.tools
         .filter { it.presence == WorkspaceToolPresence.TEMPORARY }
         .map { it.id }
@@ -1189,21 +1168,19 @@ private fun ToolInstanceWorkspace(
             val visible = instance.presence != WorkspaceToolPresence.HIDDEN &&
                 instance.presence != WorkspaceToolPresence.BOOKMARKED &&
                 activeTabId == instance.id
-            val bindingResolution = instance.binding.resolve(
-                focusedEventId = state.focusedEventId,
-                selectedEventIds = state.selectedEventIds,
-                existingEventIds = existingEventIds,
-            )
-            val unresolved = bindingResolution is WorkspaceBindingResolution.UnresolvedPinnedEvent
+            val bindingState = instance.resolveUiBinding(editorUiState)
             val bindingLabel = when (val binding = instance.binding) {
                 WorkspaceBinding.FollowFocus ->
-                    state.focusedEventId?.let { "跟随焦点 · #$it" } ?: "跟随焦点"
+                    editorUiState.focus.eventId?.let { "跟随焦点 · #$it" } ?: "跟随焦点"
                 WorkspaceBinding.FollowSelection ->
-                    if (state.selectedEventIds.isEmpty()) "跟随选择 · 空"
-                    else "跟随选择 · ${state.selectedEventIds.size} 条"
+                    if (editorUiState.selection.eventIds.isEmpty()) "跟随选择 · 空"
+                    else "跟随选择 · ${editorUiState.selection.eventIds.size} 条"
                 is WorkspaceBinding.PinnedEvent ->
-                    if (unresolved) "固定 #${binding.eventId} · 已失效"
-                    else "固定 #${binding.eventId}"
+                    if (bindingState.unresolvedPinnedEventId != null) {
+                        "固定 #${binding.eventId} · 已失效"
+                    } else {
+                        "固定 #${binding.eventId}"
+                    }
             }
             val tabTitles = groupIds.mapNotNull { id ->
                 workspaceState.tools.firstOrNull { it.id == id }?.let { grouped ->
@@ -1291,18 +1268,20 @@ private fun ToolInstanceWorkspace(
                 onCycleContentDensity = {
                     onWorkspaceStateChange(workspaceState.cycleContentDensity(instance.id))
                 },
-                onRelink = if (unresolved && state.focusedEventId != null) {
-                    {
-                        onWorkspaceStateChange(
-                            workspaceState
-                                .updateBinding(
-                                    instance.id,
-                                    WorkspaceBinding.PinnedEvent(state.focusedEventId),
-                                )
-                                .activate(instance.id)
-                        )
-                    }
-                } else null,
+                onRelink = editorUiState.focus.eventId
+                    ?.takeIf { bindingState.unresolvedPinnedEventId != null }
+                    ?.let { focusId ->
+                        {
+                            onWorkspaceStateChange(
+                                workspaceState
+                                    .updateBinding(
+                                        instance.id,
+                                        WorkspaceBinding.PinnedEvent(focusId),
+                                    )
+                                    .activate(instance.id)
+                            )
+                        }
+                    },
                 tabTitles = tabTitles,
                 onSelectTab = { tabId ->
                     surfaceController.activateTab(tabId)
@@ -3451,11 +3430,7 @@ private fun FixedWorkspace(
 
             val preview: @Composable (Modifier) -> Unit = { previewModifier ->
                 val positionTargetId = if (activeTool == WorkbenchTool.POSITION) {
-                    (instance.binding.resolve(
-                        focusedEventId = state.focusedEventId,
-                        selectedEventIds = state.selectedEventIds,
-                        existingEventIds = state.document.events.mapTo(hashSetOf()) { it.id },
-                    ) as? WorkspaceBindingResolution.Event)?.eventId
+                    instance.resolveUiBinding(state.toEditorUiState()).eventId
                 } else {
                     null
                 }
@@ -3651,26 +3626,21 @@ private fun FloatingToolContent(
     searchOpen: Boolean,
     onCloseSearch: () -> Unit,
 ) {
-    val resolvedBinding = instance.binding.resolve(
-        focusedEventId = state.focusedEventId,
-        selectedEventIds = state.selectedEventIds,
-        existingEventIds = state.document.events.asSequence().map { it.id }.toSet(),
-    )
-    val boundEventId = (resolvedBinding as? WorkspaceBindingResolution.Event)?.eventId
-    val unresolvedPinnedEventId =
-        (resolvedBinding as? WorkspaceBindingResolution.UnresolvedPinnedEvent)?.eventId
+    val editorUiState = state.toEditorUiState()
+    val bindingState = instance.resolveUiBinding(editorUiState)
+    val boundEventId = bindingState.eventId
+    val unresolvedPinnedEventId = bindingState.unresolvedPinnedEventId
     val contextualEventId = if (unresolvedPinnedEventId != null) {
         null
     } else {
-        boundEventId ?: expandedEventId ?: state.focusedEventId
+        boundEventId ?: expandedEventId ?: editorUiState.objects.currentEvent?.id
     }
     val event = state.document.events.firstOrNull { it.id == contextualEventId }
     val editScope = WorkspaceEditScopeResolver.resolve(
         tool = tool,
         instance = instance,
         document = state.document,
-        focusedEventId = state.focusedEventId,
-        selectedEventIds = state.selectedEventIds,
+        editorUiState = editorUiState,
     )
     when (tool) {
         WorkbenchTool.SUBTITLES -> Column(Modifier.fillMaxSize()) {
