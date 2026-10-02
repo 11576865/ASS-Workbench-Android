@@ -5297,8 +5297,8 @@ private fun AddTransformCard(
 
 @Composable
 private fun ModernTimelinePane(state: EditorState, viewModel: EditorViewModel, modifier: Modifier = Modifier, compact: Boolean = false) {
-    val zoomSteps = listOf(5, 10, 30, 60, 120)
-    var windowSeconds by rememberSaveable { mutableStateOf(30) }
+    val zoomStepsMs = listOf(5_000L, 10_000L, 30_000L, 60_000L, 120_000L)
+    var windowDurationMs by rememberSaveable { mutableLongStateOf(30_000L) }
     var viewportCenterMs by rememberSaveable { mutableLongStateOf(viewModel.playbackPositionMs.value) }
     var followPlayhead by rememberSaveable { mutableStateOf(true) }
     var snapEnabled by rememberSaveable { mutableStateOf(true) }
@@ -5311,7 +5311,6 @@ private fun ModernTimelinePane(state: EditorState, viewModel: EditorViewModel, m
 
     val playheadMs by viewModel.playbackPositionMs.collectAsState()
     val focusedEvent = state.document.events.firstOrNull { it.id == state.focusedEventId }
-    val windowDurationMs = windowSeconds * 1000L
     val halfWindowMs = windowDurationMs / 2L
 
     LaunchedEffect(playheadMs, followPlayhead, halfWindowMs) {
@@ -5352,7 +5351,16 @@ private fun ModernTimelinePane(state: EditorState, viewModel: EditorViewModel, m
     }
     val activeSnapStrength = TimelineSnapStrength.entries
         .firstOrNull { it.name == snapStrength } ?: TimelineSnapStrength.NORMAL
-    val zoomIndex = zoomSteps.indexOf(windowSeconds).coerceAtLeast(0)
+    val zoomIndex = zoomStepsMs.indices.minByOrNull { index ->
+        kotlin.math.abs(zoomStepsMs[index] - windowDurationMs)
+    } ?: 0
+    val timelineWindowLabel = if (windowDurationMs % 1000L == 0L) {
+        "${windowDurationMs / 1000L}s"
+    } else {
+        "%.1fs".format(java.util.Locale.US, windowDurationMs / 1000.0)
+    }
+    val latestWindowDurationMs by rememberUpdatedState(windowDurationMs)
+    val latestViewportCenterMs by rememberUpdatedState(viewportCenterMs)
 
     Column(modifier.padding(WorkbenchDimens.Small), verticalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro)) {
         Row(
@@ -5377,14 +5385,14 @@ private fun ModernTimelinePane(state: EditorState, viewModel: EditorViewModel, m
                 label = { Text("跟随播放头") },
             )
             OutlinedButton(
-                onClick = { if (zoomIndex > 0) windowSeconds = zoomSteps[zoomIndex - 1] },
+                onClick = { if (zoomIndex > 0) windowDurationMs = zoomStepsMs[zoomIndex - 1] },
                 enabled = zoomIndex > 0,
             ) { Text("放大") }
             OutlinedButton(
-                onClick = { if (zoomIndex < zoomSteps.lastIndex) windowSeconds = zoomSteps[zoomIndex + 1] },
-                enabled = zoomIndex < zoomSteps.lastIndex,
+                onClick = { if (zoomIndex < zoomStepsMs.lastIndex) windowDurationMs = zoomStepsMs[zoomIndex + 1] },
+                enabled = zoomIndex < zoomStepsMs.lastIndex,
             ) { Text("缩小") }
-            Text("${windowSeconds}s", style = MaterialTheme.typography.labelMedium)
+            Text(timelineWindowLabel, style = MaterialTheme.typography.labelMedium)
             if (!followPlayhead) {
                 TextButton(onClick = {
                     viewportCenterMs = TimelineViewportPolicy.resolveCenter(
@@ -5461,20 +5469,39 @@ private fun ModernTimelinePane(state: EditorState, viewModel: EditorViewModel, m
                 .fillMaxWidth()
                 .height(if (compact) 24.dp else 34.dp)
                 .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.38f))
-                .pointerInput(windowDurationMs, halfWindowMs) {
-                    detectHorizontalDragGestures(
-                        onDragStart = { followPlayhead = false },
-                        onHorizontalDrag = { change, dragAmount ->
-                            change.consume()
-                            viewportCenterMs = TimelineViewportPolicy.panCenter(
-                                currentCenterMs = viewportCenterMs,
-                                dragAmountPx = dragAmount,
+                .pointerInput(Unit) {
+                    detectTransformGestures { centroid, pan, zoom, _ ->
+                        val oldDuration = latestWindowDurationMs.coerceAtLeast(1L)
+                        val safeZoom = zoom.takeIf { it.isFinite() && it > 0f } ?: 1f
+                        val newDuration = kotlin.math.round(oldDuration.toDouble() / safeZoom.toDouble())
+                            .toLong()
+                            .coerceIn(500L, 120_000L)
+                        val anchorFraction = if (size.width > 0) {
+                            (centroid.x / size.width.toFloat()).coerceIn(0f, 1f)
+                        } else {
+                            0.5f
+                        }
+                        var center = TimelineViewportPolicy.zoomCenterAroundAnchor(
+                            currentCenterMs = latestViewportCenterMs,
+                            oldWindowDurationMs = oldDuration,
+                            newWindowDurationMs = newDuration,
+                            anchorFraction = anchorFraction,
+                        )
+                        if (pan.x.isFinite() && kotlin.math.abs(pan.x) > 0.01f) {
+                            center = TimelineViewportPolicy.panCenter(
+                                currentCenterMs = center,
+                                dragAmountPx = pan.x,
                                 widthPx = size.width,
-                                windowDurationMs = windowDurationMs,
-                                halfWindowMs = halfWindowMs,
+                                windowDurationMs = newDuration,
+                                halfWindowMs = newDuration / 2L,
                             )
-                        },
-                    )
+                        }
+                        if (newDuration != oldDuration || kotlin.math.abs(pan.x) > 0.01f) {
+                            followPlayhead = false
+                        }
+                        viewportCenterMs = center
+                        windowDurationMs = newDuration
+                    }
                 },
         ) {
             val viewportColors = MaterialTheme.colorScheme
@@ -5534,7 +5561,7 @@ private fun ModernTimelinePane(state: EditorState, viewModel: EditorViewModel, m
 
         if (!compact) {
         Text(
-            "拖上方时间标尺平移视窗；关闭“跟随播放头”后，播放继续也不会把视窗拉回。Event：拖左右边缘调整 Start / End，拖主体整体平移。",
+            "拖上方时间标尺平移视窗，双指捏合连续缩放；关闭“跟随播放头”后，播放继续也不会把视窗拉回。Event：拖左右边缘调整 Start / End，拖主体整体平移。",
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
