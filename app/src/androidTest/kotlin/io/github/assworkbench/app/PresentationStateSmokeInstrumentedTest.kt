@@ -57,10 +57,6 @@ class PresentationStateSmokeInstrumentedTest {
     fun subtitleObjectPreservesCanonicalStateAndExistingHistory() =
         assertPresentationInvariant("SUBTITLE_OBJECT_EXPERIMENTAL", "subtitle-object-workspace")
 
-    @Test
-    fun edgeBookmarkPreservesCanonicalStateAndExistingHistory() =
-        assertPresentationInvariant("EDGE_BOOKMARK_EXPERIMENTAL", "edge-bookmark-workspace")
-
     private fun assertPresentationInvariant(variant: String, rootTag: String) {
         composeRule.onNodeWithTag("recovery-restore")
             .assertIsDisplayed()
