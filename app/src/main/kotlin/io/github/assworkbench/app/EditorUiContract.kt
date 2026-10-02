@@ -24,6 +24,7 @@ internal data class EditorUiState(
     val preview: EditorUiPreviewState,
     val resources: EditorUiResourceState,
     val container: EditorUiContainerState,
+    val diagnostics: EditorUiDiagnosticsState,
     val history: EditorUiHistoryState,
     val workspaceSessionId: Long,
 )
@@ -79,7 +80,6 @@ internal data class EditorUiResourceState(
     val fontRevision: Long,
     val packagingSelectionCount: Int,
     val fallbackFontFamily: String?,
-    val rendererDiagnostics: List<String>,
 )
 
 /**
@@ -99,6 +99,16 @@ internal data class EditorUiContainerState(
     val writeBackAvailable: Boolean,
     val writeBackBusy: Boolean,
     val error: String?,
+)
+
+/**
+ * Read-only diagnostics snapshot for presentation surfaces.
+ *
+ * Lists are copied at projection time so diagnostics remain observation data,
+ * not a mutable back-channel into EditorState.
+ */
+internal data class EditorUiDiagnosticsState(
+    val rendererMessages: List<String>,
 )
 
 internal data class EditorUiHistoryState(
@@ -159,7 +169,6 @@ internal fun EditorState.toEditorUiState(): EditorUiState =
             fontRevision = fontRevision,
             packagingSelectionCount = fontPackagingSelection.size,
             fallbackFontFamily = fallbackFontFamily,
-            rendererDiagnostics = rendererDiagnostics.toList(),
         ),
         container = EditorUiContainerState(
             attached = container.uri != null,
@@ -172,6 +181,9 @@ internal fun EditorState.toEditorUiState(): EditorUiState =
             writeBackAvailable = container.writeBackAvailable,
             writeBackBusy = container.writeBackBusy,
             error = container.error,
+        ),
+        diagnostics = EditorUiDiagnosticsState(
+            rendererMessages = rendererDiagnostics.toList(),
         ),
         history = EditorUiHistoryState(
             canUndo = canUndo,
