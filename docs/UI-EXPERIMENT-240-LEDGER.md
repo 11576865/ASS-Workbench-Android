@@ -6,10 +6,11 @@
 
 ## 事实快照
 
-- current main: `e1e38151889e58b0c6ab4668c5ef7740fd535406`
+- current main: `1fe26544b6e8dea4296bd79334d5b235ce62f65c`
 - #61 Presentation invariant gate: merged。
 - #62 UI Stability Boundary + Contract Slice A: merged；merge commit `27e23899fe96d535cce087b172b23f2ce6050626`。
 - #69 Edge Bookmark presentation gate: merged；Edge Bookmark 现已进入 cross-presentation canonical state / Focus / Undo-Redo invariant gate。
+- #72 UI Contract Slice B（current object + Binding）: merged；Binding 解析统一经 presentation-neutral canonical identity 投影，missing pinned Event 保持 unresolved。
 - Current main 已登记：Spatial、Tool Instances、Glass Layered、Precision Lens、Subtitle Object、Edge Bookmark 等实验 presentation。
 - `TIMELINE_DOCK_EXPERIMENTAL` 不在 current-main registry；#56 仅作为历史原型证据，不作为 current-main 实现 authority。
 
@@ -47,17 +48,17 @@
 | ID | 原始要求 | 状态 | Authority | Surface / code | 自动证据 | Visual | DEVICE / 阻塞 |
 |---|---|---|---|---|---|---|---|
 | 013 | 点击工具图标直接生成具体工具实例，不跳转到独立设置页面。 | **Implemented** | main via #53 · #61 gate | `TOOL_INSTANCES_EXPERIMENTAL` · `ToolInstanceWorkspace` | #61 + tool/workspace tests; item-level mapping incomplete | Not 240-ID mapped | Not item-mapped |
-| 014 | 同一种工具可创建多个实例，分别观察当前焦点、选择集或指定事件。 | **Implemented** | main via #53 · #61 gate | `TOOL_INSTANCES_EXPERIMENTAL` · `ToolInstanceWorkspace` | #61 + tool/workspace tests; item-level mapping incomplete | Not 240-ID mapped | Not item-mapped |
+| 014 | 同一种工具可创建多个实例，分别观察当前焦点、选择集或指定事件。 | **Implemented** | main via #53 + #72 UI Contract | `TOOL_INSTANCES_EXPERIMENTAL` · `ToolInstanceWorkspace` + `WorkspaceUiBindingContract` | #61 + `WorkspaceUiBindingContractTest`; item-level mapping incomplete | Not 240-ID mapped | Not item-mapped |
 | 015 | 工具首次打开为临时层，点击外部空白自动收回；打开另一工具时自然交接。 | **Implemented** | main via #53 · #61 gate | `TOOL_INSTANCES_EXPERIMENTAL` · `ToolInstanceWorkspace` | #61 + tool/workspace tests; item-level mapping incomplete | Not 240-ID mapped | Not item-mapped |
 | 016 | 再次点击入口图标收回当前临时工具，保留草稿和局部滚动状态。 | **Partial** | main via #53 · #61 gate | `TOOL_INSTANCES_EXPERIMENTAL` · `ToolInstanceWorkspace` | #61 + tool/workspace tests; item-level mapping incomplete | Not 240-ID mapped | Not item-mapped |
 | 017 | 用户可将临时工具转为驻留工具，点击外部不再让它消失。 | **Implemented** | main via #53 · #61 gate | `TOOL_INSTANCES_EXPERIMENTAL` · `ToolInstanceWorkspace` | #61 + tool/workspace tests; item-level mapping incomplete | Not 240-ID mapped | Not item-mapped |
 | 018 | 驻留工具能收成侧书签，点击书签立即恢复原实例。 | **Implemented** | main via #53 · #61 gate | `TOOL_INSTANCES_EXPERIMENTAL` · `ToolInstanceWorkspace` | #61 + tool/workspace tests; item-level mapping incomplete | Not 240-ID mapped | Not item-mapped |
 | 019 | 工具具有紧凑、标准、精确三种内容表示；切换的是密度，不是重新创建工具。 | **Implemented** | main via #53 · #61 gate | `TOOL_INSTANCES_EXPERIMENTAL` · `ToolInstanceWorkspace` | #61 + tool/workspace tests; item-level mapping incomplete | Not 240-ID mapped | Not item-mapped |
 | 020 | 拖动工具标题即可移动，拖到边缘能停靠，拖回工作区恢复自由摆放。 | **Partial** | main via #53 · #61 gate | `TOOL_INSTANCES_EXPERIMENTAL` · `ToolInstanceWorkspace` | #61 + tool/workspace tests; item-level mapping incomplete | Not 240-ID mapped | Not item-mapped |
-| 021 | 工具支持复制实例，复制时明确选择沿用绑定还是跟随新焦点。 | **Implemented** | main via #53 · #61 gate | `TOOL_INSTANCES_EXPERIMENTAL` · `ToolInstanceWorkspace` | #61 + tool/workspace tests; item-level mapping incomplete | Not 240-ID mapped | Not item-mapped |
+| 021 | 工具支持复制实例，复制时明确选择沿用绑定还是跟随新焦点。 | **Implemented** | main via #53 + #72 UI Contract | `TOOL_INSTANCES_EXPERIMENTAL` · `ToolInstanceWorkspace` + `WorkspaceUiBindingContract` | #61 + `WorkspaceUiBindingContractTest`; item-level mapping incomplete | Not 240-ID mapped | Not item-mapped |
 | 022 | 关闭、收起、最小化、隐藏、解除绑定各有独立含义和可查入口。 | **Implemented** | main via #53 · #61 gate | `TOOL_INSTANCES_EXPERIMENTAL` · `ToolInstanceWorkspace` | #61 + tool/workspace tests; item-level mapping incomplete | Not 240-ID mapped | Not item-mapped |
 | 023 | 多工具同时编辑同一参数时同步显示正式值，并明确识别尚未提交的草稿冲突。 | **Blocked** | main via #53 · #61 gate | `TOOL_INSTANCES_EXPERIMENTAL` · `ToolInstanceWorkspace` | #61 + tool/workspace tests; item-level mapping incomplete | Not 240-ID mapped | Not item-mapped；Depends on a unified Draft/Interaction Transaction conflict model. |
-| 024 | 为失效绑定保留工具外壳和重新关联入口，不悄悄换成另一条字幕。 | **Implemented** | main via #53 · #61 gate | `TOOL_INSTANCES_EXPERIMENTAL` · `ToolInstanceWorkspace` | #61 + tool/workspace tests; item-level mapping incomplete | Not 240-ID mapped | Not item-mapped |
+| 024 | 为失效绑定保留工具外壳和重新关联入口，不悄悄换成另一条字幕。 | **Implemented** | main via #53 + #72 UI Contract | `TOOL_INSTANCES_EXPERIMENTAL` · `ToolInstanceWorkspace` + `WorkspaceUiBindingContract` | #61 + `WorkspaceUiBindingContractTest` (missing pin stays unresolved) | Not 240-ID mapped | Not item-mapped |
 
 ### 三、透明、模糊、叠加：让视觉层次成为操作语言
 
@@ -80,18 +81,18 @@
 
 | ID | 原始要求 | 状态 | Authority | Surface / code | 自动证据 | Visual | DEVICE / 阻塞 |
 |---|---|---|---|---|---|---|---|
-| 037 | 左右侧设置工具书签轨，显示工具图标、选中状态与必要的短对象标识。 | **Implemented** | main via #67 · #69 gate open | `EDGE_BOOKMARK_EXPERIMENTAL` · `EdgeBookmarkWorkspace` / `EdgeWorkspaceModel.kt` | `EdgeWorkspaceModelTest` + Android regression; #69 presentation gate pending | Not 240-ID mapped | Not item-mapped |
-| 038 | 同类工具书签可成组叠放，展开后显示各实例，避免一列重复图标。 | **Implemented** | main via #67 · #69 gate open | `EDGE_BOOKMARK_EXPERIMENTAL` · `EdgeBookmarkWorkspace` / `EdgeWorkspaceModel.kt` | `EdgeWorkspaceModelTest` + Android regression; #69 presentation gate pending | Not 240-ID mapped | Not item-mapped |
-| 039 | 书签允许拖动排序、跨侧移动、分组和命名。 | **Partial** | main via #67 · #69 gate open | `EDGE_BOOKMARK_EXPERIMENTAL` · `EdgeBookmarkWorkspace` / `EdgeWorkspaceModel.kt` | `EdgeWorkspaceModelTest` + Android regression; #69 presentation gate pending | Not 240-ID mapped | Not item-mapped；Auto grouping exists; complete user rename/group UX remains incomplete. |
-| 040 | 点击书签召回，左右滑过书签轨连续浏览工具，确认后停在目标工具。 | **Partial** | main via #67 · #69 gate open | `EDGE_BOOKMARK_EXPERIMENTAL` · `EdgeBookmarkWorkspace` / `EdgeWorkspaceModel.kt` | `EdgeWorkspaceModelTest` + Android regression; #69 presentation gate pending | Not 240-ID mapped | Not item-mapped；Click recall exists; true continuous rail scrub remains incomplete. |
-| 041 | 长按书签显示工具名称、绑定对象与核心值；继续拖动可把工具拉出来。 | **Partial** | main via #67 · #69 gate open | `EDGE_BOOKMARK_EXPERIMENTAL` · `EdgeBookmarkWorkspace` / `EdgeWorkspaceModel.kt` | `EdgeWorkspaceModelTest` + Android regression; #69 presentation gate pending | Not 240-ID mapped | Not item-mapped；Long-press metadata and rail drag exist; pulling a tool out as a free surface is incomplete. |
-| 042 | 顶部应用内抓手下拉项目与会话层，包含导入、保存、工程状态和最近现场。 | **Partial** | main via #67 · #69 gate open | `EDGE_BOOKMARK_EXPERIMENTAL` · `EdgeBookmarkWorkspace` / `EdgeWorkspaceModel.kt` | `EdgeWorkspaceModelTest` + Android regression; #69 presentation gate pending | Not 240-ID mapped | Not item-mapped |
-| 043 | 底部抓手上拉时间编辑层，紧凑时间轴仍保留明确关联。 | **Implemented** | main via #67 · #69 gate open | `EDGE_BOOKMARK_EXPERIMENTAL` · `EdgeBookmarkWorkspace` / `EdgeWorkspaceModel.kt` | `EdgeWorkspaceModelTest` + Android regression; #69 presentation gate pending | Not 240-ID mapped | Not item-mapped |
-| 044 | 左侧拉出事件、样式、资源与问题导航；右侧拉出参数工具集合。 | **Implemented** | main via #67 · #69 gate open | `EDGE_BOOKMARK_EXPERIMENTAL` · `EdgeBookmarkWorkspace` / `EdgeWorkspaceModel.kt` | `EdgeWorkspaceModelTest` + Android regression; #69 presentation gate pending | Not 240-ID mapped | Not item-mapped |
-| 045 | 四边层可临时打开，也可驻留；展开方向按实际可用空间改变。 | **Partial** | main via #67 · #69 gate open | `EDGE_BOOKMARK_EXPERIMENTAL` · `EdgeBookmarkWorkspace` / `EdgeWorkspaceModel.kt` | `EdgeWorkspaceModelTest` + Android regression; #69 presentation gate pending | Not 240-ID mapped | Not item-mapped |
-| 046 | 边缘工具层支持预览展开程度，拖动时连续调整，松手吸附到稳定尺寸。 | **Implemented** | main via #67 · #69 gate open | `EDGE_BOOKMARK_EXPERIMENTAL` · `EdgeBookmarkWorkspace` / `EdgeWorkspaceModel.kt` | `EdgeWorkspaceModelTest` + Android regression; #69 presentation gate pending | Not 240-ID mapped | Not item-mapped |
-| 047 | 多边层同时展开时有明确空间分配，必要时覆盖，不靠无限压缩内容解决。 | **Implemented** | main via #67 · #69 gate open | `EDGE_BOOKMARK_EXPERIMENTAL` · `EdgeBookmarkWorkspace` / `EdgeWorkspaceModel.kt` | `EdgeWorkspaceModelTest` + Android regression; #69 presentation gate pending | Not 240-ID mapped | Not item-mapped |
-| 048 | 所有边缘手势都有可见抓手和点击替代入口，起手区域避开系统返回与通知栏。 | **Partial** | main via #67 · #69 gate open | `EDGE_BOOKMARK_EXPERIMENTAL` · `EdgeBookmarkWorkspace` / `EdgeWorkspaceModel.kt` | `EdgeWorkspaceModelTest` + Android regression; #69 presentation gate pending | Not 240-ID mapped | Not item-mapped |
+| 037 | 左右侧设置工具书签轨，显示工具图标、选中状态与必要的短对象标识。 | **Implemented** | main via #67 · #69 gate | `EDGE_BOOKMARK_EXPERIMENTAL` · `EdgeBookmarkWorkspace` / `EdgeWorkspaceModel.kt` | `EdgeWorkspaceModelTest` + Android regression + #69 presentation invariant gate | Not 240-ID mapped | Not item-mapped |
+| 038 | 同类工具书签可成组叠放，展开后显示各实例，避免一列重复图标。 | **Implemented** | main via #67 · #69 gate | `EDGE_BOOKMARK_EXPERIMENTAL` · `EdgeBookmarkWorkspace` / `EdgeWorkspaceModel.kt` | `EdgeWorkspaceModelTest` + Android regression + #69 presentation invariant gate | Not 240-ID mapped | Not item-mapped |
+| 039 | 书签允许拖动排序、跨侧移动、分组和命名。 | **Partial** | main via #67 · #69 gate | `EDGE_BOOKMARK_EXPERIMENTAL` · `EdgeBookmarkWorkspace` / `EdgeWorkspaceModel.kt` | `EdgeWorkspaceModelTest` + Android regression + #69 presentation invariant gate | Not 240-ID mapped | Not item-mapped；Auto grouping exists; complete user rename/group UX remains incomplete. |
+| 040 | 点击书签召回，左右滑过书签轨连续浏览工具，确认后停在目标工具。 | **Partial** | main via #67 · #69 gate | `EDGE_BOOKMARK_EXPERIMENTAL` · `EdgeBookmarkWorkspace` / `EdgeWorkspaceModel.kt` | `EdgeWorkspaceModelTest` + Android regression + #69 presentation invariant gate | Not 240-ID mapped | Not item-mapped；Click recall exists; true continuous rail scrub remains incomplete. |
+| 041 | 长按书签显示工具名称、绑定对象与核心值；继续拖动可把工具拉出来。 | **Partial** | main via #67 · #69 gate | `EDGE_BOOKMARK_EXPERIMENTAL` · `EdgeBookmarkWorkspace` / `EdgeWorkspaceModel.kt` | `EdgeWorkspaceModelTest` + Android regression + #69 presentation invariant gate | Not 240-ID mapped | Not item-mapped；Long-press metadata and rail drag exist; pulling a tool out as a free surface is incomplete. |
+| 042 | 顶部应用内抓手下拉项目与会话层，包含导入、保存、工程状态和最近现场。 | **Partial** | main via #67 · #69 gate | `EDGE_BOOKMARK_EXPERIMENTAL` · `EdgeBookmarkWorkspace` / `EdgeWorkspaceModel.kt` | `EdgeWorkspaceModelTest` + Android regression + #69 presentation invariant gate | Not 240-ID mapped | Not item-mapped |
+| 043 | 底部抓手上拉时间编辑层，紧凑时间轴仍保留明确关联。 | **Implemented** | main via #67 · #69 gate | `EDGE_BOOKMARK_EXPERIMENTAL` · `EdgeBookmarkWorkspace` / `EdgeWorkspaceModel.kt` | `EdgeWorkspaceModelTest` + Android regression + #69 presentation invariant gate | Not 240-ID mapped | Not item-mapped |
+| 044 | 左侧拉出事件、样式、资源与问题导航；右侧拉出参数工具集合。 | **Implemented** | main via #67 · #69 gate | `EDGE_BOOKMARK_EXPERIMENTAL` · `EdgeBookmarkWorkspace` / `EdgeWorkspaceModel.kt` | `EdgeWorkspaceModelTest` + Android regression + #69 presentation invariant gate | Not 240-ID mapped | Not item-mapped |
+| 045 | 四边层可临时打开，也可驻留；展开方向按实际可用空间改变。 | **Partial** | main via #67 · #69 gate | `EDGE_BOOKMARK_EXPERIMENTAL` · `EdgeBookmarkWorkspace` / `EdgeWorkspaceModel.kt` | `EdgeWorkspaceModelTest` + Android regression + #69 presentation invariant gate | Not 240-ID mapped | Not item-mapped |
+| 046 | 边缘工具层支持预览展开程度，拖动时连续调整，松手吸附到稳定尺寸。 | **Implemented** | main via #67 · #69 gate | `EDGE_BOOKMARK_EXPERIMENTAL` · `EdgeBookmarkWorkspace` / `EdgeWorkspaceModel.kt` | `EdgeWorkspaceModelTest` + Android regression + #69 presentation invariant gate | Not 240-ID mapped | Not item-mapped |
+| 047 | 多边层同时展开时有明确空间分配，必要时覆盖，不靠无限压缩内容解决。 | **Implemented** | main via #67 · #69 gate | `EDGE_BOOKMARK_EXPERIMENTAL` · `EdgeBookmarkWorkspace` / `EdgeWorkspaceModel.kt` | `EdgeWorkspaceModelTest` + Android regression + #69 presentation invariant gate | Not 240-ID mapped | Not item-mapped |
+| 048 | 所有边缘手势都有可见抓手和点击替代入口，起手区域避开系统返回与通知栏。 | **Partial** | main via #67 · #69 gate | `EDGE_BOOKMARK_EXPERIMENTAL` · `EdgeBookmarkWorkspace` / `EdgeWorkspaceModel.kt` | `EdgeWorkspaceModelTest` + Android regression + #69 presentation invariant gate | Not 240-ID mapped | Not item-mapped |
 
 ### 五、字幕对象模式
 
@@ -104,8 +105,8 @@
 | 053 | 对象能力包括文字、字体、排版、位置、旋转、时间、效果、Raw 与检查。 | **Implemented** | main via #55 · #61 gate | `SUBTITLE_OBJECT_EXPERIMENTAL` · `SubtitleObjectWorkspace` | #61 + Android regression; item-level mapping incomplete | Not 240-ID mapped | Not item-mapped |
 | 054 | 长按后滑向能力图标形成连续菜单操作，松手打开相应工具。 | **Partial** | main via #55 · #61 gate | `SUBTITLE_OBJECT_EXPERIMENTAL` · `SubtitleObjectWorkspace` | #61 + Android regression; item-level mapping incomplete | Not 240-ID mapped | Not item-mapped；Object HUD exists; continuous long-press radial scrub is explicitly incomplete. |
 | 055 | 支持选择多条事件并显示选择数量，同时提供分组移动与统一参数编辑。 | **Implemented** | main via #55 · #61 gate | `SUBTITLE_OBJECT_EXPERIMENTAL` · `SubtitleObjectWorkspace` | #61 + Android regression; item-level mapping incomplete | Not 240-ID mapped | Not item-mapped |
-| 056 | 可将对象固定为参考，让另一工具继续跟随当前焦点进行比较。 | **Implemented** | main via #55 · #61 gate | `SUBTITLE_OBJECT_EXPERIMENTAL` · `SubtitleObjectWorkspace` | #61 + Android regression; item-level mapping incomplete | Not 240-ID mapped | Not item-mapped |
-| 057 | 对象身份在画面、列表、时间轴、工具中一致显示，颜色只作辅助。 | **Partial** | main via #55 · #61 gate | `SUBTITLE_OBJECT_EXPERIMENTAL` · `SubtitleObjectWorkspace` | #61 + Android regression; item-level mapping incomplete | Not 240-ID mapped | Not item-mapped |
+| 056 | 可将对象固定为参考，让另一工具继续跟随当前焦点进行比较。 | **Implemented** | main via #55 + #72 UI Contract | `SUBTITLE_OBJECT_EXPERIMENTAL` + `WorkspaceUiBindingContract` | #61 + `WorkspaceUiBindingContractTest`; item-level mapping incomplete | Not 240-ID mapped | Not item-mapped |
+| 057 | 对象身份在画面、列表、时间轴、工具中一致显示，颜色只作辅助。 | **Partial** | main via #55 + #72 UI Contract | `EditorUiState.objects.currentEvent` + `SUBTITLE_OBJECT_EXPERIMENTAL` | `EditorUiContractTest` + #61; cross-surface visual identity still not item-mapped | Not 240-ID mapped | Not item-mapped |
 | 058 | 将样式视为可选择对象，能从字幕追踪到共享样式及其他引用事件。 | **Partial** | main via #55 · #61 gate | `SUBTITLE_OBJECT_EXPERIMENTAL` · `SubtitleObjectWorkspace` | #61 + Android regression; item-level mapping incomplete | Not 240-ID mapped | Not item-mapped；Shared Style relationships exist; full style-object semantics remain incomplete. |
 | 059 | 提供对象关系视图，观察样式继承、覆盖与工具绑定，点击关系可跳转。 | **Partial** | main via #55 · #61 gate | `SUBTITLE_OBJECT_EXPERIMENTAL` · `SubtitleObjectWorkspace` | #61 + Android regression; item-level mapping incomplete | Not 240-ID mapped | Not item-mapped；Relation view exists; deeper property/override graph remains incomplete. |
 | 060 | 无视频时仍能进入字幕对象模式，在明确背景和脚本坐标中编辑。 | **Implemented** | main via #55 · #61 gate | `SUBTITLE_OBJECT_EXPERIMENTAL` · `SubtitleObjectWorkspace` | #61 + Android regression; item-level mapping incomplete | Not 240-ID mapped | Not item-mapped |
@@ -335,7 +336,7 @@
 
 | ID | 原始要求 | 状态 | Authority | Surface / code | 自动证据 | Visual | DEVICE / 阻塞 |
 |---|---|---|---|---|---|---|---|
-| 217 | 文档、工作区排列、临时显示、草稿和动画分别有明确状态所有者。 | **Partial** | main via #62 UI Contract | `WorkspaceState` + UI Contract boundary | #61 + stabilization suites; `EditorUiContractTest` (merged via #62) | Not 240-ID mapped | Not item-mapped |
+| 217 | 文档、工作区排列、临时显示、草稿和动画分别有明确状态所有者。 | **Partial** | main via #62 + #72 UI Contract | `WorkspaceState` + `EditorUiState` + `WorkspaceUiBindingContract` | #61 + `EditorUiContractTest` + `WorkspaceUiBindingContractTest` | Not 240-ID mapped | Not item-mapped |
 | 218 | 一次连续拖动只生成一次正式编辑与一次字幕 Undo。 | **Partial** | main via #62 UI Contract | `WorkspaceState` + UI Contract boundary | #61 + stabilization suites; `EditorUiContractTest` (merged via #62) | Not 240-ID mapped | Not item-mapped |
 | 219 | 工具移动、停靠与书签切换进入布局历史，不混入字幕 Undo。 | **Planned** | main via #62 UI Contract | `WorkspaceState` + UI Contract boundary | #61 + stabilization suites; `EditorUiContractTest` (merged via #62) | Not 240-ID mapped | Not item-mapped；Layout state is separate from subtitle state, but a dedicated layout-history stack is not evidenced. |
 | 220 | 手势取消清除临时预览；完成后保留正式参数；动画中断不改变业务结论。 | **Partial** | main via #62 UI Contract | `WorkspaceState` + UI Contract boundary | #61 + stabilization suites; `EditorUiContractTest` (merged via #62) | Not 240-ID mapped | Not item-mapped |
@@ -345,7 +346,7 @@
 | 224 | 用户模板保存抽象绑定与布局，工程现场保存具体对象绑定。 | **Planned** | main via #62 UI Contract | `WorkspaceState` + UI Contract boundary | #61 + stabilization suites; `EditorUiContractTest` (merged via #62) | Not 240-ID mapped | Not item-mapped；No user-template abstract-binding persistence model evidenced. |
 | 225 | 横竖屏与键盘引起的临时投影不覆盖用户正式布局。 | **Partial** | main via #62 UI Contract | `WorkspaceState` + UI Contract boundary | #61 + stabilization suites; `EditorUiContractTest` (merged via #62) | Not 240-ID mapped | Not item-mapped |
 | 226 | 重启恢复已提交现场，未应用草稿明确标识，不恢复半完成手势捕获。 | **Partial** | main via #62 UI Contract | `WorkspaceState` + UI Contract boundary | #61 + stabilization suites; `EditorUiContractTest` (merged via #62) | Not 240-ID mapped | Not item-mapped |
-| 227 | 对象删除后绑定失效可诊断，重新导入工程不复用错误事件身份。 | **Partial** | main via #62 UI Contract | `WorkspaceState` + UI Contract boundary | #61 + stabilization suites; `EditorUiContractTest` (merged via #62) | Not 240-ID mapped | Not item-mapped |
+| 227 | 对象删除后绑定失效可诊断，重新导入工程不复用错误事件身份。 | **Partial** | main via #62 + #72 UI Contract | `WorkspaceUiBindingContract` / `UnresolvedPinnedEvent` | `WorkspaceUiBindingContractTest` covers missing pin; re-import identity still not fully item-mapped | Not 240-ID mapped | Not item-mapped |
 | 228 | 导出后以真实 renderer 检查代表性结果，不把 UI 操控框当作渲染真相。 | **Partial** | main via #62 UI Contract | `WorkspaceState` + UI Contract boundary | #61 + stabilization suites; `EditorUiContractTest` (merged via #62) | Not 240-ID mapped | Not item-mapped |
 
 ### 二十、用完整体验验收，而不是数按钮
@@ -376,6 +377,6 @@
 
 ## 下一批工程切片
 
-当前顺序保持：Presentation invariant gate（Edge 扩展 #69）→ 已合入的 UI Contract Slice A → 继续迁移 Focus/Selection/Undo/Redo → Binding/current object → Preview/Commit → fonts/container/diagnostics → Write Target/batch intent → Timeline Dock → 后续 240 实验。
+当前顺序保持：Presentation invariant gate（#61 + #69，已合入）→ UI Contract Slice A（#62，已合入）→ Binding/current object Slice B（#72，已合入）→ Preview/Commit → fonts/container/diagnostics → Write Target/batch intent → Timeline Dock → 后续 240 实验。
 
-因此，在 #69 未收敛、UI Contract 后续切片尚未稳定前，本账本只建立追踪基线，不把 073+ 的新 presentation 大块并行塞进高冲突热点文件。
+因此，在 Preview/Commit 等 UI Contract 后续切片尚未稳定前，本账本继续作为追踪基线，不把 073+ 的新 presentation 大块并行塞进高冲突热点文件。
