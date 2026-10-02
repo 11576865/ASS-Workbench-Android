@@ -28,7 +28,8 @@
         },
         "density": 240,
         "locale": "zh-CN",
-        "font_scale": 1
+        "font_scale": 1,
+        "orientation": "landscape"
       },
       "ready": {
         "settle_ms": 3500
@@ -41,7 +42,10 @@
       "limitations": [
         "This initial state captures the full running APK but does not load a video or ASS fixture.",
         "Renderer-backed subtitle/video states require a later fixture-backed capture."
-      ]
+      ],
+      "assertions": {
+        "image_orientation": "landscape"
+      }
     }
   ]
 }
