@@ -1,0 +1,65 @@
+package io.github.assworkbench.app
+
+import io.github.assworkbench.domain.AssDocument
+import io.github.assworkbench.domain.AssEvent
+import io.github.assworkbench.domain.SubTime
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class EditorUiContractTest {
+    @Test
+    fun sliceAProjectionPreservesStableEditorSemanticsWithoutAliasingSelection() {
+        val selected = linkedSetOf(1L, 2L)
+        val document = AssDocument(
+            scriptInfo = linkedMapOf(
+                "ScriptType" to "v4.00+",
+                "PlayResX" to "1280",
+                "PlayResY" to "720",
+            ),
+            events = listOf(
+                AssEvent(
+                    id = 1L,
+                    start = SubTime(1_000),
+                    end = SubTime(2_000),
+                    text = "one",
+                ),
+                AssEvent(
+                    id = 2L,
+                    start = SubTime(2_100),
+                    end = SubTime(3_000),
+                    text = "two",
+                ),
+            ),
+        )
+        val state = EditorState(
+            document = document,
+            subtitleLoaded = true,
+            selectedEventIds = selected,
+            selectionAnchorId = 1L,
+            focusedEventId = 2L,
+            canUndo = true,
+            canRedo = false,
+            dirty = true,
+            workspaceSessionId = 42L,
+        )
+
+        val ui = state.toEditorUiState()
+
+        assertEquals(2, ui.document.eventCount)
+        assertEquals(1280, ui.document.playResX)
+        assertEquals(720, ui.document.playResY)
+        assertTrue(ui.document.subtitleLoaded)
+        assertTrue(ui.document.dirty)
+        assertEquals(2L, ui.focus.eventId)
+        assertEquals(setOf(1L, 2L), ui.selection.eventIds)
+        assertEquals(1L, ui.selection.anchorId)
+        assertTrue(ui.history.canUndo)
+        assertFalse(ui.history.canRedo)
+        assertEquals(42L, ui.workspaceSessionId)
+
+        selected += 99L
+        assertFalse(99L in ui.selection.eventIds)
+    }
+}
