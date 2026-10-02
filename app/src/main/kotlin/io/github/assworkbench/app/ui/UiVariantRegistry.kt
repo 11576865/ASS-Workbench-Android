@@ -52,6 +52,11 @@ internal enum class WorkspacePresentationMode(
         status = UiVariantStatus.EXPERIMENTAL,
         description = "工具以独立透明/磨砂/实底层叠加在预览上；支持真实背景模糊、层概览与临时看穿。",
     ),
+    EDGE_BOOKMARK_EXPERIMENTAL(
+        title = "四边书签工作台",
+        status = UiVariantStatus.EXPERIMENTAL,
+        description = "左右书签轨与四边工具层围绕中央预览展开；边层可临时、驻留、拖动预览并吸附尺寸。",
+    ),
 }
 
 /**
