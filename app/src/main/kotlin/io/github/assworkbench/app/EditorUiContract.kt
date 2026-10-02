@@ -9,6 +9,10 @@ package io.github.assworkbench.app
  * Slice C exposes only transient-preview ownership metadata plus cancellation;
  * canonical commits remain domain intents owned by EditorViewModel rather than a
  * generic "commit arbitrary preview document" UI operation.
+ * Slice D adds bounded resource/container/renderer summaries. It intentionally
+ * projects identities, counts and status rather than URI handles, FontAsset
+ * objects or native bridge instances, so presentations cannot acquire resource
+ * ownership through the UI contract.
  * Presentations should not bypass this boundary by depending on unrelated
  * EditorViewModel internals.
  */
@@ -18,6 +22,9 @@ internal data class EditorUiState(
     val selection: EditorUiSelectionState,
     val objects: EditorUiObjectState,
     val preview: EditorUiPreviewState,
+    val resources: EditorUiResourceState,
+    val container: EditorUiContainerState,
+    val diagnostics: EditorUiDiagnosticsState,
     val history: EditorUiHistoryState,
     val workspaceSessionId: Long,
 )
@@ -59,6 +66,49 @@ internal data class EditorUiObjectState(
 internal data class EditorUiPreviewState(
     val active: Boolean,
     val ownerId: String?,
+)
+
+/**
+ * Bounded presentation-facing resource diagnostics.
+ *
+ * The contract exposes summary/status only. Imported FontAsset objects,
+ * filesystem paths and renderer/native handles stay behind EditorViewModel.
+ */
+internal data class EditorUiResourceState(
+    val importedFontCount: Int,
+    val fontImportBusy: Boolean,
+    val fontRevision: Long,
+    val packagingSelectionCount: Int,
+    val fallbackFontFamily: String?,
+)
+
+/**
+ * Presentation-neutral container identity/status summary.
+ *
+ * Deliberately omits the container URI and full track payload. Those remain
+ * persistence/native-bridge concerns, not presentation-owned state.
+ */
+internal data class EditorUiContainerState(
+    val attached: Boolean,
+    val name: String,
+    val loading: Boolean,
+    val trackCount: Int,
+    val selectedTrackNumber: Long?,
+    val extractedFontCount: Int,
+    val skippedAttachmentCount: Int,
+    val writeBackAvailable: Boolean,
+    val writeBackBusy: Boolean,
+    val error: String?,
+)
+
+/**
+ * Read-only diagnostics snapshot for presentation surfaces.
+ *
+ * Lists are copied at projection time so diagnostics remain observation data,
+ * not a mutable back-channel into EditorState.
+ */
+internal data class EditorUiDiagnosticsState(
+    val rendererMessages: List<String>,
 )
 
 internal data class EditorUiHistoryState(
@@ -112,6 +162,28 @@ internal fun EditorState.toEditorUiState(): EditorUiState =
         preview = EditorUiPreviewState(
             active = previewDocument != null,
             ownerId = previewOwnerId.takeIf { previewDocument != null },
+        ),
+        resources = EditorUiResourceState(
+            importedFontCount = importedFonts.size,
+            fontImportBusy = fontImportBusy,
+            fontRevision = fontRevision,
+            packagingSelectionCount = fontPackagingSelection.size,
+            fallbackFontFamily = fallbackFontFamily,
+        ),
+        container = EditorUiContainerState(
+            attached = container.uri != null,
+            name = container.name,
+            loading = container.loading,
+            trackCount = container.tracks.size,
+            selectedTrackNumber = container.selectedTrackNumber,
+            extractedFontCount = container.extractedFontCount,
+            skippedAttachmentCount = container.skippedAttachmentCount,
+            writeBackAvailable = container.writeBackAvailable,
+            writeBackBusy = container.writeBackBusy,
+            error = container.error,
+        ),
+        diagnostics = EditorUiDiagnosticsState(
+            rendererMessages = rendererDiagnostics.toList(),
         ),
         history = EditorUiHistoryState(
             canUndo = canUndo,
