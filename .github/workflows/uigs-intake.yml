@@ -33,6 +33,7 @@ on:
 
 permissions:
   contents: write
+  actions: read
 
 concurrency:
   group: uigs-intake-${{ github.repository }}
@@ -51,10 +52,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build UIGS intake packet
+      - name: Build source-enriched UIGS intake packet
         id: packet
         env:
           EVENT_NAME: ${{ github.event_name }}
+          GH_TOKEN: ${{ github.token }}
           ADAPTER_RUN_ID: ${{ github.run_id }}
           SOURCE_REPOSITORY: ${{ github.repository }}
           SOURCE_REF: ${{ github.ref }}
@@ -73,7 +75,7 @@ jobs:
           INPUT_DEDUPE: ${{ inputs.dedupe_key }}
         run: |
           python - <<'PY'
-          import json, os, re
+          import json, os, re, urllib.request
           from datetime import datetime, timezone
           from pathlib import Path
 
@@ -83,19 +85,58 @@ jobs:
           now = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
           event = os.environ["EVENT_NAME"]
 
+          def api_json(url):
+              req = urllib.request.Request(url, headers={
+                  "Accept": "application/vnd.github+json",
+                  "Authorization": f"Bearer {os.environ['GH_TOKEN']}",
+                  "User-Agent": "UIGS-Source-Adapter/2",
+                  "X-GitHub-Api-Version": "2022-11-28",
+              })
+              with urllib.request.urlopen(req, timeout=30) as response:
+                  return json.load(response)
+
           if event == "workflow_run":
               run_id = os.environ.get("WR_ID", "").strip()
               attempt = os.environ.get("WR_ATTEMPT", "1").strip() or "1"
               packet_id = f"ci-{slug}-{run_id}-{attempt}"
               conclusion = os.environ.get("WR_CONCLUSION", "unknown").strip()
               workflow = os.environ.get("WR_NAME", "workflow").strip()
+
+              failed_jobs = []
+              failed_steps = []
+              evidence_capture_error = ""
+              try:
+                  jobs_payload = api_json(
+                      f"https://api.github.com/repos/{repo}/actions/runs/{run_id}/jobs?per_page=100"
+                  )
+                  failure_like = {"failure", "timed_out", "action_required", "startup_failure"}
+                  for job in jobs_payload.get("jobs", []):
+                      job_conclusion = str(job.get("conclusion") or "")
+                      if job_conclusion in failure_like:
+                          failed_jobs.append({
+                              "id": job.get("id"),
+                              "name": str(job.get("name") or ""),
+                              "conclusion": job_conclusion,
+                          })
+                      for step in job.get("steps", []) or []:
+                          step_conclusion = str(step.get("conclusion") or "")
+                          if step_conclusion in failure_like:
+                              failed_steps.append({
+                                  "job": str(job.get("name") or ""),
+                                  "number": step.get("number"),
+                                  "name": str(step.get("name") or ""),
+                                  "conclusion": step_conclusion,
+                              })
+              except Exception as exc:
+                  evidence_capture_error = f"{type(exc).__name__}: {exc}"
+
               packet = {
                   "packet_version": 1,
                   "packet_id": packet_id,
                   "status": "pending",
                   "record_type": "ci_failure",
                   "title": f"{workflow}: {conclusion}",
-                  "summary": "Tracked CI workflow did not complete successfully. Triage the Red Reason and decide whether this is reusable failure knowledge.",
+                  "summary": "Tracked CI workflow did not complete successfully. Source adapter captured failed job/step evidence when available.",
                   "source_repository": repo,
                   "source_event": "workflow_run",
                   "source_ref": os.environ.get("WR_HEAD_BRANCH", ""),
@@ -109,7 +150,10 @@ jobs:
                       "run_id": run_id,
                       "run_attempt": attempt,
                       "conclusion": conclusion,
-                      "trigger_event": os.environ.get("WR_EVENT", "")
+                      "trigger_event": os.environ.get("WR_EVENT", ""),
+                      "failed_jobs": failed_jobs,
+                      "failed_steps": failed_steps,
+                      "capture_error": evidence_capture_error,
                   }
               }
           else:
@@ -151,14 +195,8 @@ jobs:
           git config user.name "uigs-intake-bot"
           git config user.email "uigs-intake-bot@users.noreply.github.com"
 
-          if git ls-remote --exit-code --heads origin uigs-outbox >/dev/null 2>&1; then
-            git fetch origin refs/heads/uigs-outbox:refs/remotes/origin/uigs-outbox
-            git switch --force-create uigs-outbox origin/uigs-outbox
-          else
-            git switch --orphan uigs-outbox
-            git rm -rf . >/dev/null 2>&1 || true
-            printf '%s\n' '# UIGS durable outbox' '' 'Generated intake packets. Do not use this branch as product source.' > README.md
-          fi
+          git fetch origin refs/heads/uigs-outbox:refs/remotes/origin/uigs-outbox
+          git switch --force-create uigs-outbox origin/uigs-outbox
 
           mkdir -p packets
           target="packets/${PACKET_ID}.json"
@@ -172,6 +210,6 @@ jobs:
           fi
 
           cp /tmp/uigs-packet.json "$target"
-          git add README.md packets
+          git add packets
           git commit -m "chore(uigs): queue ${PACKET_ID}"
           git push origin HEAD:uigs-outbox
