@@ -3563,6 +3563,18 @@ private fun WorkbenchPreview(
         onSetEventOrigin = { x, y ->
             positionEditEventId?.let { viewModel.setEventOrigin(it, x, y) }
         },
+        onPreviewEventRotationX = { angle ->
+            positionEditEventId?.let { viewModel.previewEventRotationX(it, angle) }
+        },
+        onSetEventRotationX = { angle ->
+            positionEditEventId?.let { viewModel.setEventRotationX(it, angle) }
+        },
+        onPreviewEventRotationY = { angle ->
+            positionEditEventId?.let { viewModel.previewEventRotationY(it, angle) }
+        },
+        onSetEventRotationY = { angle ->
+            positionEditEventId?.let { viewModel.setEventRotationY(it, angle) }
+        },
         onPreviewEventRotation = { angle ->
             positionEditEventId?.let { viewModel.previewEventRotationZ(it, angle) }
         },
@@ -5917,11 +5929,27 @@ private fun PositionPane(
     var moveEndY by remember(event.id, event.text) { mutableStateOf(geometry.move?.end?.y?.toString().orEmpty()) }
     var originX by remember(event.id, event.text) { mutableStateOf(geometry.origin?.x?.toString().orEmpty()) }
     var originY by remember(event.id, event.text) { mutableStateOf(geometry.origin?.y?.toString().orEmpty()) }
+    var rotationXText by remember(event.id, event.text) {
+        mutableStateOf((geometry.rotationX ?: 0.0).toString())
+    }
+    var rotationYText by remember(event.id, event.text) {
+        mutableStateOf((geometry.rotationY ?: 0.0).toString())
+    }
     var rotationText by remember(event.id, event.text, style?.angle) {
         mutableStateOf((geometry.rotationZ ?: style?.angle ?: 0.0).toString())
     }
+    var rotationXGestureActive by remember(event.id) { mutableStateOf(false) }
+    var rotationYGestureActive by remember(event.id) { mutableStateOf(false) }
     var rotationGestureActive by remember(event.id) { mutableStateOf(false) }
+    var rotationXDraftChanged by remember(event.id) { mutableStateOf(false) }
+    var rotationYDraftChanged by remember(event.id) { mutableStateOf(false) }
     var rotationDraftChanged by remember(event.id) { mutableStateOf(false) }
+    var rotationXPreviewValue by remember(event.id, event.text) {
+        mutableStateOf(geometry.rotationX ?: 0.0)
+    }
+    var rotationYPreviewValue by remember(event.id, event.text) {
+        mutableStateOf(geometry.rotationY ?: 0.0)
+    }
     var rotationPreviewValue by remember(event.id, event.text, style?.angle) {
         mutableStateOf(geometry.rotationZ ?: style?.angle ?: 0.0)
     }
@@ -5956,6 +5984,24 @@ private fun PositionPane(
     var styleMarginR by remember(style?.name, style?.marginR) { mutableStateOf((style?.marginR ?: 0).toString()) }
     var styleMarginV by remember(style?.name, style?.marginV) { mutableStateOf((style?.marginV ?: 0).toString()) }
 
+    LaunchedEffect(event.id, rotationXText, rotationXGestureActive, rotationXDraftChanged) {
+        if (!rotationXDraftChanged || rotationXGestureActive) return@LaunchedEffect
+        val value = rotationXText.toDoubleOrNull() ?: return@LaunchedEffect
+        rotationXPreviewValue = value
+        viewModel.previewEventRotationX(event.id, value)
+        kotlinx.coroutines.delay(320)
+        viewModel.setEventRotationX(event.id, value)
+        rotationXDraftChanged = false
+    }
+    LaunchedEffect(event.id, rotationYText, rotationYGestureActive, rotationYDraftChanged) {
+        if (!rotationYDraftChanged || rotationYGestureActive) return@LaunchedEffect
+        val value = rotationYText.toDoubleOrNull() ?: return@LaunchedEffect
+        rotationYPreviewValue = value
+        viewModel.previewEventRotationY(event.id, value)
+        kotlinx.coroutines.delay(320)
+        viewModel.setEventRotationY(event.id, value)
+        rotationYDraftChanged = false
+    }
     LaunchedEffect(event.id, rotationText, rotationGestureActive, rotationDraftChanged) {
         if (!rotationDraftChanged || rotationGestureActive) return@LaunchedEffect
         val value = rotationText.toDoubleOrNull() ?: return@LaunchedEffect
@@ -6126,9 +6172,84 @@ private fun PositionPane(
         }
         item { Divider() }
         item {
-            Text("旋转 · \\frz", style = MaterialTheme.typography.titleSmall)
+            Text("正交旋转 · \\frx / \\fry / \\frz", style = MaterialTheme.typography.titleSmall)
+            Text(
+                "X / Y 用于正交轴旋转，Z 为平面旋转；三轴与 \\org 共用同一 renderer 预览。触屏操控杆的轴必须显式选择，不根据手势猜测。",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             ContinuousParameterControl(
-                label = "Rotation Z",
+                label = "Rotation X · \\frx",
+                valueText = rotationXText,
+                onValueTextChange = {
+                    rotationXText = it
+                    rotationXDraftChanged = true
+                },
+                range = -180f..180f,
+                step = 1.0,
+                suffix = "°",
+                supportingText = if (geometry.rotationX != null) {
+                    "Event override：${geometry.rotationX}°"
+                } else {
+                    "无 Event override：0°"
+                },
+                resetLabel = if (geometry.rotationX != null) "清除 X override" else null,
+                onReset = if (geometry.rotationX != null) ({
+                    rotationXDraftChanged = false
+                    rotationXGestureActive = false
+                    rotationXText = "0"
+                    rotationXPreviewValue = 0.0
+                    viewModel.clearEventRotationX(event.id)
+                }) else null,
+                onPreview = { value ->
+                    rotationXPreviewValue = value
+                    viewModel.previewEventRotationX(event.id, value)
+                },
+                onGestureActive = { active ->
+                    rotationXGestureActive = active
+                    if (!active) {
+                        viewModel.setEventRotationX(event.id, rotationXPreviewValue)
+                        rotationXDraftChanged = false
+                    }
+                },
+            )
+            ContinuousParameterControl(
+                label = "Rotation Y · \\fry",
+                valueText = rotationYText,
+                onValueTextChange = {
+                    rotationYText = it
+                    rotationYDraftChanged = true
+                },
+                range = -180f..180f,
+                step = 1.0,
+                suffix = "°",
+                supportingText = if (geometry.rotationY != null) {
+                    "Event override：${geometry.rotationY}°"
+                } else {
+                    "无 Event override：0°"
+                },
+                resetLabel = if (geometry.rotationY != null) "清除 Y override" else null,
+                onReset = if (geometry.rotationY != null) ({
+                    rotationYDraftChanged = false
+                    rotationYGestureActive = false
+                    rotationYText = "0"
+                    rotationYPreviewValue = 0.0
+                    viewModel.clearEventRotationY(event.id)
+                }) else null,
+                onPreview = { value ->
+                    rotationYPreviewValue = value
+                    viewModel.previewEventRotationY(event.id, value)
+                },
+                onGestureActive = { active ->
+                    rotationYGestureActive = active
+                    if (!active) {
+                        viewModel.setEventRotationY(event.id, rotationYPreviewValue)
+                        rotationYDraftChanged = false
+                    }
+                },
+            )
+            ContinuousParameterControl(
+                label = "Rotation Z · \\frz",
                 valueText = rotationText,
                 onValueTextChange = {
                     rotationText = it
