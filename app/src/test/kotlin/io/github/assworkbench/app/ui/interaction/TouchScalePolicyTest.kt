@@ -36,4 +36,43 @@ class TouchScalePolicyTest {
         assertEquals(TouchScaleValue(150.0, 80.0), TouchScalePolicy.x(120.0, 80.0, 30.0, false))
         assertEquals(TouchScaleValue(120.0, 100.0), TouchScalePolicy.y(120.0, 80.0, 20.0, false))
     }
+    @Test
+    fun unlockedScaleCanSnapToExplicitPercentageStep() {
+        assertEquals(
+            TouchScaleValue(150.0, 80.0),
+            TouchScalePolicy.x(
+                baseX = 120.0,
+                baseY = 80.0,
+                deltaX = 22.0,
+                locked = false,
+                snapStep = 25.0,
+            ),
+        )
+    }
+
+    @Test
+    fun lockedSnapUsesDriverAxisButKeepsExistingRatio() {
+        val value = TouchScalePolicy.x(
+            baseX = 120.0,
+            baseY = 80.0,
+            deltaX = 22.0,
+            locked = true,
+            snapStep = 25.0,
+        )
+        assertEquals(150.0, value.x, 0.0001)
+        assertEquals(100.0, value.y, 0.0001)
+        assertEquals(1.5, value.x / value.y, 0.0001)
+    }
+
+    @Test
+    fun invalidSnapStepBehavesAsSnapOff() {
+        val value = TouchScalePolicy.y(
+            baseX = 120.0,
+            baseY = 80.0,
+            deltaY = 13.0,
+            locked = false,
+            snapStep = 0.0,
+        )
+        assertEquals(TouchScaleValue(120.0, 93.0), value)
+    }
 }
