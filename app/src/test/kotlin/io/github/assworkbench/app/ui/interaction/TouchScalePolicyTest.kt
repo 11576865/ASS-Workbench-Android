@@ -25,6 +25,13 @@ class TouchScalePolicyTest {
     }
 
     @Test
+    fun lockedScaleClampsFactorBeforeAxesSoRatioSurvivesBounds() {
+        val value = TouchScalePolicy.x(900.0, 100.0, deltaX = 500.0, locked = true)
+        assertEquals(9.0, value.x / value.y, 0.0001)
+        assertEquals(1000.0, value.x, 0.0001)
+    }
+
+    @Test
     fun unlockedAxesRemainIndependent() {
         assertEquals(TouchScaleValue(150.0, 80.0), TouchScalePolicy.x(120.0, 80.0, 30.0, false))
         assertEquals(TouchScaleValue(120.0, 100.0), TouchScalePolicy.y(120.0, 80.0, 20.0, false))
