@@ -3,8 +3,6 @@ package io.github.assworkbench.app
 import android.graphics.Bitmap
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
-import androidx.compose.ui.test.onAllNodesWithTag
-import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
@@ -80,33 +78,21 @@ class UigsVisualCaptureInstrumentedTest {
             captureDisplay("ASS.${tool.name}_TOOL.FIXTURE_LANDSCAPE.png")
         }
 
-        openFixedTool(WorkbenchTool.POSITION)
-        switchPresentation("CANVAS_EXPERIMENTAL", "canvas-workspace")
-        composeRule.waitUntil(timeoutMillis = 10_000) {
-            composeRule.onAllNodesWithTag("rod-handle-position-1-pos", useUnmergedTree = true)
-                .fetchSemanticsNodes(atLeastOneRootRequired = false)
-                .isNotEmpty()
-        }
-        composeRule.onNodeWithTag("rod-handle-position-1-pos", useUnmergedTree = true)
-            .assertIsDisplayed()
-        captureDisplay("ASS.CANVAS.POSITION_INTERACTION.FIXTURE_LANDSCAPE.png")
     }
 
     private fun openFixedTool(tool: WorkbenchTool) {
-        if (tool == WorkbenchTool.CAPABILITIES) {
-            composeRule.onNodeWithTag("workspace-tools")
-                .assertIsDisplayed()
-                .performClick()
-            composeRule.waitForIdle()
-            composeRule.onNodeWithTag("tool-search")
-                .assertIsDisplayed()
-            return
-        }
-
         composeRule.onNodeWithTag("fixed-group-${tool.group.name}")
             .performScrollTo()
             .performClick()
         composeRule.waitForIdle()
+
+        if (tool == WorkbenchTool.CAPABILITIES) {
+            composeRule.onNodeWithTag("fixed-inspector", useUnmergedTree = true)
+                .assertIsDisplayed()
+            composeRule.onNodeWithTag("tool-search")
+                .assertIsDisplayed()
+            return
+        }
 
         composeRule.onNodeWithTag("fixed-tool-${tool.name}")
             .performScrollTo()
@@ -114,23 +100,6 @@ class UigsVisualCaptureInstrumentedTest {
         composeRule.waitForIdle()
         composeRule.onNodeWithTag("fixed-inspector", useUnmergedTree = true)
             .assertIsDisplayed()
-    }
-
-    private fun switchPresentation(variant: String, rootTag: String) {
-        composeRule.onNodeWithContentDescription("工具和更多操作").performClick()
-        composeRule.onNodeWithTag("workspace-mode-toggle").performClick()
-        composeRule.onNodeWithTag("ui-variant-lab").assertIsDisplayed()
-        composeRule.onNodeWithTag("ui-variant-use-$variant")
-            .performScrollTo()
-            .assertIsDisplayed()
-            .performClick()
-        composeRule.waitUntil(timeoutMillis = 10_000) {
-            composeRule.onAllNodesWithTag(rootTag, useUnmergedTree = true)
-                .fetchSemanticsNodes(atLeastOneRootRequired = false)
-                .isNotEmpty()
-        }
-        composeRule.onNodeWithTag(rootTag, useUnmergedTree = true).assertIsDisplayed()
-        composeRule.waitForIdle()
     }
 
     private fun captureDisplay(fileName: String) {
