@@ -75,16 +75,16 @@ class UigsToolInstanceVisualCaptureInstrumentedTest {
         composeRule.waitForIdle()
         composeRule.onNodeWithContentDescription("复制工具实例并沿用绑定").performClick()
         composeRule.waitUntil(10_000) {
-            composeRule.onAllNodesWithTag("surface-POSITION-1", useUnmergedTree = true)
+            composeRule.onAllNodesWithTag("surface-POSITION-2", useUnmergedTree = true)
                 .fetchSemanticsNodes(atLeastOneRootRequired = false)
                 .isNotEmpty()
         }
 
-        composeRule.onNodeWithTag("surface-resize-POSITION-1").performTouchInput {
+        composeRule.onNodeWithTag("surface-resize-POSITION-2").performTouchInput {
             swipe(start = center, end = center + Offset(90f, 60f), durationMillis = 300)
         }
         composeRule.onNodeWithTag("surface-POSITION-primary").assertIsDisplayed()
-        composeRule.onNodeWithTag("surface-POSITION-1").assertIsDisplayed()
+        composeRule.onNodeWithTag("surface-POSITION-2").assertIsDisplayed()
         composeRule.waitForIdle()
 
         captureDisplay("ASS.TOOL_INSTANCE_WORKSPACE.FIXTURE_LANDSCAPE.png")
