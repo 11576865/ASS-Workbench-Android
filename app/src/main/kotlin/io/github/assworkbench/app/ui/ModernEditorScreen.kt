@@ -65,6 +65,8 @@ import io.github.assworkbench.app.BuildConfig
 import io.github.assworkbench.app.ProjectFileCodec
 import io.github.assworkbench.app.EditorState
 import io.github.assworkbench.app.EditorViewModel
+import io.github.assworkbench.app.EditorViewModelUiActions
+import io.github.assworkbench.app.toEditorUiState
 import io.github.assworkbench.app.WaveformLiteState
 import io.github.assworkbench.app.WaveformLiteStatus
 import io.github.assworkbench.app.ui.interaction.InteractionOverlayRegistry
@@ -3277,6 +3279,8 @@ private fun ModernAppBar(
     appearance: WorkbenchAppearance,
     onAppearanceChange: (WorkbenchAppearance) -> Unit,
 ) {
+    val uiState = state.toEditorUiState()
+    val uiActions = remember(viewModel) { EditorViewModelUiActions(viewModel) }
     var moreMenuOpen by remember { mutableStateOf(false) }
     Surface(tonalElevation = 2.dp) {
         Row(
@@ -3285,17 +3289,17 @@ private fun ModernAppBar(
             horizontalArrangement = Arrangement.spacedBy(2.dp),
         ) {
             if (selectionMode) {
-                IconButton(onClick = viewModel::clearSelection) { Icon(Icons.Filled.Close, "退出多选") }
-                Text("已选 ${state.selectedEventIds.size} 条", Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
+                IconButton(onClick = uiActions::clearSelection) { Icon(Icons.Filled.Close, "退出多选") }
+                Text("已选 ${uiState.selection.eventIds.size} 条", Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
                 TextButton(onClick = viewModel::toggleSelectAllVisible) { Text("全选") }
                 TextButton(onClick = { onTool(WorkbenchTool.BATCH) }) { Text("批量") }
             } else {
                 Column(Modifier.weight(1f).padding(start = 4.dp)) {
-                    Text(state.project.title + if (state.dirty) " · 未保存" else "", style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(state.project.title + if (uiState.document.dirty) " · 未保存" else "", style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Text(
                         when {
-                            state.container.uri != null -> "MKV 工程 · ${state.document.events.size} events"
-                            state.subtitleLoaded -> "独立 ASS · ${state.document.events.size} events"
+                            state.container.uri != null -> "MKV 工程 · ${uiState.document.eventCount} events"
+                            uiState.document.subtitleLoaded -> "独立 ASS · ${uiState.document.eventCount} events"
                             else -> "未载入字幕"
                         },
                         style = MaterialTheme.typography.labelSmall,
@@ -3309,9 +3313,9 @@ private fun ModernAppBar(
                 ) {
                     Icon(if (searchOpen) Icons.Filled.Close else Icons.Filled.Search, null)
                 }
-                TooltipIconButton("保存", onSave, enabled = state.subtitleLoaded) { Icon(Icons.Filled.Save, null) }
-                TooltipIconButton("撤销", viewModel::undo, enabled = state.canUndo) { Icon(Icons.Filled.Undo, null) }
-                TooltipIconButton("重做", viewModel::redo, enabled = state.canRedo) { Icon(Icons.Filled.Redo, null) }
+                TooltipIconButton("保存", onSave, enabled = uiState.document.subtitleLoaded) { Icon(Icons.Filled.Save, null) }
+                TooltipIconButton("撤销", uiActions::undo, enabled = uiState.history.canUndo) { Icon(Icons.Filled.Undo, null) }
+                TooltipIconButton("重做", uiActions::redo, enabled = uiState.history.canRedo) { Icon(Icons.Filled.Redo, null) }
                 Box {
                     TooltipIconButton("打开文件 / 工程", onOpenMenu) { Icon(Icons.Filled.FolderOpen, null) }
                     DropdownMenu(expanded = openMenu, onDismissRequest = onDismissMenu) {
