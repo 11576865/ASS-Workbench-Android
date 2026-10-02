@@ -57,7 +57,11 @@
       "adapter": "android-emulator-screencap",
       "evidence_level": "production-rendered",
       "build": {
-        "task": ":app:connectedDebugAndroidTest",
+        "app_task": ":app:assembleDebug",
+        "test_task": ":app:assembleDebugAndroidTest",
+        "app_apk": "app/build/outputs/apk/debug/app-debug.apk",
+        "test_apk": "app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk",
+        "instrumentation_runner": "io.github.assworkbench.app.test/androidx.test.runner.AndroidJUnitRunner",
         "test_class": "io.github.assworkbench.app.UigsVisualCaptureInstrumentedTest"
       },
       "package": "io.github.assworkbench.app",
@@ -83,6 +87,7 @@
       },
       "ready": {
         "test_tag": "fixed-workspace",
+        "state": "instrumentation-test-complete",
         "settle_ms": 500
       },
       "source_dependencies": [
