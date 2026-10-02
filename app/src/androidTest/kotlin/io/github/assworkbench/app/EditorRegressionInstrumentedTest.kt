@@ -102,7 +102,7 @@ class EditorRegressionInstrumentedTest {
         // The canonical Event is still untouched after collapse/re-open. Applying
         // the visible editor now must commit the draft that survived disposal.
         assertFalse(eventText(1L).contains("DRAFT"))
-        composeRule.onNodeWithText("应用正文")
+        composeRule.onNodeWithTag("event-apply-text-1")
             .performScrollTo()
             .assertIsDisplayed()
             .performClick()
@@ -254,7 +254,7 @@ class EditorRegressionInstrumentedTest {
             .assertIsDisplayed()
 
         assertFalse(eventText(1L).contains("SWITCH"))
-        composeRule.onNodeWithText("应用正文")
+        composeRule.onNodeWithTag("event-apply-text-1")
             .performScrollTo()
             .performClick()
 
@@ -283,7 +283,7 @@ class EditorRegressionInstrumentedTest {
             .assertIsDisplayed()
         assertFalse(eventText(1L).contains("ROTATED"))
 
-        composeRule.onNodeWithText("应用正文")
+        composeRule.onNodeWithTag("event-apply-text-1")
             .performScrollTo()
             .assertIsDisplayed()
             .performClick()
@@ -356,7 +356,7 @@ class EditorRegressionInstrumentedTest {
                 .isNotEmpty()
         }
 
-        composeRule.onNodeWithText("应用正文").performScrollTo().performClick()
+        composeRule.onNodeWithTag("event-apply-text-1").performScrollTo().performClick()
         composeRule.waitUntil(5_000) { eventText(1L) == "Recovered line WORKBENCH" }
         composeRule.activityRule.scenario.onActivity {
             it.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT

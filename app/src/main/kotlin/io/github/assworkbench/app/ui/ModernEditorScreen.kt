@@ -3718,7 +3718,10 @@ private fun InlineEventEditor(
                 rawField = TextFieldValue(event.text, TextRange(event.text.length))
                 rawBaseText = event.text
             }) { Text(if (rawExternalConflict) "重新载入" else "还原") }
-            Button(onClick = { viewModel.updateEventText(event.id, rawField.text) }) {
+            Button(
+                onClick = { viewModel.updateEventText(event.id, rawField.text) },
+                modifier = Modifier.testTag("event-apply-text-${event.id}"),
+            ) {
                 Text(if (rawExternalConflict) "以草稿覆盖" else "应用正文")
             }
         }
