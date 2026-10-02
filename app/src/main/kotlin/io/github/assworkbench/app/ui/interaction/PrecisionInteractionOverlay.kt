@@ -392,8 +392,11 @@ internal fun PrecisionInteractionOverlay(
                                     var delta = when {
                                         isPositionLike -> Offset(step.dx, step.dy)
                                         mode == RodMode.SCALE -> Offset(step.radial, -step.radial)
-                                        mode == RodMode.ROTATION ->
-                                            Offset(FixedRod.assRotationDegrees(previousAngle, step.angle) / 0.35f, 0f)
+                                        mode == RodMode.ROTATION -> {
+                                            val degrees = FixedRod.assRotationDegrees(previousAngle, step.angle)
+                                            if (spec.id.endsWith("-rotation-x")) Offset(0f, -degrees / 0.35f)
+                                            else Offset(degrees / 0.35f, 0f)
+                                        }
                                         else -> Offset(step.radial, angular * radius)
                                     }
                                     delta = PrecisionInteractionMath.applyGain(delta, gainUpdated)
@@ -558,7 +561,12 @@ internal fun PrecisionInteractionOverlay(
 
         if (activeSpec != null) {
             val deltaText = if (activeSpec.id.contains("-rotation")) {
-                "Δθ %.1f°".format(activeDelta.x * 0.35f)
+                val degrees = if (activeSpec.id.endsWith("-rotation-x")) {
+                    -activeDelta.y * 0.35f
+                } else {
+                    activeDelta.x * 0.35f
+                }
+                "Δθ %.1f°".format(degrees)
             } else {
                 "Δx %.1f · Δy %.1f px".format(activeDelta.x, activeDelta.y)
             }
