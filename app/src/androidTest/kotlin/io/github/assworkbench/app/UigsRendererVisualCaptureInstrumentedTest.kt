@@ -139,8 +139,7 @@ class UigsRendererVisualCaptureInstrumentedTest {
         composeRule.waitUntil(timeoutMillis = 30_000) {
             interactionRegistry.get()
                 ?.handles
-                ?.any { it.id == "position-1-pos" }
-                == true
+                ?.any { it.id == "position-1-pos" } == true
         }
         composeRule.waitForIdle()
         composeRule.onNodeWithTag("rod-handle-position-1-pos", useUnmergedTree = true)
