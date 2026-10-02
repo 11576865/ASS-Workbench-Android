@@ -5514,11 +5514,20 @@ private fun ModernTimelinePane(state: EditorState, viewModel: EditorViewModel, m
             )
         }
 
-        TimelineWaveformLite(
+        CoRegisteredTimelineCanvas(
+            events = visible,
             waveform = state.waveform,
             windowStartMs = windowStart,
             windowEndMs = windowEnd,
             playheadMs = playheadMs,
+            focusedEventId = state.focusedEventId,
+            snapTargets = snapTargets,
+            snapEnabled = snapEnabled,
+            snapGrid = snapGrid,
+            snapGridMs = snapGridMs,
+            snapStrength = activeSnapStrength,
+            onFocus = { id -> viewModel.focusEvent(id, seek = true) },
+            onCommit = { id, startMs, endMs -> viewModel.setEventTiming(id, startMs, endMs) },
             onSeek = viewModel::seekPreviewTo,
             compact = compact,
         )
@@ -5558,34 +5567,347 @@ private fun ModernTimelinePane(state: EditorState, viewModel: EditorViewModel, m
             }
         }
         }
-        Divider()
         if (visible.isEmpty()) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("当前视窗没有字幕事件。拖动上方时间标尺，或回到播放头。")
-            }
-        } else {
-            LazyColumn(Modifier.fillMaxSize()) {
-                items(visible, key = { it.id }) { event ->
-                    ModernTimelineEventRow(
-                        event = event,
-                        relation = relationByEventId[event.id],
-                        windowStartMs = windowStart,
-                        windowEndMs = windowEnd,
-                        playheadMs = playheadMs,
-                        focused = event.id == state.focusedEventId,
-                        snapTargets = snapTargets,
-                        snapEnabled = snapEnabled,
-                        snapGrid = snapGrid,
-                        snapGridMs = snapGridMs,
-                        snapStrength = activeSnapStrength,
-                        onFocus = { viewModel.focusEvent(event.id, seek = true) },
-                        onCommit = { a, b -> viewModel.setEventTiming(event.id, a, b) },
-                    )
-                }
-            }
+            Text(
+                "当前视窗没有字幕事件。拖动上方时间标尺，或回到播放头。",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }
+@Composable
+private fun CoRegisteredTimelineCanvas(
+    events: List<AssEvent>,
+    waveform: WaveformLiteState,
+    windowStartMs: Long,
+    windowEndMs: Long,
+    playheadMs: Long,
+    focusedEventId: Long?,
+    snapTargets: List<Long>,
+    snapEnabled: Boolean,
+    snapGrid: Boolean,
+    snapGridMs: Long,
+    snapStrength: TimelineSnapStrength,
+    onFocus: (Long) -> Unit,
+    onCommit: (Long, Long, Long) -> Unit,
+    onSeek: (Long) -> Unit,
+    compact: Boolean,
+) {
+    val placements = remember(events) {
+        val byId = events.associateBy { it.id }
+        TimelineLaneLayout.assign(
+            events.map { TimelineLayerItem(it.id, it.start.millis, it.end.millis) }
+        ).mapNotNull { placement ->
+            byId[placement.item.id]?.let { event -> placement to event }
+        }
+    }
+    val maxLanes = if (compact) 4 else 8
+    val shown = placements.filter { it.first.lane < maxLanes }
+    val hiddenCount = placements.size - shown.size
+    val laneCount = (shown.maxOfOrNull { it.first.lane } ?: 0) + 1
+    val laneHeight = if (compact) 28.dp else 34.dp
+    val topPadding = if (compact) 4.dp else 8.dp
+    val canvasHeight = (topPadding * 2 + laneHeight * laneCount).coerceAtLeast(if (compact) 48.dp else 86.dp)
+    val colors = MaterialTheme.colorScheme
+    val density = LocalDensity.current
+
+    var activeEventId by remember { mutableStateOf<Long?>(null) }
+    var dragMode by remember { mutableStateOf<ModernTimelineDragMode?>(null) }
+    var baseStart by remember { mutableLongStateOf(0L) }
+    var baseEnd by remember { mutableLongStateOf(0L) }
+    var previewStart by remember { mutableLongStateOf(0L) }
+    var previewEnd by remember { mutableLongStateOf(0L) }
+    var dragPx by remember { mutableFloatStateOf(0f) }
+
+    BoxWithConstraints(
+        Modifier
+            .fillMaxWidth()
+            .height(canvasHeight)
+            .clipToBounds()
+            .background(colors.surfaceVariant.copy(alpha = 0.22f))
+            .testTag("timeline-temporal-canvas")
+    ) {
+        val widthPx = with(density) { maxWidth.toPx() }.coerceAtLeast(1f)
+        val laneHeightPx = with(density) { laneHeight.toPx() }
+        val topPaddingPx = with(density) { topPadding.toPx() }
+        val spanMs = (windowEndMs - windowStartMs).coerceAtLeast(1L)
+
+        fun xFor(ms: Long): Float =
+            ((ms - windowStartMs).toFloat() / spanMs)
+                .coerceIn(0f, 1f) * widthPx
+
+        fun currentStart(event: AssEvent): Long =
+            if (activeEventId == event.id && dragMode != null) previewStart else event.start.millis
+
+        fun currentEnd(event: AssEvent): Long =
+            if (activeEventId == event.id && dragMode != null) previewEnd else event.end.millis
+
+        fun laneAt(y: Float): Int =
+            ((y - topPaddingPx) / laneHeightPx).toInt().coerceAtLeast(0)
+
+        fun eventAt(x: Float, y: Float): AssEvent? {
+            val lane = laneAt(y)
+            val tolerance = with(density) { 14.dp.toPx() }
+            return shown.asSequence()
+                .filter { it.first.lane == lane }
+                .map { it.second }
+                .filter { event ->
+                    x >= xFor(currentStart(event)) - tolerance &&
+                        x <= xFor(currentEnd(event)) + tolerance
+                }
+                .minByOrNull { event ->
+                    val center = (xFor(currentStart(event)) + xFor(currentEnd(event))) / 2f
+                    kotlin.math.abs(x - center)
+                }
+        }
+
+        fun thresholdMs(): Long {
+            val base = minOf(120L, maxOf(24L, spanMs / 220L))
+            return (base * snapStrength.factor).toLong().coerceIn(12L, 240L)
+        }
+
+        fun activeTargets(): List<Long> = snapTargets.toMutableList().apply {
+            remove(baseStart)
+            remove(baseEnd)
+        }
+
+        fun snapPoint(candidate: Long): Long {
+            if (!snapEnabled) return candidate
+            return AssTimelineSnap.snapPoint(
+                candidateMs = candidate,
+                targets = activeTargets(),
+                thresholdMs = thresholdMs(),
+                gridMs = snapGridMs.takeIf { snapGrid },
+            )
+        }
+
+        fun snapMove(start: Long, end: Long): AssTimelineSpan {
+            if (!snapEnabled) return AssTimelineSpan(start, end)
+            return AssTimelineSnap.snapSpan(
+                startMs = start,
+                endMs = end,
+                targets = activeTargets(),
+                thresholdMs = thresholdMs(),
+                gridMs = snapGridMs.takeIf { snapGrid },
+            )
+        }
+
+        Canvas(
+            Modifier
+                .fillMaxSize()
+                .pointerInput(
+                    events,
+                    windowStartMs,
+                    windowEndMs,
+                    focusedEventId,
+                    snapTargets,
+                    snapEnabled,
+                    snapGrid,
+                    snapGridMs,
+                    snapStrength,
+                ) {
+                    detectTapGestures { offset ->
+                        val event = eventAt(offset.x, offset.y)
+                        if (event != null) {
+                            onFocus(event.id)
+                        } else {
+                            val fraction = (offset.x / size.width.coerceAtLeast(1)).coerceIn(0f, 1f)
+                            onSeek(windowStartMs + (spanMs * fraction).toLong())
+                        }
+                    }
+                }
+                .pointerInput(
+                    events,
+                    windowStartMs,
+                    windowEndMs,
+                    focusedEventId,
+                    snapTargets,
+                    snapEnabled,
+                    snapGrid,
+                    snapGridMs,
+                    snapStrength,
+                ) {
+                    detectDragGestures(
+                        onDragStart = { offset ->
+                            val event = eventAt(offset.x, offset.y)
+                            activeEventId = event?.id
+                            dragMode = null
+                            dragPx = 0f
+                            if (event != null) {
+                                onFocus(event.id)
+                                baseStart = event.start.millis
+                                baseEnd = event.end.millis
+                                previewStart = baseStart
+                                previewEnd = baseEnd
+                                if (event.id == focusedEventId) {
+                                    val sx = xFor(baseStart)
+                                    val ex = xFor(baseEnd)
+                                    val hit = with(density) { 24.dp.toPx() }
+                                    dragMode = when {
+                                        kotlin.math.abs(offset.x - sx) <= hit -> ModernTimelineDragMode.START
+                                        kotlin.math.abs(offset.x - ex) <= hit -> ModernTimelineDragMode.END
+                                        offset.x in sx..ex -> ModernTimelineDragMode.MOVE
+                                        else -> null
+                                    }
+                                }
+                            }
+                        },
+                        onDrag = { change, amount ->
+                            val mode = dragMode ?: return@detectDragGestures
+                            change.consume()
+                            dragPx += amount.x
+                            val delta = (dragPx / size.width.coerceAtLeast(1) * spanMs).toLong()
+                            when (mode) {
+                                ModernTimelineDragMode.START ->
+                                    previewStart = snapPoint(baseStart + delta)
+                                        .coerceIn(0L, (previewEnd - 10L).coerceAtLeast(0L))
+                                ModernTimelineDragMode.END ->
+                                    previewEnd = snapPoint(baseEnd + delta).coerceAtLeast(previewStart + 10L)
+                                ModernTimelineDragMode.MOVE -> {
+                                    val duration = (baseEnd - baseStart).coerceAtLeast(10L)
+                                    val rawStart = (baseStart + delta).coerceAtLeast(0L)
+                                    val snapped = snapMove(rawStart, rawStart + duration)
+                                    val clampedStart = snapped.startMs.coerceAtLeast(0L)
+                                    previewStart = clampedStart
+                                    previewEnd = clampedStart + duration
+                                }
+                            }
+                        },
+                        onDragEnd = {
+                            val id = activeEventId
+                            if (id != null && dragMode != null) onCommit(id, previewStart, previewEnd)
+                            activeEventId = null
+                            dragMode = null
+                        },
+                        onDragCancel = {
+                            activeEventId = null
+                            dragMode = null
+                        },
+                    )
+                }
+        ) {
+            val waveformEnvelope = waveform.envelope
+            if (waveform.status == WaveformLiteStatus.READY && waveformEnvelope != null) {
+                val samples = WaveformViewportSampler.sample(
+                    envelope = waveformEnvelope,
+                    startMs = windowStartMs,
+                    endMs = windowEndMs,
+                    columns = size.width.roundToInt().coerceIn(1, 1200),
+                )
+                if (samples.isNotEmpty()) {
+                    val centerY = size.height / 2f
+                    val amplitude = size.height * 0.44f
+                    val xStep = size.width / samples.size
+                    samples.forEachIndexed { index, bucket ->
+                        val x = (index + 0.5f) * xStep
+                        val high = bucket.maximum.toFloat() / Short.MAX_VALUE.toFloat()
+                        val lowMagnitude = -bucket.minimum.toFloat() / -Short.MIN_VALUE.toFloat()
+                        drawLine(
+                            color = colors.onSurfaceVariant.copy(alpha = 0.28f),
+                            start = Offset(x, centerY - high * amplitude),
+                            end = Offset(x, centerY + lowMagnitude * amplitude),
+                            strokeWidth = maxOf(1f, xStep.coerceAtMost(2f)),
+                        )
+                    }
+                }
+            }
+
+            for (i in 1..3) {
+                val x = size.width * (i / 4f)
+                drawLine(
+                    colors.outline.copy(alpha = 0.18f),
+                    Offset(x, 0f),
+                    Offset(x, size.height),
+                    1.dp.toPx(),
+                )
+            }
+
+            shown.forEach { (placement, event) ->
+                val start = currentStart(event)
+                val end = currentEnd(event)
+                val left = xFor(start)
+                val right = xFor(end).coerceAtLeast(left + 1f)
+                val top = topPaddingPx + placement.lane * laneHeightPx + 2.dp.toPx()
+                val bottom = top + laneHeightPx - 4.dp.toPx()
+                val focused = event.id == focusedEventId
+                drawRoundRect(
+                    color = if (focused) colors.primary.copy(alpha = 0.78f)
+                    else colors.secondaryContainer.copy(alpha = 0.76f),
+                    topLeft = Offset(left, top),
+                    size = androidx.compose.ui.geometry.Size(right - left, bottom - top),
+                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(5.dp.toPx(), 5.dp.toPx()),
+                )
+                if (focused) {
+                    drawLine(colors.onPrimary, Offset(left, top), Offset(left, bottom), 3.dp.toPx())
+                    drawLine(colors.onPrimary, Offset(right, top), Offset(right, bottom), 3.dp.toPx())
+                }
+            }
+
+            if (playheadMs in windowStartMs..windowEndMs) {
+                val x = xFor(playheadMs)
+                drawLine(colors.primary, Offset(x, 0f), Offset(x, size.height), 2.dp.toPx())
+            }
+        }
+
+        shown.forEach { (placement, event) ->
+            val start = currentStart(event)
+            val end = currentEnd(event)
+            val leftFraction = ((start - windowStartMs).toFloat() / spanMs).coerceIn(0f, 1f)
+            val rightFraction = ((end - windowStartMs).toFloat() / spanMs).coerceIn(0f, 1f)
+            val barWidth = maxWidth * (rightFraction - leftFraction).coerceAtLeast(0f)
+            val label = when {
+                barWidth < 34.dp -> ""
+                spanMs <= 30_000L -> AssInlineSyntax.visibleText(event.text)
+                spanMs <= 60_000L -> "#${event.id} " + AssInlineSyntax.visibleText(event.text)
+                else -> "#${event.id}"
+            }
+            if (label.isNotBlank()) {
+                Text(
+                    label,
+                    modifier = Modifier
+                        .offset(
+                            x = maxWidth * leftFraction + 4.dp,
+                            y = topPadding + laneHeight * placement.lane + 6.dp,
+                        )
+                        .width((barWidth - 8.dp).coerceAtLeast(1.dp)),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (event.id == focusedEventId) colors.onPrimary else colors.onSecondaryContainer,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+
+        if (waveform.status == WaveformLiteStatus.ANALYZING) {
+            Text(
+                "Waveform Lite · 后台分析音轨…",
+                modifier = Modifier.align(Alignment.BottomStart).padding(4.dp),
+                style = MaterialTheme.typography.labelSmall,
+                color = colors.onSurfaceVariant,
+            )
+        } else if (waveform.status == WaveformLiteStatus.UNAVAILABLE) {
+            Text(
+                "Waveform unavailable" + waveform.error?.let { " · $it" }.orEmpty(),
+                modifier = Modifier.align(Alignment.BottomStart).padding(4.dp),
+                style = MaterialTheme.typography.labelSmall,
+                color = colors.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+
+        if (hiddenCount > 0) {
+            Text(
+                "+$hiddenCount Event 位于隐藏重叠 lane",
+                modifier = Modifier.align(Alignment.BottomEnd).padding(4.dp),
+                style = MaterialTheme.typography.labelSmall,
+                color = colors.tertiary,
+            )
+        }
+    }
+}
+
 @Composable
 private fun TimelineWaveformLite(
     waveform: WaveformLiteState,
