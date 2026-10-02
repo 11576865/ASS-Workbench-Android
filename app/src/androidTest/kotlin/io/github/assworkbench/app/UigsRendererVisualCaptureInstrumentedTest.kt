@@ -8,13 +8,16 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
-import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.assworkbench.app.ui.VideoPreview
+import io.github.assworkbench.app.ui.interaction.InteractionOverlayRegistry
 import io.github.assworkbench.app.ui.interaction.WindowInteractionOverlay
 import io.github.assworkbench.app.ui.interaction.rememberInteractionOverlayRegistry
 import io.github.assworkbench.domain.AssDocument
@@ -45,6 +48,7 @@ class UigsRendererVisualCaptureInstrumentedTest {
     private lateinit var configDir: File
     private lateinit var fontsDir: File
     private val diagnostics = AtomicReference<List<String>>(emptyList())
+    private val interactionRegistry = AtomicReference<InteractionOverlayRegistry?>()
 
     @Before
     fun setUp() {
@@ -85,6 +89,7 @@ class UigsRendererVisualCaptureInstrumentedTest {
         composeRule.setContent {
             MaterialTheme(colorScheme = darkColorScheme()) {
                 val registry = rememberInteractionOverlayRegistry()
+                SideEffect { interactionRegistry.set(registry) }
                 Box(Modifier.fillMaxSize()) {
                     VideoPreview(
                         videoUri = video.absolutePath,
@@ -131,12 +136,15 @@ class UigsRendererVisualCaptureInstrumentedTest {
         composeRule.waitUntil(timeoutMillis = 30_000) {
             diagnostics.get().any { it.contains("Preview subtitle") }
         }
-        composeRule.waitUntil(timeoutMillis = 10_000) {
-            composeRule.onAllNodesWithTag("rod-handle-position-1-pos", useUnmergedTree = true)
-                .fetchSemanticsNodes(atLeastOneRootRequired = false)
-                .isNotEmpty()
+        composeRule.waitUntil(timeoutMillis = 30_000) {
+            interactionRegistry.get()
+                ?.handles
+                ?.any { it.id == "position-1-pos" }
+                == true
         }
         composeRule.waitForIdle()
+        composeRule.onNodeWithTag("rod-handle-position-1-pos", useUnmergedTree = true)
+            .assertIsDisplayed()
         Thread.sleep(800)
         captureDisplay("ASS.RENDERER_POSITION.RUNTIME_LANDSCAPE.png")
     }
