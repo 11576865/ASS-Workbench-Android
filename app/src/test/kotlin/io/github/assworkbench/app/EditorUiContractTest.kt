@@ -10,7 +10,7 @@ import org.junit.Test
 
 class EditorUiContractTest {
     @Test
-    fun sliceAProjectionPreservesStableEditorSemanticsWithoutAliasingSelection() {
+    fun projectionPreservesStableEditorAndCurrentObjectSemanticsWithoutAliasing() {
         val selected = linkedSetOf(1L, 2L)
         val document = AssDocument(
             scriptInfo = linkedMapOf(
