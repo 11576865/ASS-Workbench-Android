@@ -47,6 +47,11 @@ internal enum class WorkspacePresentationMode(
         status = UiVariantStatus.EXPERIMENTAL,
         description = "同一工具可多实例；临时、驻留、侧书签和隐藏状态彼此独立，绑定与局部现场随实例保留。",
     ),
+    GLASS_LAYERED_EXPERIMENTAL(
+        title = "玻璃叠层工作台",
+        status = UiVariantStatus.EXPERIMENTAL,
+        description = "工具以独立透明/磨砂/实底层叠加在预览上；支持真实背景模糊、层概览与临时看穿。",
+    ),
 }
 
 /**
