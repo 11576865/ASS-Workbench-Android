@@ -38,6 +38,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import io.github.assworkbench.app.EditorState
 import io.github.assworkbench.app.EditorViewModel
+import io.github.assworkbench.app.EditorViewModelUiActions
 import io.github.assworkbench.domain.AssInlineSyntax
 import io.github.assworkbench.domain.AssStyle
 import kotlinx.coroutines.delay
@@ -77,6 +78,7 @@ fun TypesettingPanel(
     var strikeOut by remember(style) { mutableStateOf(style.strikeOut) }
     var alignment by remember(style) { mutableIntStateOf(style.alignment) }
 
+    val uiActions = remember(viewModel) { EditorViewModelUiActions(viewModel) }
     val styleNames = state.document.styles.map { it.name }
 
 
@@ -184,7 +186,7 @@ fun TypesettingPanel(
     }
 
     DisposableEffect(style.name) {
-        onDispose { viewModel.clearTransientPreview("style:${style.name}") }
+        onDispose { uiActions.clearTransientPreview("style:${style.name}") }
     }
 
     when (styleManageMode) {
