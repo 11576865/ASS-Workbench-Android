@@ -196,7 +196,11 @@ internal fun WindowInteractionOverlay(
                                             val delta = when {
                                                 isPosition -> Offset(step.dx, step.dy)
                                                 mode == RodMode.SCALE -> Offset(step.radial, -step.radial)
-                                                mode == RodMode.ROTATION -> Offset(FixedRod.assRotationDegrees(previousAngle, step.angle) / 0.35f, 0f)
+                                                mode == RodMode.ROTATION -> {
+                                                    val degrees = FixedRod.assRotationDegrees(previousAngle, step.angle)
+                                                    if (spec.id.endsWith("-rotation-x")) Offset(0f, -degrees / 0.35f)
+                                                    else Offset(degrees / 0.35f, 0f)
+                                                }
                                                 else -> Offset(step.radial, angular * radius)
                                             }
                                             if (delta.getDistance() > 0.001f) {
