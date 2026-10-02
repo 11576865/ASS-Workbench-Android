@@ -6,10 +6,10 @@
 
 ## 事实快照
 
-- current main: `2bca59ee1ee06dc07226e3bed0e2dfabf979cfa0`
+- current main: `27e23899fe96d535cce087b172b23f2ce6050626`
 - #61 Presentation invariant gate: merged。
-- #62 UI Stability Boundary + Contract Slice A: open；当前 head `57db2c5e95e29930f1082b2b60c2fe878470a10e`。
-- #69 Edge Bookmark presentation gate: open；当前 head `684ecd729dd19247b1d3f0d3174c4426e25d70ba`。
+- #62 UI Stability Boundary + Contract Slice A: merged；merge commit `27e23899fe96d535cce087b172b23f2ce6050626`。
+- #69 Edge Bookmark presentation gate: open；已同步 current main，当前 head `53454625d1afe376ca534d9c5d48eae4070f52f8`，等待新一轮 CI。
 - Current main 已登记：Spatial、Tool Instances、Glass Layered、Precision Lens、Subtitle Object、Edge Bookmark 等实验 presentation。
 - `TIMELINE_DOCK_EXPERIMENTAL` 不在 current-main registry；#56 仅作为历史原型证据，不作为 current-main 实现 authority。
 
@@ -335,18 +335,18 @@
 
 | ID | 原始要求 | 状态 | Authority | Surface / code | 自动证据 | Visual | DEVICE / 阻塞 |
 |---|---|---|---|---|---|---|---|
-| 217 | 文档、工作区排列、临时显示、草稿和动画分别有明确状态所有者。 | **Partial** | main + #62 UI Contract open | `WorkspaceState` + UI Contract boundary | #61 + stabilization suites; `EditorUiContractTest` in #62 | Not 240-ID mapped | Not item-mapped |
-| 218 | 一次连续拖动只生成一次正式编辑与一次字幕 Undo。 | **Partial** | main + #62 UI Contract open | `WorkspaceState` + UI Contract boundary | #61 + stabilization suites; `EditorUiContractTest` in #62 | Not 240-ID mapped | Not item-mapped |
-| 219 | 工具移动、停靠与书签切换进入布局历史，不混入字幕 Undo。 | **Planned** | main + #62 UI Contract open | `WorkspaceState` + UI Contract boundary | #61 + stabilization suites; `EditorUiContractTest` in #62 | Not 240-ID mapped | Not item-mapped；Layout state is separate from subtitle state, but a dedicated layout-history stack is not evidenced. |
-| 220 | 手势取消清除临时预览；完成后保留正式参数；动画中断不改变业务结论。 | **Partial** | main + #62 UI Contract open | `WorkspaceState` + UI Contract boundary | #61 + stabilization suites; `EditorUiContractTest` in #62 | Not 240-ID mapped | Not item-mapped |
-| 221 | 点击外部、系统返回、收起工具和退出工程各有明确草稿处理规则。 | **Partial** | main + #62 UI Contract open | `WorkspaceState` + UI Contract boundary | #61 + stabilization suites; `EditorUiContractTest` in #62 | Not 240-ID mapped | Not item-mapped |
-| 222 | 保存工程现场包含实例身份、绑定、布局、书签、时间视口与必要局部状态。 | **Partial** | main + #62 UI Contract open | `WorkspaceState` + UI Contract boundary | #61 + stabilization suites; `EditorUiContractTest` in #62 | Not 240-ID mapped | Not item-mapped |
-| 223 | 保存 ASS 和保存工作现场分别显示未保存状态及实际保存结果。 | **Partial** | main + #62 UI Contract open | `WorkspaceState` + UI Contract boundary | #61 + stabilization suites; `EditorUiContractTest` in #62 | Not 240-ID mapped | Not item-mapped |
-| 224 | 用户模板保存抽象绑定与布局，工程现场保存具体对象绑定。 | **Planned** | main + #62 UI Contract open | `WorkspaceState` + UI Contract boundary | #61 + stabilization suites; `EditorUiContractTest` in #62 | Not 240-ID mapped | Not item-mapped；No user-template abstract-binding persistence model evidenced. |
-| 225 | 横竖屏与键盘引起的临时投影不覆盖用户正式布局。 | **Partial** | main + #62 UI Contract open | `WorkspaceState` + UI Contract boundary | #61 + stabilization suites; `EditorUiContractTest` in #62 | Not 240-ID mapped | Not item-mapped |
-| 226 | 重启恢复已提交现场，未应用草稿明确标识，不恢复半完成手势捕获。 | **Partial** | main + #62 UI Contract open | `WorkspaceState` + UI Contract boundary | #61 + stabilization suites; `EditorUiContractTest` in #62 | Not 240-ID mapped | Not item-mapped |
-| 227 | 对象删除后绑定失效可诊断，重新导入工程不复用错误事件身份。 | **Partial** | main + #62 UI Contract open | `WorkspaceState` + UI Contract boundary | #61 + stabilization suites; `EditorUiContractTest` in #62 | Not 240-ID mapped | Not item-mapped |
-| 228 | 导出后以真实 renderer 检查代表性结果，不把 UI 操控框当作渲染真相。 | **Partial** | main + #62 UI Contract open | `WorkspaceState` + UI Contract boundary | #61 + stabilization suites; `EditorUiContractTest` in #62 | Not 240-ID mapped | Not item-mapped |
+| 217 | 文档、工作区排列、临时显示、草稿和动画分别有明确状态所有者。 | **Partial** | main via #62 UI Contract | `WorkspaceState` + UI Contract boundary | #61 + stabilization suites; `EditorUiContractTest` (merged via #62) | Not 240-ID mapped | Not item-mapped |
+| 218 | 一次连续拖动只生成一次正式编辑与一次字幕 Undo。 | **Partial** | main via #62 UI Contract | `WorkspaceState` + UI Contract boundary | #61 + stabilization suites; `EditorUiContractTest` (merged via #62) | Not 240-ID mapped | Not item-mapped |
+| 219 | 工具移动、停靠与书签切换进入布局历史，不混入字幕 Undo。 | **Planned** | main via #62 UI Contract | `WorkspaceState` + UI Contract boundary | #61 + stabilization suites; `EditorUiContractTest` (merged via #62) | Not 240-ID mapped | Not item-mapped；Layout state is separate from subtitle state, but a dedicated layout-history stack is not evidenced. |
+| 220 | 手势取消清除临时预览；完成后保留正式参数；动画中断不改变业务结论。 | **Partial** | main via #62 UI Contract | `WorkspaceState` + UI Contract boundary | #61 + stabilization suites; `EditorUiContractTest` (merged via #62) | Not 240-ID mapped | Not item-mapped |
+| 221 | 点击外部、系统返回、收起工具和退出工程各有明确草稿处理规则。 | **Partial** | main via #62 UI Contract | `WorkspaceState` + UI Contract boundary | #61 + stabilization suites; `EditorUiContractTest` (merged via #62) | Not 240-ID mapped | Not item-mapped |
+| 222 | 保存工程现场包含实例身份、绑定、布局、书签、时间视口与必要局部状态。 | **Partial** | main via #62 UI Contract | `WorkspaceState` + UI Contract boundary | #61 + stabilization suites; `EditorUiContractTest` (merged via #62) | Not 240-ID mapped | Not item-mapped |
+| 223 | 保存 ASS 和保存工作现场分别显示未保存状态及实际保存结果。 | **Partial** | main via #62 UI Contract | `WorkspaceState` + UI Contract boundary | #61 + stabilization suites; `EditorUiContractTest` (merged via #62) | Not 240-ID mapped | Not item-mapped |
+| 224 | 用户模板保存抽象绑定与布局，工程现场保存具体对象绑定。 | **Planned** | main via #62 UI Contract | `WorkspaceState` + UI Contract boundary | #61 + stabilization suites; `EditorUiContractTest` (merged via #62) | Not 240-ID mapped | Not item-mapped；No user-template abstract-binding persistence model evidenced. |
+| 225 | 横竖屏与键盘引起的临时投影不覆盖用户正式布局。 | **Partial** | main via #62 UI Contract | `WorkspaceState` + UI Contract boundary | #61 + stabilization suites; `EditorUiContractTest` (merged via #62) | Not 240-ID mapped | Not item-mapped |
+| 226 | 重启恢复已提交现场，未应用草稿明确标识，不恢复半完成手势捕获。 | **Partial** | main via #62 UI Contract | `WorkspaceState` + UI Contract boundary | #61 + stabilization suites; `EditorUiContractTest` (merged via #62) | Not 240-ID mapped | Not item-mapped |
+| 227 | 对象删除后绑定失效可诊断，重新导入工程不复用错误事件身份。 | **Partial** | main via #62 UI Contract | `WorkspaceState` + UI Contract boundary | #61 + stabilization suites; `EditorUiContractTest` (merged via #62) | Not 240-ID mapped | Not item-mapped |
+| 228 | 导出后以真实 renderer 检查代表性结果，不把 UI 操控框当作渲染真相。 | **Partial** | main via #62 UI Contract | `WorkspaceState` + UI Contract boundary | #61 + stabilization suites; `EditorUiContractTest` (merged via #62) | Not 240-ID mapped | Not item-mapped |
 
 ### 二十、用完整体验验收，而不是数按钮
 
@@ -376,6 +376,6 @@
 
 ## 下一批工程切片
 
-当前顺序保持：Presentation invariant gate → UI Contract → Focus/Selection/Undo/Redo → Binding/current object → Preview/Commit → fonts/container/diagnostics → Write Target/batch intent → Timeline Dock → 后续 240 实验。
+当前顺序保持：Presentation invariant gate（Edge 扩展 #69）→ 已合入的 UI Contract Slice A → 继续迁移 Focus/Selection/Undo/Redo → Binding/current object → Preview/Commit → fonts/container/diagnostics → Write Target/batch intent → Timeline Dock → 后续 240 实验。
 
-因此，在 #62 / #69 未完成前，本账本只建立追踪基线，不把 073+ 的新 presentation 大块并行塞进高冲突热点文件。
+因此，在 #69 未收敛、UI Contract 后续切片尚未稳定前，本账本只建立追踪基线，不把 073+ 的新 presentation 大块并行塞进高冲突热点文件。
