@@ -1615,7 +1615,7 @@ private fun PositionDragOverlay(
                 targetInWindow = target(originX ?: x, originY ?: y),
                 preferredOffsetPx = preferred + Offset(0f, with(proxyDensity) { 132.dp.toPx() }),
                 onDragDelta = { delta ->
-                    directRotationX = ((directRotationX ?: displayRotationX) + delta.x * 0.35).coerceIn(-3600.0, 3600.0)
+                    directRotationX = ((directRotationX ?: displayRotationX) - delta.y * 0.35).coerceIn(-3600.0, 3600.0)
                     onPreviewRotationX(directRotationX!!)
                 },
                 onCommit = { directRotationX?.let(onCommitRotationX) },
