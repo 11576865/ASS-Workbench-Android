@@ -70,6 +70,47 @@ class RodInteractionInstrumentedTest {
         assertEquals("rotation-y", selected)
     }
 
+    @Test fun scaleConstraintControlsAreExplicitTouchActions() {
+        val registry = InteractionOverlayRegistry()
+        var lockRequest: Boolean? = null
+        var snapRequest: Double? = null
+        composeRule.activityRule.scenario.onActivity { activity ->
+            registry.publish(
+                "position-42",
+                listOf(
+                    InteractionProxySpec(
+                        "position-42-scale",
+                        "scale",
+                        Offset(400f, 650f),
+                        Offset(100f, -100f),
+                        onDragDelta = {},
+                        onCommit = {},
+                        onCancel = {},
+                    )
+                ),
+            )
+            activity.setContent {
+                MaterialTheme(colorScheme = darkColorScheme()) {
+                    WindowInteractionOverlay(
+                        registry = registry,
+                        scaleLocked = false,
+                        onScaleLockedChange = { lockRequest = it },
+                        scaleSnapStep = null,
+                        onScaleSnapStepChange = { snapRequest = it },
+                    )
+                }
+            }
+        }
+
+        composeRule.onNodeWithTag("rod-mode-SCALE").performScrollTo().performClick()
+        composeRule.onNodeWithTag("rod-scale-lock").performScrollTo().performClick()
+        composeRule.onNodeWithTag("rod-scale-snap").performScrollTo().performClick()
+        composeRule.waitForIdle()
+
+        assertEquals(true, lockRequest)
+        assertEquals(5.0, snapRequest)
+    }
+
     @Test fun oneRodSwitchesSemanticsAndOrbitNeverCommits() {
         val registry = InteractionOverlayRegistry()
         var previews = 0
