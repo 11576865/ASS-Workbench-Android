@@ -53,6 +53,20 @@ class EditorRegressionHostActivity : ComponentActivity() {
         }
     }
 
+    /**
+     * Reset and immediately restore the deterministic fixture into the live editor.
+     *
+     * Visual-capture tests must not depend on a recovery journal left by a previous
+     * instrumentation case. The journal is process-scoped, so an asynchronous write
+     * from a just-finished case can otherwise race a fresh Activity startup.
+     */
+    fun restoreDeterministicFixture() {
+        val store = RecoveryStore(application)
+        store.clear()
+        seedRecovery(store)
+        editorViewModel.restoreRecovery()
+    }
+
     private fun seedRecovery(store: RecoveryStore) {
         val document = AssDocument(
             events = listOf(
