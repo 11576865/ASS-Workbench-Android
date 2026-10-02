@@ -36,6 +36,8 @@ data class AssGeometrySnapshot(
     val position: AssPoint? = null,
     val move: AssMove? = null,
     val origin: AssPoint? = null,
+    val rotationX: Double? = null,
+    val rotationY: Double? = null,
     val rotationZ: Double? = null,
     val scaleX: Double? = null,
     val scaleY: Double? = null,
@@ -95,6 +97,8 @@ object AssGeometrySemantic {
         val position = last("pos")?.value?.let(::parsePoint)
         val move = last("move")?.value?.let(::parseMove)
         val origin = last("org")?.value?.let(::parsePoint)
+        val rotationX = last("frx")?.value?.trim()?.toDoubleOrNull()
+        val rotationY = last("fry")?.value?.trim()?.toDoubleOrNull()
         val rotation = last("frz", "fr")?.value?.trim()?.toDoubleOrNull()
         val scaleX = last("fscx")?.value?.trim()?.toDoubleOrNull()
         val scaleY = last("fscy")?.value?.trim()?.toDoubleOrNull()
@@ -109,6 +113,8 @@ object AssGeometrySemantic {
             position = position,
             move = move,
             origin = origin,
+            rotationX = rotationX,
+            rotationY = rotationY,
             rotationZ = rotation,
             scaleX = scaleX,
             scaleY = scaleY,
@@ -178,6 +184,18 @@ object AssGeometrySemantic {
         names = setOf("org"),
     )
 
+    fun patchRotationX(text: String, value: Double): String = patchScalar(
+        text = text,
+        name = "frx",
+        value = value,
+    )
+
+    fun patchRotationY(text: String, value: Double): String = patchScalar(
+        text = text,
+        name = "fry",
+        value = value,
+    )
+
     fun patchRotationZ(text: String, value: Double): String {
         val scan = scanLeading(text)
         val existing = scan.tags.lastOrNull {
@@ -191,10 +209,37 @@ object AssGeometrySemantic {
             replacement = "\\$spelling${formatNumber(value)}",
         )
     }
+    fun removeRotationX(text: String): String = removeTags(
+        text = text,
+        scan = scanLeading(text),
+        names = setOf("frx"),
+    )
+
+    fun removeRotationY(text: String): String = removeTags(
+        text = text,
+        scan = scanLeading(text),
+        names = setOf("fry"),
+    )
+
     fun removeRotationZ(text: String): String = removeTags(
         text = text,
         scan = scanLeading(text),
         names = setOf("frz", "fr"),
+    )
+
+    fun patchRotation3D(text: String, x: Double, y: Double, z: Double): String =
+        patchRotationZ(
+            text = patchRotationY(
+                text = patchRotationX(text, x),
+                value = y,
+            ),
+            value = z,
+        )
+
+    fun removeRotation3D(text: String): String = removeTags(
+        text = text,
+        scan = scanLeading(text),
+        names = setOf("frx", "fry", "frz", "fr"),
     )
 
     fun patchScaleX(text: String, value: Double): String = patchScalar(
