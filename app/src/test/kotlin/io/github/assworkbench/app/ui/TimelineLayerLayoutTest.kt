@@ -27,6 +27,17 @@ class TimelineLayerLayoutTest {
     }
 
     @Test
+    fun zeroDurationEventDoesNotBlockFollowingEventInSameLane() {
+        val result = TimelineLaneLayout.assign(
+            listOf(
+                TimelineLayerItem(1, 1_000, 1_000),
+                TimelineLayerItem(2, 1_000, 1_500),
+            )
+        )
+        assertEquals(listOf(1L to 0, 2L to 0), result.map { it.item.id to it.lane })
+    }
+
+    @Test
     fun placementIsDeterministicForEqualIntervals() {
         val result = TimelineLaneLayout.assign(
             listOf(
