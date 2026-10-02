@@ -628,6 +628,16 @@ fun ModernEditorScreen(
                     onEditEventPosition = ::openPositionTarget,
                     modifier = Modifier.weight(1f).fillMaxWidth().testTag("glass-layered-workspace"),
                 )
+            } else if (workspaceMode == WorkspacePresentationMode.TIMELINE_DOCK_EXPERIMENTAL) {
+                TimelineDockWorkspace(
+                    state = state,
+                    viewModel = viewModel,
+                    onOpenVideo = onOpenReferenceVideo,
+                    rendererEnabled = rendererEnabled,
+                    onEnableRenderer = onEnableRenderer,
+                    onEditEventPosition = ::openPositionTarget,
+                    modifier = Modifier.weight(1f).fillMaxWidth().testTag("timeline-dock-workspace"),
+                )
             } else if (workspaceMode == WorkspacePresentationMode.PRECISION_LENS_EXPERIMENTAL) {
                 PrecisionLensWorkspace(
                     state = state,
@@ -809,6 +819,7 @@ fun ModernEditorScreen(
                 WorkspacePresentationMode.PRECISION_LENS_EXPERIMENTAL -> false
                 WorkspacePresentationMode.TOOL_INSTANCES_EXPERIMENTAL -> false
                 WorkspacePresentationMode.GLASS_LAYERED_EXPERIMENTAL -> false
+                WorkspacePresentationMode.TIMELINE_DOCK_EXPERIMENTAL -> false
             },
             modifier = Modifier.fillMaxSize().testTag("interaction-overlay"),
         )
@@ -2290,7 +2301,7 @@ private fun FixedWorkspace(
 }
 
 @Composable
-private fun WorkbenchPreview(
+internal fun WorkbenchPreview(
     state: EditorState,
     viewModel: EditorViewModel,
     positionEditEventId: Long?,
@@ -4055,7 +4066,7 @@ private fun AddTransformCard(
 }
 
 @Composable
-private fun ModernTimelinePane(state: EditorState, viewModel: EditorViewModel, modifier: Modifier = Modifier, compact: Boolean = false) {
+internal fun ModernTimelinePane(state: EditorState, viewModel: EditorViewModel, modifier: Modifier = Modifier, compact: Boolean = false) {
     val zoomSteps = listOf(5, 10, 30, 60, 120)
     var windowSeconds by rememberSaveable { mutableStateOf(30) }
     var viewportCenterMs by rememberSaveable { mutableLongStateOf(viewModel.playbackPositionMs.value) }
