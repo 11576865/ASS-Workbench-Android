@@ -2406,6 +2406,34 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         return x to y
     }
 
+    fun nudgeSelectedObjects(dx: Double, dy: Double) {
+        if (!dx.isFinite() || !dy.isFinite()) return
+        val snapshot = _state.value
+        val ids = snapshot.selectedEventIds
+        if (ids.isEmpty()) return
+        editDocument("已移动选中字幕对象 " + ids.size + " 条。") { document ->
+            var next = document
+            ids.forEach { id ->
+                val event = next.events.firstOrNull { it.id == id } ?: return@forEach
+                val geometry = AssGeometrySemantic.inspect(event.text)
+                val style = next.styles.firstOrNull { it.name == event.style }
+                val anchor = geometry.position ?: eventAnchor(
+                    event = event,
+                    style = style,
+                    playResX = next.playResX,
+                    playResY = next.playResY,
+                ).let { io.github.assworkbench.domain.AssPoint(it.first, it.second) }
+                next = withEventPosition(
+                    document = next,
+                    id = id,
+                    x = anchor.x + dx,
+                    y = anchor.y + dy,
+                )
+            }
+            next
+        }
+    }
+
     fun focusEvent(id: Long, seek: Boolean = true) {
         val event = _state.value.document.events.firstOrNull { it.id == id } ?: return
         val seekInsideEvent = if (seek) {
