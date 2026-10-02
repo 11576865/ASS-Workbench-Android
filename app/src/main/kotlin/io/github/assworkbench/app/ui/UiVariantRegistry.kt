@@ -57,6 +57,11 @@ internal enum class WorkspacePresentationMode(
         status = UiVariantStatus.EXPERIMENTAL,
         description = "长按画面冻结命中时刻并选择字幕对象；能力围绕对象展开，并保留候选置信与关系信息。",
     ),
+    EDGE_BOOKMARK_EXPERIMENTAL(
+        title = "四边书签工作台",
+        status = UiVariantStatus.EXPERIMENTAL,
+        description = "左右书签轨与四边工具层围绕中央预览展开；边层可临时、驻留、拖动预览并吸附尺寸。",
+    ),
 }
 
 /**
