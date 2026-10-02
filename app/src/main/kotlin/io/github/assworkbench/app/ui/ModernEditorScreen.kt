@@ -696,21 +696,18 @@ fun ModernEditorScreen(
                         }
                     }
                     val eventBound = surfaceTool.descriptor.eventBindable
-                    val bindingResolution = instance.binding.resolve(
-                        focusedEventId = state.focusedEventId,
-                        selectedEventIds = state.selectedEventIds,
-                        existingEventIds = existingEventIds,
-                    )
+                    val bindingState = instance.resolveUiBinding(editorUiState)
                     val bindingLabel = if (eventBound) {
                         when (val binding = instance.binding) {
                             WorkspaceBinding.FollowFocus ->
-                                state.focusedEventId?.let { "跟随 #$it" } ?: "跟随焦点"
+                                editorUiState.focus.eventId?.let { "跟随 #$it" } ?: "跟随焦点"
                             WorkspaceBinding.FollowSelection -> "跟随选择"
-                            is WorkspaceBinding.PinnedEvent -> when (bindingResolution) {
-                                is WorkspaceBindingResolution.UnresolvedPinnedEvent ->
+                            is WorkspaceBinding.PinnedEvent ->
+                                if (bindingState.unresolvedPinnedEventId != null) {
                                     "固定 #${binding.eventId} · 已失效"
-                                else -> "固定 #${binding.eventId}"
-                            }
+                                } else {
+                                    "固定 #${binding.eventId}"
+                                }
                         }
                     } else {
                         null
@@ -912,18 +909,15 @@ private fun GlassLayeredWorkspace(
                 activeLayer = active,
                 deemphasized = workspaceState.activeInstanceId != null && !active,
             )
-            val bindingResolution = instance.binding.resolve(
-                focusedEventId = state.focusedEventId,
-                selectedEventIds = state.selectedEventIds,
-                existingEventIds = existingEventIds,
-            )
+            val bindingState = instance.resolveUiBinding(editorUiState)
             val bindingLabel = when (val binding = instance.binding) {
                 WorkspaceBinding.FollowFocus ->
-                    state.focusedEventId?.let { "跟随 #$it" } ?: "跟随焦点"
+                    editorUiState.focus.eventId?.let { "跟随 #$it" } ?: "跟随焦点"
                 WorkspaceBinding.FollowSelection ->
-                    if (state.selectedEventIds.isEmpty()) "跟随选择" else "选择 ${state.selectedEventIds.size} 条"
+                    if (editorUiState.selection.eventIds.isEmpty()) "跟随选择"
+                    else "选择 ${editorUiState.selection.eventIds.size} 条"
                 is WorkspaceBinding.PinnedEvent ->
-                    if (bindingResolution is WorkspaceBindingResolution.UnresolvedPinnedEvent) {
+                    if (bindingState.unresolvedPinnedEventId != null) {
                         "固定 #${binding.eventId} · 已失效"
                     } else {
                         "固定 #${binding.eventId}"
@@ -1176,21 +1170,19 @@ private fun ToolInstanceWorkspace(
             val visible = instance.presence != WorkspaceToolPresence.HIDDEN &&
                 instance.presence != WorkspaceToolPresence.BOOKMARKED &&
                 activeTabId == instance.id
-            val bindingResolution = instance.binding.resolve(
-                focusedEventId = state.focusedEventId,
-                selectedEventIds = state.selectedEventIds,
-                existingEventIds = existingEventIds,
-            )
-            val unresolved = bindingResolution is WorkspaceBindingResolution.UnresolvedPinnedEvent
+            val bindingState = instance.resolveUiBinding(editorUiState)
             val bindingLabel = when (val binding = instance.binding) {
                 WorkspaceBinding.FollowFocus ->
-                    state.focusedEventId?.let { "跟随焦点 · #$it" } ?: "跟随焦点"
+                    editorUiState.focus.eventId?.let { "跟随焦点 · #$it" } ?: "跟随焦点"
                 WorkspaceBinding.FollowSelection ->
-                    if (state.selectedEventIds.isEmpty()) "跟随选择 · 空"
-                    else "跟随选择 · ${state.selectedEventIds.size} 条"
+                    if (editorUiState.selection.eventIds.isEmpty()) "跟随选择 · 空"
+                    else "跟随选择 · ${editorUiState.selection.eventIds.size} 条"
                 is WorkspaceBinding.PinnedEvent ->
-                    if (unresolved) "固定 #${binding.eventId} · 已失效"
-                    else "固定 #${binding.eventId}"
+                    if (bindingState.unresolvedPinnedEventId != null) {
+                        "固定 #${binding.eventId} · 已失效"
+                    } else {
+                        "固定 #${binding.eventId}"
+                    }
             }
             val tabTitles = groupIds.mapNotNull { id ->
                 workspaceState.tools.firstOrNull { it.id == id }?.let { grouped ->
