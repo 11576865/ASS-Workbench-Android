@@ -1268,18 +1268,20 @@ private fun ToolInstanceWorkspace(
                 onCycleContentDensity = {
                     onWorkspaceStateChange(workspaceState.cycleContentDensity(instance.id))
                 },
-                onRelink = if (bindingState.unresolvedPinnedEventId != null && editorUiState.focus.eventId != null) {
-                    {
-                        onWorkspaceStateChange(
-                            workspaceState
-                                .updateBinding(
-                                    instance.id,
-                                    WorkspaceBinding.PinnedEvent(state.focusedEventId),
-                                )
-                                .activate(instance.id)
-                        )
-                    }
-                } else null,
+                onRelink = editorUiState.focus.eventId
+                    ?.takeIf { bindingState.unresolvedPinnedEventId != null }
+                    ?.let { focusId ->
+                        {
+                            onWorkspaceStateChange(
+                                workspaceState
+                                    .updateBinding(
+                                        instance.id,
+                                        WorkspaceBinding.PinnedEvent(focusId),
+                                    )
+                                    .activate(instance.id)
+                            )
+                        }
+                    },
                 tabTitles = tabTitles,
                 onSelectTab = { tabId ->
                     surfaceController.activateTab(tabId)
