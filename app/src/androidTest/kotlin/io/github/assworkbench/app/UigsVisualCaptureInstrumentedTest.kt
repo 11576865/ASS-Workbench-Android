@@ -93,20 +93,18 @@ class UigsVisualCaptureInstrumentedTest {
     }
 
     private fun openFixedTool(tool: WorkbenchTool) {
-        if (tool == WorkbenchTool.CAPABILITIES) {
-            composeRule.onNodeWithTag("workspace-tools")
-                .assertIsDisplayed()
-                .performClick()
-            composeRule.waitForIdle()
-            composeRule.onNodeWithTag("tool-search")
-                .assertIsDisplayed()
-            return
-        }
-
         composeRule.onNodeWithTag("fixed-group-${tool.group.name}")
             .performScrollTo()
             .performClick()
         composeRule.waitForIdle()
+
+        if (tool == WorkbenchTool.CAPABILITIES) {
+            composeRule.onNodeWithTag("fixed-inspector", useUnmergedTree = true)
+                .assertIsDisplayed()
+            composeRule.onNodeWithTag("tool-search")
+                .assertIsDisplayed()
+            return
+        }
 
         composeRule.onNodeWithTag("fixed-tool-${tool.name}")
             .performScrollTo()
