@@ -115,6 +115,8 @@ internal fun PrecisionInteractionOverlay(
     if (!visible) return
 
     var modeName by rememberSaveable { mutableStateOf(RodMode.POSITION.name) }
+    var scaleAxis by rememberSaveable { mutableStateOf("XY") }
+    var rotationAxis by rememberSaveable { mutableStateOf("Z") }
     var gainName by rememberSaveable { mutableStateOf(PrecisionGain.COARSE.name) }
     var lensName by rememberSaveable { mutableStateOf(PrecisionLensPresentation.FLOATING_LENS.name) }
     var snappingEnabled by rememberSaveable { mutableStateOf(true) }
@@ -125,6 +127,19 @@ internal fun PrecisionInteractionOverlay(
     var rootOrigin by remember { mutableStateOf(Offset.Zero) }
 
     val mode = RodMode.valueOf(modeName)
+    val selectedSuffix = when (mode) {
+        RodMode.SCALE -> when (scaleAxis) {
+            "X" -> "scale-x"
+            "Y" -> "scale-y"
+            else -> "scale"
+        }
+        RodMode.ROTATION -> when (rotationAxis) {
+            "X" -> "rotation-x"
+            "Y" -> "rotation-y"
+            else -> "rotation"
+        }
+        else -> mode.suffix
+    }
     val gain = PrecisionGain.valueOf(gainName)
     val lens = PrecisionLensPresentation.valueOf(lensName)
     val gainUpdated by rememberUpdatedState(gain)
@@ -170,7 +185,7 @@ internal fun PrecisionInteractionOverlay(
         val positionHandles = allHandles.filter { it.id.startsWith("position-") }
         val handles = allHandles.filter {
             !it.id.startsWith("position-") ||
-                it.id.endsWith("-${mode.suffix}") ||
+                it.id.endsWith("-$selectedSuffix") ||
                 it.id.endsWith("-org")
         }
         val activeId = registry.activeHandleId
@@ -470,6 +485,26 @@ internal fun PrecisionInteractionOverlay(
                             modifier = Modifier.testTag("precision-mode-${entry.name}"),
                         )
                     }
+                    if (mode == RodMode.SCALE) {
+                        listOf("X", "Y", "XY").forEach { axis ->
+                            FilterChip(
+                                selected = scaleAxis == axis,
+                                onClick = { scaleAxis = axis },
+                                label = { Text(axis) },
+                                modifier = Modifier.testTag("precision-scale-axis-$axis"),
+                            )
+                        }
+                    }
+                    if (mode == RodMode.ROTATION) {
+                        listOf("X", "Y", "Z").forEach { axis ->
+                            FilterChip(
+                                selected = rotationAxis == axis,
+                                onClick = { rotationAxis = axis },
+                                label = { Text(axis) },
+                                modifier = Modifier.testTag("precision-rotation-axis-$axis"),
+                            )
+                        }
+                    }
                 }
                 PrecisionGain.entries.forEach { entry ->
                     FilterChip(
@@ -522,7 +557,7 @@ internal fun PrecisionInteractionOverlay(
         }
 
         if (activeSpec != null) {
-            val deltaText = if (activeSpec.id.endsWith("-rotation")) {
+            val deltaText = if (activeSpec.id.contains("-rotation")) {
                 "Δθ %.1f°".format(activeDelta.x * 0.35f)
             } else {
                 "Δx %.1f · Δy %.1f px".format(activeDelta.x, activeDelta.y)
