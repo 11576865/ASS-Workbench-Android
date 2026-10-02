@@ -71,8 +71,8 @@ object AssRoundTripVerifier {
         scriptInfoExtras = normalizeEdgeBlankLines(document.scriptInfoExtras),
         styleSectionExtras = normalizeEdgeBlankLines(document.styleSectionExtras),
         eventSectionExtras = normalizeEdgeBlankLines(document.eventSectionExtras),
-        styleFormat = document.styleFormat,
-        eventFormat = document.eventFormat,
+        styleFormat = normalizeStyleFormat(document.styleFormat),
+        eventFormat = normalizeEventFormat(document.eventFormat),
         unknownSections = document.unknownSections.map { section ->
             section.copy(lines = normalizeEdgeBlankLines(section.lines))
         },
@@ -103,6 +103,22 @@ object AssRoundTripVerifier {
         }
         return AssRoundTripReport(mismatches.isEmpty(), mismatches)
     }
+
+    private val defaultStyleFormat = listOf(
+        "Name", "Fontname", "Fontsize", "PrimaryColour", "SecondaryColour", "OutlineColour", "BackColour",
+        "Bold", "Italic", "Underline", "StrikeOut", "ScaleX", "ScaleY", "Spacing", "Angle", "BorderStyle",
+        "Outline", "Shadow", "Alignment", "MarginL", "MarginR", "MarginV", "Encoding",
+    )
+
+    private val defaultEventFormat = listOf(
+        "Layer", "Start", "End", "Style", "Name", "MarginL", "MarginR", "MarginV", "Effect", "Text",
+    )
+
+    private fun normalizeStyleFormat(format: List<String>): List<String> =
+        if (format.isEmpty()) defaultStyleFormat else format
+
+    private fun normalizeEventFormat(format: List<String>): List<String> =
+        if (format.isEmpty()) defaultEventFormat else format
 
     private fun normalizeAssTime(time: SubTime): SubTime =
         SubTime((time.millis / 10L) * 10L)
