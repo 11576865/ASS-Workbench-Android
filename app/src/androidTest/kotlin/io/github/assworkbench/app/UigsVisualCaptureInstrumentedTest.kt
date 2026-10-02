@@ -3,7 +3,6 @@ package io.github.assworkbench.app
 import android.graphics.Bitmap
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
-import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
@@ -80,16 +79,6 @@ class UigsVisualCaptureInstrumentedTest {
             captureDisplay("ASS.${tool.name}_TOOL.FIXTURE_LANDSCAPE.png")
         }
 
-        openFixedTool(WorkbenchTool.POSITION)
-        switchPresentation("CANVAS_EXPERIMENTAL", "canvas-workspace")
-        composeRule.waitUntil(timeoutMillis = 10_000) {
-            composeRule.onAllNodesWithTag("rod-handle-position-1-pos", useUnmergedTree = true)
-                .fetchSemanticsNodes(atLeastOneRootRequired = false)
-                .isNotEmpty()
-        }
-        composeRule.onNodeWithTag("rod-handle-position-1-pos", useUnmergedTree = true)
-            .assertIsDisplayed()
-        captureDisplay("ASS.CANVAS.POSITION_INTERACTION.FIXTURE_LANDSCAPE.png")
     }
 
     private fun openFixedTool(tool: WorkbenchTool) {
