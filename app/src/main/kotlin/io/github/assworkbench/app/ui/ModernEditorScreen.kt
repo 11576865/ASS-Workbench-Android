@@ -1268,7 +1268,7 @@ private fun ToolInstanceWorkspace(
                 onCycleContentDensity = {
                     onWorkspaceStateChange(workspaceState.cycleContentDensity(instance.id))
                 },
-                onRelink = if (unresolved && state.focusedEventId != null) {
+                onRelink = if (bindingState.unresolvedPinnedEventId != null && editorUiState.focus.eventId != null) {
                     {
                         onWorkspaceStateChange(
                             workspaceState
