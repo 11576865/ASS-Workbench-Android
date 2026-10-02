@@ -18,44 +18,54 @@ data class RecoverySnapshot(
 )
 
 class RecoveryStore(context: Context) {
+    companion object {
+        /**
+         * RecoveryStore is instantiated independently by tests, Activities and ViewModels.
+         * Instance-level @Synchronized does not protect the shared recovery directory.
+         * Serialize journal I/O across every instance in this app process.
+         */
+        private val journalLock = Any()
+    }
+
     private val dir = File(context.filesDir, "recovery").apply { mkdirs() }
     private val assFile = File(dir, "latest.ass")
     private val metaFile = File(dir, "latest.meta")
 
-    @Synchronized
-    fun exists(): Boolean = assFile.isFile && metaFile.isFile
-
-    @Synchronized
-    fun label(): String = readMeta().getOrNull(0).orEmpty().ifBlank { "未保存字幕工程" }
-
-    @Synchronized
-    fun write(project: SubtitleProject, document: AssDocument, textEncoding: AssTextEncoding) {
-        val tmpAss = File(dir, "latest.ass.tmp")
-        val tmpMeta = File(dir, "latest.meta.tmp")
-        val assText = AssCodec.write(document)
-        io.github.assworkbench.domain.AssRoundTripVerifier.requireEquivalent(document, assText)
-        writeSynced(tmpAss, assText.toByteArray(Charsets.UTF_8))
-        val lines = listOf(
-            encode(project.title),
-            encode(project.subtitleUri.orEmpty()),
-            encode(project.videoUri.orEmpty()),
-            project.splitRatio.toString(),
-            textEncoding.storageValue(),
-        )
-        writeSynced(tmpMeta, lines.joinToString("\n").toByteArray(Charsets.UTF_8))
-
-        // Validate both staged files before replacing the last known-good journal.
-        AssCodec.parse(tmpAss.readText(Charsets.UTF_8))
-        readMetaFile(tmpMeta)
-
-        replaceAtomically(tmpAss, assFile)
-        replaceAtomically(tmpMeta, metaFile)
+    fun exists(): Boolean = synchronized(journalLock) {
+        assFile.isFile && metaFile.isFile
     }
 
-    @Synchronized
-    fun read(): RecoverySnapshot? {
-        if (!exists()) return null
-        return runCatching {
+    fun label(): String = synchronized(journalLock) {
+        readMeta().getOrNull(0).orEmpty().ifBlank { "未保存字幕工程" }
+    }
+
+    fun write(project: SubtitleProject, document: AssDocument, textEncoding: AssTextEncoding) =
+        synchronized(journalLock) {
+            val tmpAss = File(dir, "latest.ass.tmp")
+            val tmpMeta = File(dir, "latest.meta.tmp")
+            val assText = AssCodec.write(document)
+            io.github.assworkbench.domain.AssRoundTripVerifier.requireEquivalent(document, assText)
+            writeSynced(tmpAss, assText.toByteArray(Charsets.UTF_8))
+            val lines = listOf(
+                encode(project.title),
+                encode(project.subtitleUri.orEmpty()),
+                encode(project.videoUri.orEmpty()),
+                project.splitRatio.toString(),
+                textEncoding.storageValue(),
+            )
+            writeSynced(tmpMeta, lines.joinToString("\n").toByteArray(Charsets.UTF_8))
+
+            // Validate both staged files before replacing the last known-good journal.
+            AssCodec.parse(tmpAss.readText(Charsets.UTF_8))
+            readMetaFile(tmpMeta)
+
+            replaceAtomically(tmpAss, assFile)
+            replaceAtomically(tmpMeta, metaFile)
+        }
+
+    fun read(): RecoverySnapshot? = synchronized(journalLock) {
+        if (!assFile.isFile || !metaFile.isFile) return@synchronized null
+        runCatching {
             val meta = readMeta()
             val project = SubtitleProject(
                 title = meta.getOrNull(0).orEmpty().ifBlank { "Recovered ASS" },
@@ -71,8 +81,7 @@ class RecoveryStore(context: Context) {
         }.getOrNull()
     }
 
-    @Synchronized
-    fun clear() {
+    fun clear() = synchronized(journalLock) {
         assFile.delete()
         metaFile.delete()
         File(dir, "latest.ass.tmp").delete()
