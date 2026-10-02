@@ -1005,6 +1005,122 @@
       }
     },
     {
+      "id": "ASS.TOOL_INSTANCE_WORKSPACE.FIXTURE_LANDSCAPE",
+      "surface_ids": [
+        "ASS.WORKSPACE.TOOL_INSTANCE_BINDING",
+        "ASS.WORKSPACE.FLOATING_SURFACE_GEOMETRY"
+      ],
+      "adapter": "android-emulator-screencap",
+      "evidence_level": "production-rendered",
+      "build": {
+        "app_task": ":app:assembleDebug",
+        "test_task": ":app:assembleDebugAndroidTest",
+        "app_apk": "app/build/outputs/apk/debug/app-debug.apk",
+        "test_apk": "app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk",
+        "instrumentation_runner": "io.github.assworkbench.app.test/androidx.test.runner.AndroidJUnitRunner",
+        "test_class": "io.github.assworkbench.app.UigsToolInstanceVisualCaptureInstrumentedTest"
+      },
+      "package": "io.github.assworkbench.app",
+      "activity": "io.github.assworkbench.app/.EditorRegressionHostActivity",
+      "device": {
+        "api_level": 35,
+        "target": "google_apis",
+        "arch": "x86_64",
+        "profile": "pixel_6",
+        "logical_size": {
+          "width": 1600,
+          "height": 1000
+        },
+        "density": 240,
+        "locale": "zh-CN",
+        "font_scale": 1,
+        "orientation": "landscape"
+      },
+      "fixture": {
+        "kind": "debug-regression-host",
+        "source": "EditorRegressionHostActivity.restoreDeterministicFixture",
+        "state": "restore deterministic two-line ASS fixture; focus Event 1; switch to Tool Instances; open POSITION; pin to Event 1; duplicate instance; resize one floating surface"
+      },
+      "ready": {
+        "test_tag": "tool-instance-workspace",
+        "state": "instrumentation-test-complete",
+        "settle_ms": 500
+      },
+      "source_dependencies": [
+        "app/src/debug/kotlin/io/github/assworkbench/app/EditorRegressionHostActivity.kt",
+        "app/src/main/kotlin/io/github/assworkbench/app/ui/ModernEditorScreen.kt",
+        "app/src/main/kotlin/io/github/assworkbench/app/ui/workspace/WorkspaceSurfaceHost.kt",
+        "app/src/main/kotlin/io/github/assworkbench/app/ui/workspace/WorkspaceModel.kt",
+        "app/src/androidTest/kotlin/io/github/assworkbench/app/UigsToolInstanceVisualCaptureInstrumentedTest.kt"
+      ],
+      "output_name": "ASS.TOOL_INSTANCE_WORKSPACE.FIXTURE_LANDSCAPE.png",
+      "limitations": [
+        "Uses the debug-only regression host to inject deterministic editor state while rendering the production ToolInstanceWorkspace and FloatingWorkbenchSurface implementation.",
+        "Renderer/video pixels are not required for this evidence because the covered claims are binding identity and floating-surface geometry/presentation.",
+        "Screenshot is captured from Android UiAutomation at full-display compositor level."
+      ],
+      "assertions": {
+        "image_orientation": "landscape"
+      }
+    },
+    {
+      "id": "ASS.RENDERER_POSITION.RUNTIME_LANDSCAPE",
+      "surface_ids": [
+        "ASS.PREVIEW.VIDEO",
+        "ASS.WORKSPACE.INTERACTION_OVERLAY"
+      ],
+      "adapter": "android-emulator-screencap",
+      "evidence_level": "runtime-backed",
+      "build": {
+        "app_task": ":app:assembleDebug",
+        "test_task": ":app:assembleDebugAndroidTest",
+        "app_apk": "app/build/outputs/apk/debug/app-debug.apk",
+        "test_apk": "app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk",
+        "instrumentation_runner": "io.github.assworkbench.app.test/androidx.test.runner.AndroidJUnitRunner",
+        "test_class": "io.github.assworkbench.app.UigsRendererVisualCaptureInstrumentedTest"
+      },
+      "package": "io.github.assworkbench.app",
+      "activity": "androidx.activity.ComponentActivity test host",
+      "device": {
+        "api_level": 35,
+        "target": "google_apis",
+        "arch": "x86_64",
+        "profile": "pixel_6",
+        "logical_size": {
+          "width": 1600,
+          "height": 1000
+        },
+        "density": 240,
+        "locale": "zh-CN",
+        "font_scale": 1,
+        "orientation": "landscape"
+      },
+      "fixture": {
+        "kind": "generated-local-media",
+        "source": "UigsRendererVisualCaptureInstrumentedTest",
+        "state": "real libmpv/libass preview of a deterministic 30-second H.264 color clip with an active ASS Event at pos(960,540); WindowInteractionOverlay renders the production position proxy from the shared registry"
+      },
+      "ready": {
+        "test_tag": "rod-handle-position-1-pos",
+        "state": "renderer diagnostics report attached external ASS and interaction proxy is displayed",
+        "settle_ms": 800
+      },
+      "source_dependencies": [
+        "app/src/main/kotlin/io/github/assworkbench/app/ui/VideoPreview.kt",
+        "app/src/main/kotlin/io/github/assworkbench/app/ui/interaction/WorkspaceInteractionOverlay.kt",
+        "app/src/androidTest/kotlin/io/github/assworkbench/app/UigsRendererVisualCaptureInstrumentedTest.kt"
+      ],
+      "output_name": "ASS.RENDERER_POSITION.RUNTIME_LANDSCAPE.png",
+      "limitations": [
+        "The media input is a deterministic generated color video rather than user media; the mpv/libass/native rendering path is real.",
+        "This is a surface-level runtime fixture hosted by a ComponentActivity rather than a full ModernEditorScreen navigation session.",
+        "It proves renderer-backed preview and integrated interaction-proxy pixels, not OEM-specific physical-device behavior."
+      ],
+      "assertions": {
+        "image_orientation": "landscape"
+      }
+    },
+    {
       "id": "ASS.CANVAS.WORKSPACE.FIXTURE_LANDSCAPE",
       "surface_ids": [
         "ASS.WORKSPACE.FLOATING_SURFACE_GEOMETRY"
@@ -1056,176 +1172,6 @@
       "limitations": [
         "Uses the debug-only regression host to inject deterministic editor data while rendering the production Canvas workspace.",
         "This state proves floating-surface geometry/presentation only; ToolInstance binding and native renderer evidence are captured separately.",
-        "Screenshot is captured from Android UiAutomation at full-display compositor level."
-      ],
-      "assertions": {
-        "image_orientation": "landscape"
-      }
-    },
-    {
-      "id": "ASS.RENDERER_BACKED.PREVIEW_LANDSCAPE",
-      "surface_ids": [
-        "ASS.PREVIEW.VIDEO"
-      ],
-      "adapter": "android-emulator-screencap",
-      "evidence_level": "runtime-backed",
-      "build": {
-        "app_task": ":app:assembleDebug",
-        "test_task": ":app:assembleDebugAndroidTest",
-        "app_apk": "app/build/outputs/apk/debug/app-debug.apk",
-        "test_apk": "app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk",
-        "instrumentation_runner": "io.github.assworkbench.app.test/androidx.test.runner.AndroidJUnitRunner",
-        "test_class": "io.github.assworkbench.app.UigsAdditionalVisualCaptureInstrumentedTest"
-      },
-      "package": "io.github.assworkbench.app",
-      "activity": "io.github.assworkbench.app/.EditorRegressionHostActivity",
-      "device": {
-        "api_level": 35,
-        "target": "google_apis",
-        "arch": "x86_64",
-        "profile": "pixel_6",
-        "logical_size": {
-          "width": 1600,
-          "height": 1000
-        },
-        "density": 240,
-        "locale": "zh-CN",
-        "font_scale": 1,
-        "orientation": "landscape"
-      },
-      "fixture": {
-        "kind": "instrumentation-generated-y4m",
-        "source": "UigsAdditionalVisualCaptureInstrumentedTest.writeDeterministicVideo",
-        "state": "generate deterministic 320x180 two-second Y4M video; run production VideoPreview with real mpv/libass; attach active ASS event; wait for renderer diagnostics proving an active preview subtitle"
-      },
-      "ready": {
-        "state": "renderer-diagnostics-confirm-active-preview-subtitle",
-        "settle_ms": 500
-      },
-      "source_dependencies": [
-        "app/src/main/kotlin/io/github/assworkbench/app/ui/VideoPreview.kt",
-        "app/src/main/kotlin/io/github/assworkbench/app/ui/interaction/WorkspaceInteractionOverlay.kt",
-        "app/src/androidTest/kotlin/io/github/assworkbench/app/UigsAdditionalVisualCaptureInstrumentedTest.kt"
-      ],
-      "output_name": "ASS.RENDERER_BACKED.PREVIEW_LANDSCAPE.png",
-      "limitations": [
-        "Runs the production mpv/libass preview on an API 35 x86_64 emulator with software GPU.",
-        "The reference video is a deterministic YUV4MPEG2 fixture generated by instrumentation; it is real decoded video but not representative of hardware-decoder or OEM/GPU behavior.",
-        "Runtime-backed status requires renderer diagnostics to report a non-unknown active subtitle SID after the real video and generated ASS are attached.",
-        "Interaction-overlay evidence is captured separately so renderer validity and overlay discovery are not conflated.",
-        "Real-device GPU/OEM differences remain field/device evidence."
-      ],
-      "assertions": {
-        "image_orientation": "landscape"
-      }
-    },
-    {
-      "id": "ASS.TOOL_INSTANCES.WORKSPACE.FIXTURE_LANDSCAPE",
-      "surface_ids": [
-        "ASS.WORKSPACE.TOOL_INSTANCE_BINDING"
-      ],
-      "adapter": "android-emulator-screencap",
-      "evidence_level": "production-rendered",
-      "build": {
-        "app_task": ":app:assembleDebug",
-        "test_task": ":app:assembleDebugAndroidTest",
-        "app_apk": "app/build/outputs/apk/debug/app-debug.apk",
-        "test_apk": "app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk",
-        "instrumentation_runner": "io.github.assworkbench.app.test/androidx.test.runner.AndroidJUnitRunner",
-        "test_class": "io.github.assworkbench.app.UigsAdditionalVisualCaptureInstrumentedTest"
-      },
-      "package": "io.github.assworkbench.app",
-      "activity": "io.github.assworkbench.app/.EditorRegressionHostActivity",
-      "device": {
-        "api_level": 35,
-        "target": "google_apis",
-        "arch": "x86_64",
-        "profile": "pixel_6",
-        "logical_size": {
-          "width": 1600,
-          "height": 1000
-        },
-        "density": 240,
-        "locale": "zh-CN",
-        "font_scale": 1,
-        "orientation": "landscape"
-      },
-      "fixture": {
-        "kind": "debug-regression-host",
-        "source": "EditorRegressionHostActivity.restoreDeterministicFixture",
-        "state": "restore deterministic two-line ASS fixture; focus Event 1; switch to Tool Instances presentation; open real tool-instance directory surface"
-      },
-      "ready": {
-        "test_tag": "tool-instance-workspace",
-        "state": "instrumentation-test-complete",
-        "settle_ms": 350
-      },
-      "source_dependencies": [
-        "app/src/debug/kotlin/io/github/assworkbench/app/EditorRegressionHostActivity.kt",
-        "app/src/main/kotlin/io/github/assworkbench/app/ui/ModernEditorScreen.kt",
-        "app/src/main/kotlin/io/github/assworkbench/app/ui/workspace/WorkspaceModel.kt",
-        "app/src/main/kotlin/io/github/assworkbench/app/ui/workspace/WorkspaceUiBindingContract.kt",
-        "app/src/androidTest/kotlin/io/github/assworkbench/app/UigsAdditionalVisualCaptureInstrumentedTest.kt"
-      ],
-      "output_name": "ASS.TOOL_INSTANCES.WORKSPACE.FIXTURE_LANDSCAPE.png",
-      "limitations": [
-        "Shows the production Tool Instances presentation and binding-aware surface chrome using deterministic editor state.",
-        "This capture does not by itself prove every pinned-target lifecycle edge case; those remain covered by WorkspaceState and binding contract tests.",
-        "Screenshot is captured from Android UiAutomation at full-display compositor level."
-      ],
-      "assertions": {
-        "image_orientation": "landscape"
-      }
-    },
-    {
-      "id": "ASS.INTERACTION_OVERLAY.FIXTURE_LANDSCAPE",
-      "surface_ids": [
-        "ASS.WORKSPACE.INTERACTION_OVERLAY"
-      ],
-      "adapter": "android-emulator-screencap",
-      "evidence_level": "production-rendered",
-      "build": {
-        "app_task": ":app:assembleDebug",
-        "test_task": ":app:assembleDebugAndroidTest",
-        "app_apk": "app/build/outputs/apk/debug/app-debug.apk",
-        "test_apk": "app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk",
-        "instrumentation_runner": "io.github.assworkbench.app.test/androidx.test.runner.AndroidJUnitRunner",
-        "test_class": "io.github.assworkbench.app.UigsAdditionalVisualCaptureInstrumentedTest"
-      },
-      "package": "io.github.assworkbench.app",
-      "activity": "io.github.assworkbench.app/.EditorRegressionHostActivity",
-      "device": {
-        "api_level": 35,
-        "target": "google_apis",
-        "arch": "x86_64",
-        "profile": "pixel_6",
-        "logical_size": {
-          "width": 1600,
-          "height": 1000
-        },
-        "density": 240,
-        "locale": "zh-CN",
-        "font_scale": 1,
-        "orientation": "landscape"
-      },
-      "fixture": {
-        "kind": "semantic-proxy-fixture",
-        "source": "UigsAdditionalVisualCaptureInstrumentedTest.captureInteractionOverlayFixtureLandscape",
-        "state": "render the production WindowInteractionOverlay with a deterministic position InteractionProxySpec at the center of the real Android compositor"
-      },
-      "ready": {
-        "test_tag": "rod-handle-position-1-pos",
-        "state": "instrumentation-test-complete",
-        "settle_ms": 250
-      },
-      "source_dependencies": [
-        "app/src/main/kotlin/io/github/assworkbench/app/ui/interaction/WorkspaceInteractionOverlay.kt",
-        "app/src/androidTest/kotlin/io/github/assworkbench/app/UigsAdditionalVisualCaptureInstrumentedTest.kt"
-      ],
-      "output_name": "ASS.INTERACTION_OVERLAY.FIXTURE_LANDSCAPE.png",
-      "limitations": [
-        "This is production-rendered evidence for the actual WindowInteractionOverlay component and semantic rod, not runtime-backed evidence from the video renderer.",
-        "The proxy geometry is deterministic test input; production discovery/publication from VideoPreview remains independently exercised by interaction tests.",
         "Screenshot is captured from Android UiAutomation at full-display compositor level."
       ],
       "assertions": {
