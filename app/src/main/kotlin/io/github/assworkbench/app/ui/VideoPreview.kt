@@ -1667,8 +1667,15 @@ private fun PositionDragOverlay(
                 targetInWindow = target(x, y),
                 preferredOffsetPx = preferred + Offset(with(proxyDensity) { 78.dp.toPx() }, 0f),
                 onDragDelta = { delta ->
-                    directScaleX = ((directScaleX ?: displayScaleX) + delta.x * 0.45).coerceIn(1.0, 1000.0)
-                    directScaleY = directScaleY ?: displayScaleY
+                    val baseX = (directScaleX ?: displayScaleX).coerceAtLeast(1.0)
+                    val baseY = (directScaleY ?: displayScaleY).coerceAtLeast(1.0)
+                    val nextX = (baseX + delta.x * 0.45).coerceIn(1.0, 1000.0)
+                    directScaleX = nextX
+                    directScaleY = if (scaleLocked) {
+                        (baseY * (nextX / baseX)).coerceIn(1.0, 1000.0)
+                    } else {
+                        baseY
+                    }
                     onPreviewScale(directScaleX!!, directScaleY!!)
                 },
                 onCommit = {
@@ -1682,8 +1689,15 @@ private fun PositionDragOverlay(
                 targetInWindow = target(x, y),
                 preferredOffsetPx = preferred + Offset(with(proxyDensity) { 78.dp.toPx() }, 0f),
                 onDragDelta = { delta ->
-                    directScaleX = directScaleX ?: displayScaleX
-                    directScaleY = ((directScaleY ?: displayScaleY) - delta.y * 0.45).coerceIn(1.0, 1000.0)
+                    val baseX = (directScaleX ?: displayScaleX).coerceAtLeast(1.0)
+                    val baseY = (directScaleY ?: displayScaleY).coerceAtLeast(1.0)
+                    val nextY = (baseY - delta.y * 0.45).coerceIn(1.0, 1000.0)
+                    directScaleY = nextY
+                    directScaleX = if (scaleLocked) {
+                        (baseX * (nextY / baseY)).coerceIn(1.0, 1000.0)
+                    } else {
+                        baseX
+                    }
                     onPreviewScale(directScaleX!!, directScaleY!!)
                 },
                 onCommit = {
