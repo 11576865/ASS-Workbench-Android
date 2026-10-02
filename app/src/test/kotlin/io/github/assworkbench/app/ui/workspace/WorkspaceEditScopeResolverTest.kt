@@ -132,8 +132,7 @@ class WorkspaceEditScopeResolverTest {
                 WorkbenchTool.CAPABILITIES,
                 instance,
                 document,
-                focusedEventId = 41,
-                selectedEventIds = emptySet(),
+                editorUiState = uiState(focusedEventId = 41),
             ),
         )
     }
