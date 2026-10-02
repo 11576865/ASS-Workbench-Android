@@ -158,7 +158,7 @@ class EditorUiContractTest {
         assertEquals("Noto Sans CJK SC", ui.resources.fallbackFontFamily)
         assertEquals(
             listOf("Preview subtitle：sid=1", "Font match：Noto Sans"),
-            ui.resources.rendererDiagnostics,
+            ui.diagnostics.rendererMessages,
         )
 
         assertTrue(ui.container.attached)
@@ -173,7 +173,7 @@ class EditorUiContractTest {
         assertEquals("fixture error", ui.container.error)
 
         rendererDiagnostics += "late mutation"
-        assertFalse("late mutation" in ui.resources.rendererDiagnostics)
+        assertFalse("late mutation" in ui.diagnostics.rendererMessages)
     }
 
 }
