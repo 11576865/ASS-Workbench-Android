@@ -6,11 +6,12 @@
 
 ## 事实快照
 
-- current main: `1fe26544b6e8dea4296bd79334d5b235ce62f65c`
+- current main: `0addc6e8a168f8c28a2f05f2ef81d369d4ee252b`
 - #61 Presentation invariant gate: merged。
 - #62 UI Stability Boundary + Contract Slice A: merged；merge commit `27e23899fe96d535cce087b172b23f2ce6050626`。
 - #69 Edge Bookmark presentation gate: merged；Edge Bookmark 现已进入 cross-presentation canonical state / Focus / Undo-Redo invariant gate。
 - #72 UI Contract Slice B（current object + Binding）: merged；Binding 解析统一经 presentation-neutral canonical identity 投影，missing pinned Event 保持 unresolved。
+- #75 UIGS visual-capture baseline repair: merged；Fixed capture 使用真实入口，并移除了 renderer-disabled fixture 无法真实产生的 Canvas Position rod 视觉证据声明。
 - Current main 已登记：Spatial、Tool Instances、Glass Layered、Precision Lens、Subtitle Object、Edge Bookmark 等实验 presentation。
 - `TIMELINE_DOCK_EXPERIMENTAL` 不在 current-main registry；#56 仅作为历史原型证据，不作为 current-main 实现 authority。
 
