@@ -109,6 +109,10 @@ internal object PrecisionInteractionMath {
 @Composable
 internal fun PrecisionInteractionOverlay(
     registry: InteractionOverlayRegistry,
+    scaleLocked: Boolean = false,
+    onScaleLockedChange: (Boolean) -> Unit = {},
+    scaleSnapStep: Double? = null,
+    onScaleSnapStepChange: (Double?) -> Unit = {},
     visible: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
@@ -497,6 +501,28 @@ internal fun PrecisionInteractionOverlay(
                                 modifier = Modifier.testTag("precision-scale-axis-$axis"),
                             )
                         }
+                        FilterChip(
+                            selected = scaleLocked,
+                            onClick = { onScaleLockedChange(!scaleLocked) },
+                            label = { Text(if (scaleLocked) "比例锁" else "独立") },
+                            modifier = Modifier.testTag("precision-scale-lock"),
+                        )
+                        FilterChip(
+                            selected = scaleSnapStep != null,
+                            onClick = {
+                                val next = when (scaleSnapStep?.toInt()) {
+                                    null -> 5.0
+                                    5 -> 10.0
+                                    10 -> 25.0
+                                    else -> null
+                                }
+                                onScaleSnapStepChange(next)
+                            },
+                            label = {
+                                Text(scaleSnapStep?.let { "吸附 ${it.toInt()}%" } ?: "吸附关")
+                            },
+                            modifier = Modifier.testTag("precision-scale-snap"),
+                        )
                     }
                     if (mode == RodMode.ROTATION) {
                         listOf("X", "Y", "Z").forEach { axis ->
