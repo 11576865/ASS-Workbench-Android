@@ -211,14 +211,14 @@ class EditorRegressionInstrumentedTest {
         composeRule.onNodeWithTag("edge-handle-left").assertIsDisplayed()
         composeRule.onNodeWithTag("edge-handle-right").assertIsDisplayed()
 
-        composeRule.onNodeWithTag("edge-handle-top").performClick()
+        composeRule.onNodeWithTag("edge-toggle-top").assertIsDisplayed().performClick()
         composeRule.waitUntil(5_000) {
             composeRule.onAllNodesWithTag("edge-layer-top", useUnmergedTree = true)
                 .fetchSemanticsNodes(atLeastOneRootRequired = false)
                 .isNotEmpty()
         }
 
-        composeRule.onNodeWithTag("edge-handle-bottom").performClick()
+        composeRule.onNodeWithTag("edge-toggle-bottom").assertIsDisplayed().performClick()
         composeRule.waitUntil(5_000) {
             composeRule.onAllNodesWithTag("edge-layer-bottom", useUnmergedTree = true)
                 .fetchSemanticsNodes(atLeastOneRootRequired = false)
