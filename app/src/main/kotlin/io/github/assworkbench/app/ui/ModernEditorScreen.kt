@@ -2059,7 +2059,12 @@ private fun EdgeHandle(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(2.dp),
         ) {
-            IconButton(onClick = onToggle, modifier = Modifier.size(38.dp)) {
+            IconButton(
+                onClick = onToggle,
+                modifier = Modifier
+                    .size(38.dp)
+                    .testTag("edge-toggle-" + side.name.lowercase()),
+            ) {
                 Icon(icon, contentDescription = if (open) "收起$label" else "展开$label")
             }
             Text(label, style = MaterialTheme.typography.labelSmall)
