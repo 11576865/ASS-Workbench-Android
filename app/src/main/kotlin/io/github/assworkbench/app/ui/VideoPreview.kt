@@ -136,6 +136,7 @@ internal fun VideoPreview(
     onPreviewEventRotation: (Double) -> Unit,
     onSetEventRotation: (Double) -> Unit,
     scaleLocked: Boolean,
+    scaleSnapStep: Double? = null,
     onPreviewEventScale: (Double, Double) -> Unit,
     onSetEventScale: (Double, Double) -> Unit,
     onPreviewEventShear: (Double, Double) -> Unit,
@@ -242,6 +243,7 @@ internal fun VideoPreview(
             onPreviewEventRotation = onPreviewEventRotation,
             onSetEventRotation = onSetEventRotation,
             scaleLocked = scaleLocked,
+            scaleSnapStep = scaleSnapStep,
             onPreviewEventScale = onPreviewEventScale,
             onSetEventScale = onSetEventScale,
             onPreviewEventShear = onPreviewEventShear,
@@ -547,6 +549,7 @@ private fun AuthoritativeMpvPreview(
     onPreviewEventRotation: (Double) -> Unit,
     onSetEventRotation: (Double) -> Unit,
     scaleLocked: Boolean,
+    scaleSnapStep: Double? = null,
     onPreviewEventScale: (Double, Double) -> Unit,
     onSetEventScale: (Double, Double) -> Unit,
     onPreviewEventShear: (Double, Double) -> Unit,
@@ -968,6 +971,7 @@ private fun AuthoritativeMpvPreview(
                         onPreviewRotation = onPreviewEventRotation,
                         onCommitRotation = onSetEventRotation,
                         scaleLocked = scaleLocked,
+                        scaleSnapStep = scaleSnapStep,
                         onPreviewScale = onPreviewEventScale,
                         onCommitScale = onSetEventScale,
                         onPreviewShear = onPreviewEventShear,
@@ -1140,6 +1144,7 @@ private fun PositionDragOverlay(
     onPreviewRotation: (Double) -> Unit,
     onCommitRotation: (Double) -> Unit,
     scaleLocked: Boolean,
+    scaleSnapStep: Double? = null,
     onPreviewScale: (Double, Double) -> Unit,
     onCommitScale: (Double, Double) -> Unit,
     onPreviewShear: (Double, Double) -> Unit,
@@ -1645,6 +1650,7 @@ private fun PositionDragOverlay(
                         deltaX = delta.x * 0.45,
                         deltaY = -delta.y * 0.45,
                         locked = scaleLocked,
+                        snapStep = scaleSnapStep,
                     )
                     directScaleX = next.x
                     directScaleY = next.y
@@ -1668,6 +1674,7 @@ private fun PositionDragOverlay(
                         baseY = directScaleY ?: displayScaleY,
                         deltaX = delta.x * 0.45,
                         locked = scaleLocked,
+                        snapStep = scaleSnapStep,
                     )
                     directScaleX = next.x
                     directScaleY = next.y
@@ -1689,6 +1696,7 @@ private fun PositionDragOverlay(
                         baseY = directScaleY ?: displayScaleY,
                         deltaY = -delta.y * 0.45,
                         locked = scaleLocked,
+                        snapStep = scaleSnapStep,
                     )
                     directScaleX = next.x
                     directScaleY = next.y
@@ -1726,7 +1734,7 @@ private fun PositionDragOverlay(
                 overlayOriginInWindow = it.positionInWindow()
                 overlaySizePx = it.size
             }
-            .pointerInput(event.id, document.playResX, document.playResY, scaleLocked) {
+            .pointerInput(event.id, document.playResX, document.playResY, scaleLocked, scaleSnapStep) {
             var activeHandle = 0 // 1=position, 2=origin, 3=rotation, 4=scale, 5=fax, 6=fay
             var lastPreviewAt = 0L
             var scaleStartX = displayScaleX
@@ -1849,16 +1857,16 @@ private fun PositionDragOverlay(
                             if (activeHandle == 4) {
                                 val rawScaleX = (kotlin.math.abs(localX) / 70.dp.toPx() * 100.0).coerceIn(1.0, 1000.0)
                                 val rawScaleY = (kotlin.math.abs(localY) / 40.dp.toPx() * 100.0).coerceIn(1.0, 1000.0)
-                                if (scaleLocked) {
-                                    val factorX = rawScaleX / scaleStartX.coerceAtLeast(1.0)
-                                    val factorY = rawScaleY / scaleStartY.coerceAtLeast(1.0)
-                                    val factor = ((factorX + factorY) / 2.0).coerceIn(0.01, 10.0)
-                                    directScaleX = (scaleStartX * factor).coerceIn(1.0, 1000.0)
-                                    directScaleY = (scaleStartY * factor).coerceIn(1.0, 1000.0)
-                                } else {
-                                    directScaleX = rawScaleX
-                                    directScaleY = rawScaleY
-                                }
+                                val next = TouchScalePolicy.xy(
+                                    baseX = scaleStartX,
+                                    baseY = scaleStartY,
+                                    deltaX = rawScaleX - scaleStartX,
+                                    deltaY = rawScaleY - scaleStartY,
+                                    locked = scaleLocked,
+                                    snapStep = scaleSnapStep,
+                                )
+                                directScaleX = next.x
+                                directScaleY = next.y
                             } else if (activeHandle == 5) {
                                 val width = 70.dp.toPx() * (displayScaleX / 100.0)
                                 val height = -40.dp.toPx() * (displayScaleY / 100.0)
