@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
@@ -19,6 +20,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import io.github.assworkbench.app.ui.VideoPreview
 import io.github.assworkbench.app.ui.WorkbenchTool
 import io.github.assworkbench.app.ui.interaction.InteractionOverlayRegistry
+import io.github.assworkbench.app.ui.interaction.InteractionProxySpec
 import io.github.assworkbench.app.ui.interaction.WindowInteractionOverlay
 import io.github.assworkbench.domain.AssDocument
 import io.github.assworkbench.domain.AssEvent
@@ -62,7 +64,7 @@ class UigsAdditionalVisualCaptureInstrumentedTest {
     }
 
     @Test
-    fun captureRendererBackedPreviewPositionLandscape() {
+    fun captureRendererBackedPreviewLandscape() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val targetContext = instrumentation.targetContext
         val video = targetContext.filesDir.resolve("uigs-renderer-backed-fixture.y4m")
@@ -152,9 +154,46 @@ class UigsAdditionalVisualCaptureInstrumentedTest {
         }
 
         composeRule.waitUntil(timeoutMillis = 30_000) {
-            diagnostics.get().any { it.contains("Preview subtitle") }
+            diagnostics.get().any {
+                it.contains("Preview subtitle：sid=") && !it.contains("sid=unknown")
+            }
         }
-        composeRule.waitUntil(timeoutMillis = 10_000) {
+        composeRule.waitForIdle()
+        captureDisplay("ASS.RENDERER_BACKED.PREVIEW_LANDSCAPE.png")
+    }
+
+    @Test
+    fun captureInteractionOverlayFixtureLandscape() {
+        val registry = InteractionOverlayRegistry()
+        composeRule.activityRule.scenario.onActivity { activity ->
+            activity.setContent {
+                MaterialTheme(colorScheme = darkColorScheme()) {
+                    Box(Modifier.fillMaxSize()) {
+                        WindowInteractionOverlay(
+                            registry = registry,
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    }
+                }
+            }
+        }
+        composeRule.runOnUiThread {
+            registry.publish(
+                "position-1",
+                listOf(
+                    InteractionProxySpec(
+                        id = "position-1-pos",
+                        label = "位置",
+                        targetInWindow = Offset(800f, 500f),
+                        preferredOffsetPx = Offset(120f, -120f),
+                        onDragDelta = {},
+                        onCommit = {},
+                        onCancel = {},
+                    ),
+                ),
+            )
+        }
+        composeRule.waitUntil(timeoutMillis = 5_000) {
             composeRule.onAllNodesWithTag("rod-handle-position-1-pos", useUnmergedTree = true)
                 .fetchSemanticsNodes(atLeastOneRootRequired = false)
                 .isNotEmpty()
@@ -162,7 +201,7 @@ class UigsAdditionalVisualCaptureInstrumentedTest {
         composeRule.onNodeWithTag("rod-handle-position-1-pos", useUnmergedTree = true)
             .assertIsDisplayed()
         composeRule.waitForIdle()
-        captureDisplay("ASS.RENDERER_BACKED.PREVIEW_POSITION_LANDSCAPE.png")
+        captureDisplay("ASS.INTERACTION_OVERLAY.FIXTURE_LANDSCAPE.png")
     }
 
     private fun restoreFixture() {
