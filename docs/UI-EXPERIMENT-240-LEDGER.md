@@ -6,10 +6,10 @@
 
 ## 事实快照
 
-- current main: `39e23ea090e4a98e4d50e786f7662db287b4462f`
+- current main: `e1e38151889e58b0c6ab4668c5ef7740fd535406`
 - #61 Presentation invariant gate: merged。
 - #62 UI Stability Boundary + Contract Slice A: merged；merge commit `27e23899fe96d535cce087b172b23f2ce6050626`。
-- #69 Edge Bookmark presentation gate: open；已同步 #71 后的 current main，当前 head `b0290b4fd7035ed2ed4713b04672b057d7ca5051`，等待新一轮 CI。
+- #69 Edge Bookmark presentation gate: merged；Edge Bookmark 现已进入 cross-presentation canonical state / Focus / Undo-Redo invariant gate。
 - Current main 已登记：Spatial、Tool Instances、Glass Layered、Precision Lens、Subtitle Object、Edge Bookmark 等实验 presentation。
 - `TIMELINE_DOCK_EXPERIMENTAL` 不在 current-main registry；#56 仅作为历史原型证据，不作为 current-main 实现 authority。
 
