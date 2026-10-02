@@ -75,4 +75,31 @@ class TimelineViewportPolicyTest {
             ),
         )
     }
+    @Test
+    fun pinchZoomKeepsTouchedTimeUnderSameViewportFraction() {
+        // 30 s window centered at 60 s => [45 s, 75 s].
+        // Finger at 25% points at 52.5 s. Zooming to 10 s must keep 52.5 s at 25%.
+        assertEquals(
+            55_000L,
+            TimelineViewportPolicy.zoomCenterAroundAnchor(
+                currentCenterMs = 60_000L,
+                oldWindowDurationMs = 30_000L,
+                newWindowDurationMs = 10_000L,
+                anchorFraction = 0.25f,
+            ),
+        )
+    }
+
+    @Test
+    fun pinchZoomCannotExposeNegativeTimelineTime() {
+        assertEquals(
+            5_000L,
+            TimelineViewportPolicy.zoomCenterAroundAnchor(
+                currentCenterMs = 15_000L,
+                oldWindowDurationMs = 30_000L,
+                newWindowDurationMs = 10_000L,
+                anchorFraction = 0f,
+            ),
+        )
+    }
 }
