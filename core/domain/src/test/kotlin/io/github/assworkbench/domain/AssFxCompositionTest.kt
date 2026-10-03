@@ -133,6 +133,108 @@ class AssFxCompositionTest {
     }
 
     @Test
+    fun generatedFxRejectsNonKaraokeSpanAndTemporalReownership() {
+        val inline = AssDocument(
+            events = listOf(
+                AssEvent(
+                    id = 45,
+                    start = SubTime(0),
+                    end = SubTime(1000),
+                    text = "A{\\blur4}B",
+                )
+            )
+        )
+        val inlineError = assertFailsWith<IllegalArgumentException> {
+            AssFxComposition.createGlow(inline, 45)
+        }
+        assertTrue(inlineError.message.orEmpty().contains("后续行内"))
+
+        val faded = AssDocument(
+            events = listOf(
+                AssEvent(
+                    id = 46,
+                    start = SubTime(0),
+                    end = SubTime(1000),
+                    text = "{\\fad(120,120)}Fade",
+                )
+            )
+        )
+        val fadeError = assertFailsWith<IllegalArgumentException> {
+            AssFxComposition.createReflection(faded, 46)
+        }
+        assertTrue(fadeError.message.orEmpty().contains("\\fad / \\fade"))
+
+        val transformed = AssDocument(
+            events = listOf(
+                AssEvent(
+                    id = 47,
+                    start = SubTime(0),
+                    end = SubTime(1000),
+                    text = "{\\t(0,500,\\fscy120)}Scale",
+                )
+            )
+        )
+        val transformError = assertFailsWith<IllegalArgumentException> {
+            AssFxComposition.createReflection(transformed, 47)
+        }
+        assertTrue(transformError.message.orEmpty().contains("\\t Transform"))
+
+        assertEquals("A{\\blur4}B", inline.events.single().text)
+        assertEquals("{\\fad(120,120)}Fade", faded.events.single().text)
+        assertEquals("{\\t(0,500,\\fscy120)}Scale", transformed.events.single().text)
+    }
+
+    @Test
+    fun spatialFadeRejectsGeometryTransformsButAllowsColorOnlyTransform() {
+        val animatedGeometry = AssDocument(
+            scriptInfo = linkedMapOf("PlayResX" to "1920", "PlayResY" to "1080"),
+            events = listOf(
+                AssEvent(
+                    id = 48,
+                    start = SubTime(0),
+                    end = SubTime(1000),
+                    text = "{\\pos(400,300)\\t(0,500,\\frz45\\fscx130)}Animated",
+                )
+            )
+        )
+
+        val geometryError = assertFailsWith<IllegalArgumentException> {
+            AssFxComposition.createReflection(
+                document = animatedGeometry,
+                eventId = 48,
+                fade = AssReflectionFadeSpec(
+                    bands = 4,
+                    depthPx = 120.0,
+                    direction = AssReflectionFadeDirection.DOWN,
+                ),
+            )
+        }
+        assertTrue(geometryError.message.orEmpty().contains("固定屏幕 Clip"))
+        assertEquals(1, animatedGeometry.events.size)
+
+        val colorOnly = animatedGeometry.copy(
+            events = listOf(
+                AssEvent(
+                    id = 49,
+                    start = SubTime(0),
+                    end = SubTime(1000),
+                    text = "{\\pos(400,300)\\t(0,500,\\1c&HFF0000&)}Color",
+                )
+            )
+        )
+        val result = AssFxComposition.createReflection(
+            document = colorOnly,
+            eventId = 49,
+            fade = AssReflectionFadeSpec(
+                bands = 4,
+                depthPx = 120.0,
+                direction = AssReflectionFadeDirection.DOWN,
+            ),
+        )
+        assertEquals(4, result.generatedEventIds.size)
+    }
+
+    @Test
     fun reflectionRejectsKaraokeSpanThatReownsReflectionProperties() {
         val document = AssDocument(
             events = listOf(
