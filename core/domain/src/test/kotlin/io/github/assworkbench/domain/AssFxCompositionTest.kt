@@ -97,6 +97,44 @@ class AssFxCompositionTest {
     }
 
     @Test
+    fun mirrorStackCreatesGlowAndReflectionBeforeSourceInOneResult() {
+        val document = AssDocument(
+            events = listOf(
+                AssEvent(
+                    id = 10,
+                    layer = 2,
+                    start = SubTime(0),
+                    end = SubTime(1500),
+                    text = "{\\pos(400,300)\\bord2}Stack",
+                )
+            )
+        )
+
+        val result = AssFxComposition.composeMirrorStack(
+            document = document,
+            eventId = 10,
+            reflection = AssReflectionFxSpec(offsetY = 40.0),
+            glow = AssGlowFxSpec(opacityPercent = 25.0, blur = 4.0, border = 3.0),
+            entrance = null,
+        )
+
+        assertEquals(3, result.document.events.size)
+        assertEquals(2, result.generatedEventIds.size)
+        val glow = result.document.events[0]
+        val reflection = result.document.events[1]
+        val source = result.document.events[2]
+        assertEquals(10L, source.id)
+        assertTrue(glow.id in result.generatedEventIds)
+        assertTrue(reflection.id in result.generatedEventIds)
+        assertTrue(glow.text.contains("\\alpha&HBF&"))
+        assertTrue(glow.text.contains("\\blur4"))
+        assertTrue(glow.text.contains("\\bord3"))
+        assertTrue(reflection.text.contains("\\pos(400,340)"))
+        assertTrue(reflection.text.contains("\\frx180"))
+        assertEquals("{\\pos(400,300)\\bord2}Stack", source.text)
+    }
+
+    @Test
     fun flipEntranceUsesExistingScaleAndRotationAsItsFinalState() {
         val document = AssDocument(
             events = listOf(
