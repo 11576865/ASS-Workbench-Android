@@ -169,6 +169,68 @@ class AssKaraokeFxAuthoringTest {
     }
 
     @Test
+    fun batchRevealResolvesEachEventIndependentlyAndFailsAtomically() {
+        val document = AssDocument(
+            styles = listOf(
+                AssStyle(name = "A", scaleY = 80.0, primaryColor = "&H20FFFFFF"),
+                AssStyle(name = "B", scaleY = 60.0, primaryColor = "&H80FFFFFF"),
+            ),
+            events = listOf(
+                AssEvent(
+                    id = 1,
+                    start = SubTime(0),
+                    end = SubTime(1000),
+                    style = "A",
+                    text = "{\\k20}One",
+                ),
+                AssEvent(
+                    id = 2,
+                    start = SubTime(1000),
+                    end = SubTime(2000),
+                    style = "B",
+                    text = "{\\frx10}{\\k20}Two",
+                ),
+            ),
+        )
+
+        val result = AssKaraokeFxAuthoring.planProgressiveRevealBatch(
+            document = document,
+            eventIds = setOf(2, 1),
+            spec = AssKaraokeRevealFxSpec(
+                revealMs = 120,
+                flip = AssKaraokeFlipFxSpec(
+                    startScalePercent = 10.0,
+                    overshootScalePercent = 110.0,
+                    startRotationXDegrees = 80.0,
+                ),
+            ),
+        )
+
+        assertEquals(listOf(1L, 2L), result.sourceEventIds)
+        assertEquals(2, result.sourceSegmentCount)
+        val first = result.document.events.first { it.id == 1L }.text
+        val second = result.document.events.first { it.id == 2L }.text
+        assertTrue(first.contains("\\fscy8\\frx80"))
+        assertTrue(first.contains("\\1a&H20&"))
+        assertTrue(second.contains("\\fscy6\\frx90"))
+        assertTrue(second.contains("\\1a&H80&"))
+
+        val invalid = document.copy(
+            events = document.events.map { event ->
+                if (event.id == 2L) event.copy(text = "{\\fad(100,100)}{\\k20}Two") else event
+            }
+        )
+        assertFailsWith<IllegalArgumentException> {
+            AssKaraokeFxAuthoring.planProgressiveRevealBatch(
+                document = invalid,
+                eventIds = setOf(1, 2),
+                spec = AssKaraokeRevealFxSpec(flip = AssKaraokeFlipFxSpec()),
+            )
+        }
+        assertEquals("{\\k20}One", invalid.events.first { it.id == 1L }.text)
+    }
+
+    @Test
     fun rejectsFadeAndStyleResetBecauseTheyChangeOwnedBaseState() {
         assertFailsWith<IllegalArgumentException> {
             AssKaraokeFxAuthoring.applyProgressiveReveal("{\\fad(100,100)}{\\k20}A")
