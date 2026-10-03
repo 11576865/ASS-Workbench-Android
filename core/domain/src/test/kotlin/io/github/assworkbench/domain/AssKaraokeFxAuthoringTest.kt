@@ -16,9 +16,12 @@ class AssKaraokeFxAuthoringTest {
 
         assertEquals(3, plan.sourceSegmentCount)
         assertTrue(plan.generatedText.startsWith("{\\an8}{\\k20\\bord2"))
-        assertTrue(plan.generatedText.contains("\\alpha&HFF&\\blur4\\t(0,150,1.2,\\alpha&H00&\\blur0)"))
-        assertTrue(plan.generatedText.contains("{\\kf30\\alpha&HFF&\\blur4\\t(200,350,1.2,\\alpha&H00&\\blur0)}there"))
-        assertTrue(plan.generatedText.contains("{\\ko10\\alpha&HFF&\\blur4\\t(500,600,1.2,\\alpha&H00&\\blur0)}!"))
+        assertTrue(plan.generatedText.contains("\\1a&HFF&\\2a&HFF&\\3a&HFF&\\4a&HFF&\\blur4"))
+        assertTrue(plan.generatedText.contains("\\t(0,150,1.2,\\1a&H00&\\2a&H00&\\3a&H00&\\4a&H00&\\blur0)"))
+        assertTrue(plan.generatedText.contains("{\\kf30\\1a&HFF&\\2a&HFF&\\3a&HFF&\\4a&HFF&\\blur4"))
+        assertTrue(plan.generatedText.contains("\\t(200,350,1.2,\\1a&H00&\\2a&H00&\\3a&H00&\\4a&H00&\\blur0)}there"))
+        assertTrue(plan.generatedText.contains("{\\ko10\\1a&HFF&\\2a&HFF&\\3a&HFF&\\4a&HFF&\\blur4"))
+        assertTrue(plan.generatedText.contains("\\t(500,600,1.2,\\1a&H00&\\2a&H00&\\3a&H00&\\4a&H00&\\blur0)}!"))
         assertTrue(plan.generatedText.endsWith("!"))
     }
 
@@ -30,8 +33,45 @@ class AssKaraokeFxAuthoringTest {
             AssKaraokeRevealFxSpec(revealMs = 160, startBlur = 3.5),
         )
 
-        assertTrue(output.contains("\\t(0,50,\\alpha&H00&\\blur0)"))
-        assertTrue(output.contains("{\\k0\\alpha&H00&\\blur0}B"))
+        assertTrue(output.contains("\\t(0,50,\\1a&H00&\\2a&H00&\\3a&H00&\\4a&H00&\\blur0)"))
+        assertTrue(output.contains("{\\k0\\1a&H00&\\2a&H00&\\3a&H00&\\4a&H00&\\blur0}B"))
+    }
+
+    @Test
+    fun documentPlannerRestoresStyleChannelAlphaInsteadOfForcingOpaque() {
+        val document = AssDocument(
+            styles = listOf(
+                AssStyle(
+                    name = "Alpha",
+                    primaryColor = "&H80FFFFFF",
+                    secondaryColor = "&H400000FF",
+                    outlineColor = "&H20000000",
+                    backColor = "&HC0000000",
+                )
+            ),
+            events = listOf(
+                AssEvent(
+                    id = 3,
+                    start = SubTime(0),
+                    end = SubTime(1000),
+                    style = "Alpha",
+                    text = "{\\k20}A",
+                )
+            ),
+        )
+
+        val plan = AssKaraokeFxAuthoring.planProgressiveReveal(
+            document,
+            3,
+            AssKaraokeRevealFxSpec(revealMs = 100, startBlur = 0.0),
+        )
+
+        assertTrue(plan.generatedText.contains("\\1a&HFF&\\2a&HFF&\\3a&HFF&\\4a&HFF&"))
+        assertTrue(
+            plan.generatedText.contains(
+                "\\t(0,100,\\1a&H80&\\2a&H40&\\3a&H20&\\4a&HC0&\\blur0)"
+            )
+        )
     }
 
     @Test
@@ -125,6 +165,19 @@ class AssKaraokeFxAuthoringTest {
                 "{\\k20}A{\\frx20}{\\k20}B",
                 AssKaraokeRevealFxSpec(flip = AssKaraokeFlipFxSpec()),
             )
+        }
+    }
+
+    @Test
+    fun rejectsFadeAndStyleResetBecauseTheyChangeOwnedBaseState() {
+        assertFailsWith<IllegalArgumentException> {
+            AssKaraokeFxAuthoring.applyProgressiveReveal("{\\fad(100,100)}{\\k20}A")
+        }
+        assertFailsWith<IllegalArgumentException> {
+            AssKaraokeFxAuthoring.applyProgressiveReveal("{\\fade(255,0,255,0,100,500,600)}{\\k20}A")
+        }
+        assertFailsWith<IllegalArgumentException> {
+            AssKaraokeFxAuthoring.applyProgressiveReveal("{\\rAlt}{\\k20}A")
         }
     }
 
