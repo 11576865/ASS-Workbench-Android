@@ -295,6 +295,52 @@ class AssFxCompositionTest {
     }
 
     @Test
+    fun reflectionPreservesHorizontalCoordinatesOutsidePlayRes() {
+        val positioned = AssDocument(
+            scriptInfo = linkedMapOf("PlayResX" to "1920", "PlayResY" to "1080"),
+            events = listOf(
+                AssEvent(
+                    id = 41,
+                    start = SubTime(0),
+                    end = SubTime(1000),
+                    text = "{\\pos(-120,300)\\org(2040,200)}Offscreen",
+                )
+            )
+        )
+
+        val positionedResult = AssFxComposition.createReflection(
+            document = positioned,
+            eventId = 41,
+            spec = AssReflectionFxSpec(offsetY = 50.0),
+        )
+        val positionedReflection = positionedResult.document.events.first {
+            it.id == positionedResult.generatedEventId
+        }
+        assertTrue(positionedReflection.text.contains("\\pos(-120,350)"))
+        assertTrue(positionedReflection.text.contains("\\org(2040,250)"))
+
+        val moving = positioned.copy(
+            events = listOf(
+                AssEvent(
+                    id = 42,
+                    start = SubTime(0),
+                    end = SubTime(1000),
+                    text = "{\\move(-100,120,2050,320,20,900)}Move",
+                )
+            )
+        )
+        val movingResult = AssFxComposition.createReflection(
+            document = moving,
+            eventId = 42,
+            spec = AssReflectionFxSpec(offsetY = 50.0),
+        )
+        val movingReflection = movingResult.document.events.first {
+            it.id == movingResult.generatedEventId
+        }
+        assertTrue(movingReflection.text.contains("\\move(-100,170,2050,370,20,900)"))
+    }
+
+    @Test
     fun ordinaryReflectionShiftsRectClipWithItsGeometry() {
         val document = AssDocument(
             scriptInfo = linkedMapOf("PlayResX" to "1920", "PlayResY" to "1080"),
