@@ -129,6 +129,88 @@ class AuthoringEngineSuiteTest {
     }
 
     @Test
+    fun batchRejectsUnknownStyleAndNegativeMargins() {
+        val document = AssDocument(
+            styles = listOf(AssStyle(name = "Default")),
+            events = listOf(event(10, 0, 1000, "Safe")),
+        )
+
+        val styleError = assertFailsWith<IllegalArgumentException> {
+            AssBatchEngine.preview(
+                document,
+                AssBatchRecipe(
+                    id = "missing-style",
+                    actions = listOf(AssBatchAction.SetStyle("Missing")),
+                ),
+            )
+        }
+        assertTrue(styleError.message.orEmpty().contains("Style 不存在"))
+        assertEquals("Default", document.events.single().style)
+
+        assertFailsWith<IllegalArgumentException> {
+            AssBatchAction.SetMargins(left = -1)
+        }
+    }
+
+    @Test
+    fun batchTimingUsesExactArithmeticAndFailsClosedOnOverflow() {
+        val exactStart = 9_007_199_254_740_993L
+        val exactDocument = AssDocument(
+            events = listOf(
+                event(
+                    id = 11,
+                    start = exactStart,
+                    end = exactStart + 100L,
+                    text = "Exact",
+                )
+            )
+        )
+        val exactPreview = AssBatchEngine.preview(
+            exactDocument,
+            AssBatchRecipe(
+                id = "exact-timing",
+                actions = listOf(AssBatchAction.ScaleTiming(0L, 1L, 1L)),
+            ),
+        )
+        assertEquals(exactStart, exactPreview.document.events.single().start.millis)
+        assertEquals(exactStart + 100L, exactPreview.document.events.single().end.millis)
+
+        val overflowDocument = AssDocument(
+            events = listOf(
+                event(
+                    id = 12,
+                    start = Long.MAX_VALUE - 10L,
+                    end = Long.MAX_VALUE,
+                    text = "Overflow",
+                )
+            )
+        )
+        val shiftError = assertFailsWith<IllegalArgumentException> {
+            AssBatchEngine.preview(
+                overflowDocument,
+                AssBatchRecipe(
+                    id = "overflow-shift",
+                    actions = listOf(AssBatchAction.ShiftTime(100L)),
+                ),
+            )
+        }
+        assertTrue(shiftError.message.orEmpty().contains("超出可表示"))
+
+        val scaleError = assertFailsWith<IllegalArgumentException> {
+            AssBatchEngine.preview(
+                overflowDocument,
+                AssBatchRecipe(
+                    id = "overflow-scale",
+                    actions = listOf(AssBatchAction.ScaleTiming(0L, 2L, 1L)),
+                ),
+            )
+        }
+        assertTrue(scaleError.message.orEmpty().contains("超出可表示"))
+        assertEquals(Long.MAX_VALUE - 10L, overflowDocument.events.single().start.millis)
+        assertEquals(Long.MAX_VALUE, overflowDocument.events.single().end.millis)
+    }
+
+    @Test
     fun expandedBatchRegexAndTimingRemainOnePreviewDocument() {
         val doc = AssDocument(events = listOf(event(1, 1000, 2000, "Hello 123")))
         val recipe = AssBatchRecipe(
