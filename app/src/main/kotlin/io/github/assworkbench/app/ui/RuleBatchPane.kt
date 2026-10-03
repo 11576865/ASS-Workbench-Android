@@ -156,22 +156,34 @@ internal fun RuleBatchPane(
         regexFind, regexReplace, regexRaw, timingOrigin, timingNumerator, timingDenominator, overridePropertyName, overrideValue,
         karaokeRevealEnabled, karaokeRevealMs, karaokeRevealBlur, karaokeRevealAccel,
     ) { recipe() }
-    val previewResult = remember(
-        state.document,
-        recipe,
-        karaokeRevealEnabled,
-        karaokeRevealSpec,
-    ) {
-        if (karaokeRevealEnabled && karaokeRevealSpec == null) {
-            Result.failure<AssBatchPreview>(
-                IllegalArgumentException("Karaoke FX 参数无效，未生成批处理配方。")
-            )
+    val automaticPreviewResult = remember(state.document, recipe, karaokeRevealEnabled) {
+        if (karaokeRevealEnabled) {
+            null
         } else {
             runCatching { AssBatchEngine.preview(state.document, recipe) }
         }
     }
-    val preview = previewResult.getOrNull()
-    val previewError = previewResult.exceptionOrNull()?.message
+    var explicitKaraokePreview by remember(state.document, recipe) {
+        mutableStateOf<AssBatchPreview?>(null)
+    }
+    var explicitKaraokePreviewError by remember(state.document, recipe) {
+        mutableStateOf<String?>(null)
+    }
+    val preview = if (karaokeRevealEnabled) {
+        explicitKaraokePreview
+    } else {
+        automaticPreviewResult?.getOrNull()
+    }
+    val previewError = when {
+        karaokeRevealEnabled && karaokeRevealSpec == null ->
+            "Karaoke FX 参数无效，未生成批处理配方。"
+        karaokeRevealEnabled -> explicitKaraokePreviewError
+        else -> automaticPreviewResult?.exceptionOrNull()?.message
+    }
+    val previewPending = karaokeRevealEnabled &&
+        karaokeRevealSpec != null &&
+        preview == null &&
+        previewError == null
     val changedExamples = remember(state.document, preview) {
         if (preview == null) {
             emptyList()
@@ -325,27 +337,50 @@ internal fun RuleBatchPane(
 
         HorizontalDivider()
         Text("Preview", style = MaterialTheme.typography.labelLarge)
-        if (preview == null) {
-            Text(
-                "预览失败：" + (previewError ?: "unknown"),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.error,
-                modifier = Modifier.testTag("batch-preview-error"),
-            )
-        } else {
-            Text("命中 ${preview.affectedEventIds.size} 条 · 实际变化 ${preview.changedEventIds.size} 条")
-            changedExamples.forEach { (before, after) ->
-                Surface(tonalElevation = 1.dp, shape = MaterialTheme.shapes.small) {
-                    Column(Modifier.fillMaxWidth().padding(6.dp)) {
-                        Text("#${before.id} · ${before.start.millis}-${before.end.millis} → ${after.start.millis}-${after.end.millis}",
-                            style = MaterialTheme.typography.labelSmall)
-                        if (before.style != after.style || before.layer != after.layer) {
-                            Text("${before.style}/L${before.layer} → ${after.style}/L${after.layer}",
+        if (karaokeRevealEnabled && karaokeRevealSpec != null) {
+            OutlinedButton(
+                onClick = {
+                    val result = runCatching { AssBatchEngine.preview(state.document, recipe) }
+                    explicitKaraokePreview = result.getOrNull()
+                    explicitKaraokePreviewError = result.exceptionOrNull()?.message
+                },
+                modifier = Modifier.fillMaxWidth().testTag("batch-preview-explicit"),
+            ) {
+                Text("预检并生成批处理预览")
+            }
+        }
+        when {
+            previewError != null -> {
+                Text(
+                    "预览失败：" + previewError,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.testTag("batch-preview-error"),
+                )
+            }
+            previewPending -> {
+                Text(
+                    "Karaoke 批次尚未执行完整预检；修改参数时不会扫描整个文档。",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.testTag("batch-preview-pending"),
+                )
+            }
+            preview != null -> {
+                Text("命中 ${preview.affectedEventIds.size} 条 · 实际变化 ${preview.changedEventIds.size} 条")
+                changedExamples.forEach { (before, after) ->
+                    Surface(tonalElevation = 1.dp, shape = MaterialTheme.shapes.small) {
+                        Column(Modifier.fillMaxWidth().padding(6.dp)) {
+                            Text("#${before.id} · ${before.start.millis}-${before.end.millis} → ${after.start.millis}-${after.end.millis}",
                                 style = MaterialTheme.typography.labelSmall)
-                        }
-                        if (before.text != after.text) {
-                            Text(AssInlineSyntax.visibleText(before.text) + " → " + AssInlineSyntax.visibleText(after.text),
-                                style = MaterialTheme.typography.bodySmall)
+                            if (before.style != after.style || before.layer != after.layer) {
+                                Text("${before.style}/L${before.layer} → ${after.style}/L${after.layer}",
+                                    style = MaterialTheme.typography.labelSmall)
+                            }
+                            if (before.text != after.text) {
+                                Text(AssInlineSyntax.visibleText(before.text) + " → " + AssInlineSyntax.visibleText(after.text),
+                                    style = MaterialTheme.typography.bodySmall)
+                            }
                         }
                     }
                 }
