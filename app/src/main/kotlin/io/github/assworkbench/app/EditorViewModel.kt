@@ -636,7 +636,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                         ),
                         recoveryAvailable = if (unchangedSinceSaveStarted) false else state.recoveryAvailable,
                         recoveryLabel = if (unchangedSinceSaveStarted) "" else state.recoveryLabel,
-                        status = "新 MKV 已保存并重新扫描验证；所有原有轨道与章节保持，" +
+                        status = "新 MKV 已保存并重新扫描；轨道身份/顺序/元数据与章节数量验证保持，" +
                             "输出 " + (bytes / (1024 * 1024)) + " MiB。" +
                             (if (packageAssets.isEmpty()) "" else " 新封入字体 " + packageAssets.size + " 个。") +
                             if (unchangedSinceSaveStarted) "" else " · 保存期间出现新编辑，当前工程仍未保存。",
