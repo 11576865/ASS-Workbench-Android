@@ -91,7 +91,7 @@ object AssKaraokeFxAuthoring {
 
         val segments = AssKaraokeCodec.parse(text)
         var cursorMs = 0L
-        val patched = segments.mapIndexed { index, segment ->
+        val patched = segments.map { segment ->
             val segmentDurationMs = segment.centiseconds.toLong() * 10L
             val revealDuration = minOf(spec.revealMs, segmentDurationMs)
             val endMs = cursorMs + revealDuration
