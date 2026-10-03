@@ -295,7 +295,7 @@ class AssFxCompositionTest {
     }
 
     @Test
-    fun reflectionPreservesHorizontalCoordinatesOutsidePlayRes() {
+    fun reflectionPreservesOffscreenGeometryInsteadOfViewportClamping() {
         val positioned = AssDocument(
             scriptInfo = linkedMapOf("PlayResX" to "1920", "PlayResY" to "1080"),
             events = listOf(
@@ -303,7 +303,7 @@ class AssFxCompositionTest {
                     id = 41,
                     start = SubTime(0),
                     end = SubTime(1000),
-                    text = "{\\pos(-120,300)\\org(2040,200)}Offscreen",
+                    text = "{\\pos(-120,1100)\\org(2040,1200)\\clip(-40,1000,2100,1200)}Offscreen",
                 )
             )
         )
@@ -316,8 +316,9 @@ class AssFxCompositionTest {
         val positionedReflection = positionedResult.document.events.first {
             it.id == positionedResult.generatedEventId
         }
-        assertTrue(positionedReflection.text.contains("\\pos(-120,350)"))
-        assertTrue(positionedReflection.text.contains("\\org(2040,250)"))
+        assertTrue(positionedReflection.text.contains("\\pos(-120,1150)"))
+        assertTrue(positionedReflection.text.contains("\\org(2040,1250)"))
+        assertTrue(positionedReflection.text.contains("\\clip(-40,1050,2100,1250)"))
 
         val moving = positioned.copy(
             events = listOf(
@@ -325,7 +326,7 @@ class AssFxCompositionTest {
                     id = 42,
                     start = SubTime(0),
                     end = SubTime(1000),
-                    text = "{\\move(-100,120,2050,320,20,900)}Move",
+                    text = "{\\move(-100,1120,2050,1320,20,900)}Move",
                 )
             )
         )
@@ -337,7 +338,38 @@ class AssFxCompositionTest {
         val movingReflection = movingResult.document.events.first {
             it.id == movingResult.generatedEventId
         }
-        assertTrue(movingReflection.text.contains("\\move(-100,170,2050,370,20,900)"))
+        assertTrue(movingReflection.text.contains("\\move(-100,1170,2050,1370,20,900)"))
+    }
+
+    @Test
+    fun spatialFadeRejectsOffscreenAnchorInsteadOfClampingItIntoView() {
+        val document = AssDocument(
+            scriptInfo = linkedMapOf("PlayResX" to "1920", "PlayResY" to "1080"),
+            events = listOf(
+                AssEvent(
+                    id = 43,
+                    start = SubTime(0),
+                    end = SubTime(1000),
+                    text = "{\\pos(400,-100)}Offscreen fade",
+                )
+            )
+        )
+
+        val error = assertFailsWith<IllegalArgumentException> {
+            AssFxComposition.createReflection(
+                document = document,
+                eventId = 43,
+                spec = AssReflectionFxSpec(offsetY = 0.0),
+                fade = AssReflectionFadeSpec(
+                    bands = 4,
+                    depthPx = 120.0,
+                    direction = AssReflectionFadeDirection.DOWN,
+                ),
+            )
+        }
+
+        assertTrue(error.message.orEmpty().contains("锚点必须位于画面内"))
+        assertEquals("{\\pos(400,-100)}Offscreen fade", document.events.single().text)
     }
 
     @Test
