@@ -453,6 +453,72 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    fun addContainerAttachments(uris: List<Uri>) {
+        if (uris.isEmpty()) return
+        val snapshot = _state.value
+        if (snapshot.container.uri == null) {
+            _state.update { it.copy(status = "请先打开 MKV 工程，再添加容器附件。") }
+            return
+        }
+        if (snapshot.container.writeBackBusy) {
+            _state.update { it.copy(status = "MKV 写回进行中；完成后才能修改附件计划。") }
+            return
+        }
+        val next = snapshot.container.pendingAttachments.toMutableList()
+        var added = 0
+        for (uri in uris) {
+            val uriText = uri.toString()
+            if (next.any { it.uri == uriText }) continue
+            val name = displayName(uri)
+                ?.substringAfterLast('/')
+                ?.substringAfterLast('\\')
+                ?.takeIf { it.isNotBlank() && it != "." && it != ".." }
+                ?: "attachment-${next.size + 1}.bin"
+            val mimeType = app.contentResolver.getType(uri)
+                ?.takeIf { it.isNotBlank() }
+                ?: "application/octet-stream"
+            val size = runCatching {
+                app.contentResolver.openAssetFileDescriptor(uri, "r")?.use { descriptor ->
+                    descriptor.length.takeIf { it >= 0L }
+                }
+            }.getOrNull()
+            next += PendingContainerAttachmentUi(
+                uri = uriText,
+                name = name,
+                mimeType = mimeType,
+                sizeBytes = size,
+            )
+            added++
+        }
+        _state.update {
+            it.copy(
+                container = it.container.copy(pendingAttachments = next),
+                status = if (added == 0) {
+                    "所选附件已经在待写入列表中。"
+                } else {
+                    "已加入 $added 个待写入 MKV 附件；保存时将与其他容器内容一起无重编码重封装。"
+                },
+            )
+        }
+    }
+
+    fun removeContainerAttachment(uri: String) {
+        _state.update { state ->
+            if (state.container.writeBackBusy) {
+                return@update state.copy(status = "MKV 写回进行中；完成后才能修改附件计划。")
+            }
+            val next = state.container.pendingAttachments.filterNot { it.uri == uri }
+            if (next.size == state.container.pendingAttachments.size) {
+                state
+            } else {
+                state.copy(
+                    container = state.container.copy(pendingAttachments = next),
+                    status = "已从待写入计划移除附件。",
+                )
+            }
+        }
+    }
+
     fun selectContainerTrack(trackNumber: Long, discardUnsaved: Boolean = false) {
         val current = _state.value
         if (
@@ -514,15 +580,13 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             reportError("MKV 写回失败", IllegalStateException("没有已打开的 MKV 工程"))
             return
         }
-        val trackNumber = snapshot.container.selectedTrackNumber ?: run {
-            reportError("MKV 写回失败", IllegalStateException("尚未选择 ASS 轨"))
-            return
-        }
         if (!mkvGoTool.isAvailable()) {
             reportError("MKV 写回失败", IllegalStateException("当前设备 ABI 没有 MKV 写回工具"))
             return
         }
 
+        val trackNumber = snapshot.container.selectedTrackNumber
+        val replaceAss = trackNumber != null && snapshot.subtitleLoaded
         val embeddedShas = snapshot.importedFonts.asSequence()
             .filter { it.origin == FontOrigin.MKV_ATTACHMENT }
             .map { it.sha256 }
@@ -534,13 +598,24 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                     it.sha256 !in embeddedShas
             }
             .distinctBy { it.sha256 }
+        val plannedAttachments = snapshot.container.pendingAttachments
 
+        if (!replaceAss && packageAssets.isEmpty() && plannedAttachments.isEmpty()) {
+            reportError("MKV 写回失败", IllegalStateException("没有待写入的 ASS 修改、字体或附件"))
+            return
+        }
+
+        val plannedAttachmentCount = packageAssets.size + plannedAttachments.size
         _state.update {
             it.copy(
                 container = it.container.copy(writeBackBusy = true),
-                status = "正在无重编码更新 MKV" +
-                    if (packageAssets.isEmpty()) "；大文件可能需要一些时间……"
-                    else "并封入 " + packageAssets.size + " 个所选字体；大文件可能需要一些时间……",
+                status = buildString {
+                    append("正在无重编码更新 MKV")
+                    if (replaceAss) append(" · ASS")
+                    if (packageAssets.isNotEmpty()) append(" · 字体 ").append(packageAssets.size)
+                    if (plannedAttachments.isNotEmpty()) append(" · 附件 ").append(plannedAttachments.size)
+                    append("；大文件可能需要一些时间……")
+                },
             )
         }
 
@@ -557,21 +632,46 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                             source.outputStream().buffered().use { output -> input.copyTo(output, 1024 * 1024) }
                         } ?: error("无法重新读取源 MKV")
 
-                        val editedAss = File(work, "edited.ass")
-                        editedAss.writeText(AssCodec.write(snapshot.document), Charsets.UTF_8)
                         val result = File(work, "updated.mkv")
-
                         val packageFiles = packageAssets.map { asset ->
                             fontStore.fileFor(asset)
                                 ?: error("找不到待封入字体文件：" + asset.fileName)
                         }
-                        mkvGoTool.replaceAss(
-                            source = source,
-                            trackNumber = trackNumber,
-                            editedAss = editedAss,
-                            output = result,
-                            fonts = packageFiles,
-                        )
+                        val attachmentFiles = plannedAttachments.mapIndexed { index, attachment ->
+                            val safeName = attachment.name
+                                .substringAfterLast('/')
+                                .substringAfterLast('\\')
+                                .takeIf { it.isNotBlank() && it != "." && it != ".." }
+                                ?: "attachment-${index + 1}.bin"
+                            val dir = File(work, "attachment-$index").apply { mkdirs() }
+                            val target = File(dir, safeName)
+                            app.contentResolver.openInputStream(Uri.parse(attachment.uri))?.use { input ->
+                                target.outputStream().buffered().use { output ->
+                                    input.copyTo(output, 1024 * 1024)
+                                }
+                            } ?: error("无法读取待封入附件：" + attachment.name)
+                            require(target.length() > 0L) { "待封入附件为空：" + attachment.name }
+                            target
+                        }
+
+                        if (replaceAss) {
+                            val editedAss = File(work, "edited.ass")
+                            editedAss.writeText(AssCodec.write(snapshot.document), Charsets.UTF_8)
+                            mkvGoTool.replaceAss(
+                                source = source,
+                                trackNumber = requireNotNull(trackNumber),
+                                editedAss = editedAss,
+                                output = result,
+                                fonts = packageFiles,
+                                attachments = attachmentFiles,
+                            )
+                        } else {
+                            mkvGoTool.addAttachments(
+                                source = source,
+                                output = result,
+                                attachments = packageFiles + attachmentFiles,
+                            )
+                        }
 
                         // Verify the complete remux product before publishing it to
                         // the user-selected destination. The source MKV is never
@@ -579,16 +679,18 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                         val verifiedScan = result.inputStream().buffered().use { input ->
                             MatroskaReader().scan(input, retainAttachments = false)
                         }
-                        val verifiedTrack = verifiedScan.subtitleTracks
-                            .firstOrNull { it.number == trackNumber }
-                            ?: error("写回验证失败：目标 ASS 轨不存在")
-                        val verifiedDocument = AssCodec.parse(verifiedTrack.toAss())
-                        val roundTrip = AssRoundTripVerifier.compare(
-                            AssRoundTripVerifier.snapshot(snapshot.document),
-                            AssRoundTripVerifier.snapshot(verifiedDocument),
-                        )
-                        require(roundTrip.equivalent) {
-                            "写回验证失败：" + roundTrip.summary
+                        if (replaceAss) {
+                            val verifiedTrack = verifiedScan.subtitleTracks
+                                .firstOrNull { it.number == trackNumber }
+                                ?: error("写回验证失败：目标 ASS 轨不存在")
+                            val verifiedDocument = AssCodec.parse(verifiedTrack.toAss())
+                            val roundTrip = AssRoundTripVerifier.compare(
+                                AssRoundTripVerifier.snapshot(snapshot.document),
+                                AssRoundTripVerifier.snapshot(verifiedDocument),
+                            )
+                            require(roundTrip.equivalent) {
+                                "写回验证失败：" + roundTrip.summary
+                            }
                         }
                         sourceScanSnapshot?.let { sourceScan ->
                             require(verifiedScan.trackPreservationSignature() == sourceScan.trackPreservationSignature()) {
@@ -602,6 +704,12 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                                 require(key in verifiedAttachments) {
                                     "写回验证失败：原有附件缺失或身份无法确认"
                                 }
+                            }
+                            require(
+                                verifiedScan.attachmentInfos.size ==
+                                    sourceScan.attachmentInfos.size + plannedAttachmentCount
+                            ) {
+                                "写回验证失败：计划新增 $plannedAttachmentCount 个附件，实际附件数量不匹配"
                             }
                         }
 
@@ -622,24 +730,30 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                     snapshot.container.selectedTrackNumber,
                 )
                 if (!sameProject) return@onSuccess
-                val unchangedSinceSaveStarted = current.document == snapshot.document
-                if (unchangedSinceSaveStarted) clearPendingRecovery()
+                val documentSaved = replaceAss && current.document == snapshot.document
+                if (documentSaved) clearPendingRecovery()
+                val savedAttachmentUris = plannedAttachments.mapTo(hashSetOf()) { it.uri }
                 _state.update { state ->
                     state.copy(
-                        dirty = if (unchangedSinceSaveStarted) false else state.dirty,
+                        dirty = if (documentSaved) false else state.dirty,
                         container = state.container.copy(
                             writeBackBusy = false,
+                            pendingAttachments = state.container.pendingAttachments
+                                .filterNot { it.uri in savedAttachmentUris },
                             resources = baselineScanSnapshot?.let { baseline ->
                                 diffContainerResources(baseline, verifiedScan)
                             } ?: baselineContainerResources(verifiedScan),
                             inventoryEvidence = ContainerInventoryEvidence.VERIFIED_OUTPUT,
                         ),
-                        recoveryAvailable = if (unchangedSinceSaveStarted) false else state.recoveryAvailable,
-                        recoveryLabel = if (unchangedSinceSaveStarted) "" else state.recoveryLabel,
-                        status = "新 MKV 已保存并重新扫描；轨道身份/顺序/元数据与章节数量验证保持，" +
-                            "输出 " + (bytes / (1024 * 1024)) + " MiB。" +
-                            (if (packageAssets.isEmpty()) "" else " 新封入字体 " + packageAssets.size + " 个。") +
-                            if (unchangedSinceSaveStarted) "" else " · 保存期间出现新编辑，当前工程仍未保存。",
+                        recoveryAvailable = if (documentSaved) false else state.recoveryAvailable,
+                        recoveryLabel = if (documentSaved) "" else state.recoveryLabel,
+                        status = buildString {
+                            append("新 MKV 已保存并重新扫描；轨道身份/顺序/元数据、章节与原附件保持。输出 ")
+                            append(bytes / (1024 * 1024)).append(" MiB。")
+                            if (packageAssets.isNotEmpty()) append(" 新封入字体 ").append(packageAssets.size).append(" 个。")
+                            if (plannedAttachments.isNotEmpty()) append(" 新封入附件 ").append(plannedAttachments.size).append(" 个。")
+                            if (replaceAss && !documentSaved) append(" · 保存期间出现新字幕编辑，当前工程仍未保存。")
+                        },
                     )
                 }
             }.onFailure { error ->
