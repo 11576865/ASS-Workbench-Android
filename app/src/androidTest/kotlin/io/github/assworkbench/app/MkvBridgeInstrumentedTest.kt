@@ -5,6 +5,7 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.assworkbench.container.MatroskaReader
+import io.github.assworkbench.container.MatroskaTrackKind
 import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -36,6 +37,10 @@ class MkvBridgeInstrumentedTest {
 
         val sourceScan = source.inputStream().use { MatroskaReader().scan(it) }
         assertEquals(1, sourceScan.subtitleTracks.size)
+        assertEquals(
+            listOf(MatroskaTrackKind.VIDEO, MatroskaTrackKind.SUBTITLE),
+            sourceScan.trackInfos.map { it.kind },
+        )
         assertEquals(2L, sourceScan.subtitleTracks.single().number)
         assertTrue(sourceScan.subtitleTracks.single().toAss().contains("Old line"))
         assertEquals(listOf("Fixture.ttf"), sourceScan.attachments.map { it.fileName })
@@ -76,5 +81,18 @@ class MkvBridgeInstrumentedTest {
         assertTrue("Fixture.ttf" in attachmentNames)
         assertTrue("AddedFont.otf" in attachmentNames)
         assertEquals(2, outputScan.attachments.size)
+
+        val inventoryDiff = diffContainerResources(sourceScan, outputScan)
+        assertTrue(
+            inventoryDiff.any {
+                it.trackNumber == 2L && it.change == ContainerResourceChange.MODIFIED
+            }
+        )
+        assertTrue(
+            inventoryDiff.any {
+                it.title == "AddedFont.otf" && it.change == ContainerResourceChange.ADDED
+            }
+        )
+        assertTrue(inventoryDiff.none { it.change == ContainerResourceChange.REMOVED })
     }
 }
