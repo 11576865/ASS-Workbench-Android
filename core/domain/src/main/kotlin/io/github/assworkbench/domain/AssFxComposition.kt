@@ -301,6 +301,9 @@ object AssFxComposition {
             require(!containsSpatialFadeAlphaControl(source.text)) {
                 "源字幕已有 alpha / fad / fade 控制；当前空间渐隐不能安全合成这些透明度语义。"
             }
+            require(!containsSpatialFadeAnimatedGeometry(source.text)) {
+                "源字幕已有行内或 Transform 几何动画；固定屏幕 Clip 无法可靠跟随位置、缩放、旋转、倾斜或裁剪变化。"
+            }
             val allowedLeadingRectClipCount = if (geometry.clipRect != null) 1 else 0
             require(countOverrideClipTags(source.text) <= allowedLeadingRectClipCount) {
                 "源字幕包含额外或行内 Clip；空间渐隐只支持一个前导矩形 Clip。"
@@ -590,23 +593,66 @@ object AssFxComposition {
             "$effectLabel 暂不支持 \\r Style reset；重置可能在行内重新接管生成层的透明度、模糊或几何属性。"
         }
 
-        val firstKaraoke = analysis.tags.firstOrNull { tag ->
-            tag.name.equals("k", true) ||
-                tag.name.equals("K", false) ||
-                tag.name.equals("kf", true) ||
-                tag.name.equals("ko", true) ||
-                tag.name.equals("kt", true)
-        } ?: return
+        val normalizedOwnedTags = ownedTags.mapTo(linkedSetOf()) { it.lowercase() }
+        val leadingEnd = leadingOverridePrefix(text).length
+        val spanConflict = analysis.tags.firstOrNull { tag ->
+            tag.start >= leadingEnd && tag.name.lowercase() in normalizedOwnedTags
+        }
+        require(spanConflict == null) {
+            "$effectLabel 与后续行内 \\${spanConflict?.name} 存在属性所有权冲突；" +
+                "生成层不能只在行首声明属性后再让后续 span 重新接管。"
+        }
 
-        val conflicting = analysis.tags.firstOrNull { tag ->
-            tag.start >= firstKaraoke.start &&
-                ownedTags.any { it.equals(tag.name, ignoreCase = true) }
-        } ?: return
+        val animation = AssAnimationSemantic.inspect(text)
+        require(!animation.malformedLeadingBlock) {
+            "$effectLabel 无法安全处理包含损坏前导动画 block 的字幕。"
+        }
+        val ownsAlpha = normalizedOwnedTags.any {
+            it == "alpha" || it == "1a" || it == "2a" || it == "3a" || it == "4a"
+        }
+        require(!ownsAlpha || (animation.simpleFade == null && animation.complexFade == null)) {
+            "$effectLabel 与源字幕的 \\fad / \\fade 时间透明度存在属性所有权冲突。"
+        }
 
-        error(
-            "$effectLabel 与 Karaoke 区域中的 \\${conflicting.name} 存在属性所有权冲突；" +
-                "当前不会猜测覆盖顺序。请先移除该音节级效果，或等待 Layer-aware Karaoke FX 合成。"
+        val transformConflict = animation.transforms.firstOrNull { transform ->
+            transform.malformed ||
+                "t" in normalizedOwnedTags ||
+                transformPayloadOwns(transform.tags, normalizedOwnedTags)
+        }
+        require(transformConflict == null) {
+            "$effectLabel 与源字幕前导 \\t Transform 的属性所有权冲突；" +
+                "当前不会猜测动画期间的覆盖顺序。"
+        }
+    }
+
+    private fun transformPayloadOwns(tags: String, ownedTags: Set<String>): Boolean {
+        val analysis = AssInlineSyntax.analyze("{$tags}")
+        if (analysis.hasErrors) return true
+        return analysis.tags.any { it.name.lowercase() in ownedTags }
+    }
+
+    private fun containsSpatialFadeAnimatedGeometry(text: String): Boolean {
+        val geometryTags = setOf(
+            "pos", "move", "org",
+            "fs", "fsp", "fscx", "fscy",
+            "fr", "frx", "fry", "frz",
+            "fax", "fay",
+            "clip", "iclip",
         )
+        val leadingEnd = leadingOverridePrefix(text).length
+        val analysis = AssInlineSyntax.analyze(text)
+        if (analysis.hasErrors) return true
+        if (analysis.tags.any { tag ->
+                tag.start >= leadingEnd && tag.name.lowercase() in geometryTags
+            }) {
+            return true
+        }
+
+        val animation = AssAnimationSemantic.inspect(text)
+        if (animation.malformedLeadingBlock) return true
+        return animation.transforms.any { transform ->
+            transform.malformed || transformPayloadOwns(transform.tags, geometryTags)
+        }
     }
 
     private fun inheritedAnchor(document: AssDocument, event: AssEvent, style: AssStyle?): AssPoint {
