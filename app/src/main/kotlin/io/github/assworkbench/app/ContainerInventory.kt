@@ -158,6 +158,7 @@ private fun MatroskaScanResult.inventoryItems(): List<InventoryItem> {
         )
     }
 
+    val attachmentNameCounts = attachmentInfos.groupingBy { it.fileName }.eachCount()
     attachmentInfos.forEachIndexed { index, info ->
         val kind = if (info.isSupportedFont) ContainerResourceKind.FONT else ContainerResourceKind.ATTACHMENT
         val strongKey = info.uid?.let { "attachment:uid:$it" }
@@ -188,6 +189,8 @@ private fun MatroskaScanResult.inventoryItems(): List<InventoryItem> {
                 kind = kind,
                 title = info.fileName,
                 detail = detail,
+                attachmentTarget = info.uid?.toString()
+                    ?: info.fileName.takeIf { attachmentNameCounts[it] == 1 },
             ),
         )
     }
