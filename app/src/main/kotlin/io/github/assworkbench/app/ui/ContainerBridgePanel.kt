@@ -164,7 +164,7 @@ fun ContainerBridgePanel(
 
         if (state.skippedAttachmentCount > 0) {
             Text(
-                "${state.skippedAttachmentCount} 个附件 payload 因读取限制未载入；可用元数据仍保留在清单中。",
+                "${state.skippedAttachmentCount} 个附件未完整载入（大小限制或结构异常）。",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
