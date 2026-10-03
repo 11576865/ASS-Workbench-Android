@@ -140,7 +140,7 @@ object AssFxComposition {
             DeferredReflectionReveal(settleMs, revealEndMs)
         } else null
 
-        val reflectionResult = createReflection(
+        val reflectionResult = createReflectionInternal(
             document = next,
             eventId = eventId,
             spec = reflection,
@@ -221,7 +221,21 @@ object AssFxComposition {
         eventId: Long,
         spec: AssReflectionFxSpec = AssReflectionFxSpec(),
         fade: AssReflectionFadeSpec? = null,
-        deferredReveal: DeferredReflectionReveal? = null,
+    ): AssFxCompositionResult =
+        createReflectionInternal(
+            document = document,
+            eventId = eventId,
+            spec = spec,
+            fade = fade,
+            deferredReveal = null,
+        )
+
+    private fun createReflectionInternal(
+        document: AssDocument,
+        eventId: Long,
+        spec: AssReflectionFxSpec,
+        fade: AssReflectionFadeSpec?,
+        deferredReveal: DeferredReflectionReveal?,
     ): AssFxCompositionResult {
         require(spec.offsetY.isFinite()) { "倒影 Y 偏移必须是有限数字。" }
         require(spec.verticalScalePercent.isFinite() && spec.verticalScalePercent > 0.0) {
