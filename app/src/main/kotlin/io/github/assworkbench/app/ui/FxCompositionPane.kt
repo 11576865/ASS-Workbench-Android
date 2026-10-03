@@ -129,6 +129,10 @@ internal fun FxCompositionPane(
         templateName = template.name
     }
 
+    DisposableEffect(event.id, targetEventIds) {
+        onDispose { viewModel.clearTransientPreview("fx-composition") }
+    }
+
     Surface(
         modifier = modifier.fillMaxWidth().testTag("fx-composition-pane"),
         tonalElevation = 1.dp,
@@ -339,44 +343,51 @@ internal fun FxCompositionPane(
                 )
             }
 
-            Button(
-                enabled = valid,
-                onClick = {
-                    val reflection = AssReflectionFxSpec(
-                        offsetY = requireNotNull(parsedOffset),
-                        verticalScalePercent = requireNotNull(parsedScale),
-                        opacityPercent = requireNotNull(parsedOpacity),
-                        blur = requireNotNull(parsedBlur),
-                    )
-                    val glow = if (withGlow) {
-                        AssGlowFxSpec(
-                            opacityPercent = requireNotNull(parsedGlowOpacity),
-                            blur = requireNotNull(parsedGlowBlur),
-                            border = requireNotNull(parsedGlowBorder),
-                        )
-                    } else null
-                    val entrance = if (withEntrance) {
-                        AssFlipEntranceSpec(
-                            durationMs = requireNotNull(parsedEntranceMs),
-                            startScalePercent = requireNotNull(parsedEntranceStartScale),
-                            overshootScalePercent = requireNotNull(parsedEntranceOvershoot),
-                            startRotationXDegrees = requireNotNull(parsedEntranceRotationX),
-                            accel = parsedEntranceAccel,
-                        )
-                    } else null
-                    viewModel.createMirrorFxComposition(targetEventIds, reflection, glow, entrance)
-                },
-                modifier = Modifier.fillMaxWidth().testTag("fx-compose-reflection"),
+            val currentRecipe = currentTemplate("当前参数")
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Text(
-                    (if (targetEventIds.size > 1) "对 ${targetEventIds.size} 条字幕 · " else "") +
-                    when {
-                        withGlow && withEntrance -> "生成柔光 + 倒影 + 翻转入场"
-                        withGlow -> "生成柔光 + 倒影"
-                        withEntrance -> "生成倒影 + 翻转入场"
-                        else -> "生成倒影 Event"
-                    }
-                )
+                OutlinedButton(
+                    enabled = currentRecipe != null,
+                    onClick = {
+                        currentRecipe?.let { recipe ->
+                            viewModel.previewMirrorFxComposition(
+                                eventIds = targetEventIds,
+                                reflection = recipe.reflection,
+                                glow = recipe.glow,
+                                entrance = recipe.entrance,
+                            )
+                        }
+                    },
+                    modifier = Modifier.weight(1f).testTag("fx-preview-reflection"),
+                ) {
+                    Text("预览")
+                }
+                Button(
+                    enabled = currentRecipe != null,
+                    onClick = {
+                        currentRecipe?.let { recipe ->
+                            viewModel.createMirrorFxComposition(
+                                eventIds = targetEventIds,
+                                reflection = recipe.reflection,
+                                glow = recipe.glow,
+                                entrance = recipe.entrance,
+                            )
+                        }
+                    },
+                    modifier = Modifier.weight(2f).testTag("fx-compose-reflection"),
+                ) {
+                    Text(
+                        (if (targetEventIds.size > 1) "对 ${targetEventIds.size} 条字幕 · " else "") +
+                        when {
+                            withGlow && withEntrance -> "生成柔光 + 倒影 + 翻转入场"
+                            withGlow -> "生成柔光 + 倒影"
+                            withEntrance -> "生成倒影 + 翻转入场"
+                            else -> "生成倒影 Event"
+                        }
+                    )
+                }
             }
 
             Text(
