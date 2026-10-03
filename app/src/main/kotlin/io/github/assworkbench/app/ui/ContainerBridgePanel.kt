@@ -1,5 +1,8 @@
 package io.github.assworkbench.app.ui
 
+import android.content.Intent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -42,6 +45,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import io.github.assworkbench.app.ContainerBridgeState
@@ -62,6 +66,21 @@ fun ContainerBridgePanel(
 ) {
     if (state.uri == null) return
     var pendingTrackNumber by remember { mutableStateOf<Long?>(null) }
+    val context = LocalContext.current
+    val attachmentPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenMultipleDocuments()
+    ) { uris ->
+        if (uris.isEmpty()) return@rememberLauncherForActivityResult
+        uris.forEach { uri ->
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION,
+                )
+            }
+        }
+        viewModel.addContainerAttachments(uris)
+    }
 
     val actualCount = state.resources.count { it.change != ContainerResourceChange.REMOVED }
     val added = state.resources.count { it.change == ContainerResourceChange.ADDED }
@@ -81,10 +100,16 @@ fun ContainerBridgePanel(
             Column(Modifier.weight(1f)) {
                 Text(state.name, style = MaterialTheme.typography.titleSmall)
                 Text(
-                    "$actualCount 项 · " + when (state.inventoryEvidence) {
+                    buildString {
+                        append("$actualCount 项 · ")
+                        append(when (state.inventoryEvidence) {
                         ContainerInventoryEvidence.BASELINE -> "首次检测"
                         ContainerInventoryEvidence.CURRENT_SOURCE -> "重新检测"
-                        ContainerInventoryEvidence.VERIFIED_OUTPUT -> "已验证输出"
+                            ContainerInventoryEvidence.VERIFIED_OUTPUT -> "已验证输出"
+                        })
+                        if (state.pendingAttachments.isNotEmpty()) {
+                            append(" · 待写入附件 ").append(state.pendingAttachments.size)
+                        }
                     },
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -101,11 +126,18 @@ fun ContainerBridgePanel(
                 Icon(Icons.Filled.Refresh, contentDescription = "重新检测容器内容")
             }
             ContainerIconButton(
+                label = "添加附件",
+                enabled = !state.loading && !state.writeBackBusy,
+                onClick = { attachmentPicker.launch(arrayOf("*/*")) },
+            ) {
+                Icon(Icons.Filled.AttachFile, contentDescription = "添加附件")
+            }
+            ContainerIconButton(
                 label = "保存为新 MKV；验证通过后写入，源文件不原地修改",
                 enabled = state.writeBackAvailable &&
                     !state.loading &&
                     !state.writeBackBusy &&
-                    state.selectedTrackNumber != null,
+                    (state.selectedTrackNumber != null || state.pendingAttachments.isNotEmpty()),
                 onClick = onSaveMkv,
             ) {
                 Icon(Icons.Filled.Save, contentDescription = "保存为新 MKV")
@@ -160,6 +192,46 @@ fun ContainerBridgePanel(
                     }
                 },
             )
+        }
+
+        if (state.pendingAttachments.isNotEmpty()) {
+            HorizontalDivider()
+            Text(
+                "待写入附件 · ${state.pendingAttachments.size}",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            state.pendingAttachments.forEach { attachment ->
+                Row(
+                    Modifier.fillMaxWidth().padding(vertical = 6.dp, horizontal = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Icon(
+                        Icons.Filled.AttachFile,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp),
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                    Column(Modifier.weight(1f)) {
+                        Text(attachment.name, style = MaterialTheme.typography.bodyMedium)
+                        Text(
+                            buildString {
+                                append(attachment.mimeType)
+                                attachment.sizeBytes?.let { append(" · ").append(formatPendingBytes(it)) }
+                            },
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    IconButton(
+                        enabled = !state.writeBackBusy,
+                        onClick = { viewModel.removeContainerAttachment(attachment.uri) },
+                    ) {
+                        Icon(Icons.Filled.RemoveCircle, contentDescription = "移除待写入附件")
+                    }
+                }
+            }
         }
 
         if (state.skippedAttachmentCount > 0) {
@@ -313,4 +385,11 @@ private fun ContainerIconButton(
     ) {
         IconButton(onClick = onClick, enabled = enabled, content = content)
     }
+}
+
+
+private fun formatPendingBytes(bytes: Long): String = when {
+    bytes >= 1024L * 1024L -> "%.1f MiB".format(bytes.toDouble() / (1024.0 * 1024.0))
+    bytes >= 1024L -> "%.1f KiB".format(bytes.toDouble() / 1024.0)
+    else -> "$bytes B"
 }
