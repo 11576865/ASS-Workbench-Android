@@ -273,6 +273,42 @@ class AssFxCompositionTest {
                 fade = AssReflectionFadeSpec(),
             )
         }
+
+        val alphaControlled = AssDocument(
+            events = listOf(
+                AssEvent(
+                    id = 37,
+                    start = SubTime(0),
+                    end = SubTime(1000),
+                    text = "{\\pos(200,200)\\t(0,500,\\alpha&H80&)}Alpha",
+                )
+            )
+        )
+        assertFailsWith<IllegalArgumentException> {
+            AssFxComposition.createReflection(
+                alphaControlled,
+                37,
+                fade = AssReflectionFadeSpec(depthPx = 80.0),
+            )
+        }
+
+        val inlineClip = AssDocument(
+            events = listOf(
+                AssEvent(
+                    id = 38,
+                    start = SubTime(0),
+                    end = SubTime(1000),
+                    text = "{\\pos(200,200)}A{\\clip(0,0,100,100)}B",
+                )
+            )
+        )
+        assertFailsWith<IllegalArgumentException> {
+            AssFxComposition.createReflection(
+                inlineClip,
+                38,
+                fade = AssReflectionFadeSpec(depthPx = 80.0),
+            )
+        }
     }
 
     @Test
