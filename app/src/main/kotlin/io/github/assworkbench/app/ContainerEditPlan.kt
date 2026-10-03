@@ -5,12 +5,15 @@ import io.github.assworkbench.fonts.FontOrigin
 enum class ContainerMutationKind {
     REPLACE_ASS_TRACK,
     ADD_ATTACHMENT,
+    REMOVE_ATTACHMENT,
+    REPLACE_ATTACHMENT,
 }
 
 enum class ContainerMutationSource {
     ASS_DOCUMENT,
     FONT_PACKAGE,
     GENERIC_ATTACHMENT,
+    EXISTING_ATTACHMENT,
 }
 
 data class ContainerMutationUi(
@@ -102,6 +105,30 @@ internal fun buildContainerEditPlan(state: EditorState): ContainerEditPlanUi {
         )
     }
 
+    state.container.pendingAttachmentRemovals.forEach { removal ->
+        mutations += ContainerMutationUi(
+            id = "remove-attachment:${removal.target}",
+            kind = ContainerMutationKind.REMOVE_ATTACHMENT,
+            source = ContainerMutationSource.EXISTING_ATTACHMENT,
+            title = "删除附件 ${removal.name}",
+            detail = "目标 ${removal.target}；写回后必须在输出 Inventory 中确认消失",
+        )
+    }
+
+    state.container.pendingAttachmentReplacements.forEach { replacement ->
+        mutations += ContainerMutationUi(
+            id = "replace-attachment:${replacement.target}",
+            kind = ContainerMutationKind.REPLACE_ATTACHMENT,
+            source = ContainerMutationSource.EXISTING_ATTACHMENT,
+            title = "替换附件 ${replacement.originalName} → ${replacement.name}",
+            detail = buildString {
+                append(replacement.mimeType.ifBlank { "application/octet-stream" })
+                replacement.sizeBytes?.let { append(" · ").append(formatContainerBytes(it)) }
+                append(" · 保留原 Attachment UID/目标身份")
+            },
+        )
+    }
+
     val checks = mutableListOf<ContainerCompatibilityCheckUi>()
 
     checks += if (state.container.skippedAttachmentCount > 0) {
@@ -135,7 +162,7 @@ internal fun buildContainerEditPlan(state: EditorState): ContainerEditPlanUi {
         detail = if (mutations.isEmpty()) {
             "尚无待执行的容器修改。"
         } else {
-            "当前计划仅包含 ASS 同槽位替换与通用 Attachment 追加，均映射到已实现的 Matroska 写入路径。"
+            "当前计划中的 ASS 同槽位替换与 Attachment 添加 / 删除 / 替换，均映射到已实现的 Matroska 写入路径。"
         },
     )
 
@@ -158,12 +185,12 @@ internal fun buildContainerEditPlan(state: EditorState): ContainerEditPlanUi {
         dimension = ContainerCompatibilityDimension.OUTPUT_VERIFICATION,
         status = ContainerCompatibilityStatus.SUPPORTED,
         title = "输出验证",
-        detail = "写回后重新扫描实际 MKV，并验证轨道、章节、原附件与计划新增资源。",
+        detail = "写回后重新扫描实际 MKV，并验证轨道、章节、未改附件，以及计划添加 / 删除 / 替换的实际结果。",
     )
 
     val hasGenericAttachment = mutations.any {
-        it.kind == ContainerMutationKind.ADD_ATTACHMENT &&
-            it.source == ContainerMutationSource.GENERIC_ATTACHMENT
+        it.source == ContainerMutationSource.GENERIC_ATTACHMENT ||
+            it.kind == ContainerMutationKind.REPLACE_ATTACHMENT
     }
     val hasFontAttachment = mutations.any { it.source == ContainerMutationSource.FONT_PACKAGE }
     val hasAss = mutations.any { it.kind == ContainerMutationKind.REPLACE_ASS_TRACK }
