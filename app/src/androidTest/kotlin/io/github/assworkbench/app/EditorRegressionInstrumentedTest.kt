@@ -14,6 +14,7 @@ import androidx.compose.ui.test.onRoot
 import androidx.test.platform.app.InstrumentationRegistry
 import android.app.Application
 import android.net.Uri
+import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -428,6 +429,24 @@ class EditorRegressionInstrumentedTest {
             composeRule.onNodeWithTag("event-raw-1").assertIsDisplayed()
         }
         assertEquals(before, viewModel.state.value.document)
+    }
+
+    @Test fun positionFieldsFollowTransientPreviewAndCancelRestoresTypedDraft() {
+        restoreRecovery()
+        viewModel.focusEvent(1L, seek = false)
+        viewModel.setEventPosition(1L, 100.0, 200.0)
+        openTool("POSITION")
+        val before = viewModel.state.value.document
+        composeRule.onNodeWithTag("position-value-x-1").performScrollTo().performTextReplacement("333")
+        composeRule.runOnIdle { viewModel.previewEventPosition(1L, 125.0, 240.0) }
+        composeRule.onNodeWithTag("position-value-x-1").assertTextContains("125.0")
+        composeRule.onNodeWithTag("position-value-y-1").assertTextContains("240.0")
+        assertEquals(before, viewModel.state.value.document)
+        composeRule.runOnIdle { viewModel.clearTransientPreview("geometry:1") }
+        composeRule.onNodeWithTag("position-value-x-1").assertTextContains("333")
+        composeRule.onNodeWithTag("position-value-y-1").assertTextContains("200.0")
+        composeRule.runOnIdle { viewModel.undo() }
+        composeRule.waitUntil(5_000) { eventText(1L) == "Recovered line" }
     }
 
     private fun captureLayout(name: String) {

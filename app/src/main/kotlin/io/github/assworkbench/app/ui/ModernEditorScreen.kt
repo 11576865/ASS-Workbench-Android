@@ -6105,10 +6105,16 @@ private fun PositionPane(
         Box(modifier, contentAlignment = Alignment.Center) { Text("先选择一条字幕") }
         return
     }
+    val displayEvent = io.github.assworkbench.app.ui.preview.GeometryParameterDisplay.event(
+        state.document, state.previewDocument, state.previewOwnerId, event.id,
+    ) ?: event
+    val externalPreview = displayEvent != event
+    val displayGeometry = remember(displayEvent.text) { AssGeometrySemantic.inspect(displayEvent.text) }
     val style = state.document.styles.firstOrNull { it.name == event.style }
     val geometry = remember(event.text) { AssGeometrySemantic.inspect(event.text) }
-    val effective = remember(state.document, event) {
-        AssEffectiveInspector.inspect(state.document, event).associateBy { it.name }
+    val displayDocument = if (externalPreview) state.previewDocument ?: state.document else state.document
+    val effective = remember(displayDocument, displayEvent) {
+        AssEffectiveInspector.inspect(displayDocument, displayEvent).associateBy { it.name }
     }
 
     var x by remember(event.id, event.text) { mutableStateOf(geometry.position?.x?.toString().orEmpty()) }
@@ -6257,7 +6263,9 @@ private fun PositionPane(
         verticalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small),
     ) {
         item {
-            Text("当前 Event", style = MaterialTheme.typography.titleSmall)
+            Text("字幕 #${event.id}" + if (externalPreview) " · 临时预览" else " · 已提交",
+                modifier = Modifier.testTag("position-target-${event.id}"),
+                style = MaterialTheme.typography.titleSmall)
             Text(
                 "Effective: an${effective["Alignment"]?.effectiveValue} · V${effective["Margin V"]?.effectiveValue} · ${effective["Position"]?.effectiveValue}",
                 style = MaterialTheme.typography.labelSmall,
@@ -6764,15 +6772,23 @@ private fun PositionPane(
         item {
             Text("任意位置")
             Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small)) {
-                OutlinedTextField(x, { x = it }, label = { Text("X") }, singleLine = true, enabled = geometry.positionMode != AssPositionMode.MOVE && geometry.positionMode != AssPositionMode.CONFLICT, modifier = Modifier.weight(1f))
-                OutlinedTextField(y, { y = it }, label = { Text("Y") }, singleLine = true, enabled = geometry.positionMode != AssPositionMode.MOVE && geometry.positionMode != AssPositionMode.CONFLICT, modifier = Modifier.weight(1f))
+                OutlinedTextField(if (externalPreview) displayGeometry.position?.x?.toString().orEmpty() else x,
+                    { x = it }, label = { Text("X") }, singleLine = true,
+                    readOnly = externalPreview,
+                    enabled = geometry.positionMode != AssPositionMode.MOVE && geometry.positionMode != AssPositionMode.CONFLICT,
+                    modifier = Modifier.weight(1f).testTag("position-value-x-${event.id}"))
+                OutlinedTextField(if (externalPreview) displayGeometry.position?.y?.toString().orEmpty() else y,
+                    { y = it }, label = { Text("Y") }, singleLine = true,
+                    readOnly = externalPreview,
+                    enabled = geometry.positionMode != AssPositionMode.MOVE && geometry.positionMode != AssPositionMode.CONFLICT,
+                    modifier = Modifier.weight(1f).testTag("position-value-y-${event.id}"))
                 Button(
                     onClick = {
                         val px = x.toDoubleOrNull()
                         val py = y.toDoubleOrNull()
                         if (px != null && py != null) viewModel.setEventPosition(event.id, px, py)
                     },
-                    enabled = geometry.positionMode != AssPositionMode.MOVE &&
+                    enabled = !externalPreview && geometry.positionMode != AssPositionMode.MOVE &&
                         geometry.positionMode != AssPositionMode.CONFLICT,
                     modifier = Modifier.align(Alignment.CenterVertically),
                 ) { Text("应用") }
