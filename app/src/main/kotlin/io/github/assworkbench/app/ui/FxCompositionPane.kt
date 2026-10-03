@@ -39,6 +39,10 @@ internal fun FxCompositionPane(
     var glowBorder by rememberSaveable(event.id) { mutableStateOf("3") }
     var withEntrance by rememberSaveable(event.id) { mutableStateOf(true) }
     var entranceMs by rememberSaveable(event.id) { mutableStateOf("280") }
+    var entranceStartScale by rememberSaveable(event.id) { mutableStateOf("8") }
+    var entranceOvershoot by rememberSaveable(event.id) { mutableStateOf("118") }
+    var entranceRotationX by rememberSaveable(event.id) { mutableStateOf("88") }
+    var entranceAccel by rememberSaveable(event.id) { mutableStateOf("") }
 
     val savedTemplates by viewModel.fxTemplates.collectAsState()
     var templateName by rememberSaveable { mutableStateOf("") }
@@ -52,6 +56,10 @@ internal fun FxCompositionPane(
     val parsedGlowBlur = glowBlur.toDoubleOrNull()
     val parsedGlowBorder = glowBorder.toDoubleOrNull()
     val parsedEntranceMs = entranceMs.toLongOrNull()
+    val parsedEntranceStartScale = entranceStartScale.toDoubleOrNull()
+    val parsedEntranceOvershoot = entranceOvershoot.toDoubleOrNull()
+    val parsedEntranceRotationX = entranceRotationX.toDoubleOrNull()
+    val parsedEntranceAccel = entranceAccel.takeIf { it.isNotBlank() }?.toDoubleOrNull()
     val valid =
         parsedOffset?.isFinite() == true &&
             parsedScale?.let { it.isFinite() && it > 0.0 } == true &&
@@ -62,7 +70,13 @@ internal fun FxCompositionPane(
                     parsedGlowBlur?.let { it.isFinite() && it in 0.0..20.0 } == true &&
                     parsedGlowBorder?.let { it.isFinite() && it in 0.0..20.0 } == true
                 )) &&
-            (!withEntrance || (parsedEntranceMs != null && parsedEntranceMs >= 2L))
+            (!withEntrance || (
+                parsedEntranceMs != null && parsedEntranceMs >= 2L &&
+                    parsedEntranceStartScale?.let { it.isFinite() && it > 0.0 } == true &&
+                    parsedEntranceOvershoot?.let { it.isFinite() && it > 0.0 } == true &&
+                    parsedEntranceRotationX?.isFinite() == true &&
+                    (entranceAccel.isBlank() || parsedEntranceAccel?.let { it.isFinite() && it > 0.0 } == true)
+                ))
 
     fun currentTemplate(name: String): AssFxTemplate? {
         if (!valid || name.isBlank()) return null
@@ -82,7 +96,13 @@ internal fun FxCompositionPane(
                 )
             } else null,
             entrance = if (withEntrance) {
-                AssFlipEntranceSpec(durationMs = requireNotNull(parsedEntranceMs))
+                AssFlipEntranceSpec(
+                    durationMs = requireNotNull(parsedEntranceMs),
+                    startScalePercent = requireNotNull(parsedEntranceStartScale),
+                    overshootScalePercent = requireNotNull(parsedEntranceOvershoot),
+                    startRotationXDegrees = requireNotNull(parsedEntranceRotationX),
+                    accel = parsedEntranceAccel,
+                )
             } else null,
         )
     }
@@ -101,6 +121,10 @@ internal fun FxCompositionPane(
         withEntrance = template.entrance != null
         template.entrance?.let { entrance ->
             entranceMs = entrance.durationMs.toString()
+            entranceStartScale = entrance.startScalePercent.toString()
+            entranceOvershoot = entrance.overshootScalePercent.toString()
+            entranceRotationX = entrance.startRotationXDegrees.toString()
+            entranceAccel = entrance.accel?.toString().orEmpty()
         }
         templateName = template.name
     }
@@ -273,11 +297,43 @@ internal fun FxCompositionPane(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth().testTag("fx-entrance-duration"),
                 )
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    OutlinedTextField(
+                        value = entranceStartScale,
+                        onValueChange = { entranceStartScale = it },
+                        label = { Text("起始高度 %") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f).testTag("fx-entrance-start-scale"),
+                    )
+                    OutlinedTextField(
+                        value = entranceOvershoot,
+                        onValueChange = { entranceOvershoot = it },
+                        label = { Text("回弹高度 %") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f).testTag("fx-entrance-overshoot"),
+                    )
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    OutlinedTextField(
+                        value = entranceRotationX,
+                        onValueChange = { entranceRotationX = it },
+                        label = { Text("起始 X 旋转 °") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f).testTag("fx-entrance-rotation-x"),
+                    )
+                    OutlinedTextField(
+                        value = entranceAccel,
+                        onValueChange = { entranceAccel = it },
+                        label = { Text("Accel（空=线性）") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f).testTag("fx-entrance-accel"),
+                    )
+                }
             }
 
             if (!valid) {
                 Text(
-                    "参数无效：高度需 > 0；各不透明度 0..100；Blur/Border 0..20；入场至少 2 ms。",
+                    "参数无效：高度需 > 0；各不透明度 0..100；Blur/Border 0..20；入场至少 2 ms；起始/回弹高度需 > 0；Accel 为空或 > 0。",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.error,
                 )
@@ -300,7 +356,13 @@ internal fun FxCompositionPane(
                         )
                     } else null
                     val entrance = if (withEntrance) {
-                        AssFlipEntranceSpec(durationMs = requireNotNull(parsedEntranceMs))
+                        AssFlipEntranceSpec(
+                            durationMs = requireNotNull(parsedEntranceMs),
+                            startScalePercent = requireNotNull(parsedEntranceStartScale),
+                            overshootScalePercent = requireNotNull(parsedEntranceOvershoot),
+                            startRotationXDegrees = requireNotNull(parsedEntranceRotationX),
+                            accel = parsedEntranceAccel,
+                        )
                     } else null
                     viewModel.createMirrorFxComposition(targetEventIds, reflection, glow, entrance)
                 },
