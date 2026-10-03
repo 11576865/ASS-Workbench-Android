@@ -135,6 +135,147 @@ class AssFxCompositionTest {
     }
 
     @Test
+    fun spatialFadeSplitsReflectionIntoClippedOpacityBands() {
+        val document = AssDocument(
+            scriptInfo = linkedMapOf("PlayResX" to "1920", "PlayResY" to "1080"),
+            events = listOf(
+                AssEvent(
+                    id = 30,
+                    layer = 3,
+                    start = SubTime(0),
+                    end = SubTime(1500),
+                    text = "{\\pos(400,300)}Fade",
+                )
+            )
+        )
+
+        val result = AssFxComposition.composeMirrorStack(
+            document = document,
+            eventId = 30,
+            reflection = AssReflectionFxSpec(
+                offsetY = 40.0,
+                verticalScalePercent = 35.0,
+                opacityPercent = 40.0,
+                blur = 1.5,
+            ),
+            glow = null,
+            fade = AssReflectionFadeSpec(
+                bands = 4,
+                depthPx = 120.0,
+                farOpacityPercent = 0.0,
+                direction = AssReflectionFadeDirection.DOWN,
+            ),
+            entrance = null,
+        )
+
+        assertEquals(4, result.generatedEventIds.size)
+        val bands = result.generatedEventIds.map { id ->
+            result.document.events.first { it.id == id }
+        }
+        assertTrue(bands[0].text.contains("\\pos(400,340)"))
+        assertTrue(bands[0].text.contains("\\clip(0,340,1920,370)"))
+        assertTrue(bands[0].text.contains("\\alpha&HA6&"))
+        assertTrue(bands[3].text.contains("\\clip(0,430,1920,460)"))
+        assertTrue(bands[3].text.contains("\\alpha&HF2&"))
+    }
+
+    @Test
+    fun spatialFadeIntersectsShiftedSourceRectClipAndDropsEmptyBands() {
+        val document = AssDocument(
+            scriptInfo = linkedMapOf("PlayResX" to "1920", "PlayResY" to "1080"),
+            events = listOf(
+                AssEvent(
+                    id = 31,
+                    start = SubTime(0),
+                    end = SubTime(1500),
+                    text = "{\\pos(400,300)\\clip(0,300,600,380)}Clipped",
+                )
+            )
+        )
+
+        val result = AssFxComposition.createReflection(
+            document = document,
+            eventId = 31,
+            spec = AssReflectionFxSpec(offsetY = 40.0),
+            fade = AssReflectionFadeSpec(
+                bands = 4,
+                depthPx = 120.0,
+                direction = AssReflectionFadeDirection.DOWN,
+            ),
+        )
+
+        assertEquals(3, result.generatedEventIds.size)
+        val texts = result.generatedEventIds.map { id ->
+            result.document.events.first { it.id == id }.text
+        }
+        assertTrue(texts[0].contains("\\clip(0,340,600,370)"))
+        assertTrue(texts[1].contains("\\clip(0,370,600,400)"))
+        assertTrue(texts[2].contains("\\clip(0,400,600,420)"))
+    }
+
+    @Test
+    fun ordinaryReflectionShiftsRectClipWithItsGeometry() {
+        val document = AssDocument(
+            scriptInfo = linkedMapOf("PlayResX" to "1920", "PlayResY" to "1080"),
+            events = listOf(
+                AssEvent(
+                    id = 32,
+                    start = SubTime(0),
+                    end = SubTime(1000),
+                    text = "{\\pos(300,200)\\clip(10,100,500,400)}Clip",
+                )
+            )
+        )
+
+        val result = AssFxComposition.createReflection(
+            document = document,
+            eventId = 32,
+            spec = AssReflectionFxSpec(offsetY = 50.0),
+        )
+        val reflection = result.document.events.first { it.id == result.generatedEventId }
+        assertTrue(reflection.text.contains("\\clip(10,150,500,450)"))
+    }
+
+    @Test
+    fun spatialFadeRefusesMotionAndUnsupportedClipSemantics() {
+        val moving = AssDocument(
+            events = listOf(
+                AssEvent(
+                    id = 33,
+                    start = SubTime(0),
+                    end = SubTime(1000),
+                    text = "{\\move(100,100,200,200)}Move",
+                )
+            )
+        )
+        assertFailsWith<IllegalArgumentException> {
+            AssFxComposition.createReflection(
+                moving,
+                33,
+                fade = AssReflectionFadeSpec(),
+            )
+        }
+
+        val invertedClip = AssDocument(
+            events = listOf(
+                AssEvent(
+                    id = 34,
+                    start = SubTime(0),
+                    end = SubTime(1000),
+                    text = "{\\pos(200,200)\\iclip(0,0,100,100)}Clip",
+                )
+            )
+        )
+        assertFailsWith<IllegalArgumentException> {
+            AssFxComposition.createReflection(
+                invertedClip,
+                34,
+                fade = AssReflectionFadeSpec(),
+            )
+        }
+    }
+
+    @Test
     fun entranceKeepsGlowAndReflectionGeometrySynchronized() {
         val document = AssDocument(
             events = listOf(
