@@ -338,7 +338,13 @@ func planAttachmentEdits(
 		}
 	}
 
-	additions, err := buildFileAttachments(updated, addPaths)
+	var nextIDFloor uint64 = 1
+	for _, att := range existing {
+		if att.ID >= nextIDFloor {
+			nextIDFloor = att.ID + 1
+		}
+	}
+	additions, err := buildFileAttachmentsFrom(updated, addPaths, nextIDFloor)
 	if err != nil {
 		return nil, err
 	}
@@ -382,12 +388,23 @@ func fileAttachment(path string, id uint64) (mkv.Attachment, error) {
 }
 
 func buildFileAttachments(existing []mkv.Attachment, paths []string) ([]mkv.Attachment, error) {
+	return buildFileAttachmentsFrom(existing, paths, 1)
+}
+
+func buildFileAttachmentsFrom(
+	existing []mkv.Attachment,
+	paths []string,
+	nextIDFloor uint64,
+) ([]mkv.Attachment, error) {
 	if len(paths) == 0 {
 		return nil, nil
 	}
 
 	existingNames := make(map[string]struct{}, len(existing)+len(paths))
-	var nextID uint64 = 1
+	nextID := nextIDFloor
+	if nextID == 0 {
+		nextID = 1
+	}
 	for _, att := range existing {
 		existingNames[strings.ToLower(att.Name)] = struct{}{}
 		if att.ID >= nextID {
