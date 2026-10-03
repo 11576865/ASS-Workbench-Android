@@ -15,6 +15,15 @@ data class AssReflectionFxSpec(
     val blur: Double = 1.5,
 )
 
+enum class AssReflectionFadeDirection { AUTO, DOWN, UP }
+
+data class AssReflectionFadeSpec(
+    val bands: Int = 6,
+    val depthPx: Double = 120.0,
+    val farOpacityPercent: Double = 0.0,
+    val direction: AssReflectionFadeDirection = AssReflectionFadeDirection.AUTO,
+)
+
 data class AssFlipEntranceSpec(
     val durationMs: Long = 280L,
     val startScalePercent: Double = 8.0,
@@ -48,6 +57,7 @@ object AssFxComposition {
         document: AssDocument,
         eventId: Long,
         reflection: AssReflectionFxSpec = AssReflectionFxSpec(),
+        fade: AssReflectionFadeSpec? = null,
         entrance: AssFlipEntranceSpec? = null,
     ): AssFxCompositionResult =
         composeMirrorStack(
@@ -55,6 +65,7 @@ object AssFxComposition {
             eventId = eventId,
             reflection = reflection,
             glow = null,
+            fade = fade,
             entrance = entrance,
         )
 
@@ -63,6 +74,7 @@ object AssFxComposition {
         eventIds: Set<Long>,
         reflection: AssReflectionFxSpec = AssReflectionFxSpec(),
         glow: AssGlowFxSpec? = AssGlowFxSpec(),
+        fade: AssReflectionFadeSpec? = null,
         entrance: AssFlipEntranceSpec? = null,
     ): AssFxBatchCompositionResult {
         require(eventIds.isNotEmpty()) { "至少需要一个源字幕。" }
@@ -77,6 +89,7 @@ object AssFxComposition {
                 eventId = sourceId,
                 reflection = reflection,
                 glow = glow,
+                fade = fade,
                 entrance = entrance,
             )
             next = result.document
@@ -94,6 +107,7 @@ object AssFxComposition {
         eventId: Long,
         reflection: AssReflectionFxSpec = AssReflectionFxSpec(),
         glow: AssGlowFxSpec? = AssGlowFxSpec(),
+        fade: AssReflectionFadeSpec? = null,
         entrance: AssFlipEntranceSpec? = null,
     ): AssFxCompositionResult {
         var next = document
@@ -105,7 +119,7 @@ object AssFxComposition {
             generated += glowResult.generatedEventIds
         }
 
-        val reflectionResult = createReflection(next, eventId, reflection)
+        val reflectionResult = createReflection(next, eventId, reflection, fade)
         next = reflectionResult.document
         generated += reflectionResult.generatedEventIds
 
@@ -175,6 +189,7 @@ object AssFxComposition {
         document: AssDocument,
         eventId: Long,
         spec: AssReflectionFxSpec = AssReflectionFxSpec(),
+        fade: AssReflectionFadeSpec? = null,
     ): AssFxCompositionResult {
         require(spec.offsetY.isFinite()) { "倒影 Y 偏移必须是有限数字。" }
         require(spec.verticalScalePercent.isFinite() && spec.verticalScalePercent > 0.0) {
@@ -185,6 +200,16 @@ object AssFxComposition {
         }
         require(spec.blur.isFinite() && spec.blur in 0.0..20.0) {
             "倒影 Blur 必须在 0..20 之间。"
+        }
+
+        fade?.let { value ->
+            require(value.bands in 2..16) { "空间渐隐分段必须在 2..16 之间。" }
+            require(value.depthPx.isFinite() && value.depthPx > 0.0) {
+                "空间渐隐深度必须大于 0。"
+            }
+            require(value.farOpacityPercent.isFinite() && value.farOpacityPercent in 0.0..100.0) {
+                "空间渐隐末端不透明度必须在 0..100% 之间。"
+            }
         }
 
         val sourceIndex = document.events.indexOfFirst { it.id == eventId }
@@ -198,11 +223,36 @@ object AssFxComposition {
             "源字幕同时包含 \\pos 与 \\move；先消解位置冲突再生成 FX。"
         }
 
+        if (fade != null) {
+            require(geometry.positionMode != AssPositionMode.MOVE) {
+                "带空间渐隐的倒影暂不支持 \\move；固定屏幕 Clip 无法可靠跟随运动路径。"
+            }
+            require(!geometry.clipNonRectangular && !geometry.clipInverted) {
+                "带空间渐隐的倒影暂不支持矢量 Clip / iClip；无法安全与渐隐分带合成。"
+            }
+        }
+        require(!geometry.clipNonRectangular && !geometry.clipInverted) {
+            "倒影暂不自动平移矢量 Clip / iClip；请先转换为普通矩形 Clip 或移除裁剪。"
+        }
+
         val style = document.styles.firstOrNull { it.name.equals(source.style, ignoreCase = true) }
         val sourceScaleY = geometry.scaleY ?: style?.scaleY ?: 100.0
         val reflectionScaleY = (sourceScaleY * spec.verticalScalePercent / 100.0).coerceAtLeast(0.001)
         val sourceRotationX = geometry.rotationX ?: 0.0
         val alpha = ((1.0 - spec.opacityPercent / 100.0) * 255.0).roundToInt().coerceIn(0, 255)
+        val alignment = leadingAlignment(source.text) ?: style?.alignment ?: 2
+        val inherited = if (geometry.positionMode == AssPositionMode.INHERITED) {
+            inheritedAnchor(document, source, style)
+        } else null
+        val reflectionAnchorY = when (geometry.positionMode) {
+            AssPositionMode.POSITION ->
+                (requireNotNull(geometry.position).y + spec.offsetY)
+                    .coerceIn(0.0, document.playResY.toDouble())
+            AssPositionMode.INHERITED ->
+                (requireNotNull(inherited).y + spec.offsetY)
+                    .coerceIn(0.0, document.playResY.toDouble())
+            AssPositionMode.MOVE, AssPositionMode.CONFLICT -> null
+        }
 
         var reflectedText = source.text
         reflectedText = when (geometry.positionMode) {
@@ -231,7 +281,7 @@ object AssFxComposition {
                 )
             }
             AssPositionMode.INHERITED -> {
-                val anchor = inheritedAnchor(document, source, style)
+                val anchor = requireNotNull(inherited)
                 AssGeometrySemantic.patchPosition(
                     reflectedText,
                     anchor.x,
@@ -249,6 +299,19 @@ object AssFxComposition {
             )
         }
 
+        geometry.clipRect?.let { clip ->
+            reflectedText = AssGeometrySemantic.patchRectClip(
+                reflectedText,
+                AssClipRect(
+                    left = clip.left,
+                    top = (clip.top + spec.offsetY).coerceIn(0.0, document.playResY.toDouble()),
+                    right = clip.right,
+                    bottom = (clip.bottom + spec.offsetY).coerceIn(0.0, document.playResY.toDouble()),
+                ),
+                inverted = false,
+            )
+        }
+
         reflectedText = appendLeadingOverride(
             reflectedText,
             buildString {
@@ -259,21 +322,98 @@ object AssFxComposition {
             },
         )
 
-        val newId = (document.events.maxOfOrNull { it.id } ?: 0L) + 1L
-        val reflectionEvent = source.copy(
-            id = newId,
-            layer = (source.layer - 1).coerceAtLeast(0),
-            text = reflectedText,
-        )
-        val events = document.events.toMutableList().apply {
-            // Put a layer-0 companion before the source as an additional back-to-front safeguard.
-            add(sourceIndex, reflectionEvent)
+        val reflectionLayer = (source.layer - 1).coerceAtLeast(0)
+        if (fade == null) {
+            val newId = (document.events.maxOfOrNull { it.id } ?: 0L) + 1L
+            val reflectionEvent = source.copy(
+                id = newId,
+                layer = reflectionLayer,
+                text = reflectedText,
+            )
+            val events = document.events.toMutableList().apply {
+                add(sourceIndex, reflectionEvent)
+            }
+            return AssFxCompositionResult(
+                document = document.copy(events = events),
+                sourceEventId = eventId,
+                generatedEventIds = listOf(newId),
+            )
         }
 
+        val anchorY = requireNotNull(reflectionAnchorY)
+        val direction = when (fade.direction) {
+            AssReflectionFadeDirection.DOWN -> AssReflectionFadeDirection.DOWN
+            AssReflectionFadeDirection.UP -> AssReflectionFadeDirection.UP
+            AssReflectionFadeDirection.AUTO ->
+                if (alignment in 7..9) AssReflectionFadeDirection.UP else AssReflectionFadeDirection.DOWN
+        }
+        val maxDepth = when (direction) {
+            AssReflectionFadeDirection.DOWN -> document.playResY.toDouble() - anchorY
+            AssReflectionFadeDirection.UP -> anchorY
+            AssReflectionFadeDirection.AUTO -> error("unreachable")
+        }
+        val depth = minOf(fade.depthPx, maxDepth)
+        require(depth > 0.0) {
+            "倒影锚点已位于画面边界，空间渐隐在所选方向没有可用区域。"
+        }
+
+        val shiftedSourceClip = geometry.clipRect?.let { clip ->
+            AssClipRect(
+                left = clip.left.coerceIn(0.0, document.playResX.toDouble()),
+                top = (clip.top + spec.offsetY).coerceIn(0.0, document.playResY.toDouble()),
+                right = clip.right.coerceIn(0.0, document.playResX.toDouble()),
+                bottom = (clip.bottom + spec.offsetY).coerceIn(0.0, document.playResY.toDouble()),
+            ).normalized()
+        }
+
+        var nextId = (document.events.maxOfOrNull { it.id } ?: 0L) + 1L
+        val bandEvents = buildList {
+            repeat(fade.bands) { index ->
+                val start = depth * index / fade.bands.toDouble()
+                val end = depth * (index + 1) / fade.bands.toDouble()
+                val rawBand = when (direction) {
+                    AssReflectionFadeDirection.DOWN -> AssClipRect(
+                        0.0, anchorY + start, document.playResX.toDouble(), anchorY + end
+                    )
+                    AssReflectionFadeDirection.UP -> AssClipRect(
+                        0.0, anchorY - end, document.playResX.toDouble(), anchorY - start
+                    )
+                    AssReflectionFadeDirection.AUTO -> error("unreachable")
+                }.normalized()
+                val band = shiftedSourceClip?.let { intersect(it, rawBand) } ?: rawBand
+                if (band == null || band.right <= band.left || band.bottom <= band.top) return@repeat
+
+                val sample = (index + 0.5) / fade.bands.toDouble()
+                val opacity = spec.opacityPercent +
+                    (fade.farOpacityPercent - spec.opacityPercent) * sample
+                val bandAlpha = ((1.0 - opacity / 100.0) * 255.0)
+                    .roundToInt()
+                    .coerceIn(0, 255)
+                var bandText = AssGeometrySemantic.patchRectClip(reflectedText, band, inverted = false)
+                bandText = appendLeadingOverride(
+                    bandText,
+                    "\\alpha&H" + "%02X".format(bandAlpha) + "&",
+                )
+                add(
+                    source.copy(
+                        id = nextId++,
+                        layer = reflectionLayer,
+                        text = bandText,
+                    )
+                )
+            }
+        }
+        require(bandEvents.isNotEmpty()) {
+            "空间渐隐与现有矩形 Clip 没有可见交集。"
+        }
+
+        val events = document.events.toMutableList().apply {
+            addAll(sourceIndex, bandEvents)
+        }
         return AssFxCompositionResult(
             document = document.copy(events = events),
             sourceEventId = eventId,
-            generatedEventIds = listOf(newId),
+            generatedEventIds = bandEvents.map { it.id },
         )
     }
 
@@ -387,6 +527,14 @@ object AssFxComposition {
             cursor = close + 1
         }
         return out.toString()
+    }
+
+    private fun intersect(a: AssClipRect, b: AssClipRect): AssClipRect? {
+        val left = maxOf(a.left, b.left)
+        val top = maxOf(a.top, b.top)
+        val right = minOf(a.right, b.right)
+        val bottom = minOf(a.bottom, b.bottom)
+        return if (right > left && bottom > top) AssClipRect(left, top, right, bottom) else null
     }
 
     private fun format(value: Double): String {
