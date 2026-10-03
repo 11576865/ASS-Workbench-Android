@@ -374,9 +374,19 @@ class EditorRegressionInstrumentedTest {
             composeRule.activity.resources.configuration.screenWidthDp < 1200
         }
 
-        // Responsive relayout is allowed to return the compact workspace to its list page.
-        // Re-enter the same Event explicitly so this regression verifies draft persistence
-        // rather than depending on which compact page happens to be active after wm reset.
+        // Responsive relayout can leave the compact workspace on either the list
+        // page or the inspector page after wm reset. Navigate by stable semantics first,
+        // then wait for the Event row itself instead of assuming the row is already composed.
+        val listPageAfterReset = composeRule.onAllNodesWithTag("fixed-page-list", useUnmergedTree = true)
+            .fetchSemanticsNodes(atLeastOneRootRequired = false)
+        if (listPageAfterReset.isNotEmpty()) {
+            composeRule.onNodeWithTag("fixed-page-list").performClick()
+        }
+        composeRule.waitUntil(10_000) {
+            composeRule.onAllNodesWithTag("event-row-1", useUnmergedTree = true)
+                .fetchSemanticsNodes(atLeastOneRootRequired = false)
+                .isNotEmpty()
+        }
         eventRow(1L)
             .performScrollTo()
             .assertIsDisplayed()
