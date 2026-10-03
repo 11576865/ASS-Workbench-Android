@@ -1,5 +1,7 @@
 package io.github.assworkbench.domain
 
+import java.math.BigInteger
+
 sealed interface AssBatchFilter {
     fun matches(event: AssEvent, document: AssDocument): Boolean
 
@@ -23,6 +25,10 @@ sealed interface AssBatchFilter {
         override fun matches(event: AssEvent, document: AssDocument) = pattern.containsMatchIn(event.style)
     }
     data class DurationRange(val minimumMs: Long, val maximumMs: Long) : AssBatchFilter {
+        init {
+            require(minimumMs >= 0L) { "最短时长不能为负数。" }
+            require(maximumMs >= minimumMs) { "最长时长不能小于最短时长。" }
+        }
         override fun matches(event: AssEvent, document: AssDocument): Boolean {
             val duration = (event.end.millis - event.start.millis).coerceAtLeast(0L)
             return duration in minimumMs..maximumMs
@@ -70,13 +76,29 @@ sealed interface AssBatchAction {
 
     data class ShiftTime(val deltaMs: Long) : AssBatchAction {
         override fun apply(event: AssEvent, document: AssDocument): AssEvent {
-            val minStart = (event.start.millis + deltaMs).coerceAtLeast(0L)
-            val duration = event.end.millis - event.start.millis
-            return event.copy(start = SubTime(minStart), end = SubTime(minStart + duration))
+            val duration = BigInteger.valueOf(event.end.millis)
+                .subtract(BigInteger.valueOf(event.start.millis))
+            val shiftedStart = BigInteger.valueOf(event.start.millis)
+                .add(BigInteger.valueOf(deltaMs))
+            val start = if (shiftedStart.signum() < 0) BigInteger.ZERO else shiftedStart
+            val end = start.add(duration)
+            require(end <= LONG_MAX_BIG_INTEGER) {
+                "时间平移结果超出可表示的字幕时间范围。"
+            }
+            return event.copy(
+                start = SubTime(start.longValueExact()),
+                end = SubTime(end.longValueExact()),
+            )
         }
     }
     data class SetStyle(val style: String) : AssBatchAction {
-        override fun apply(event: AssEvent, document: AssDocument) = event.copy(style = style)
+        init {
+            require(style.isNotBlank()) { "目标 Style 不能为空。" }
+        }
+        override fun apply(event: AssEvent, document: AssDocument): AssEvent {
+            require(document.styles.any { it.name == style }) { "目标 Style 不存在：$style" }
+            return event.copy(style = style)
+        }
     }
     data class SetLayer(val layer: Int) : AssBatchAction {
         override fun apply(event: AssEvent, document: AssDocument) = event.copy(layer = layer)
@@ -109,8 +131,18 @@ sealed interface AssBatchAction {
     ) : AssBatchAction {
         init { require(numerator > 0 && denominator > 0) }
         override fun apply(event: AssEvent, document: AssDocument): AssEvent {
-            fun scale(value: Long): Long = (originMs + ((value - originMs).toDouble() * numerator / denominator))
-                .toLong().coerceAtLeast(0L)
+            val origin = BigInteger.valueOf(originMs)
+            val ratioNumerator = BigInteger.valueOf(numerator)
+            val ratioDenominator = BigInteger.valueOf(denominator)
+            fun scale(value: Long): Long {
+                val delta = BigInteger.valueOf(value).subtract(origin)
+                val scaled = origin.add(delta.multiply(ratioNumerator).divide(ratioDenominator))
+                val nonNegative = if (scaled.signum() < 0) BigInteger.ZERO else scaled
+                require(nonNegative <= LONG_MAX_BIG_INTEGER) {
+                    "时间缩放结果超出可表示的字幕时间范围。"
+                }
+                return nonNegative.longValueExact()
+            }
             val start = scale(event.start.millis)
             val end = scale(event.end.millis).coerceAtLeast(start)
             return event.copy(start = SubTime(start), end = SubTime(end))
@@ -131,6 +163,11 @@ sealed interface AssBatchAction {
         }
     }
     data class SetMargins(val left: Int? = null, val right: Int? = null, val vertical: Int? = null) : AssBatchAction {
+        init {
+            require(listOfNotNull(left, right, vertical).all { it >= 0 }) {
+                "Event Margin 不能为负数。"
+            }
+        }
         override fun apply(event: AssEvent, document: AssDocument) = event.copy(
             marginL = left ?: event.marginL, marginR = right ?: event.marginR, marginV = vertical ?: event.marginV)
     }
@@ -167,6 +204,8 @@ sealed interface AssBatchAction {
 
 data class AssBatchRecipe(val id: String, val filter: AssBatchFilter = AssBatchFilter.All, val actions: List<AssBatchAction>)
 data class AssBatchPreview(val document: AssDocument, val affectedEventIds: List<Long>, val changedEventIds: List<Long>)
+
+private val LONG_MAX_BIG_INTEGER: BigInteger = BigInteger.valueOf(Long.MAX_VALUE)
 
 object AssBatchEngine {
     fun preview(document: AssDocument, recipe: AssBatchRecipe): AssBatchPreview {
