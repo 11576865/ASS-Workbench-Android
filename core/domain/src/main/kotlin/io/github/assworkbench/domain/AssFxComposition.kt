@@ -610,7 +610,11 @@ object AssFxComposition {
         val ownsAlpha = normalizedOwnedTags.any {
             it == "alpha" || it == "1a" || it == "2a" || it == "3a" || it == "4a"
         }
-        require(!ownsAlpha || (animation.simpleFade == null && animation.complexFade == null)) {
+        val temporalAlphaConflict = ownsAlpha && analysis.tags.any { tag ->
+            tag.name.equals("fad", ignoreCase = true) ||
+                tag.name.equals("fade", ignoreCase = true)
+        }
+        require(!temporalAlphaConflict) {
             "$effectLabel 与源字幕的 \\fad / \\fade 时间透明度存在属性所有权冲突。"
         }
 
