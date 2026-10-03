@@ -627,10 +627,10 @@ class EditorRegressionInstrumentedTest {
         openTool("KARAOKE")
 
         composeRule.onNodeWithTag("karaoke-fx-author")
-            .performScrollTo()
+            .assertIsDisplayed()
+        composeRule.onNodeWithTag("karaoke-fx-summary")
             .assertIsDisplayed()
         composeRule.onNodeWithTag("karaoke-fx-preview")
-            .performScrollTo()
             .assertIsDisplayed()
             .performClick()
 
@@ -643,7 +643,6 @@ class EditorRegressionInstrumentedTest {
         assertEquals(canonicalBeforePreview, viewModel.state.value.document)
 
         composeRule.onNodeWithTag("karaoke-fx-apply")
-            .performScrollTo()
             .assertIsDisplayed()
             .performClick()
 
