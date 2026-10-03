@@ -32,6 +32,10 @@ internal fun KaraokePane(
         return
     }
     val segments = remember(event.text) { AssKaraokeCodec.parse(event.text) }
+    val fxTargetEventIds = state.selectedEventIds.ifEmpty { setOf(event.id) }
+    DisposableEffect(event.id, fxTargetEventIds) {
+        onDispose { viewModel.clearTransientPreview("karaoke-fx") }
+    }
     fun commit(next: List<AssKaraokeSegment>) {
         viewModel.updateEventText(event.id, AssKaraokeCodec.write(next))
     }
@@ -71,11 +75,22 @@ internal fun KaraokePane(
                     accel = parsedRevealAccel,
                 )
             } else null
-            val revealCompatibility = remember(event.text, revealSpec) {
+            val revealCompatibility = remember(
+                state.document,
+                fxTargetEventIds,
+                revealSpec,
+            ) {
                 revealSpec?.let { spec ->
-                    runCatching { AssKaraokeFxAuthoring.planProgressiveReveal(event.text, spec) }
+                    runCatching {
+                        AssKaraokeFxAuthoring.planProgressiveRevealBatch(
+                            document = state.document,
+                            eventIds = fxTargetEventIds,
+                            spec = spec,
+                        )
+                    }
                 }
             }
+            val revealPlan = revealCompatibility?.getOrNull()
             val revealError = revealCompatibility?.exceptionOrNull()?.message
 
             Surface(
@@ -89,7 +104,11 @@ internal fun KaraokePane(
                 ) {
                     Text("Karaoke FX · 逐音节显现", style = MaterialTheme.typography.titleSmall)
                     Text(
-                        "按 Karaoke 累计时间给每个音节写入独立 alpha / blur transform；不拆 Event，也不需要猜测字形宽度。",
+                        if (fxTargetEventIds.size > 1) {
+                            "将对选中的 ${fxTargetEventIds.size} 条字幕按各自 Karaoke 累计时间批量写入 alpha / blur transform；整个批次只形成一次 Undo 事务。"
+                        } else {
+                            "按 Karaoke 累计时间给每个音节写入独立 alpha / blur transform；不拆 Event，也不需要猜测字形宽度。"
+                        },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -129,14 +148,38 @@ internal fun KaraokePane(
                             color = MaterialTheme.colorScheme.error,
                         )
                     }
-                    Button(
-                        enabled = revealSpec != null && revealError == null,
-                        onClick = {
-                            revealSpec?.let { viewModel.applyKaraokeRevealFx(event.id, it) }
-                        },
-                        modifier = Modifier.fillMaxWidth(),
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        Text("写入 ${segments.size} 个逐音节 FX")
+                        OutlinedButton(
+                            enabled = revealSpec != null && revealError == null,
+                            onClick = {
+                                revealSpec?.let {
+                                    viewModel.previewKaraokeRevealFx(fxTargetEventIds, it)
+                                }
+                            },
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            Text("预览")
+                        }
+                        Button(
+                            enabled = revealSpec != null && revealError == null,
+                            onClick = {
+                                revealSpec?.let {
+                                    viewModel.applyKaraokeRevealFx(fxTargetEventIds, it)
+                                }
+                            },
+                            modifier = Modifier.weight(2f),
+                        ) {
+                            Text(
+                                if (fxTargetEventIds.size > 1) {
+                                    "对 ${fxTargetEventIds.size} 条字幕写入 ${revealPlan?.totalSegmentCount ?: 0} 个 FX"
+                                } else {
+                                    "写入 ${revealPlan?.totalSegmentCount ?: segments.size} 个逐音节 FX"
+                                }
+                            )
+                        }
                     }
                 }
             }
