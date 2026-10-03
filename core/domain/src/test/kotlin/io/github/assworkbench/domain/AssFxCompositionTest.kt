@@ -164,6 +164,21 @@ class AssFxCompositionTest {
         }
         assertTrue(fadeError.message.orEmpty().contains("\\fad / \\fade"))
 
+        val malformedFade = AssDocument(
+            events = listOf(
+                AssEvent(
+                    id = 50,
+                    start = SubTime(0),
+                    end = SubTime(1000),
+                    text = "{\\fad(bad)}Malformed fade",
+                )
+            )
+        )
+        val malformedFadeError = assertFailsWith<IllegalArgumentException> {
+            AssFxComposition.createGlow(malformedFade, 50)
+        }
+        assertTrue(malformedFadeError.message.orEmpty().contains("\\fad / \\fade"))
+
         val transformed = AssDocument(
             events = listOf(
                 AssEvent(
