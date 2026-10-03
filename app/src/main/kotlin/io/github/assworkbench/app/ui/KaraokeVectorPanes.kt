@@ -15,6 +15,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import io.github.assworkbench.app.EditorState
 import io.github.assworkbench.app.EditorViewModel
@@ -113,7 +114,7 @@ internal fun KaraokePane(
             Surface(
                 color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.38f),
                 shape = MaterialTheme.shapes.small,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().testTag("karaoke-fx-author"),
             ) {
                 Column(
                     Modifier.padding(8.dp),
@@ -138,23 +139,23 @@ internal fun KaraokePane(
                             onValueChange = { revealMs = it },
                             label = { Text("显现时长 ms") },
                             singleLine = true,
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier.weight(1f).testTag("karaoke-fx-reveal-ms"),
                         )
                         OutlinedTextField(
                             value = revealBlur,
                             onValueChange = { revealBlur = it },
                             label = { Text("起始 Blur") },
                             singleLine = true,
-                            modifier = Modifier.weight(1f),
-                        )
-                        OutlinedTextField(
-                            value = revealAccel,
-                            onValueChange = { revealAccel = it },
-                            label = { Text("Accel") },
-                            singleLine = true,
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier.weight(1f).testTag("karaoke-fx-blur"),
                         )
                     }
+                    OutlinedTextField(
+                        value = revealAccel,
+                        onValueChange = { revealAccel = it },
+                        label = { Text("Accel（空=线性）") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth().testTag("karaoke-fx-accel"),
+                    )
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -162,6 +163,7 @@ internal fun KaraokePane(
                         Switch(
                             checked = withFlip,
                             onCheckedChange = { withFlip = it },
+                            modifier = Modifier.testTag("karaoke-fx-flip-enabled"),
                         )
                         Text("翻转 / 拉伸显现")
                     }
@@ -172,23 +174,23 @@ internal fun KaraokePane(
                                 onValueChange = { flipStartScale = it },
                                 label = { Text("起始高度 %") },
                                 singleLine = true,
-                                modifier = Modifier.weight(1f),
+                                modifier = Modifier.weight(1f).testTag("karaoke-fx-start-scale"),
                             )
                             OutlinedTextField(
                                 value = flipOvershoot,
                                 onValueChange = { flipOvershoot = it },
                                 label = { Text("回弹高度 %") },
                                 singleLine = true,
-                                modifier = Modifier.weight(1f),
-                            )
-                            OutlinedTextField(
-                                value = flipRotationX,
-                                onValueChange = { flipRotationX = it },
-                                label = { Text("起始 X 旋转 °") },
-                                singleLine = true,
-                                modifier = Modifier.weight(1f),
+                                modifier = Modifier.weight(1f).testTag("karaoke-fx-overshoot"),
                             )
                         }
+                        OutlinedTextField(
+                            value = flipRotationX,
+                            onValueChange = { flipRotationX = it },
+                            label = { Text("起始 X 旋转 °") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth().testTag("karaoke-fx-rotation-x"),
+                        )
                     }
                     if (revealSpec == null) {
                         Text(
@@ -212,7 +214,7 @@ internal fun KaraokePane(
                             onClick = {
                                 revealSpec?.let { viewModel.previewKaraokeRevealFx(fxTargetEventIds, it) }
                             },
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier.weight(1f).testTag("karaoke-fx-preview"),
                         ) {
                             Text("预览")
                         }
@@ -221,7 +223,7 @@ internal fun KaraokePane(
                             onClick = {
                                 revealSpec?.let { viewModel.applyKaraokeRevealFx(fxTargetEventIds, it) }
                             },
-                            modifier = Modifier.weight(2f),
+                            modifier = Modifier.weight(2f).testTag("karaoke-fx-apply"),
                         ) {
                             val plannedSegments = revealCompatibility?.getOrNull()?.sourceSegmentCount
                             Text(
