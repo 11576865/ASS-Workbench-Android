@@ -11,6 +11,14 @@ data class AssKaraokeRevealFxPlan(
     val generatedText: String,
 )
 
+data class AssKaraokeRevealBatchResult(
+    val document: AssDocument,
+    val sourceEventIds: List<Long>,
+    val segmentCountByEvent: Map<Long, Int>,
+) {
+    val totalSegmentCount: Int get() = segmentCountByEvent.values.sum()
+}
+
 /**
  * Conservative karaoke-FX compiler.
  *
@@ -26,6 +34,40 @@ object AssKaraokeFxAuthoring {
         """\\(?:alpha|[1-4]a|blur|t)(?=[^A-Za-z]|$)""",
         RegexOption.IGNORE_CASE,
     )
+
+    fun planProgressiveRevealBatch(
+        document: AssDocument,
+        eventIds: Set<Long>,
+        spec: AssKaraokeRevealFxSpec = AssKaraokeRevealFxSpec(),
+    ): AssKaraokeRevealBatchResult {
+        require(eventIds.isNotEmpty()) { "至少需要一个 Karaoke 源字幕。" }
+        val ordered = document.events.filter { it.id in eventIds }
+        require(ordered.size == eventIds.size) { "选择中包含已经不存在的字幕。" }
+        ordered.forEach { event ->
+            require(!event.comment) { "Comment 事件 #${event.id} 不能生成可见 Karaoke FX。" }
+        }
+
+        val plans = linkedMapOf<Long, AssKaraokeRevealFxPlan>()
+        ordered.forEach { event ->
+            plans[event.id] = try {
+                planProgressiveReveal(event.text, spec)
+            } catch (error: IllegalArgumentException) {
+                throw IllegalArgumentException(
+                    "字幕 #${event.id}：${error.message ?: "Karaoke FX 无法生成。"}",
+                    error,
+                )
+            }
+        }
+
+        val nextEvents = document.events.map { event ->
+            plans[event.id]?.let { plan -> event.copy(text = plan.generatedText) } ?: event
+        }
+        return AssKaraokeRevealBatchResult(
+            document = document.copy(events = nextEvents),
+            sourceEventIds = ordered.map { it.id },
+            segmentCountByEvent = plans.mapValues { it.value.sourceSegmentCount },
+        )
+    }
 
     fun planProgressiveReveal(
         text: String,
