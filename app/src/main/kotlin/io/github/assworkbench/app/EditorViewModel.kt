@@ -519,6 +519,100 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    fun planExistingAttachmentRemoval(target: String, name: String) {
+        if (target.isBlank()) return
+        _state.update { state ->
+            if (state.container.writeBackBusy) {
+                return@update state.copy(status = "MKV 写回进行中；完成后才能修改附件计划。")
+            }
+            val withoutReplacement = state.container.pendingAttachmentReplacements
+                .filterNot { it.target == target }
+            val next = if (state.container.pendingAttachmentRemovals.any { it.target == target }) {
+                state.container.pendingAttachmentRemovals
+            } else {
+                state.container.pendingAttachmentRemovals + PendingContainerAttachmentRemovalUi(
+                    target = target,
+                    name = name,
+                )
+            }
+            state.copy(
+                container = state.container.copy(
+                    pendingAttachmentRemovals = next,
+                    pendingAttachmentReplacements = withoutReplacement,
+                ),
+                status = "已计划删除附件 $name；保存新 MKV 前不会修改源文件。",
+            )
+        }
+    }
+
+    fun cancelExistingAttachmentRemoval(target: String) {
+        _state.update { state ->
+            val next = state.container.pendingAttachmentRemovals.filterNot { it.target == target }
+            if (next.size == state.container.pendingAttachmentRemovals.size) state
+            else state.copy(
+                container = state.container.copy(pendingAttachmentRemovals = next),
+                status = "已取消附件删除计划。",
+            )
+        }
+    }
+
+    fun planExistingAttachmentReplacement(
+        target: String,
+        originalName: String,
+        uri: Uri,
+    ) {
+        if (target.isBlank()) return
+        val snapshot = _state.value
+        if (snapshot.container.writeBackBusy) {
+            _state.update { it.copy(status = "MKV 写回进行中；完成后才能修改附件计划。") }
+            return
+        }
+        val uriText = uri.toString()
+        val name = displayName(uri)
+            ?.substringAfterLast('/')
+            ?.substringAfterLast('\\')
+            ?.takeIf { it.isNotBlank() && it != "." && it != ".." }
+            ?: originalName
+        val mimeType = app.contentResolver.getType(uri)
+            ?.takeIf { it.isNotBlank() }
+            ?: "application/octet-stream"
+        val size = runCatching {
+            app.contentResolver.openAssetFileDescriptor(uri, "r")?.use { descriptor ->
+                descriptor.length.takeIf { it >= 0L }
+            }
+        }.getOrNull()
+        val replacement = PendingContainerAttachmentReplacementUi(
+            target = target,
+            originalName = originalName,
+            uri = uriText,
+            name = name,
+            mimeType = mimeType,
+            sizeBytes = size,
+        )
+        _state.update { state ->
+            state.copy(
+                container = state.container.copy(
+                    pendingAttachmentRemovals = state.container.pendingAttachmentRemovals
+                        .filterNot { it.target == target },
+                    pendingAttachmentReplacements = state.container.pendingAttachmentReplacements
+                        .filterNot { it.target == target } + replacement,
+                ),
+                status = "已计划替换附件 $originalName → $name；保存新 MKV 前不会修改源文件。",
+            )
+        }
+    }
+
+    fun cancelExistingAttachmentReplacement(target: String) {
+        _state.update { state ->
+            val next = state.container.pendingAttachmentReplacements.filterNot { it.target == target }
+            if (next.size == state.container.pendingAttachmentReplacements.size) state
+            else state.copy(
+                container = state.container.copy(pendingAttachmentReplacements = next),
+                status = "已取消附件替换计划。",
+            )
+        }
+    }
+
     fun selectContainerTrack(trackNumber: Long, discardUnsaved: Boolean = false) {
         val current = _state.value
         if (
@@ -617,9 +711,14 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             }
             .distinctBy { it.sha256 }
         val plannedAttachments = snapshot.container.pendingAttachments
+        val plannedRemovals = snapshot.container.pendingAttachmentRemovals
+        val plannedReplacements = snapshot.container.pendingAttachmentReplacements
 
         val plannedAttachmentCount = editPlan.mutations.count {
             it.kind == ContainerMutationKind.ADD_ATTACHMENT
+        }
+        val plannedRemovalCount = editPlan.mutations.count {
+            it.kind == ContainerMutationKind.REMOVE_ATTACHMENT
         }
         _state.update {
             it.copy(
@@ -628,7 +727,9 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                     append("容器预检通过 · 正在无重编码更新 MKV")
                     if (replaceAss) append(" · ASS")
                     if (packageAssets.isNotEmpty()) append(" · 字体 ").append(packageAssets.size)
-                    if (plannedAttachments.isNotEmpty()) append(" · 附件 ").append(plannedAttachments.size)
+                    if (plannedAttachments.isNotEmpty()) append(" · 新附件 ").append(plannedAttachments.size)
+                    if (plannedRemovals.isNotEmpty()) append(" · 删除 ").append(plannedRemovals.size)
+                    if (plannedReplacements.isNotEmpty()) append(" · 替换 ").append(plannedReplacements.size)
                     append("；大文件可能需要一些时间……")
                 },
             )
@@ -668,6 +769,25 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                             require(target.length() > 0L) { "待封入附件为空：" + attachment.name }
                             target
                         }
+                        val replacementInputs = plannedReplacements.mapIndexed { index, replacement ->
+                            val safeName = replacement.name
+                                .substringAfterLast('/')
+                                .substringAfterLast('\\')
+                                .takeIf { it.isNotBlank() && it != "." && it != ".." }
+                                ?: "replacement-${index + 1}.bin"
+                            val dir = File(work, "replacement-$index").apply { mkdirs() }
+                            val targetFile = File(dir, safeName)
+                            app.contentResolver.openInputStream(Uri.parse(replacement.uri))?.use { input ->
+                                targetFile.outputStream().buffered().use { output ->
+                                    input.copyTo(output, 1024 * 1024)
+                                }
+                            } ?: error("无法读取附件替换文件：" + replacement.name)
+                            require(targetFile.length() > 0L) { "附件替换文件为空：" + replacement.name }
+                            AttachmentReplacementInput(
+                                target = replacement.target,
+                                file = targetFile,
+                            )
+                        }
 
                         if (replaceAss) {
                             val editedAss = File(work, "edited.ass")
@@ -679,12 +799,16 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                                 output = result,
                                 fonts = packageFiles,
                                 attachments = attachmentFiles,
+                                removeAttachments = plannedRemovals.map { it.target },
+                                replaceAttachments = replacementInputs,
                             )
                         } else {
-                            mkvGoTool.addAttachments(
+                            mkvGoTool.editAttachments(
                                 source = source,
                                 output = result,
-                                attachments = packageFiles + attachmentFiles,
+                                additions = packageFiles + attachmentFiles,
+                                removals = plannedRemovals.map { it.target },
+                                replacements = replacementInputs,
                             )
                         }
 
@@ -714,17 +838,57 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                             require(verifiedScan.chapterCount == sourceScan.chapterCount) {
                                 "写回验证失败：章节数量发生意外变化"
                             }
+                            val removalTargets = plannedRemovals.mapTo(hashSetOf()) { it.target }
+                            val replacementTargets = plannedReplacements.mapTo(hashSetOf()) { it.target }
+                            val mutatedTargets = removalTargets + replacementTargets
                             val verifiedAttachments = verifiedScan.attachmentPreservationKeys().toSet()
-                            sourceScan.attachmentPreservationKeys().forEach { key ->
-                                require(key in verifiedAttachments) {
-                                    "写回验证失败：原有附件缺失或身份无法确认"
+                            sourceScan.attachmentInfos.forEach { info ->
+                                val target = info.uid?.toString() ?: info.fileName
+                                if (target !in mutatedTargets) {
+                                    val key = info.uid?.let { "uid:$it" }
+                                        ?: info.sha256?.let { "sha256:$it" }
+                                        ?: "weak:${info.fileName}\u001f${info.mimeType}\u001f${info.sizeBytes ?: -1L}"
+                                    require(key in verifiedAttachments) {
+                                        "写回验证失败：未修改附件缺失或身份无法确认：" + info.fileName
+                                    }
                                 }
                             }
-                            require(
-                                verifiedScan.attachmentInfos.size ==
-                                    sourceScan.attachmentInfos.size + plannedAttachmentCount
-                            ) {
-                                "写回验证失败：计划新增 $plannedAttachmentCount 个附件，实际附件数量不匹配"
+                            plannedRemovals.forEach { removal ->
+                                require(
+                                    verifiedScan.attachmentInfos.none { info ->
+                                        info.uid?.toString() == removal.target ||
+                                            (info.uid == null && info.fileName == removal.target)
+                                    }
+                                ) {
+                                    "写回验证失败：计划删除的附件仍存在：" + removal.name
+                                }
+                            }
+                            plannedReplacements.forEach { replacement ->
+                                val sourceInfo = sourceScan.attachmentInfos.firstOrNull { info ->
+                                    info.uid?.toString() == replacement.target ||
+                                        (info.uid == null && info.fileName == replacement.target)
+                                } ?: error("写回验证失败：替换目标在源 Inventory 中不存在：" + replacement.originalName)
+                                val verified = if (sourceInfo.uid != null) {
+                                    verifiedScan.attachmentInfos.firstOrNull { it.uid == sourceInfo.uid }
+                                } else {
+                                    verifiedScan.attachmentInfos.firstOrNull { it.fileName == replacement.name }
+                                }
+                                require(verified != null) {
+                                    "写回验证失败：替换后的附件不存在：" + replacement.name
+                                }
+                                require(verified.fileName == replacement.name) {
+                                    "写回验证失败：替换附件名称不匹配：" + replacement.name
+                                }
+                                replacement.sizeBytes?.let { expectedSize ->
+                                    require(verified.sizeBytes == expectedSize) {
+                                        "写回验证失败：替换附件大小不匹配：" + replacement.name
+                                    }
+                                }
+                            }
+                            val expectedAttachmentCount =
+                                sourceScan.attachmentInfos.size + plannedAttachmentCount - plannedRemovalCount
+                            require(verifiedScan.attachmentInfos.size == expectedAttachmentCount) {
+                                "写回验证失败：预期附件数 $expectedAttachmentCount，实际 ${verifiedScan.attachmentInfos.size}"
                             }
                         }
 
@@ -748,6 +912,8 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 val documentSaved = replaceAss && current.document == snapshot.document
                 if (documentSaved) clearPendingRecovery()
                 val savedAttachmentUris = plannedAttachments.mapTo(hashSetOf()) { it.uri }
+                val savedRemovalTargets = plannedRemovals.mapTo(hashSetOf()) { it.target }
+                val savedReplacementTargets = plannedReplacements.mapTo(hashSetOf()) { it.target }
                 _state.update { state ->
                     state.copy(
                         dirty = if (documentSaved) false else state.dirty,
@@ -755,6 +921,10 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                             writeBackBusy = false,
                             pendingAttachments = state.container.pendingAttachments
                                 .filterNot { it.uri in savedAttachmentUris },
+                            pendingAttachmentRemovals = state.container.pendingAttachmentRemovals
+                                .filterNot { it.target in savedRemovalTargets },
+                            pendingAttachmentReplacements = state.container.pendingAttachmentReplacements
+                                .filterNot { it.target in savedReplacementTargets },
                             resources = baselineScanSnapshot?.let { baseline ->
                                 diffContainerResources(baseline, verifiedScan)
                             } ?: baselineContainerResources(verifiedScan),
@@ -763,10 +933,12 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                         recoveryAvailable = if (documentSaved) false else state.recoveryAvailable,
                         recoveryLabel = if (documentSaved) "" else state.recoveryLabel,
                         status = buildString {
-                            append("新 MKV 已保存并重新扫描；轨道身份/顺序/元数据、章节与原附件保持。输出 ")
+                            append("新 MKV 已保存并重新扫描；轨道身份/顺序/元数据、章节与未修改附件保持。输出 ")
                             append(bytes / (1024 * 1024)).append(" MiB。")
                             if (packageAssets.isNotEmpty()) append(" 新封入字体 ").append(packageAssets.size).append(" 个。")
                             if (plannedAttachments.isNotEmpty()) append(" 新封入附件 ").append(plannedAttachments.size).append(" 个。")
+                            if (plannedRemovals.isNotEmpty()) append(" 删除附件 ").append(plannedRemovals.size).append(" 个。")
+                            if (plannedReplacements.isNotEmpty()) append(" 替换附件 ").append(plannedReplacements.size).append(" 个。")
                             if (replaceAss && !documentSaved) append(" · 保存期间出现新字幕编辑，当前工程仍未保存。")
                         },
                     )
