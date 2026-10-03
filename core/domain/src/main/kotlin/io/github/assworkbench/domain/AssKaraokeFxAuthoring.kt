@@ -25,6 +25,12 @@ data class AssKaraokeRevealFxPlan(
     val generatedText: String,
 )
 
+data class AssKaraokeRevealBatchPlan(
+    val document: AssDocument,
+    val sourceEventIds: List<Long>,
+    val sourceSegmentCount: Int,
+)
+
 /**
  * Conservative karaoke-FX compiler.
  *
@@ -45,6 +51,28 @@ object AssKaraokeFxAuthoring {
         """\\(?:fscy|frx)(?=[^A-Za-z]|$)""",
         RegexOption.IGNORE_CASE,
     )
+
+    fun planProgressiveRevealBatch(
+        document: AssDocument,
+        eventIds: Set<Long>,
+        spec: AssKaraokeRevealFxSpec = AssKaraokeRevealFxSpec(),
+    ): AssKaraokeRevealBatchPlan {
+        require(eventIds.isNotEmpty()) { "至少需要一个源字幕。" }
+        val orderedIds = document.events.map { it.id }.filter { it in eventIds }
+        require(orderedIds.size == eventIds.size) { "选择中包含已经不存在的字幕。" }
+
+        val plans = orderedIds.associateWith { eventId ->
+            planProgressiveReveal(document, eventId, spec)
+        }
+        val next = document.copy(events = document.events.map { event ->
+            plans[event.id]?.let { plan -> event.copy(text = plan.generatedText) } ?: event
+        })
+        return AssKaraokeRevealBatchPlan(
+            document = next,
+            sourceEventIds = orderedIds,
+            sourceSegmentCount = plans.values.sumOf { it.sourceSegmentCount },
+        )
+    }
 
     fun planProgressiveReveal(
         document: AssDocument,
