@@ -580,13 +580,31 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             reportError("MKV 写回失败", IllegalStateException("没有已打开的 MKV 工程"))
             return
         }
-        if (!mkvGoTool.isAvailable()) {
-            reportError("MKV 写回失败", IllegalStateException("当前设备 ABI 没有 MKV 写回工具"))
+        val runtimeWriterAvailable = mkvGoTool.isAvailable()
+        val planState = if (snapshot.container.writeBackAvailable == runtimeWriterAvailable) {
+            snapshot
+        } else {
+            snapshot.copy(
+                container = snapshot.container.copy(writeBackAvailable = runtimeWriterAvailable),
+            )
+        }
+        val editPlan = buildContainerEditPlan(planState)
+        if (editPlan.mutations.isEmpty()) {
+            reportError("MKV 写回失败", IllegalStateException("没有待写入的容器修改"))
+            return
+        }
+        editPlan.blockingChecks.firstOrNull()?.let { blocking ->
+            reportError(
+                "MKV 写回失败",
+                IllegalStateException(blocking.title + "：" + blocking.detail),
+            )
             return
         }
 
         val trackNumber = snapshot.container.selectedTrackNumber
-        val replaceAss = trackNumber != null && snapshot.subtitleLoaded
+        val replaceAss = editPlan.mutations.any {
+            it.kind == ContainerMutationKind.REPLACE_ASS_TRACK
+        }
         val embeddedShas = snapshot.importedFonts.asSequence()
             .filter { it.origin == FontOrigin.MKV_ATTACHMENT }
             .map { it.sha256 }
@@ -600,17 +618,14 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             .distinctBy { it.sha256 }
         val plannedAttachments = snapshot.container.pendingAttachments
 
-        if (!replaceAss && packageAssets.isEmpty() && plannedAttachments.isEmpty()) {
-            reportError("MKV 写回失败", IllegalStateException("没有待写入的 ASS 修改、字体或附件"))
-            return
+        val plannedAttachmentCount = editPlan.mutations.count {
+            it.kind == ContainerMutationKind.ADD_ATTACHMENT
         }
-
-        val plannedAttachmentCount = packageAssets.size + plannedAttachments.size
         _state.update {
             it.copy(
                 container = it.container.copy(writeBackBusy = true),
                 status = buildString {
-                    append("正在无重编码更新 MKV")
+                    append("容器预检通过 · 正在无重编码更新 MKV")
                     if (replaceAss) append(" · ASS")
                     if (packageAssets.isNotEmpty()) append(" · 字体 ").append(packageAssets.size)
                     if (plannedAttachments.isNotEmpty()) append(" · 附件 ").append(plannedAttachments.size)
