@@ -33,6 +33,7 @@ import io.github.assworkbench.domain.AssTransformVisualProperty
 import io.github.assworkbench.domain.AssFxComposition
 import io.github.assworkbench.domain.AssReflectionFxSpec
 import io.github.assworkbench.domain.AssFlipEntranceSpec
+import io.github.assworkbench.domain.AssGlowFxSpec
 import io.github.assworkbench.domain.EventFormatClipboard
 import io.github.assworkbench.domain.EventFormatClipboardOps
 import io.github.assworkbench.domain.EventFormatPasteMode
@@ -873,17 +874,19 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    fun createReflectionFxComposition(
+    fun createMirrorFxComposition(
         eventId: Long,
         reflection: AssReflectionFxSpec,
+        glow: AssGlowFxSpec?,
         entrance: AssFlipEntranceSpec?,
     ) {
         val snapshot = _state.value
         val result = runCatching {
-            AssFxComposition.composeReflection(
+            AssFxComposition.composeMirrorStack(
                 document = snapshot.document,
                 eventId = eventId,
                 reflection = reflection,
+                glow = glow,
                 entrance = entrance,
             )
         }.getOrElse { error ->
@@ -895,7 +898,8 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
 
         val status = buildString {
             append("已从字幕 #").append(eventId)
-            append(" 生成倒影 Event #").append(result.generatedEventId)
+            append(" 生成 ").append(result.generatedEventIds.size).append(" 个 FX Event")
+            if (glow != null) append("（柔光 + 倒影）") else append("（倒影）")
             if (entrance != null) append("，并写入主体翻转入场")
             append("。")
         }
@@ -903,7 +907,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         _state.update { state ->
             state.copy(
                 focusedEventId = eventId.takeIf { id -> state.document.events.any { it.id == id } },
-                selectedEventIds = setOf(eventId, result.generatedEventId)
+                selectedEventIds = (listOf(eventId) + result.generatedEventIds)
                     .filterTo(linkedSetOf()) { id -> state.document.events.any { it.id == id } },
                 selectionAnchorId = null,
             )
