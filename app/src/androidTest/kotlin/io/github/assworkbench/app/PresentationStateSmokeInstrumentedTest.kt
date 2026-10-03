@@ -61,6 +61,10 @@ class PresentationStateSmokeInstrumentedTest {
     fun edgeBookmarkPreservesCanonicalStateAndExistingHistory() =
         assertPresentationInvariant("EDGE_BOOKMARK_EXPERIMENTAL", "edge-bookmark-workspace")
 
+    @Test
+    fun timelineDockPreservesCanonicalStateAndExistingHistory() =
+        assertPresentationInvariant("TIMELINE_DOCK_EXPERIMENTAL", "timeline-dock-workspace")
+
     private fun assertPresentationInvariant(variant: String, rootTag: String) {
         composeRule.onNodeWithTag("recovery-restore")
             .assertIsDisplayed()
