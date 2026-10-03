@@ -83,7 +83,6 @@ internal fun FxCompositionPane(
                     } == true &&
                     runCatching { AssReflectionFadeDirection.valueOf(fadeDirection) }.isSuccess
                 )) &&
-            !(withFade && withEntrance) &&
             (!withGlow || (
                 parsedGlowOpacity?.let { it.isFinite() && it in 0.0..100.0 } == true &&
                     parsedGlowBlur?.let { it.isFinite() && it in 0.0..20.0 } == true &&
@@ -429,13 +428,16 @@ internal fun FxCompositionPane(
 
             if (!valid) {
                 Text(
-                    if (withFade && withEntrance) {
-                        "空间渐隐与翻转/拉伸入场暂不能同时启用：渐隐 Clip 固定在屏幕坐标中，无法可靠跟随旋转与缩放。"
-                    } else {
-                        "参数无效：高度需 > 0；各不透明度 0..100；渐隐末端不透明度不得高于倒影；Blur/Border 0..20；渐隐分段 2..16、深度 > 0；入场至少 2 ms；起始/回弹高度需 > 0；Accel 为空或 > 0。"
-                    },
+                    "参数无效：高度需 > 0；各不透明度 0..100；渐隐末端不透明度不得高于倒影；Blur/Border 0..20；渐隐分段 2..16、深度 > 0；入场至少 2 ms；起始/回弹高度需 > 0；Accel 为空或 > 0。",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.error,
+                )
+            } else if (withFade && withEntrance) {
+                Text(
+                    "组合策略：主体与柔光先完成翻转 / 拉伸入场；渐隐倒影保持隐藏，待几何稳定后再快速显现。这样不会让固定屏幕 Clip 在旋转 / 缩放期间与文字脱节，也不会改变 Karaoke Event 的起始时间。",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.testTag("fx-fade-entrance-deferred-note"),
                 )
             }
 
@@ -504,7 +506,7 @@ internal fun FxCompositionPane(
             }
 
             Text(
-                "位置继承会被解析成显式 \\pos；普通倒影可整体偏移 \\move 路径。启用空间渐隐后，由于 Clip 固定在屏幕坐标中，\\move 会被明确拒绝。",
+                "位置继承会被解析成显式 \\pos；普通倒影可整体偏移 \\move 路径。空间渐隐仍拒绝 \\move；若同时启用翻转入场，渐隐倒影会延后到几何稳定后再显现。",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
