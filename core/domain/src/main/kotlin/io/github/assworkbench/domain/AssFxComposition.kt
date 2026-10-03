@@ -23,11 +23,19 @@ data class AssFlipEntranceSpec(
     val accel: Double? = null,
 )
 
+data class AssGlowFxSpec(
+    val opacityPercent: Double = 22.0,
+    val blur: Double = 4.0,
+    val border: Double = 3.0,
+)
+
 data class AssFxCompositionResult(
     val document: AssDocument,
     val sourceEventId: Long,
-    val generatedEventId: Long,
-)
+    val generatedEventIds: List<Long>,
+) {
+    val generatedEventId: Long get() = generatedEventIds.first()
+}
 
 object AssFxComposition {
     fun composeReflection(
@@ -35,12 +43,90 @@ object AssFxComposition {
         eventId: Long,
         reflection: AssReflectionFxSpec = AssReflectionFxSpec(),
         entrance: AssFlipEntranceSpec? = null,
+    ): AssFxCompositionResult =
+        composeMirrorStack(
+            document = document,
+            eventId = eventId,
+            reflection = reflection,
+            glow = null,
+            entrance = entrance,
+        )
+
+    fun composeMirrorStack(
+        document: AssDocument,
+        eventId: Long,
+        reflection: AssReflectionFxSpec = AssReflectionFxSpec(),
+        glow: AssGlowFxSpec? = AssGlowFxSpec(),
+        entrance: AssFlipEntranceSpec? = null,
     ): AssFxCompositionResult {
-        val created = createReflection(document, eventId, reflection)
-        val composed = entrance?.let {
-            applyFlipEntrance(created.document, eventId, it)
-        } ?: created.document
-        return created.copy(document = composed)
+        var next = document
+        val generated = mutableListOf<Long>()
+
+        if (glow != null) {
+            val glowResult = createGlow(next, eventId, glow)
+            next = glowResult.document
+            generated += glowResult.generatedEventIds
+        }
+
+        val reflectionResult = createReflection(next, eventId, reflection)
+        next = reflectionResult.document
+        generated += reflectionResult.generatedEventIds
+
+        if (entrance != null) {
+            next = applyFlipEntrance(next, eventId, entrance)
+        }
+
+        return AssFxCompositionResult(
+            document = next,
+            sourceEventId = eventId,
+            generatedEventIds = generated,
+        )
+    }
+
+    fun createGlow(
+        document: AssDocument,
+        eventId: Long,
+        spec: AssGlowFxSpec = AssGlowFxSpec(),
+    ): AssFxCompositionResult {
+        require(spec.opacityPercent.isFinite() && spec.opacityPercent in 0.0..100.0) {
+            "柔光不透明度必须在 0..100% 之间。"
+        }
+        require(spec.blur.isFinite() && spec.blur in 0.0..20.0) {
+            "柔光 Blur 必须在 0..20 之间。"
+        }
+        require(spec.border.isFinite() && spec.border in 0.0..20.0) {
+            "柔光 Border 必须在 0..20 之间。"
+        }
+
+        val sourceIndex = document.events.indexOfFirst { it.id == eventId }
+        require(sourceIndex >= 0) { "源字幕不存在。" }
+        val source = document.events[sourceIndex]
+        require(!source.comment) { "Comment 事件不能直接生成可见柔光层。" }
+
+        val alpha = ((1.0 - spec.opacityPercent / 100.0) * 255.0).roundToInt().coerceIn(0, 255)
+        val glowText = appendLeadingOverride(
+            source.text,
+            buildString {
+                append("\\alpha&H").append("%02X".format(alpha)).append("&")
+                if (spec.blur > 0.0) append("\\blur").append(format(spec.blur))
+                if (spec.border > 0.0) append("\\bord").append(format(spec.border))
+            },
+        )
+
+        val newId = (document.events.maxOfOrNull { it.id } ?: 0L) + 1L
+        val glowEvent = source.copy(
+            id = newId,
+            layer = (source.layer - 1).coerceAtLeast(0),
+            text = glowText,
+        )
+        val events = document.events.toMutableList().apply {
+            add(sourceIndex, glowEvent)
+        }
+        return AssFxCompositionResult(
+            document = document.copy(events = events),
+            sourceEventId = eventId,
+            generatedEventIds = listOf(newId),
+        )
     }
 
     fun createReflection(
@@ -145,7 +231,7 @@ object AssFxComposition {
         return AssFxCompositionResult(
             document = document.copy(events = events),
             sourceEventId = eventId,
-            generatedEventId = newId,
+            generatedEventIds = listOf(newId),
         )
     }
 
