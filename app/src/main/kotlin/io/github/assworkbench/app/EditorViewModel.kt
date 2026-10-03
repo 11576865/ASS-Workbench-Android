@@ -86,6 +86,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     private var containerScanJob: Job? = null
     private var waveformSourceUri: String? = null
     private var containerScan: MatroskaScanResult? = null
+    private var containerBaselineScan: MatroskaScanResult? = null
     private var eventFormatClipboard: EventFormatClipboard? = null
     private val workspaceEpoch = AtomicLong(1L)
     private val writeBackSerial = AtomicLong(0L)
@@ -117,6 +118,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         containerScanJob?.cancel()
         containerScanJob = null
         containerScan = null
+        containerBaselineScan = null
         val epoch = workspaceEpoch.incrementAndGet()
         if (resetProjectFonts) fontStore.beginProjectFontSession(epoch, refresh = false)
         _state.update { it.copy(workspaceSessionId = epoch) }
@@ -295,7 +297,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                     loading = true,
                     writeBackAvailable = mkvGoTool.isAvailable(),
                 ),
-                status = "正在扫描 MKV 字幕轨与字体附件……",
+                status = "正在扫描 MKV 容器内容……",
             )
         }
         containerScanJob = viewModelScope.launch {
@@ -334,6 +336,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                     _state.value.container.uri != uri.toString()
                 ) return@onSuccess
                 containerScan = scan
+                containerBaselineScan = scan
                 val tracks = scan.subtitleTracks.map {
                     ContainerTrackUi(it.number, it.displayName, it.language, it.packets.size)
                 }
@@ -343,11 +346,16 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                         container = it.container.copy(
                             loading = false,
                             tracks = tracks,
+                            resources = baselineContainerResources(scan),
+                            inventoryEvidence = ContainerInventoryEvidence.BASELINE,
                             extractedFontCount = imported,
                             skippedAttachmentCount = skipped,
                             error = null,
                         ),
-                        status = "MKV：发现 " + tracks.size + " 个 ASS 轨；注册字体 " + imported + " 个。",
+                        status = "MKV：已检测 " + scan.trackInfos.size + " 条轨道、" +
+                            scan.attachmentInfos.size + " 个附件" +
+                            (if (scan.chapterCount > 0) "、" + scan.chapterCount + " 个章节" else "") +
+                            "；可编辑 ASS 轨 " + tracks.size + " 条。",
                     )
                 }
                 refreshFonts(initial = false)
@@ -369,6 +377,83 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 }
                 if (_state.value.project.videoUri == uri.toString()) {
                     launchMediaAssist(uri)
+                }
+            }
+        }
+    }
+
+    fun rescanContainer() {
+        val snapshot = _state.value
+        val uriText = snapshot.container.uri ?: return
+        if (snapshot.container.loading || snapshot.container.writeBackBusy) return
+        val scanEpoch = workspaceEpoch.get()
+        val uri = Uri.parse(uriText)
+        containerScanJob?.cancel()
+        _state.update {
+            it.copy(
+                container = it.container.copy(loading = true, error = null),
+                status = "正在重新检测 MKV 容器内容……",
+            )
+        }
+        containerScanJob = viewModelScope.launch {
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    val stream = app.contentResolver.openInputStream(uri) ?: error("无法读取 MKV")
+                    stream.use {
+                        MatroskaReader().scan(
+                            input = it,
+                            retainAttachments = false,
+                        )
+                    }
+                }
+            }.onSuccess { scan ->
+                if (
+                    workspaceEpoch.get() != scanEpoch ||
+                    _state.value.container.uri != uriText
+                ) return@onSuccess
+                containerScan = scan
+                val baseline = containerBaselineScan ?: scan.also { containerBaselineScan = it }
+                val tracks = scan.subtitleTracks.map {
+                    ContainerTrackUi(it.number, it.displayName, it.language, it.packets.size)
+                }
+                _state.update { state ->
+                    val selected = state.container.selectedTrackNumber?.takeIf { number ->
+                        scan.subtitleTracks.any { it.number == number }
+                    }
+                    state.copy(
+                        container = state.container.copy(
+                            loading = false,
+                            tracks = tracks,
+                            resources = diffContainerResources(baseline, scan),
+                            inventoryEvidence = ContainerInventoryEvidence.CURRENT_SOURCE,
+                            selectedTrackNumber = selected,
+                            skippedAttachmentCount = scan.skippedAttachmentCount,
+                            error = null,
+                        ),
+                        status = if (
+                            state.container.selectedTrackNumber != null &&
+                            selected == null
+                        ) {
+                            "MKV 已重新检测；当前编辑 ASS 的源轨已不存在，写回前需重新选择轨道。"
+                        } else {
+                            "MKV 容器内容已重新检测；变化已与首次载入基线比较。"
+                        },
+                    )
+                }
+            }.onFailure { error ->
+                if (error is kotlinx.coroutines.CancellationException) return@onFailure
+                if (
+                    workspaceEpoch.get() != scanEpoch ||
+                    _state.value.container.uri != uriText
+                ) return@onFailure
+                _state.update {
+                    it.copy(
+                        container = it.container.copy(
+                            loading = false,
+                            error = error.message ?: "MKV 重新检测失败",
+                        ),
+                        status = "MKV 重新检测失败：" + (error.message ?: error::class.java.simpleName),
+                    )
                 }
             }
         }
@@ -428,7 +513,8 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             return
         }
         val saveEpoch = workspaceEpoch.get()
-        val sourceAssTrackNumbers = containerScan?.subtitleTracks?.map { it.number }
+        val sourceScanSnapshot = containerScan
+        val baselineScanSnapshot = containerBaselineScan ?: sourceScanSnapshot
         val operationId = writeBackSerial.incrementAndGet()
         val sourceUri = snapshot.container.uri?.let(Uri::parse) ?: run {
             reportError("MKV 写回失败", IllegalStateException("没有已打开的 MKV 工程"))
@@ -510,21 +596,30 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                         require(roundTrip.equivalent) {
                             "写回验证失败：" + roundTrip.summary
                         }
-                        sourceAssTrackNumbers?.let { sourceTracks ->
-                            require(verifiedScan.subtitleTracks.map { it.number } == sourceTracks) {
-                                "写回验证失败：ASS 轨身份或顺序发生变化"
+                        sourceScanSnapshot?.let { sourceScan ->
+                            require(verifiedScan.trackPreservationSignature() == sourceScan.trackPreservationSignature()) {
+                                "写回验证失败：容器轨道身份、顺序或元数据发生意外变化"
+                            }
+                            require(verifiedScan.chapterCount == sourceScan.chapterCount) {
+                                "写回验证失败：章节数量发生意外变化"
+                            }
+                            val verifiedAttachments = verifiedScan.attachmentPreservationKeys().toSet()
+                            sourceScan.attachmentPreservationKeys().forEach { key ->
+                                require(key in verifiedAttachments) {
+                                    "写回验证失败：原有附件缺失或身份无法确认"
+                                }
                             }
                         }
 
                         app.contentResolver.openOutputStream(outputUri, "w")?.use { output ->
                             result.inputStream().buffered().use { input -> input.copyTo(output, 1024 * 1024) }
                         } ?: error("无法写入目标 MKV")
-                        result.length()
+                        result.length() to verifiedScan
                     } finally {
                         work.deleteRecursively()
                     }
                 }
-            }.onSuccess { bytes ->
+            }.onSuccess { (bytes, verifiedScan) ->
                 val current = _state.value
                 val sameProject = sameMkvWorkspace(
                     current,
@@ -538,12 +633,18 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 _state.update { state ->
                     state.copy(
                         dirty = if (unchangedSinceSaveStarted) false else state.dirty,
-                        container = state.container.copy(writeBackBusy = false),
+                        container = state.container.copy(
+                            writeBackBusy = false,
+                            resources = baselineScanSnapshot?.let { baseline ->
+                                diffContainerResources(baseline, verifiedScan)
+                            } ?: baselineContainerResources(verifiedScan),
+                            inventoryEvidence = ContainerInventoryEvidence.VERIFIED_OUTPUT,
+                        ),
                         recoveryAvailable = if (unchangedSinceSaveStarted) false else state.recoveryAvailable,
                         recoveryLabel = if (unchangedSinceSaveStarted) "" else state.recoveryLabel,
-                        status = "新 MKV 已保存；视频/音频未重新编码，原 ASS 轨身份与顺序保持" +
-                            (if (packageAssets.isEmpty()) "" else "，并封入所选字体 " + packageAssets.size + " 个") +
-                            "；输出 " + (bytes / (1024 * 1024)) + " MiB。" +
+                        status = "新 MKV 已保存并重新扫描验证；所有原有轨道与章节保持，" +
+                            "输出 " + (bytes / (1024 * 1024)) + " MiB。" +
+                            (if (packageAssets.isEmpty()) "" else " 新封入字体 " + packageAssets.size + " 个。") +
                             if (unchangedSinceSaveStarted) "" else " · 保存期间出现新编辑，当前工程仍未保存。",
                     )
                 }
