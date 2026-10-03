@@ -31,6 +31,7 @@ import io.github.assworkbench.domain.AssReflectionFxSpec
 @Composable
 internal fun FxCompositionPane(
     event: AssEvent,
+    targetEventIds: Set<Long>,
     viewModel: EditorViewModel,
     modifier: Modifier = Modifier,
 ) {
@@ -76,7 +77,11 @@ internal fun FxCompositionPane(
         ) {
             Text("FX Composition · 多层镜像", style = MaterialTheme.typography.titleSmall)
             Text(
-                "一次提交可生成柔光层 + 倒影层，并可给主体写入翻转 / 拉伸关键帧。生成后都是普通独立 ASS Event，没有隐藏联动。",
+                if (targetEventIds.size > 1) {
+                    "当前将对选中的 ${targetEventIds.size} 条字幕一次性生成柔光层 + 倒影层，并可给各自主体写入翻转 / 拉伸关键帧。整个批次只产生一次 Undo 事务。"
+                } else {
+                    "一次提交可生成柔光层 + 倒影层，并可给主体写入翻转 / 拉伸关键帧。生成后都是普通独立 ASS Event，没有隐藏联动。"
+                },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -199,11 +204,12 @@ internal fun FxCompositionPane(
                     val entrance = if (withEntrance) {
                         AssFlipEntranceSpec(durationMs = requireNotNull(parsedEntranceMs))
                     } else null
-                    viewModel.createMirrorFxComposition(event.id, reflection, glow, entrance)
+                    viewModel.createMirrorFxComposition(targetEventIds, reflection, glow, entrance)
                 },
                 modifier = Modifier.fillMaxWidth().testTag("fx-compose-reflection"),
             ) {
                 Text(
+                    (if (targetEventIds.size > 1) "对 ${targetEventIds.size} 条字幕 · " else "") +
                     when {
                         withGlow && withEntrance -> "生成柔光 + 倒影 + 翻转入场"
                         withGlow -> "生成柔光 + 倒影"
