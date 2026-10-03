@@ -151,18 +151,29 @@ internal fun buildContainerEditPlan(state: EditorState): ContainerEditPlanUi {
         )
     }
 
+    val removalTargets = state.container.pendingAttachmentRemovals.mapTo(hashSetOf()) { it.target }
+    val replacementTargets = state.container.pendingAttachmentReplacements.mapTo(hashSetOf()) { it.target }
+    val conflictingAttachmentTargets = removalTargets.intersect(replacementTargets)
+    val currentAttachmentTargets = state.container.resources.mapNotNullTo(hashSetOf()) { it.attachmentTarget }
+    val missingAttachmentTargets = (removalTargets + replacementTargets).filterNot { it in currentAttachmentTargets }
+
     checks += ContainerCompatibilityCheckUi(
         dimension = ContainerCompatibilityDimension.CONTAINER_STRUCTURE,
-        status = if (mutations.isEmpty()) {
-            ContainerCompatibilityStatus.WARNING
-        } else {
-            ContainerCompatibilityStatus.SUPPORTED
+        status = when {
+            conflictingAttachmentTargets.isNotEmpty() -> ContainerCompatibilityStatus.UNSUPPORTED
+            missingAttachmentTargets.isNotEmpty() -> ContainerCompatibilityStatus.UNSUPPORTED
+            mutations.isEmpty() -> ContainerCompatibilityStatus.WARNING
+            else -> ContainerCompatibilityStatus.SUPPORTED
         },
         title = "Matroska 结构",
-        detail = if (mutations.isEmpty()) {
-            "尚无待执行的容器修改。"
-        } else {
-            "当前计划中的 ASS 同槽位替换与 Attachment 添加 / 删除 / 替换，均映射到已实现的 Matroska 写入路径。"
+        detail = when {
+            conflictingAttachmentTargets.isNotEmpty() ->
+                "同一附件不能在一次计划中同时删除和替换：" + conflictingAttachmentTargets.joinToString()
+            missingAttachmentTargets.isNotEmpty() ->
+                "附件目标已不在当前检测 Inventory 中：" + missingAttachmentTargets.joinToString()
+            mutations.isEmpty() -> "尚无待执行的容器修改。"
+            else ->
+                "当前计划中的 ASS 同槽位替换与 Attachment 添加 / 删除 / 替换，均映射到已实现的 Matroska 写入路径。"
         },
     )
 
