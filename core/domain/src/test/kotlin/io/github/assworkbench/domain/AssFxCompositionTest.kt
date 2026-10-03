@@ -55,6 +55,63 @@ class AssFxCompositionTest {
     }
 
     @Test
+    fun generatedFxRejectsMissingOrCaseMismatchedSourceStyle() {
+        val missing = AssDocument(
+            styles = listOf(AssStyle(name = "Default")),
+            events = listOf(
+                AssEvent(
+                    id = 70,
+                    start = SubTime(0),
+                    end = SubTime(1000),
+                    style = "Missing",
+                    text = "Missing style",
+                )
+            )
+        )
+
+        val missingError = assertFailsWith<IllegalStateException> {
+            AssFxComposition.createReflection(missing, 70)
+        }
+        assertTrue(missingError.message.orEmpty().contains("Style"))
+        assertEquals(1, missing.events.size)
+
+        val caseMismatch = missing.copy(
+            events = listOf(
+                missing.events.single().copy(
+                    id = 71,
+                    style = "default",
+                    text = "Case mismatch",
+                )
+            )
+        )
+        assertFailsWith<IllegalStateException> {
+            AssFxComposition.createGlow(caseMismatch, 71)
+        }
+        assertEquals("default", caseMismatch.events.single().style)
+    }
+
+    @Test
+    fun generatedFxFailsClosedWhenEventIdSpaceIsExhausted() {
+        val document = AssDocument(
+            events = listOf(
+                AssEvent(
+                    id = Long.MAX_VALUE,
+                    start = SubTime(0),
+                    end = SubTime(1000),
+                    text = "No id left",
+                )
+            )
+        )
+
+        val error = assertFailsWith<IllegalArgumentException> {
+            AssFxComposition.createGlow(document, Long.MAX_VALUE)
+        }
+
+        assertTrue(error.message.orEmpty().contains("Event ID"))
+        assertEquals(listOf(Long.MAX_VALUE), document.events.map { it.id })
+    }
+
+    @Test
     fun reflectionPreservesZeroScaleAndRejectsNonFiniteDerivedGeometry() {
         val zeroScale = AssDocument(
             events = listOf(
