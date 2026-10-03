@@ -54,6 +54,9 @@ class MkvBridgeInstrumentedTest {
         val addedFont = File(workDir, "AddedFont.otf").apply {
             writeBytes(byteArrayOf(0x4f, 0x54, 0x54, 0x4f) + ByteArray(128) { 0x42 })
         }
+        val cover = File(workDir, "cover.png").apply {
+            writeBytes(byteArrayOf(0x89.toByte(), 0x50, 0x4e, 0x47) + ByteArray(96) { 0x21 })
+        }
         val output = File(workDir, "updated.mkv")
 
         val tool = MkvGoTool(application)
@@ -64,6 +67,7 @@ class MkvBridgeInstrumentedTest {
             editedAss = edited,
             output = output,
             fonts = listOf(addedFont),
+            attachments = listOf(cover),
         )
 
         assertTrue(output.isFile)
@@ -80,7 +84,9 @@ class MkvBridgeInstrumentedTest {
         val attachmentNames = outputScan.attachments.map { it.fileName }.toSet()
         assertTrue("Fixture.ttf" in attachmentNames)
         assertTrue("AddedFont.otf" in attachmentNames)
-        assertEquals(2, outputScan.attachments.size)
+        assertTrue("cover.png" in attachmentNames)
+        assertEquals("image/png", outputScan.attachments.first { it.fileName == "cover.png" }.mimeType)
+        assertEquals(3, outputScan.attachments.size)
 
         val inventoryDiff = diffContainerResources(sourceScan, outputScan)
         assertTrue(
@@ -93,6 +99,40 @@ class MkvBridgeInstrumentedTest {
                 it.title == "AddedFont.otf" && it.change == ContainerResourceChange.ADDED
             }
         )
+        assertTrue(
+            inventoryDiff.any {
+                it.title == "cover.png" && it.change == ContainerResourceChange.ADDED
+            }
+        )
         assertTrue(inventoryDiff.none { it.change == ContainerResourceChange.REMOVED })
     }
+
+    @Test
+    fun nativeBridgeAddsGenericAttachmentWithoutEditingAss() {
+        val source = File(workDir, "attachment-only-source.mkv")
+        InstrumentationRegistry.getInstrumentation().context.assets
+            .open("mkv/source.mkv")
+            .use { input -> source.outputStream().use { output -> input.copyTo(output) } }
+        val before = source.inputStream().use { MatroskaReader().scan(it) }
+
+        val note = File(workDir, "notes.txt").apply {
+            writeText("ASS Workbench attachment-only fixture", Charsets.UTF_8)
+        }
+        val output = File(workDir, "attachment-only-updated.mkv")
+
+        val tool = MkvGoTool(application)
+        assertTrue("x86_64 emulator APK must package the mkvgo helper", tool.isAvailable())
+        tool.addAttachments(source, output, listOf(note))
+
+        val after = output.inputStream().use { MatroskaReader().scan(it) }
+        assertEquals(before.trackPreservationSignature(), after.trackPreservationSignature())
+        assertEquals(before.chapterCount, after.chapterCount)
+        assertEquals(
+            before.subtitleTracks.single().toAss(),
+            after.subtitleTracks.single().toAss(),
+        )
+        assertTrue(after.attachments.any { it.fileName == "notes.txt" && it.mimeType == "text/plain" })
+        assertEquals(before.attachments.size + 1, after.attachments.size)
+    }
+
 }
