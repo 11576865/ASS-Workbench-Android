@@ -34,6 +34,7 @@ import io.github.assworkbench.domain.AssFxComposition
 import io.github.assworkbench.domain.AssReflectionFxSpec
 import io.github.assworkbench.domain.AssFlipEntranceSpec
 import io.github.assworkbench.domain.AssGlowFxSpec
+import io.github.assworkbench.domain.AssFxTemplate
 import io.github.assworkbench.domain.EventFormatClipboard
 import io.github.assworkbench.domain.EventFormatClipboardOps
 import io.github.assworkbench.domain.EventFormatPasteMode
@@ -68,6 +69,12 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     }
     private val recoveryStore = StartupProbe.stage(application, "viewmodel_recovery_store") {
         RecoveryStore(application)
+    }
+    private val fxTemplateStore = StartupProbe.stage(application, "viewmodel_fx_template_store") {
+        FxTemplateStore(application)
+    }
+    private val initialFxTemplateSnapshot = StartupProbe.stage(application, "viewmodel_fx_template_load") {
+        fxTemplateStore.load()
     }
     private var recoveryJob: Job? = null
     private var fontDiagnosticJob: Job? = null
@@ -871,6 +878,46 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                     text = AssAnimationAuthoring.applyNumericTrack(event.text, property, keyframes, accel)
                 )
             })
+        }
+    }
+
+    fun saveFxTemplate(template: AssFxTemplate) {
+        val snapshot = runCatching { fxTemplateStore.save(template) }.getOrElse { error ->
+            _state.update {
+                it.copy(status = "保存 FX 模板失败：" + (error.message ?: error::class.java.simpleName))
+            }
+            return
+        }
+        _fxTemplates.value = snapshot.templates
+        _state.update {
+            it.copy(
+                status = buildString {
+                    append("已保存 FX 模板“").append(template.name).append("”。")
+                    if (snapshot.corruptFileCount > 0) {
+                        append(" 另有 ").append(snapshot.corruptFileCount).append(" 个损坏模板文件已跳过。")
+                    }
+                }
+            )
+        }
+    }
+
+    fun deleteFxTemplate(id: String) {
+        val snapshot = runCatching { fxTemplateStore.delete(id) }.getOrElse { error ->
+            _state.update {
+                it.copy(status = "删除 FX 模板失败：" + (error.message ?: error::class.java.simpleName))
+            }
+            return
+        }
+        _fxTemplates.value = snapshot.templates
+        _state.update {
+            it.copy(
+                status = buildString {
+                    append("已删除 FX 模板。")
+                    if (snapshot.corruptFileCount > 0) {
+                        append(" 另有 ").append(snapshot.corruptFileCount).append(" 个损坏模板文件已跳过。")
+                    }
+                }
+            )
         }
     }
 
