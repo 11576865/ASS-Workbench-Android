@@ -276,6 +276,33 @@ class AssFxCompositionTest {
     }
 
     @Test
+    fun spatialFadeRejectsOpacityThatIncreasesAwayFromSource() {
+        val document = AssDocument(
+            scriptInfo = linkedMapOf("PlayResX" to "1920", "PlayResY" to "1080"),
+            events = listOf(
+                AssEvent(
+                    id = 35,
+                    start = SubTime(0),
+                    end = SubTime(1000),
+                    text = "{\\pos(400,300)}Fade",
+                )
+            )
+        )
+
+        assertFailsWith<IllegalArgumentException> {
+            AssFxComposition.createReflection(
+                document = document,
+                eventId = 35,
+                spec = AssReflectionFxSpec(opacityPercent = 30.0),
+                fade = AssReflectionFadeSpec(
+                    farOpacityPercent = 45.0,
+                    direction = AssReflectionFadeDirection.DOWN,
+                ),
+            )
+        }
+    }
+
+    @Test
     fun entranceKeepsGlowAndReflectionGeometrySynchronized() {
         val document = AssDocument(
             events = listOf(
