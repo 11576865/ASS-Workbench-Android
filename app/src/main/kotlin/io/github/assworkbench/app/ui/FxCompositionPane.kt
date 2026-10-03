@@ -19,6 +19,7 @@ import androidx.compose.ui.unit.dp
 import io.github.assworkbench.app.EditorViewModel
 import io.github.assworkbench.domain.AssEvent
 import io.github.assworkbench.domain.AssFlipEntranceSpec
+import io.github.assworkbench.domain.AssGlowFxSpec
 import io.github.assworkbench.domain.AssReflectionFxSpec
 
 /**
@@ -37,6 +38,10 @@ internal fun FxCompositionPane(
     var scaleY by rememberSaveable(event.id) { mutableStateOf("35") }
     var opacity by rememberSaveable(event.id) { mutableStateOf("35") }
     var blur by rememberSaveable(event.id) { mutableStateOf("1.5") }
+    var withGlow by rememberSaveable(event.id) { mutableStateOf(true) }
+    var glowOpacity by rememberSaveable(event.id) { mutableStateOf("22") }
+    var glowBlur by rememberSaveable(event.id) { mutableStateOf("4") }
+    var glowBorder by rememberSaveable(event.id) { mutableStateOf("3") }
     var withEntrance by rememberSaveable(event.id) { mutableStateOf(true) }
     var entranceMs by rememberSaveable(event.id) { mutableStateOf("280") }
 
@@ -44,12 +49,20 @@ internal fun FxCompositionPane(
     val parsedScale = scaleY.toDoubleOrNull()
     val parsedOpacity = opacity.toDoubleOrNull()
     val parsedBlur = blur.toDoubleOrNull()
+    val parsedGlowOpacity = glowOpacity.toDoubleOrNull()
+    val parsedGlowBlur = glowBlur.toDoubleOrNull()
+    val parsedGlowBorder = glowBorder.toDoubleOrNull()
     val parsedEntranceMs = entranceMs.toLongOrNull()
     val valid =
         parsedOffset?.isFinite() == true &&
             parsedScale?.let { it.isFinite() && it > 0.0 } == true &&
             parsedOpacity?.let { it.isFinite() && it in 0.0..100.0 } == true &&
             parsedBlur?.let { it.isFinite() && it in 0.0..20.0 } == true &&
+            (!withGlow || (
+                parsedGlowOpacity?.let { it.isFinite() && it in 0.0..100.0 } == true &&
+                    parsedGlowBlur?.let { it.isFinite() && it in 0.0..20.0 } == true &&
+                    parsedGlowBorder?.let { it.isFinite() && it in 0.0..20.0 } == true
+                )) &&
             (!withEntrance || (parsedEntranceMs != null && parsedEntranceMs >= 2L))
 
     Surface(
@@ -61,9 +74,9 @@ internal fun FxCompositionPane(
             Modifier.padding(10.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Text("FX Composition · 倒影 / 翻转入场", style = MaterialTheme.typography.titleSmall)
+            Text("FX Composition · 多层镜像", style = MaterialTheme.typography.titleSmall)
             Text(
-                "一次提交生成独立倒影 Event；生成后没有隐藏联动，可分别编辑、移动或删除。主体可同时写入关键帧翻转入场。",
+                "一次提交可生成柔光层 + 倒影层，并可给主体写入翻转 / 拉伸关键帧。生成后都是普通独立 ASS Event，没有隐藏联动。",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -106,6 +119,43 @@ internal fun FxCompositionPane(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Switch(
+                    checked = withGlow,
+                    onCheckedChange = { withGlow = it },
+                    modifier = Modifier.testTag("fx-mirror-with-glow"),
+                )
+                Text("生成主体后方柔光层")
+            }
+            if (withGlow) {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    OutlinedTextField(
+                        value = glowOpacity,
+                        onValueChange = { glowOpacity = it },
+                        label = { Text("柔光不透明度 %") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f).testTag("fx-glow-opacity"),
+                    )
+                    OutlinedTextField(
+                        value = glowBlur,
+                        onValueChange = { glowBlur = it },
+                        label = { Text("柔光 Blur") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f).testTag("fx-glow-blur"),
+                    )
+                }
+                OutlinedTextField(
+                    value = glowBorder,
+                    onValueChange = { glowBorder = it },
+                    label = { Text("柔光 Border") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().testTag("fx-glow-border"),
+                )
+            }
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Switch(
                     checked = withEntrance,
                     onCheckedChange = { withEntrance = it },
                     modifier = Modifier.testTag("fx-reflection-with-entrance"),
@@ -124,7 +174,7 @@ internal fun FxCompositionPane(
 
             if (!valid) {
                 Text(
-                    "参数无效：高度需 > 0；不透明度 0..100；Blur 0..20；入场至少 2 ms。",
+                    "参数无效：高度需 > 0；各不透明度 0..100；Blur/Border 0..20；入场至少 2 ms。",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.error,
                 )
@@ -139,14 +189,28 @@ internal fun FxCompositionPane(
                         opacityPercent = requireNotNull(parsedOpacity),
                         blur = requireNotNull(parsedBlur),
                     )
+                    val glow = if (withGlow) {
+                        AssGlowFxSpec(
+                            opacityPercent = requireNotNull(parsedGlowOpacity),
+                            blur = requireNotNull(parsedGlowBlur),
+                            border = requireNotNull(parsedGlowBorder),
+                        )
+                    } else null
                     val entrance = if (withEntrance) {
                         AssFlipEntranceSpec(durationMs = requireNotNull(parsedEntranceMs))
                     } else null
-                    viewModel.createReflectionFxComposition(event.id, reflection, entrance)
+                    viewModel.createMirrorFxComposition(event.id, reflection, glow, entrance)
                 },
                 modifier = Modifier.fillMaxWidth().testTag("fx-compose-reflection"),
             ) {
-                Text(if (withEntrance) "生成倒影 + 翻转入场" else "生成倒影 Event")
+                Text(
+                    when {
+                        withGlow && withEntrance -> "生成柔光 + 倒影 + 翻转入场"
+                        withGlow -> "生成柔光 + 倒影"
+                        withEntrance -> "生成倒影 + 翻转入场"
+                        else -> "生成倒影 Event"
+                    }
+                )
             }
 
             Text(
