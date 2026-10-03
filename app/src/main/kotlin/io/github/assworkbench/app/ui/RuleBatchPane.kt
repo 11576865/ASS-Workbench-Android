@@ -78,25 +78,98 @@ internal fun RuleBatchPane(
         )
     } else null
 
+    val parsedLayerFilter = layerFilter.trim().takeIf { it.isNotEmpty() }?.toIntOrNull()
+    val parsedRawRegexFilter = rawRegexFilter.takeIf { it.isNotBlank() }?.let { raw ->
+        runCatching { Regex(raw) }.getOrNull()
+    }
+    val parsedDurationMin = durationMin.takeIf { it.isNotBlank() }?.toLongOrNull()
+    val parsedDurationMax = durationMax.takeIf { it.isNotBlank() }?.toLongOrNull()
+    val parsedShift = shiftText.takeIf { it.isNotBlank() }?.toLongOrNull()
+    val parsedLayerAction = layerText.takeIf { it.isNotBlank() }?.toIntOrNull()
+    val parsedMarginL = marginL.takeIf { it.isNotBlank() }?.toIntOrNull()
+    val parsedMarginR = marginR.takeIf { it.isNotBlank() }?.toIntOrNull()
+    val parsedMarginV = marginV.takeIf { it.isNotBlank() }?.toIntOrNull()
+    val parsedReplaceRegex = regexFind.takeIf { it.isNotBlank() }?.let { raw ->
+        runCatching { Regex(raw) }.getOrNull()
+    }
+    val parsedTimingOrigin = timingOrigin.toLongOrNull()
+    val parsedTimingNumerator = timingNumerator.takeIf { it.isNotBlank() }?.toLongOrNull()
+    val parsedTimingDenominator = timingDenominator.takeIf { it.isNotBlank() }?.toLongOrNull()
+    val timingScaleRequested = timingNumerator.isNotBlank() || timingDenominator.isNotBlank()
+    val parsedOverrideProperty = AssTransformVisualProperty.entries
+        .firstOrNull { it.name == overridePropertyName }
+    val parsedOverrideValue = overrideValue.takeIf { it.isNotBlank() }?.toDoubleOrNull()
+
+    val batchInputError = buildList {
+        if (layerFilter.isNotBlank() && parsedLayerFilter == null) {
+            add("Layer Filter 必须是整数。")
+        }
+        if (rawRegexFilter.isNotBlank() && parsedRawRegexFilter == null) {
+            add("Raw ASS Regex filter 无效。")
+        }
+        if (durationMin.isNotBlank() && (parsedDurationMin == null || parsedDurationMin < 0L)) {
+            add("最短时长必须是 ≥ 0 的整数毫秒。")
+        }
+        if (durationMax.isNotBlank() && (parsedDurationMax == null || parsedDurationMax < 0L)) {
+            add("最长时长必须是 ≥ 0 的整数毫秒。")
+        }
+        if (parsedDurationMin != null && parsedDurationMax != null && parsedDurationMin > parsedDurationMax) {
+            add("最短时长不能大于最长时长。")
+        }
+        if (shiftText.isNotBlank() && parsedShift == null) {
+            add("时间平移必须是整数毫秒。")
+        }
+        if (layerText.isNotBlank() && parsedLayerAction == null) {
+            add("目标 Layer 必须是整数。")
+        }
+        if (marginL.isNotBlank() && parsedMarginL == null) add("MarginL 必须是整数。")
+        if (marginR.isNotBlank() && parsedMarginR == null) add("MarginR 必须是整数。")
+        if (marginV.isNotBlank() && parsedMarginV == null) add("MarginV 必须是整数。")
+        if (regexFind.isNotBlank() && parsedReplaceRegex == null) {
+            add("Regex 查找表达式无效。")
+        }
+        if (timingScaleRequested) {
+            if (parsedTimingOrigin == null) add("时间缩放原点必须是整数毫秒。")
+            if (parsedTimingNumerator == null || parsedTimingNumerator <= 0L) {
+                add("时间倍率分子必须是正整数。")
+            }
+            if (parsedTimingDenominator == null || parsedTimingDenominator <= 0L) {
+                add("时间倍率分母必须是正整数。")
+            }
+        }
+        if (overrideValue.isNotBlank()) {
+            if (parsedOverrideProperty == null) {
+                add("数值 override 属性无效。")
+            }
+            if (parsedOverrideValue?.isFinite() != true) {
+                add("数值 override 必须是有限数字。")
+            } else if (
+                parsedOverrideProperty?.minimum != null &&
+                parsedOverrideValue < parsedOverrideProperty.minimum
+            ) {
+                add("${parsedOverrideProperty.name} 不能小于 ${parsedOverrideProperty.minimum}。")
+            }
+        }
+        if (karaokeRevealEnabled && karaokeRevealSpec == null) {
+            add("Karaoke FX 参数无效：显现时长需 ≥ 0；Blur 0..20；Accel 为空或 > 0。")
+        }
+    }.firstOrNull()
+
     fun filter(): AssBatchFilter {
         val filters = buildList<AssBatchFilter> {
             if (selectedOnly) add(AssBatchFilter.EventIds(uiState.selection.eventIds))
             styleFilter.trim().takeIf(String::isNotEmpty)?.let { add(AssBatchFilter.StyleIs(it)) }
             textFilter.takeIf(String::isNotEmpty)?.let { add(AssBatchFilter.TextContains(it)) }
             actorFilter.takeIf(String::isNotEmpty)?.let { add(AssBatchFilter.ActorContains(it)) }
-            layerFilter.toIntOrNull()?.let { add(AssBatchFilter.LayerIs(it)) }
+            parsedLayerFilter?.let { add(AssBatchFilter.LayerIs(it)) }
             tagFilter.trim().removePrefix("\\").takeIf(String::isNotEmpty)?.let { add(AssBatchFilter.HasTag(it)) }
             when (commentFilter) {
                 "DIALOGUE" -> add(AssBatchFilter.CommentIs(false))
                 "COMMENT" -> add(AssBatchFilter.CommentIs(true))
             }
-            rawRegexFilter.takeIf(String::isNotBlank)?.let { raw ->
-                runCatching { Regex(raw) }.getOrNull()?.let { add(AssBatchFilter.RawRegex(it)) }
-            }
-            val minDuration = durationMin.toLongOrNull()
-            val maxDuration = durationMax.toLongOrNull()
-            if (minDuration != null || maxDuration != null) {
-                add(AssBatchFilter.DurationRange(minDuration ?: 0L, maxDuration ?: Long.MAX_VALUE))
+            parsedRawRegexFilter?.let { add(AssBatchFilter.RawRegex(it)) }
+            if (parsedDurationMin != null || parsedDurationMax != null) {
+                add(AssBatchFilter.DurationRange(parsedDurationMin ?: 0L, parsedDurationMax ?: Long.MAX_VALUE))
             }
             // Keep the compiler-backed compatibility filter last so cheap scope/text/style
             // predicates can short-circuit before full Karaoke FX inspection.
@@ -113,35 +186,46 @@ internal fun RuleBatchPane(
 
     fun recipe(): AssBatchRecipe {
         val actions = buildList<AssBatchAction> {
-            shiftText.toLongOrNull()?.takeIf { it != 0L }?.let { add(AssBatchAction.ShiftTime(it)) }
+            parsedShift?.takeIf { it != 0L }?.let { add(AssBatchAction.ShiftTime(it)) }
             styleText.trim().takeIf(String::isNotEmpty)?.let { add(AssBatchAction.SetStyle(it)) }
-            layerText.toIntOrNull()?.let { add(AssBatchAction.SetLayer(it)) }
+            parsedLayerAction?.let { add(AssBatchAction.SetLayer(it)) }
             actorText.takeIf(String::isNotEmpty)?.let { add(AssBatchAction.SetActor(it)) }
             if (marginL.isNotBlank() || marginR.isNotBlank() || marginV.isNotBlank()) {
-                add(AssBatchAction.SetMargins(marginL.toIntOrNull(), marginR.toIntOrNull(), marginV.toIntOrNull()))
+                add(AssBatchAction.SetMargins(parsedMarginL, parsedMarginR, parsedMarginV))
             }
             findText.takeIf(String::isNotEmpty)?.let { add(AssBatchAction.ReplacePlainText(it, replaceText)) }
             when (commentAction) {
                 "DIALOGUE" -> add(AssBatchAction.SetComment(false))
                 "COMMENT" -> add(AssBatchAction.SetComment(true))
             }
-            regexFind.takeIf(String::isNotBlank)?.let { raw ->
-                runCatching { Regex(raw) }.getOrNull()?.let { pattern ->
-                    add(
-                        if (regexRaw) AssBatchAction.ReplaceRawRegex(pattern, regexReplace)
-                        else AssBatchAction.ReplaceVisibleRegex(pattern, regexReplace)
+            parsedReplaceRegex?.let { pattern ->
+                add(
+                    if (regexRaw) AssBatchAction.ReplaceRawRegex(pattern, regexReplace)
+                    else AssBatchAction.ReplaceVisibleRegex(pattern, regexReplace)
+                )
+            }
+            if (
+                timingScaleRequested &&
+                parsedTimingOrigin != null &&
+                parsedTimingNumerator != null &&
+                parsedTimingDenominator != null &&
+                parsedTimingNumerator > 0L &&
+                parsedTimingDenominator > 0L
+            ) {
+                add(
+                    AssBatchAction.ScaleTiming(
+                        parsedTimingOrigin,
+                        parsedTimingNumerator,
+                        parsedTimingDenominator,
                     )
-                }
+                )
             }
-            val numerator = timingNumerator.toLongOrNull()
-            val denominator = timingDenominator.toLongOrNull()
-            if (numerator != null && denominator != null && numerator > 0 && denominator > 0) {
-                add(AssBatchAction.ScaleTiming(timingOrigin.toLongOrNull() ?: 0L, numerator, denominator))
-            }
-            overrideValue.toDoubleOrNull()?.let { value ->
-                AssTransformVisualProperty.entries.firstOrNull { it.name == overridePropertyName }?.let { property ->
-                    add(AssBatchAction.SetNumericOverride(property, value))
-                }
+            if (
+                parsedOverrideProperty != null &&
+                parsedOverrideValue?.isFinite() == true &&
+                (parsedOverrideProperty.minimum == null || parsedOverrideValue >= parsedOverrideProperty.minimum)
+            ) {
+                add(AssBatchAction.SetNumericOverride(parsedOverrideProperty, parsedOverrideValue))
             }
             if (karaokeRevealEnabled) {
                 karaokeRevealSpec?.let { add(AssBatchAction.ApplyKaraokeRevealFx(it)) }
@@ -158,34 +242,15 @@ internal fun RuleBatchPane(
         regexFind, regexReplace, regexRaw, timingOrigin, timingNumerator, timingDenominator, overridePropertyName, overrideValue,
         karaokeRevealEnabled, karaokeRevealMs, karaokeRevealBlur, karaokeRevealAccel,
     ) { recipe() }
-    val automaticPreviewResult = remember(state.document, recipe, karaokeRevealEnabled) {
-        if (karaokeRevealEnabled) {
-            null
-        } else {
-            runCatching { AssBatchEngine.preview(state.document, recipe) }
-        }
-    }
-    var explicitKaraokePreview by remember(state.document, recipe) {
+    var explicitPreview by remember(state.document, recipe) {
         mutableStateOf<AssBatchPreview?>(null)
     }
-    var explicitKaraokePreviewError by remember(state.document, recipe) {
+    var explicitPreviewError by remember(state.document, recipe) {
         mutableStateOf<String?>(null)
     }
-    val preview = if (karaokeRevealEnabled) {
-        explicitKaraokePreview
-    } else {
-        automaticPreviewResult?.getOrNull()
-    }
-    val previewError = when {
-        karaokeRevealEnabled && karaokeRevealSpec == null ->
-            "Karaoke FX 参数无效，未生成批处理配方。"
-        karaokeRevealEnabled -> explicitKaraokePreviewError
-        else -> automaticPreviewResult?.exceptionOrNull()?.message
-    }
-    val previewPending = karaokeRevealEnabled &&
-        karaokeRevealSpec != null &&
-        preview == null &&
-        previewError == null
+    val preview = explicitPreview
+    val previewError = batchInputError ?: explicitPreviewError
+    val previewPending = batchInputError == null && preview == null && previewError == null
     val changedExamples = remember(state.document, preview) {
         if (preview == null) {
             emptyList()
@@ -339,17 +404,16 @@ internal fun RuleBatchPane(
 
         HorizontalDivider()
         Text("Preview", style = MaterialTheme.typography.labelLarge)
-        if (karaokeRevealEnabled && karaokeRevealSpec != null) {
-            OutlinedButton(
-                onClick = {
-                    val result = runCatching { AssBatchEngine.preview(state.document, recipe) }
-                    explicitKaraokePreview = result.getOrNull()
-                    explicitKaraokePreviewError = result.exceptionOrNull()?.message
-                },
-                modifier = Modifier.fillMaxWidth().testTag("batch-preview-explicit"),
-            ) {
-                Text("预检并生成批处理预览")
-            }
+        OutlinedButton(
+            onClick = {
+                val result = runCatching { AssBatchEngine.preview(state.document, recipe) }
+                explicitPreview = result.getOrNull()
+                explicitPreviewError = result.exceptionOrNull()?.message
+            },
+            enabled = batchInputError == null,
+            modifier = Modifier.fillMaxWidth().testTag("batch-preview-explicit"),
+        ) {
+            Text("预检并生成批处理预览")
         }
         when {
             previewError != null -> {
@@ -362,7 +426,7 @@ internal fun RuleBatchPane(
             }
             previewPending -> {
                 Text(
-                    "Karaoke 批次尚未执行完整预检；修改参数时不会扫描整个文档。",
+                    "当前配方尚未执行完整预检；修改参数时不会扫描整个文档。",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.testTag("batch-preview-pending"),
