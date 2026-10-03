@@ -35,6 +35,32 @@ class AssKaraokeFxAuthoringTest {
     }
 
     @Test
+    fun compatibilityExplainsSafeAndUnsafeKaraokeWithoutMutatingText() {
+        val safe = "{\\k20}Hi{\\kf30}there"
+        val safeCheck = AssKaraokeFxAuthoring.inspectProgressiveRevealCompatibility(safe)
+        assertTrue(safeCheck.compatible)
+        assertEquals(2, safeCheck.segmentCount)
+        assertEquals(null, safeCheck.reason)
+
+        val absolute = AssKaraokeFxAuthoring.inspectProgressiveRevealCompatibility("{\\kt50}A")
+        assertTrue(!absolute.compatible)
+        assertTrue(absolute.reason?.contains("\\kt") == true)
+
+        val controlled = AssKaraokeFxAuthoring.inspectProgressiveRevealCompatibility(
+            "{\\k20}A{\\t(0,100,\\blur2)}B{\\k20}C"
+        )
+        assertTrue(!controlled.compatible)
+        assertTrue(controlled.reason?.contains("alpha / blur / transform") == true)
+    }
+
+    @Test
+    fun revealSpecRejectsInvalidValuesAtConstructionBoundary() {
+        assertFailsWith<IllegalArgumentException> { AssKaraokeRevealFxSpec(revealMs = -1) }
+        assertFailsWith<IllegalArgumentException> { AssKaraokeRevealFxSpec(startBlur = 21.0) }
+        assertFailsWith<IllegalArgumentException> { AssKaraokeRevealFxSpec(accel = 0.0) }
+    }
+
+    @Test
     fun rejectsAbsoluteKtAndExistingControlledFx() {
         assertFailsWith<IllegalArgumentException> {
             AssKaraokeFxAuthoring.applyProgressiveReveal("{\\kt50}A")

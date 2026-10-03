@@ -4,6 +4,22 @@ data class AssKaraokeRevealFxSpec(
     val revealMs: Long = 160L,
     val startBlur: Double = 3.5,
     val accel: Double? = null,
+) {
+    init {
+        require(revealMs >= 0L) { "逐音节显现时长不能为负数。" }
+        require(startBlur.isFinite() && startBlur in 0.0..20.0) {
+            "逐音节起始 Blur 必须在 0..20 之间。"
+        }
+        if (accel != null) require(accel.isFinite() && accel > 0.0) {
+            "Accel 必须大于 0。"
+        }
+    }
+}
+
+data class AssKaraokeRevealCompatibility(
+    val compatible: Boolean,
+    val segmentCount: Int,
+    val reason: String? = null,
 )
 
 data class AssKaraokeRevealFxPlan(
@@ -27,36 +43,55 @@ object AssKaraokeFxAuthoring {
         RegexOption.IGNORE_CASE,
     )
 
-    fun planProgressiveReveal(
-        text: String,
-        spec: AssKaraokeRevealFxSpec = AssKaraokeRevealFxSpec(),
-    ): AssKaraokeRevealFxPlan {
-        require(spec.revealMs >= 0L) { "逐音节显现时长不能为负数。" }
-        require(spec.startBlur.isFinite() && spec.startBlur in 0.0..20.0) {
-            "逐音节起始 Blur 必须在 0..20 之间。"
-        }
-        if (spec.accel != null) {
-            require(spec.accel.isFinite() && spec.accel > 0.0) { "Accel 必须大于 0。" }
-        }
-
+    fun inspectProgressiveRevealCompatibility(text: String): AssKaraokeRevealCompatibility {
         val segments = AssKaraokeCodec.parse(text)
-        require(segments.isNotEmpty()) { "当前 Event 没有可用的 Karaoke 音节。" }
-        require(segments.none { it.mode == AssKaraokeMode.KT }) {
-            "\\kt 使用绝对 Karaoke 时间；当前逐音节 FX 编译器不会把它误当累计时长。"
+        if (segments.isEmpty()) {
+            return AssKaraokeRevealCompatibility(
+                compatible = false,
+                segmentCount = 0,
+                reason = "没有可用的 Karaoke 音节。",
+            )
         }
-
-        var cursorMs = 0L
-        val patched = segments.mapIndexed { index, segment ->
+        if (segments.any { it.mode == AssKaraokeMode.KT }) {
+            return AssKaraokeRevealCompatibility(
+                compatible = false,
+                segmentCount = segments.size,
+                reason = "\\kt 使用绝对 Karaoke 时间，不能按累计时长生成逐音节显现。",
+            )
+        }
+        segments.forEachIndexed { index, segment ->
             val ownedSyntax = buildString {
                 if (index == 0) append(segment.leadingText)
                 append(segment.overridePrefix)
                 append(segment.overrideSuffix)
                 append(segment.text)
             }
-            require(!conflictingTag.containsMatchIn(ownedSyntax)) {
-                "第 ${index + 1} 个音节已有 alpha / blur / transform；自动 FX 已停止，避免覆盖原特效。"
+            if (conflictingTag.containsMatchIn(ownedSyntax)) {
+                return AssKaraokeRevealCompatibility(
+                    compatible = false,
+                    segmentCount = segments.size,
+                    reason = "第 ${index + 1} 个音节已有 alpha / blur / transform。",
+                )
             }
+        }
+        return AssKaraokeRevealCompatibility(
+            compatible = true,
+            segmentCount = segments.size,
+        )
+    }
 
+    fun planProgressiveReveal(
+        text: String,
+        spec: AssKaraokeRevealFxSpec = AssKaraokeRevealFxSpec(),
+    ): AssKaraokeRevealFxPlan {
+        val compatibility = inspectProgressiveRevealCompatibility(text)
+        require(compatibility.compatible) {
+            compatibility.reason ?: "当前 Event 不能安全生成逐音节显现。"
+        }
+
+        val segments = AssKaraokeCodec.parse(text)
+        var cursorMs = 0L
+        val patched = segments.map { segment ->
             val segmentDurationMs = segment.centiseconds.toLong() * 10L
             val revealDuration = minOf(spec.revealMs, segmentDurationMs)
             val endMs = cursorMs + revealDuration
