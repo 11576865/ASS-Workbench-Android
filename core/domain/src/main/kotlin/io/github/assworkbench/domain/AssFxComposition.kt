@@ -335,7 +335,7 @@ object AssFxComposition {
                 val p = requireNotNull(geometry.position)
                 AssGeometrySemantic.patchPosition(
                     reflectedText,
-                    p.x.coerceIn(0.0, document.playResX.toDouble()),
+                    p.x,
                     (p.y + spec.offsetY).coerceIn(0.0, document.playResY.toDouble()),
                 )
             }
@@ -344,11 +344,11 @@ object AssFxComposition {
                 AssGeometrySemantic.patchMove(
                     reflectedText,
                     start = AssPoint(
-                        move.start.x.coerceIn(0.0, document.playResX.toDouble()),
+                        move.start.x,
                         (move.start.y + spec.offsetY).coerceIn(0.0, document.playResY.toDouble()),
                     ),
                     end = AssPoint(
-                        move.end.x.coerceIn(0.0, document.playResX.toDouble()),
+                        move.end.x,
                         (move.end.y + spec.offsetY).coerceIn(0.0, document.playResY.toDouble()),
                     ),
                     startMs = move.startMs,
@@ -369,7 +369,7 @@ object AssFxComposition {
         geometry.origin?.let { origin ->
             reflectedText = AssGeometrySemantic.patchOrigin(
                 reflectedText,
-                origin.x.coerceIn(0.0, document.playResX.toDouble()),
+                origin.x,
                 (origin.y + spec.offsetY).coerceIn(0.0, document.playResY.toDouble()),
             )
         }
