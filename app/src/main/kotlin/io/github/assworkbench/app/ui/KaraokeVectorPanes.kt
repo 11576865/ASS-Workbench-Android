@@ -57,26 +57,51 @@ internal fun KaraokePane(
             var revealMs by rememberSaveable(event.id) { mutableStateOf("160") }
             var revealBlur by rememberSaveable(event.id) { mutableStateOf("3.5") }
             var revealAccel by rememberSaveable(event.id) { mutableStateOf("") }
+            var withFlip by rememberSaveable(event.id) { mutableStateOf(true) }
+            var flipStartScale by rememberSaveable(event.id) { mutableStateOf("12") }
+            var flipOvershoot by rememberSaveable(event.id) { mutableStateOf("118") }
+            var flipRotationX by rememberSaveable(event.id) { mutableStateOf("86") }
+
             val parsedRevealMs = revealMs.toLongOrNull()
             val parsedRevealBlur = revealBlur.toDoubleOrNull()
             val parsedRevealAccel = revealAccel.takeIf { it.isNotBlank() }?.toDoubleOrNull()
+            val parsedFlipStartScale = flipStartScale.toDoubleOrNull()
+            val parsedFlipOvershoot = flipOvershoot.toDoubleOrNull()
+            val parsedFlipRotationX = flipRotationX.toDoubleOrNull()
+
             val revealSpec = if (
                 parsedRevealMs != null && parsedRevealMs >= 0L &&
                 parsedRevealBlur?.let { it.isFinite() && it in 0.0..20.0 } == true &&
-                (revealAccel.isBlank() || parsedRevealAccel?.let { it.isFinite() && it > 0.0 } == true)
+                (revealAccel.isBlank() || parsedRevealAccel?.let { it.isFinite() && it > 0.0 } == true) &&
+                (!withFlip || (
+                    parsedFlipStartScale?.let { it.isFinite() && it > 0.0 } == true &&
+                        parsedFlipOvershoot?.let { it.isFinite() && it > 0.0 } == true &&
+                        parsedFlipRotationX?.isFinite() == true
+                    ))
             ) {
                 AssKaraokeRevealFxSpec(
                     revealMs = parsedRevealMs,
                     startBlur = parsedRevealBlur,
                     accel = parsedRevealAccel,
+                    flip = if (withFlip) {
+                        AssKaraokeFlipFxSpec(
+                            startScalePercent = requireNotNull(parsedFlipStartScale),
+                            overshootScalePercent = requireNotNull(parsedFlipOvershoot),
+                            startRotationXDegrees = requireNotNull(parsedFlipRotationX),
+                        )
+                    } else null,
                 )
             } else null
-            val revealCompatibility = remember(event.text, revealSpec) {
+            val revealCompatibility = remember(event.text, event.style, state.document.styles, revealSpec) {
                 revealSpec?.let { spec ->
-                    runCatching { AssKaraokeFxAuthoring.planProgressiveReveal(event.text, spec) }
+                    runCatching { AssKaraokeFxAuthoring.planProgressiveReveal(state.document, event.id, spec) }
                 }
             }
             val revealError = revealCompatibility?.exceptionOrNull()?.message
+
+            DisposableEffect(event.id) {
+                onDispose { viewModel.clearTransientPreview("karaoke-fx:${event.id}") }
+            }
 
             Surface(
                 color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.38f),
@@ -89,7 +114,7 @@ internal fun KaraokePane(
                 ) {
                     Text("Karaoke FX · 逐音节显现", style = MaterialTheme.typography.titleSmall)
                     Text(
-                        "按 Karaoke 累计时间给每个音节写入独立 alpha / blur transform；不拆 Event，也不需要猜测字形宽度。",
+                        "按 Karaoke 累计时间给每个音节写入 alpha / blur；可叠加基于本 Event 有效 Scale Y / Rotation X 的翻转拉伸。仍保持单 Event，不猜字形宽度。",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -116,9 +141,44 @@ internal fun KaraokePane(
                             modifier = Modifier.weight(1f),
                         )
                     }
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Switch(
+                            checked = withFlip,
+                            onCheckedChange = { withFlip = it },
+                        )
+                        Text("翻转 / 拉伸显现")
+                    }
+                    if (withFlip) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            OutlinedTextField(
+                                value = flipStartScale,
+                                onValueChange = { flipStartScale = it },
+                                label = { Text("起始高度 %") },
+                                singleLine = true,
+                                modifier = Modifier.weight(1f),
+                            )
+                            OutlinedTextField(
+                                value = flipOvershoot,
+                                onValueChange = { flipOvershoot = it },
+                                label = { Text("回弹高度 %") },
+                                singleLine = true,
+                                modifier = Modifier.weight(1f),
+                            )
+                            OutlinedTextField(
+                                value = flipRotationX,
+                                onValueChange = { flipRotationX = it },
+                                label = { Text("起始 X 旋转 °") },
+                                singleLine = true,
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                    }
                     if (revealSpec == null) {
                         Text(
-                            "参数无效：显现时长需 ≥ 0；Blur 0..20；Accel 为空或 > 0。",
+                            "参数无效：显现时长需 ≥ 0；Blur 0..20；Accel 为空或 > 0；翻转开启时起始/回弹高度需 > 0，Rotation X 必须是有限数字。",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.error,
                         )
@@ -129,14 +189,34 @@ internal fun KaraokePane(
                             color = MaterialTheme.colorScheme.error,
                         )
                     }
-                    Button(
-                        enabled = revealSpec != null && revealError == null,
-                        onClick = {
-                            revealSpec?.let { viewModel.applyKaraokeRevealFx(event.id, it) }
-                        },
-                        modifier = Modifier.fillMaxWidth(),
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        Text("写入 ${segments.size} 个逐音节 FX")
+                        OutlinedButton(
+                            enabled = revealSpec != null && revealError == null,
+                            onClick = {
+                                revealSpec?.let { viewModel.previewKaraokeRevealFx(event.id, it) }
+                            },
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            Text("预览")
+                        }
+                        Button(
+                            enabled = revealSpec != null && revealError == null,
+                            onClick = {
+                                revealSpec?.let { viewModel.applyKaraokeRevealFx(event.id, it) }
+                            },
+                            modifier = Modifier.weight(2f),
+                        ) {
+                            Text(
+                                if (withFlip) {
+                                    "写入 ${segments.size} 个翻转显现 FX"
+                                } else {
+                                    "写入 ${segments.size} 个逐音节 FX"
+                                }
+                            )
+                        }
                     }
                 }
             }
