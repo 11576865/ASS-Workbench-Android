@@ -1012,6 +1012,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 eventIds = eventIds,
                 reflection = reflection,
                 glow = glow,
+                fade = fade,
                 entrance = entrance,
             )
         }.getOrElse { error ->
