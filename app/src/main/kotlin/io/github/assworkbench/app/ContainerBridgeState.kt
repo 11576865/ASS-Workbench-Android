@@ -41,6 +41,13 @@ data class ContainerTrackUi(
     val eventCount: Int,
 )
 
+data class PendingContainerAttachmentUi(
+    val uri: String,
+    val name: String,
+    val mimeType: String,
+    val sizeBytes: Long? = null,
+)
+
 data class ContainerBridgeState(
     val uri: String? = null,
     val name: String = "",
@@ -49,6 +56,7 @@ data class ContainerBridgeState(
     val resources: List<ContainerResourceUi> = emptyList(),
     val inventoryEvidence: ContainerInventoryEvidence = ContainerInventoryEvidence.BASELINE,
     val selectedTrackNumber: Long? = null,
+    val pendingAttachments: List<PendingContainerAttachmentUi> = emptyList(),
     val extractedFontCount: Int = 0,
     val skippedAttachmentCount: Int = 0,
     val writeBackAvailable: Boolean = false,
