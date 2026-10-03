@@ -327,12 +327,22 @@ internal fun RuleBatchPane(
         Text("Transform", style = MaterialTheme.typography.labelLarge)
         OutlinedTextField(shiftText, { shiftText = it }, label = { Text("时间平移 ms") }, modifier = Modifier.fillMaxWidth())
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            OutlinedTextField(styleText, { styleText = it }, label = { Text("设 Style") }, modifier = Modifier.weight(1f))
+            OutlinedTextField(
+                styleText,
+                { styleText = it },
+                label = { Text("设 Style") },
+                modifier = Modifier.weight(1f).testTag("batch-style-action"),
+            )
             OutlinedTextField(layerText, { layerText = it }, label = { Text("设 Layer") }, modifier = Modifier.weight(1f))
         }
         OutlinedTextField(actorText, { actorText = it }, label = { Text("设 Actor/Name") }, modifier = Modifier.fillMaxWidth())
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            OutlinedTextField(marginL, { marginL = it }, label = { Text("MarginL") }, modifier = Modifier.weight(1f))
+            OutlinedTextField(
+                marginL,
+                { marginL = it },
+                label = { Text("MarginL") },
+                modifier = Modifier.weight(1f).testTag("batch-margin-l"),
+            )
             OutlinedTextField(marginR, { marginR = it }, label = { Text("MarginR") }, modifier = Modifier.weight(1f))
             OutlinedTextField(marginV, { marginV = it }, label = { Text("MarginV") }, modifier = Modifier.weight(1f))
         }
