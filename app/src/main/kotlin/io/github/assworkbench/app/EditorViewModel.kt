@@ -98,6 +98,9 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     )
     val state: StateFlow<EditorState> = _state.asStateFlow()
 
+    private val _fxTemplates = MutableStateFlow(initialFxTemplateSnapshot.templates)
+    val fxTemplates: StateFlow<List<SavedFxTemplate>> = _fxTemplates.asStateFlow()
+
     // Playback is intentionally outside EditorState. mpv can report position at a
     // high cadence; publishing each tick through the root editor state invalidates
     // the whole workbench even though only timeline / focused-event timing UI needs it.
