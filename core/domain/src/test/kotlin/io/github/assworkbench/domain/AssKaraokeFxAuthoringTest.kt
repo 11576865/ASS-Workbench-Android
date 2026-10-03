@@ -51,8 +51,6 @@ class AssKaraokeFxAuthoringTest {
         )
         assertTrue(!controlled.compatible)
         assertTrue(controlled.reason?.contains("alpha / blur / transform") == true)
-
-        assertEquals(safe, safe)
     }
 
     @Test
