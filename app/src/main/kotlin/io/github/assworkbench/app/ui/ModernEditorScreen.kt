@@ -4442,6 +4442,8 @@ private fun InlineEffectsEditor(event: AssEvent, playbackPositionMs: Long, viewM
         modifier = Modifier.fillMaxWidth(),
     ) {
         Column(Modifier.padding(WorkbenchDimens.Small), verticalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small)) {
+            FxCompositionPane(event, viewModel)
+            Divider()
             Text("视觉效果", style = MaterialTheme.typography.titleSmall)
             ContinuousParameterControl(
                 label = "Blur",
