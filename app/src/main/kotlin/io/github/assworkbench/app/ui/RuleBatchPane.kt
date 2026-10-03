@@ -10,7 +10,10 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import io.github.assworkbench.app.EditorState
+import io.github.assworkbench.app.EditorUiBatchDefaultScope
 import io.github.assworkbench.app.EditorViewModel
+import io.github.assworkbench.app.EditorViewModelUiActions
+import io.github.assworkbench.app.toEditorUiState
 import io.github.assworkbench.domain.*
 
 @Composable
@@ -19,8 +22,12 @@ internal fun RuleBatchPane(
     viewModel: EditorViewModel,
     modifier: Modifier = Modifier,
 ) {
-    val hasSelection = state.selectedEventIds.isNotEmpty()
-    var selectedOnly by rememberSaveable(hasSelection) { mutableStateOf(hasSelection) }
+    val uiState = state.toEditorUiState()
+    val uiActions = remember(viewModel) { EditorViewModelUiActions(viewModel) }
+    val hasSelection = uiState.batch.selectedEventCount > 0
+    var selectedOnly by rememberSaveable(uiState.batch.defaultScope) {
+        mutableStateOf(uiState.batch.defaultScope == EditorUiBatchDefaultScope.SELECTION)
+    }
     var styleFilter by rememberSaveable { mutableStateOf("") }
     var textFilter by rememberSaveable { mutableStateOf("") }
     var actorFilter by rememberSaveable { mutableStateOf("") }
@@ -52,7 +59,7 @@ internal fun RuleBatchPane(
 
     fun filter(): AssBatchFilter {
         val filters = buildList<AssBatchFilter> {
-            if (selectedOnly) add(AssBatchFilter.EventIds(state.selectedEventIds))
+            if (selectedOnly) add(AssBatchFilter.EventIds(uiState.selection.eventIds))
             styleFilter.trim().takeIf(String::isNotEmpty)?.let { add(AssBatchFilter.StyleIs(it)) }
             textFilter.takeIf(String::isNotEmpty)?.let { add(AssBatchFilter.TextContains(it)) }
             actorFilter.takeIf(String::isNotEmpty)?.let { add(AssBatchFilter.ActorContains(it)) }
@@ -115,7 +122,7 @@ internal fun RuleBatchPane(
     }
 
     val recipe = remember(
-        state.selectedEventIds,
+        uiState.selection.eventIds,
         selectedOnly, styleFilter, textFilter, actorFilter, layerFilter, tagFilter, commentFilter,
         rawRegexFilter, durationMin, durationMax,
         shiftText, styleText, layerText, actorText, marginL, marginR, marginV, findText, replaceText, commentAction,
@@ -140,7 +147,7 @@ internal fun RuleBatchPane(
             style = MaterialTheme.typography.bodySmall,
         )
 
-        if (state.selectedEventIds.size > 1) {
+        if (uiState.batch.selectedEventCount > 1) {
             Text("已选字幕结构", style = MaterialTheme.typography.labelLarge)
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 OutlinedButton({ viewModel.mergeSelected(useLineBreak = true) }) { Text("合并 · 换行") }
@@ -150,7 +157,7 @@ internal fun RuleBatchPane(
         }
         Text("Scope / Filter", style = MaterialTheme.typography.labelLarge)
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            FilterChip(selectedOnly, { selectedOnly = !selectedOnly }, { Text("仅已选 ${state.selectedEventIds.size}") })
+            FilterChip(selectedOnly, { selectedOnly = !selectedOnly }, { Text("仅已选 ${uiState.batch.selectedEventCount}") })
             listOf("ALL", "DIALOGUE", "COMMENT").forEach { mode ->
                 FilterChip(commentFilter == mode, { commentFilter = mode }, { Text(mode) })
             }
@@ -226,7 +233,7 @@ internal fun RuleBatchPane(
             }
         }
         Button(
-            onClick = { viewModel.applyBatchRecipe(recipe) },
+            onClick = { uiActions.applyBatchRecipe(recipe) },
             enabled = preview.changedEventIds.isNotEmpty(),
             modifier = Modifier.fillMaxWidth(),
         ) { Text("应用为一个事务") }

@@ -11,14 +11,25 @@ import io.github.assworkbench.domain.AssDocument
  * canonical document plus the ToolInstance binding so every host can present
  * the same explanation.
  */
+internal enum class WorkspaceWriteTarget(val label: String) {
+    SHARED_STYLE("共享 Style"),
+    EVENT_TEXT("Event Text"),
+    EVENT_FIELDS("Event 字段"),
+    EVENT_OVERRIDE("Event Override"),
+    EVENT_TEXT_KARAOKE("Event Text / Karaoke tags"),
+    BATCH_EVENTS("批量 Event 变换"),
+}
+
 internal data class WorkspaceEditScopeSummary(
     val who: String,
-    val where: String,
+    val writeTarget: WorkspaceWriteTarget,
     val howMany: Int,
     val binding: String,
     val detail: String? = null,
     val unresolved: Boolean = false,
-)
+) {
+    val where: String get() = writeTarget.label
+}
 
 internal object WorkspaceEditScopeResolver {
     fun resolve(
@@ -34,7 +45,7 @@ internal object WorkspaceEditScopeResolver {
         if (bindingResolution is WorkspaceBindingResolution.UnresolvedPinnedEvent) {
             return WorkspaceEditScopeSummary(
                 who = "#${bindingResolution.eventId}（目标已失效）",
-                where = writeTarget(tool),
+                writeTarget = writeTarget(tool),
                 howMany = 0,
                 binding = bindingLabel,
                 detail = "Former target: #${bindingResolution.eventId}",
@@ -45,25 +56,25 @@ internal object WorkspaceEditScopeResolver {
         return when (tool) {
             WorkbenchTool.STYLE -> {
                 val eventId = (bindingResolution as? WorkspaceBindingResolution.Event)?.eventId
-                    ?: return noEvent(bindingLabel, "共享 Style")
+                    ?: return noEvent(bindingLabel, WorkspaceWriteTarget.SHARED_STYLE)
                 val event = document.events.firstOrNull { it.id == eventId }
-                    ?: return noEvent(bindingLabel, "共享 Style")
+                    ?: return noEvent(bindingLabel, WorkspaceWriteTarget.SHARED_STYLE)
                 val affected = document.events.count { it.style == event.style }
                 WorkspaceEditScopeSummary(
                     who = "Style · ${event.style}",
-                    where = "共享 Style",
+                    writeTarget = WorkspaceWriteTarget.SHARED_STYLE,
                     howMany = affected,
                     binding = bindingLabel,
                     detail = "由 Event #${event.id} 上下文进入",
                 )
             }
 
-            WorkbenchTool.TEXT -> eventScope(bindingResolution, document, bindingLabel, "Event Text")
-            WorkbenchTool.EVENT -> eventScope(bindingResolution, document, bindingLabel, "Event 字段")
-            WorkbenchTool.POSITION -> eventScope(bindingResolution, document, bindingLabel, "Event Override")
-            WorkbenchTool.EFFECTS -> eventScope(bindingResolution, document, bindingLabel, "Event Override")
-            WorkbenchTool.KARAOKE -> eventScope(bindingResolution, document, bindingLabel, "Event Text / Karaoke tags")
-            WorkbenchTool.VECTOR_CLIP -> eventScope(bindingResolution, document, bindingLabel, "Event Override")
+            WorkbenchTool.TEXT -> eventScope(bindingResolution, document, bindingLabel, WorkspaceWriteTarget.EVENT_TEXT)
+            WorkbenchTool.EVENT -> eventScope(bindingResolution, document, bindingLabel, WorkspaceWriteTarget.EVENT_FIELDS)
+            WorkbenchTool.POSITION -> eventScope(bindingResolution, document, bindingLabel, WorkspaceWriteTarget.EVENT_OVERRIDE)
+            WorkbenchTool.EFFECTS -> eventScope(bindingResolution, document, bindingLabel, WorkspaceWriteTarget.EVENT_OVERRIDE)
+            WorkbenchTool.KARAOKE -> eventScope(bindingResolution, document, bindingLabel, WorkspaceWriteTarget.EVENT_TEXT_KARAOKE)
+            WorkbenchTool.VECTOR_CLIP -> eventScope(bindingResolution, document, bindingLabel, WorkspaceWriteTarget.EVENT_OVERRIDE)
 
             WorkbenchTool.BATCH -> {
                 val ids = when (bindingResolution) {
@@ -73,7 +84,7 @@ internal object WorkspaceEditScopeResolver {
                 }
                 WorkspaceEditScopeSummary(
                     who = if (ids.isEmpty()) "当前选择为空" else "已选 ${ids.size} 条 Event",
-                    where = "批量 Event 变换",
+                    writeTarget = WorkspaceWriteTarget.BATCH_EVENTS,
                     howMany = ids.size,
                     binding = bindingLabel,
                 )
@@ -87,37 +98,38 @@ internal object WorkspaceEditScopeResolver {
         resolution: WorkspaceBindingResolution,
         document: AssDocument,
         bindingLabel: String,
-        where: String,
+        writeTarget: WorkspaceWriteTarget,
     ): WorkspaceEditScopeSummary {
         val eventId = (resolution as? WorkspaceBindingResolution.Event)?.eventId
-            ?: return noEvent(bindingLabel, where)
+            ?: return noEvent(bindingLabel, writeTarget)
         val event = document.events.firstOrNull { it.id == eventId }
-            ?: return noEvent(bindingLabel, where)
+            ?: return noEvent(bindingLabel, writeTarget)
         return WorkspaceEditScopeSummary(
             who = "Event #${event.id}",
-            where = where,
+            writeTarget = writeTarget,
             howMany = 1,
             binding = bindingLabel,
             detail = "Style · ${event.style}",
         )
     }
 
-    private fun noEvent(bindingLabel: String, where: String) =
+    private fun noEvent(bindingLabel: String, writeTarget: WorkspaceWriteTarget) =
         WorkspaceEditScopeSummary(
             who = "未绑定 Event",
-            where = where,
+            writeTarget = writeTarget,
             howMany = 0,
             binding = bindingLabel,
             unresolved = true,
         )
 
-    private fun writeTarget(tool: WorkbenchTool): String = when (tool) {
-        WorkbenchTool.STYLE -> "共享 Style"
-        WorkbenchTool.TEXT -> "Event Text"
-        WorkbenchTool.EVENT -> "Event 字段"
-        WorkbenchTool.POSITION, WorkbenchTool.EFFECTS, WorkbenchTool.VECTOR_CLIP -> "Event Override"
-        WorkbenchTool.KARAOKE -> "Event Text / Karaoke tags"
-        WorkbenchTool.BATCH -> "批量 Event 变换"
-        else -> "—"
+    private fun writeTarget(tool: WorkbenchTool): WorkspaceWriteTarget = when (tool) {
+        WorkbenchTool.STYLE -> WorkspaceWriteTarget.SHARED_STYLE
+        WorkbenchTool.TEXT -> WorkspaceWriteTarget.EVENT_TEXT
+        WorkbenchTool.EVENT -> WorkspaceWriteTarget.EVENT_FIELDS
+        WorkbenchTool.POSITION, WorkbenchTool.EFFECTS, WorkbenchTool.VECTOR_CLIP ->
+            WorkspaceWriteTarget.EVENT_OVERRIDE
+        WorkbenchTool.KARAOKE -> WorkspaceWriteTarget.EVENT_TEXT_KARAOKE
+        WorkbenchTool.BATCH -> WorkspaceWriteTarget.BATCH_EVENTS
+        else -> error("Non-mutating tool has no write target: $tool")
     }
 }

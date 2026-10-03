@@ -1,5 +1,7 @@
 package io.github.assworkbench.app
 
+import io.github.assworkbench.domain.AssBatchRecipe
+
 /**
  * Stable, presentation-neutral slice of editor state.
  *
@@ -13,6 +15,9 @@ package io.github.assworkbench.app
  * projects identities, counts and status rather than URI handles, FontAsset
  * objects or native bridge instances, so presentations cannot acquire resource
  * ownership through the UI contract.
+ * Slice E adds a bounded batch-edit intent summary plus the batch commit intent.
+ * It does not duplicate Tool Binding or resolve per-tool write targets inside
+ * EditorUiState; those remain workspace-derived from Binding + canonical identity.
  * Presentations should not bypass this boundary by depending on unrelated
  * EditorViewModel internals.
  */
@@ -25,6 +30,7 @@ internal data class EditorUiState(
     val resources: EditorUiResourceState,
     val container: EditorUiContainerState,
     val diagnostics: EditorUiDiagnosticsState,
+    val batch: EditorUiBatchIntentState,
     val history: EditorUiHistoryState,
     val workspaceSessionId: Long,
 )
@@ -111,6 +117,23 @@ internal data class EditorUiDiagnosticsState(
     val rendererMessages: List<String>,
 )
 
+internal enum class EditorUiBatchDefaultScope {
+    ALL_EVENTS,
+    SELECTION,
+}
+
+/**
+ * Presentation-neutral default intent for the rule-based batch editor.
+ *
+ * This is deliberately only the canonical selection-derived default. The
+ * editor-local Filter/Transform draft remains presentation state until the user
+ * commits it as one domain transaction.
+ */
+internal data class EditorUiBatchIntentState(
+    val defaultScope: EditorUiBatchDefaultScope,
+    val selectedEventCount: Int,
+)
+
 internal data class EditorUiHistoryState(
     val canUndo: Boolean,
     val canRedo: Boolean,
@@ -127,6 +150,7 @@ internal interface EditorUiActions {
     fun toggleSelection(id: Long)
     fun clearSelection()
     fun clearTransientPreview(ownerId: String? = null)
+    fun applyBatchRecipe(recipe: AssBatchRecipe)
     fun undo()
     fun redo()
 }
@@ -185,6 +209,14 @@ internal fun EditorState.toEditorUiState(): EditorUiState =
         diagnostics = EditorUiDiagnosticsState(
             rendererMessages = rendererDiagnostics.toList(),
         ),
+        batch = EditorUiBatchIntentState(
+            defaultScope = if (selectedEventIds.isEmpty()) {
+                EditorUiBatchDefaultScope.ALL_EVENTS
+            } else {
+                EditorUiBatchDefaultScope.SELECTION
+            },
+            selectedEventCount = selectedEventIds.size,
+        ),
         history = EditorUiHistoryState(
             canUndo = canUndo,
             canRedo = canRedo,
@@ -209,6 +241,10 @@ internal class EditorViewModelUiActions(
 
     override fun clearTransientPreview(ownerId: String?) {
         viewModel.clearTransientPreview(ownerId)
+    }
+
+    override fun applyBatchRecipe(recipe: AssBatchRecipe) {
+        viewModel.applyBatchRecipe(recipe)
     }
 
     override fun undo() {

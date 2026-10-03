@@ -6,12 +6,16 @@
 
 ## 事实快照
 
-- current main: `0addc6e8a168f8c28a2f05f2ef81d369d4ee252b`
+- current main at Slice E branch point: `73c09f4052af0b7b057794a138a618f7883f4803`
 - #61 Presentation invariant gate: merged。
 - #62 UI Stability Boundary + Contract Slice A: merged；merge commit `27e23899fe96d535cce087b172b23f2ce6050626`。
 - #69 Edge Bookmark presentation gate: merged；Edge Bookmark 现已进入 cross-presentation canonical state / Focus / Undo-Redo invariant gate。
 - #72 UI Contract Slice B（current object + Binding）: merged；Binding 解析统一经 presentation-neutral canonical identity 投影，missing pinned Event 保持 unresolved。
 - #75 UIGS visual-capture baseline repair: merged；Fixed capture 使用真实入口，并移除了 renderer-disabled fixture 无法真实产生的 Canvas Position rod 视觉证据声明。
+- #74 UI Contract Slice C（transient preview ownership）: merged；preview ownership/cancel 已进入稳定 boundary，generic preview commit 仍被明确禁止。
+- #77 UI Contract Slice D（resources / container / renderer diagnostics）: merged；只读资源、容器与 renderer diagnostics 摘要已进入 presentation-neutral contract。
+- #76 Canvas Production Visual Evidence: merged；Canvas workspace 已有确定性 Android compositor production-rendered 证据。
+- #80 UI Contract Slice E（write target / batch intent）: current PR；typed Write Target + selection-derived batch default + batch commit action 正在验收。
 - Current main 已登记：Spatial、Tool Instances、Glass Layered、Precision Lens、Subtitle Object、Edge Bookmark 等实验 presentation。
 - `TIMELINE_DOCK_EXPERIMENTAL` 不在 current-main registry；#56 仅作为历史原型证据，不作为 current-main 实现 authority。
 
@@ -178,7 +182,7 @@
 | 105 | 位置改为画面操控与二维控制板，X、Y 数值作为精确补充。 | **Partial** | main · no dedicated 240 slice | Fixed/Canvas parameter tools in `ModernEditorScreen.kt` | Existing editor tests; no 240-ID test mapping | Not 240-ID mapped | Not item-mapped |
 | 106 | 旋转改为角度盘、操纵杆和读数，可显式输入角度。 | **Partial** | main · no dedicated 240 slice | Fixed/Canvas parameter tools in `ModernEditorScreen.kt` | Existing editor tests; no 240-ID test mapping | Not 240-ID mapped | Not item-mapped |
 | 107 | 参数图标周围可显示微型数值或状态环，收起工具时仍能观察关键值。 | **Planned** | main · no dedicated 240 slice | Fixed/Canvas parameter tools in `ModernEditorScreen.kt` | Existing editor tests; no 240-ID test mapping | Not 240-ID mapped | Not item-mapped；No micro value/status ring around collapsed parameter icons evidenced. |
-| 108 | 共享样式影响范围、错误原因和参数来源按需展开，关键风险信息仍直接可见。 | **Partial** | main · no dedicated 240 slice | Fixed/Canvas parameter tools in `ModernEditorScreen.kt` | Existing editor tests; no 240-ID test mapping | Not 240-ID mapped | Not item-mapped |
+| 108 | 共享样式影响范围、错误原因和参数来源按需展开，关键风险信息仍直接可见。 | **Partial** | main via Scope Transparency + #80 Slice E | Fixed/Canvas parameter tools + typed `WorkspaceWriteTarget` | `WorkspaceEditScopeResolverTest`; item-level visual mapping incomplete | Not 240-ID mapped | Not item-mapped |
 
 ### 十、把控件拆出来，组成自己的工具
 
@@ -291,9 +295,9 @@
 | 183 | Raw 编辑支持标签着色、匹配提示、来源定位与错误标识。 | **Partial** | main · no dedicated 240 slice | Event/Text/Raw/Review surfaces | Round-trip/editor regressions; no 240-ID mapping | Not 240-ID mapped | Not item-mapped |
 | 184 | 点击可视参数能定位对应 Raw 标签；点击标签能召回相应参数工具。 | **Planned** | main · no dedicated 240 slice | Event/Text/Raw/Review surfaces | Round-trip/editor regressions; no 240-ID mapping | Not 240-ID mapped | Not item-mapped；No bidirectional structured-control ↔ Raw-tag navigation evidenced. |
 | 185 | 双语字幕支持上下或左右对照编辑，语言与事件配对关系显式建立。 | **Partial** | main · no dedicated 240 slice | Event/Text/Raw/Review surfaces | Round-trip/editor regressions; no 240-ID mapping | Not 240-ID mapped | Not item-mapped |
-| 186 | 允许只筛选一种语言或一类样式，减少批量操作的重复工作。 | **Partial** | main · no dedicated 240 slice | Event/Text/Raw/Review surfaces | Round-trip/editor regressions; no 240-ID mapping | Not 240-ID mapped | Not item-mapped |
+| 186 | 允许只筛选一种语言或一类样式，减少批量操作的重复工作。 | **Partial** | main batch engine + #80 Slice E | `RuleBatchPane` + `EditorUiState.batch` | `EditorUiContractTest` + existing batch engine tests; language-specific filter remains incomplete | Not 240-ID mapped | Not item-mapped |
 | 187 | 搜索结果出现在对象轨和时间轴，点击结果定位并召回相关工具。 | **Partial** | main · no dedicated 240 slice | Event/Text/Raw/Review surfaces | Round-trip/editor regressions; no 240-ID mapping | Not 240-ID mapped | Not item-mapped |
-| 188 | 多事件正文差异可以并列查看，批量替换先显示实际影响范围。 | **Planned** | main · no dedicated 240 slice | Event/Text/Raw/Review surfaces | Round-trip/editor regressions; no 240-ID mapping | Not 240-ID mapped | Not item-mapped |
+| 188 | 多事件正文差异可以并列查看，批量替换先显示实际影响范围。 | **Partial** | main batch preview + #80 Slice E | `RuleBatchPane` preview shows affected/changed counts and examples; full side-by-side multi-event diff remains incomplete | `EditorUiContractTest` + batch preview path; no complete 240-ID scenario | Not 240-ID mapped | Not item-mapped |
 | 189 | 标签块保留可折叠表示，未知标签仍保留原始内容。 | **Partial** | main · no dedicated 240 slice | Event/Text/Raw/Review surfaces | Round-trip/editor regressions; no 240-ID mapping | Not 240-ID mapped | Not item-mapped |
 | 190 | 输入时实时预览使用草稿层；点击外部收回工具不悄悄吞掉草稿。 | **Partial** | main · no dedicated 240 slice | Event/Text/Raw/Review surfaces | Round-trip/editor regressions; no 240-ID mapping | Not 240-ID mapped | Not item-mapped |
 | 191 | 提供换行和排版辅助，建议与正式写入分开，应用后可撤销。 | **Planned** | main · no dedicated 240 slice | Event/Text/Raw/Review surfaces | Round-trip/editor regressions; no 240-ID mapping | Not 240-ID mapped | Not item-mapped |
@@ -337,8 +341,8 @@
 
 | ID | 原始要求 | 状态 | Authority | Surface / code | 自动证据 | Visual | DEVICE / 阻塞 |
 |---|---|---|---|---|---|---|---|
-| 217 | 文档、工作区排列、临时显示、草稿和动画分别有明确状态所有者。 | **Partial** | main via #62 + #72 UI Contract | `WorkspaceState` + `EditorUiState` + `WorkspaceUiBindingContract` | #61 + `EditorUiContractTest` + `WorkspaceUiBindingContractTest` | Not 240-ID mapped | Not item-mapped |
-| 218 | 一次连续拖动只生成一次正式编辑与一次字幕 Undo。 | **Partial** | main via #62 UI Contract | `WorkspaceState` + UI Contract boundary | #61 + stabilization suites; `EditorUiContractTest` (merged via #62) | Not 240-ID mapped | Not item-mapped |
+| 217 | 文档、工作区排列、临时显示、草稿和动画分别有明确状态所有者。 | **Partial** | main via #62/#72/#74/#77 + #80 Slice E | `WorkspaceState` + `EditorUiState` + Binding/Preview/Resource/Batch contract slices | #61 + `EditorUiContractTest` + `WorkspaceUiBindingContractTest` | Not 240-ID mapped | Batch Filter/Transform draft remains presentation-local by contract; animation ownership still incomplete |
+| 218 | 一次连续拖动只生成一次正式编辑与一次字幕 Undo。 | **Partial** | main via #74 Preview boundary + #80 batch commit boundary | UI Contract keeps transient preview separate from canonical commit; batch recipe commits as one transaction | `EditorUiContractTest` + existing interaction/batch tests | Not 240-ID mapped | Continuous interaction coverage remains incomplete across all tools |
 | 219 | 工具移动、停靠与书签切换进入布局历史，不混入字幕 Undo。 | **Planned** | main via #62 UI Contract | `WorkspaceState` + UI Contract boundary | #61 + stabilization suites; `EditorUiContractTest` (merged via #62) | Not 240-ID mapped | Not item-mapped；Layout state is separate from subtitle state, but a dedicated layout-history stack is not evidenced. |
 | 220 | 手势取消清除临时预览；完成后保留正式参数；动画中断不改变业务结论。 | **Partial** | main via #62 UI Contract | `WorkspaceState` + UI Contract boundary | #61 + stabilization suites; `EditorUiContractTest` (merged via #62) | Not 240-ID mapped | Not item-mapped |
 | 221 | 点击外部、系统返回、收起工具和退出工程各有明确草稿处理规则。 | **Partial** | main via #62 UI Contract | `WorkspaceState` + UI Contract boundary | #61 + stabilization suites; `EditorUiContractTest` (merged via #62) | Not 240-ID mapped | Not item-mapped |

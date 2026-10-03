@@ -41,6 +41,7 @@ class WorkspaceEditScopeResolverTest {
         )!!
 
         assertEquals("Style · Default", summary.who)
+        assertEquals(WorkspaceWriteTarget.SHARED_STYLE, summary.writeTarget)
         assertEquals("共享 Style", summary.where)
         assertEquals(2, summary.howMany)
         assertEquals("Pinned #41", summary.binding)
@@ -63,6 +64,7 @@ class WorkspaceEditScopeResolverTest {
         )!!
 
         assertEquals("Event #41", summary.who)
+        assertEquals(WorkspaceWriteTarget.EVENT_OVERRIDE, summary.writeTarget)
         assertEquals("Event Override", summary.where)
         assertEquals(1, summary.howMany)
     }
@@ -106,6 +108,7 @@ class WorkspaceEditScopeResolverTest {
         )!!
 
         assertEquals("已选 2 条 Event", summary.who)
+        assertEquals(WorkspaceWriteTarget.BATCH_EVENTS, summary.writeTarget)
         assertEquals("批量 Event 变换", summary.where)
         assertEquals(2, summary.howMany)
     }
