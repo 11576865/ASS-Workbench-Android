@@ -19,12 +19,40 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 
 internal data class InfiniteCanvasEntry(val id: String, val title: String, val subtitle: String = "")
+
+
+/**
+ * Keeps the viewport finite while measuring world-space surfaces without inheriting
+ * the viewport's max width/height. The parent still clips drawing to the viewport.
+ */
+@Composable
+private fun UnboundedCanvasLayer(
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
+    Layout(modifier = modifier, content = content) { measurables, constraints ->
+        val unbounded = Constraints(
+            minWidth = 0,
+            maxWidth = Constraints.Infinity,
+            minHeight = 0,
+            maxHeight = Constraints.Infinity,
+        )
+        val placeables = measurables.map { it.measure(unbounded) }
+        val viewportWidth = if (constraints.hasBoundedWidth) constraints.maxWidth else constraints.minWidth
+        val viewportHeight = if (constraints.hasBoundedHeight) constraints.maxHeight else constraints.minHeight
+        layout(viewportWidth, viewportHeight) {
+            placeables.forEach { it.place(0, 0) }
+        }
+    }
+}
 
 /** World surfaces are measured in screen dp, so text and hit areas do not shrink with camera zoom. */
 @Composable
@@ -109,7 +137,7 @@ internal fun InfiniteCanvasHost(
                 }
             }
         })
-        Box(Modifier.fillMaxSize().testTag("spatial-world")) {
+        UnboundedCanvasLayer(Modifier.fillMaxSize().testTag("spatial-world")) {
             entries.forEach { entry ->
                 val savedNode = nodes.firstOrNull { it.id == entry.id } ?: return@forEach
                 if (!savedNode.hidden) key(entry.id) {
