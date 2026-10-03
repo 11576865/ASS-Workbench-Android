@@ -189,6 +189,11 @@ object AssFxComposition {
         require(sourceIndex >= 0) { "源字幕不存在。" }
         val source = document.events[sourceIndex]
         require(!source.comment) { "Comment 事件不能直接生成可见柔光层。" }
+        requireCompositionOwnershipCompatible(
+            source.text,
+            ownedTags = setOf("alpha", "1a", "2a", "3a", "4a", "blur", "bord"),
+            effectLabel = "柔光层",
+        )
 
         val alpha = ((1.0 - spec.opacityPercent / 100.0) * 255.0).roundToInt().coerceIn(0, 255)
         val glowText = appendLeadingOverride(
@@ -274,6 +279,11 @@ object AssFxComposition {
         require(sourceIndex >= 0) { "源字幕不存在。" }
         val source = document.events[sourceIndex]
         require(!source.comment) { "Comment 事件不能直接生成可见倒影。" }
+        requireCompositionOwnershipCompatible(
+            source.text,
+            ownedTags = setOf("alpha", "1a", "2a", "3a", "4a", "blur", "fscy", "frx"),
+            effectLabel = "倒影层",
+        )
 
         val geometry = AssGeometrySemantic.inspect(source.text)
         require(!geometry.malformedLeadingBlock) { "源字幕的前导 override block 不完整，不能安全生成 FX。" }
@@ -519,6 +529,11 @@ object AssFxComposition {
 
         val source = document.events.firstOrNull { it.id == eventId } ?: error("源字幕不存在。")
         require(!source.comment) { "Comment 事件不能添加可见入场动画。" }
+        requireCompositionOwnershipCompatible(
+            source.text,
+            ownedTags = setOf("fscy", "frx", "t"),
+            effectLabel = "翻转入场",
+        )
         val eventDuration = source.end.millis - source.start.millis
         require(eventDuration >= 2L) { "字幕持续时间过短，无法生成入场动画。" }
         val duration = spec.durationMs.coerceAtMost(eventDuration)
@@ -553,6 +568,41 @@ object AssFxComposition {
         return document.copy(events = document.events.map { event ->
             if (event.id == eventId) event.copy(text = text) else event
         })
+    }
+
+    /**
+     * Generated composition layers establish their own alpha/blur/geometry base state. Inline
+     * span tags that re-own the same properties after karaoke timing begins would override that
+     * generated base only for later syllables, producing a visually split stack.
+     *
+     * Leading Event-level overrides remain valid. The guard only owns the region beginning with
+     * the first karaoke marker, which is where span-local karaoke authoring starts.
+     */
+    private fun requireCompositionOwnershipCompatible(
+        text: String,
+        ownedTags: Set<String>,
+        effectLabel: String,
+    ) {
+        val analysis = AssInlineSyntax.analyze(text)
+        require(!analysis.hasErrors) { "$effectLabel 无法安全处理包含损坏 override block 的字幕。" }
+
+        val firstKaraoke = analysis.tags.firstOrNull { tag ->
+            tag.name.equals("k", true) ||
+                tag.name.equals("K", false) ||
+                tag.name.equals("kf", true) ||
+                tag.name.equals("ko", true) ||
+                tag.name.equals("kt", true)
+        } ?: return
+
+        val conflicting = analysis.tags.firstOrNull { tag ->
+            tag.start >= firstKaraoke.start &&
+                ownedTags.any { it.equals(tag.name, ignoreCase = true) }
+        } ?: return
+
+        error(
+            "$effectLabel 与 Karaoke 区域中的 \\${conflicting.name} 存在属性所有权冲突；" +
+                "当前不会猜测覆盖顺序。请先移除该音节级效果，或等待 Layer-aware Karaoke FX 合成。"
+        )
     }
 
     private fun inheritedAnchor(document: AssDocument, event: AssEvent, style: AssStyle?): AssPoint {

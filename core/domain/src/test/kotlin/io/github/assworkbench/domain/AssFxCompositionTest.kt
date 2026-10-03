@@ -79,6 +79,87 @@ class AssFxCompositionTest {
     }
 
     @Test
+    fun plainKaraokeCanStillGenerateReflection() {
+        val document = AssDocument(
+            events = listOf(
+                AssEvent(
+                    id = 1,
+                    start = SubTime(0),
+                    end = SubTime(1000),
+                    text = "{\\an8}{\\k20}Plain{\\kf30} karaoke",
+                )
+            )
+        )
+
+        val result = AssFxComposition.createReflection(document, 1)
+        assertEquals(2, result.document.events.size)
+        assertTrue(result.document.events.first().text.contains("\\frx180"))
+        assertTrue(result.document.events.first().text.contains("{\\kf30} karaoke"))
+    }
+
+    @Test
+    fun reflectionRejectsKaraokeSpanThatReownsReflectionProperties() {
+        val document = AssDocument(
+            events = listOf(
+                AssEvent(
+                    id = 1,
+                    start = SubTime(0),
+                    end = SubTime(1000),
+                    text = "{\\fscy80}{\\k20\\alpha&HFF&\\blur3\\t(0,120,\\alpha&H00&\\blur0)}A",
+                )
+            )
+        )
+
+        val error = assertFailsWith<IllegalStateException> {
+            AssFxComposition.createReflection(document, 1)
+        }
+        assertTrue(error.message.orEmpty().contains("属性所有权冲突"))
+        assertEquals(1, document.events.size)
+    }
+
+    @Test
+    fun glowRejectsKaraokeSpanAlphaButLeadingBaseAlphaRemainsAllowed() {
+        val allowed = AssDocument(
+            events = listOf(
+                AssEvent(
+                    id = 1,
+                    start = SubTime(0),
+                    end = SubTime(1000),
+                    text = "{\\alpha&H40&}{\\k20}A",
+                )
+            )
+        )
+        assertEquals(2, AssFxComposition.createGlow(allowed, 1).document.events.size)
+
+        val conflict = allowed.copy(
+            events = listOf(
+                allowed.events.single().copy(text = "{\\alpha&H40&}{\\k20\\1a&HFF&}A")
+            )
+        )
+        assertFailsWith<IllegalStateException> {
+            AssFxComposition.createGlow(conflict, 1)
+        }
+    }
+
+    @Test
+    fun flipEntranceRejectsKaraokeSpanTransformOwnership() {
+        val document = AssDocument(
+            events = listOf(
+                AssEvent(
+                    id = 1,
+                    start = SubTime(0),
+                    end = SubTime(1000),
+                    text = "{\\fscy80\\frx10}{\\k20\\t(0,120,\\fscy80\\frx10)}A",
+                )
+            )
+        )
+
+        assertFailsWith<IllegalStateException> {
+            AssFxComposition.applyFlipEntrance(document, 1)
+        }
+    }
+
+    @Test
     fun positionConflictIsRejectedInsteadOfGuessing() {
         val document = AssDocument(
             events = listOf(
