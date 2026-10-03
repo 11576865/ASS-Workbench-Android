@@ -135,8 +135,8 @@ object AssFxComposition {
             require(settleMs < eventDurationMs) {
                 "字幕持续时间不足：空间渐隐倒影需要在翻转/拉伸入场结束后仍保留可见时段。"
             }
-            val revealEndMs = (settleMs + DEFERRED_REFLECTION_REVEAL_MS)
-                .coerceAtMost(eventDurationMs)
+            val revealEndMs = settleMs +
+                minOf(DEFERRED_REFLECTION_REVEAL_MS, eventDurationMs - settleMs)
             DeferredReflectionReveal(settleMs, revealEndMs)
         } else null
 
@@ -290,6 +290,19 @@ object AssFxComposition {
         require(geometry.positionMode != AssPositionMode.CONFLICT) {
             "源字幕同时包含 \\pos 与 \\move；先消解位置冲突再生成 FX。"
         }
+        geometry.position?.let { point ->
+            requireFinitePoint(point, "\\pos")
+        }
+        geometry.move?.let { move ->
+            requireFinitePoint(move.start, "\\move 起点")
+            requireFinitePoint(move.end, "\\move 终点")
+            require(move.startMs?.isFinite() != false && move.endMs?.isFinite() != false) {
+                "\\move 时间参数必须是有限数字。"
+            }
+        }
+        geometry.origin?.let { point ->
+            requireFinitePoint(point, "\\org")
+        }
 
         if (fade != null) {
             require(geometry.positionMode != AssPositionMode.MOVE) {
@@ -315,8 +328,19 @@ object AssFxComposition {
 
         val style = document.styles.firstOrNull { it.name.equals(source.style, ignoreCase = true) }
         val sourceScaleY = geometry.scaleY ?: style?.scaleY ?: 100.0
-        val reflectionScaleY = (sourceScaleY * spec.verticalScalePercent / 100.0).coerceAtLeast(0.001)
+        require(sourceScaleY.isFinite() && sourceScaleY >= 0.0) {
+            "源字幕有效 Scale Y 必须是有限且非负的数字。"
+        }
+        val reflectionScaleY = sourceScaleY * spec.verticalScalePercent / 100.0
+        require(reflectionScaleY.isFinite()) {
+            "倒影 Scale Y 计算溢出；请缩小源缩放或倒影高度比例。"
+        }
         val sourceRotationX = geometry.rotationX ?: 0.0
+        require(sourceRotationX.isFinite()) { "源字幕有效 Rotation X 必须是有限数字。" }
+        val reflectionRotationX = sourceRotationX + 180.0
+        require(reflectionRotationX.isFinite()) {
+            "倒影 Rotation X 计算溢出；请缩小源旋转值。"
+        }
         val alpha = ((1.0 - spec.opacityPercent / 100.0) * 255.0).roundToInt().coerceIn(0, 255)
         val alignment = leadingAlignment(source.text) ?: style?.alignment ?: 2
         val inherited = if (geometry.positionMode == AssPositionMode.INHERITED) {
@@ -324,9 +348,9 @@ object AssFxComposition {
         } else null
         val reflectionAnchorY = when (geometry.positionMode) {
             AssPositionMode.POSITION ->
-                requireNotNull(geometry.position).y + spec.offsetY
+                translatedCoordinate(requireNotNull(geometry.position).y, spec.offsetY, "倒影锚点 Y")
             AssPositionMode.INHERITED ->
-                requireNotNull(inherited).y + spec.offsetY
+                translatedCoordinate(requireNotNull(inherited).y, spec.offsetY, "倒影锚点 Y")
             AssPositionMode.MOVE, AssPositionMode.CONFLICT -> null
         }
 
@@ -337,7 +361,7 @@ object AssFxComposition {
                 AssGeometrySemantic.patchPosition(
                     reflectedText,
                     p.x,
-                    p.y + spec.offsetY,
+                    translatedCoordinate(p.y, spec.offsetY, "\\pos Y"),
                 )
             }
             AssPositionMode.MOVE -> {
@@ -346,11 +370,11 @@ object AssFxComposition {
                     reflectedText,
                     start = AssPoint(
                         move.start.x,
-                        move.start.y + spec.offsetY,
+                        translatedCoordinate(move.start.y, spec.offsetY, "\\move 起点 Y"),
                     ),
                     end = AssPoint(
                         move.end.x,
-                        move.end.y + spec.offsetY,
+                        translatedCoordinate(move.end.y, spec.offsetY, "\\move 终点 Y"),
                     ),
                     startMs = move.startMs,
                     endMs = move.endMs,
@@ -361,7 +385,7 @@ object AssFxComposition {
                 AssGeometrySemantic.patchPosition(
                     reflectedText,
                     anchor.x,
-                    anchor.y + spec.offsetY,
+                    translatedCoordinate(anchor.y, spec.offsetY, "继承锚点 Y"),
                 )
             }
             AssPositionMode.CONFLICT -> error("unreachable")
@@ -371,7 +395,7 @@ object AssFxComposition {
             reflectedText = AssGeometrySemantic.patchOrigin(
                 reflectedText,
                 origin.x,
-                origin.y + spec.offsetY,
+                translatedCoordinate(origin.y, spec.offsetY, "\\org Y"),
             )
         }
 
@@ -380,9 +404,9 @@ object AssFxComposition {
                 reflectedText,
                 AssClipRect(
                     left = clip.left,
-                    top = clip.top + spec.offsetY,
+                    top = translatedCoordinate(clip.top, spec.offsetY, "\\clip top"),
                     right = clip.right,
-                    bottom = clip.bottom + spec.offsetY,
+                    bottom = translatedCoordinate(clip.bottom, spec.offsetY, "\\clip bottom"),
                 ),
                 inverted = false,
             )
@@ -391,7 +415,7 @@ object AssFxComposition {
         reflectedText = appendLeadingOverride(
             reflectedText,
             buildString {
-                append("\\frx").append(format(sourceRotationX + 180.0))
+                append("\\frx").append(format(reflectionRotationX))
                 append("\\fscy").append(format(reflectionScaleY))
                 append("\\alpha&H").append("%02X".format(alpha)).append("&")
                 if (spec.blur > 0.0) append("\\blur").append(format(spec.blur))
@@ -442,9 +466,9 @@ object AssFxComposition {
         val shiftedSourceClip = geometry.clipRect?.let { clip ->
             AssClipRect(
                 left = clip.left,
-                top = clip.top + spec.offsetY,
+                top = translatedCoordinate(clip.top, spec.offsetY, "\\clip top"),
                 right = clip.right,
-                bottom = clip.bottom + spec.offsetY,
+                bottom = translatedCoordinate(clip.bottom, spec.offsetY, "\\clip bottom"),
             ).normalized()
         }
 
@@ -541,20 +565,33 @@ object AssFxComposition {
         val eventDuration = source.end.millis - source.start.millis
         require(eventDuration >= 2L) { "字幕持续时间过短，无法生成入场动画。" }
         val duration = spec.durationMs.coerceAtMost(eventDuration)
-        val middle = (duration * 2L / 3L).coerceIn(1L, duration - 1L)
+        val middle = (
+            (duration / 3L) * 2L +
+                ((duration % 3L) * 2L / 3L)
+            ).coerceIn(1L, duration - 1L)
 
         val geometry = AssGeometrySemantic.inspect(source.text)
         require(!geometry.malformedLeadingBlock) { "源字幕的前导 override block 不完整，不能安全生成 FX。" }
         val style = document.styles.firstOrNull { it.name.equals(source.style, ignoreCase = true) }
         val baseScaleY = geometry.scaleY ?: style?.scaleY ?: 100.0
+        require(baseScaleY.isFinite() && baseScaleY >= 0.0) {
+            "源字幕有效 Scale Y 必须是有限且非负的数字。"
+        }
         val baseRotationX = geometry.rotationX ?: 0.0
+        require(baseRotationX.isFinite()) { "源字幕有效 Rotation X 必须是有限数字。" }
+        val startScaleY = baseScaleY * spec.startScalePercent / 100.0
+        val overshootScaleY = baseScaleY * spec.overshootScalePercent / 100.0
+        val startRotationX = baseRotationX + spec.startRotationXDegrees
+        require(startScaleY.isFinite() && overshootScaleY.isFinite() && startRotationX.isFinite()) {
+            "翻转入场派生几何计算溢出；请缩小缩放或旋转参数。"
+        }
 
         var text = AssAnimationAuthoring.applyNumericTrack(
             source.text,
             AssTransformVisualProperty.SCALE_Y,
             listOf(
-                AssAnimationKeyframe(0L, baseScaleY * spec.startScalePercent / 100.0),
-                AssAnimationKeyframe(middle, baseScaleY * spec.overshootScalePercent / 100.0),
+                AssAnimationKeyframe(0L, startScaleY),
+                AssAnimationKeyframe(middle, overshootScaleY),
                 AssAnimationKeyframe(duration, baseScaleY),
             ),
             spec.accel,
@@ -563,7 +600,7 @@ object AssFxComposition {
             text,
             AssTransformVisualProperty.ROTATION_X,
             listOf(
-                AssAnimationKeyframe(0L, baseRotationX + spec.startRotationXDegrees),
+                AssAnimationKeyframe(0L, startRotationX),
                 AssAnimationKeyframe(duration, baseRotationX),
             ),
             spec.accel,
@@ -575,12 +612,12 @@ object AssFxComposition {
     }
 
     /**
-     * Generated composition layers establish their own alpha/blur/geometry base state. Inline
-     * span tags that re-own the same properties after karaoke timing begins would override that
-     * generated base only for later syllables, producing a visually split stack.
+     * Generated composition layers establish their own alpha/blur/geometry base state. Any later
+     * inline span, style reset, fade, or time transform that re-owns those properties can override
+     * the generated state partway through the Event.
      *
-     * Leading Event-level overrides remain valid. The guard only owns the region beginning with
-     * the first karaoke marker, which is where span-local karaoke authoring starts.
+     * Leading static Event-level overrides remain valid when they do not introduce temporal
+     * ownership conflicts. Ambiguous re-ownership fails closed before any document mutation.
      */
     private fun requireCompositionOwnershipCompatible(
         text: String,
@@ -657,6 +694,19 @@ object AssFxComposition {
         return animation.transforms.any { transform ->
             transform.malformed || transformPayloadOwns(transform.tags, geometryTags)
         }
+    }
+
+    private fun requireFinitePoint(point: AssPoint, label: String) {
+        require(point.x.isFinite() && point.y.isFinite()) {
+            "$label 坐标必须是有限数字。"
+        }
+    }
+
+    private fun translatedCoordinate(value: Double, offset: Double, label: String): Double {
+        require(value.isFinite()) { "$label 源值必须是有限数字。" }
+        val translated = value + offset
+        require(translated.isFinite()) { "$label 平移结果溢出。" }
+        return translated
     }
 
     private fun inheritedAnchor(document: AssDocument, event: AssEvent, style: AssStyle?): AssPoint {
