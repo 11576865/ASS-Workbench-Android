@@ -44,12 +44,14 @@ sealed interface AssBatchFilter {
         override fun matches(event: AssEvent, document: AssDocument) = event.comment == comment
     }
     data class HasTag(val tag: String) : AssBatchFilter {
-        private val pattern = Regex(
-            """\\${Regex.escape(tag)}(?:[^A-Za-z]|$)""",
-            RegexOption.IGNORE_CASE,
-        )
-        override fun matches(event: AssEvent, document: AssDocument) =
-            pattern.containsMatchIn(event.text)
+        init {
+            require(tag.isNotBlank()) { "Tag Filter 不能为空。" }
+        }
+        override fun matches(event: AssEvent, document: AssDocument): Boolean {
+            val analysis = AssInlineSyntax.analyze(event.text)
+            return !analysis.hasErrors &&
+                analysis.tags.any { it.name.equals(tag, ignoreCase = true) }
+        }
     }
     data class KaraokeRevealCompatible(
         val spec: AssKaraokeRevealFxSpec = AssKaraokeRevealFxSpec(),
