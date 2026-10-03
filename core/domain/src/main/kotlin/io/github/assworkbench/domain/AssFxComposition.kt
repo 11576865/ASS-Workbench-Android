@@ -380,7 +380,11 @@ object AssFxComposition {
                     )
                     AssReflectionFadeDirection.AUTO -> error("unreachable")
                 }.normalized()
-                val band = shiftedSourceClip?.let { intersect(it, rawBand) } ?: rawBand
+                val band = if (shiftedSourceClip != null) {
+                    intersect(shiftedSourceClip, rawBand)
+                } else {
+                    rawBand
+                }
                 if (band == null || band.right <= band.left || band.bottom <= band.top) return@repeat
 
                 val sample = (index + 0.5) / fade.bands.toDouble()
