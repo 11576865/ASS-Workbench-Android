@@ -51,6 +51,18 @@ internal fun FxCompositionPane(
     val parsedGlowBlur = glowBlur.toDoubleOrNull()
     val parsedGlowBorder = glowBorder.toDoubleOrNull()
     val parsedEntranceMs = entranceMs.toLongOrNull()
+    val valid =
+        parsedOffset?.isFinite() == true &&
+            parsedScale?.let { it.isFinite() && it > 0.0 } == true &&
+            parsedOpacity?.let { it.isFinite() && it in 0.0..100.0 } == true &&
+            parsedBlur?.let { it.isFinite() && it in 0.0..20.0 } == true &&
+            (!withGlow || (
+                parsedGlowOpacity?.let { it.isFinite() && it in 0.0..100.0 } == true &&
+                    parsedGlowBlur?.let { it.isFinite() && it in 0.0..20.0 } == true &&
+                    parsedGlowBorder?.let { it.isFinite() && it in 0.0..20.0 } == true
+                )) &&
+            (!withEntrance || (parsedEntranceMs != null && parsedEntranceMs >= 2L))
+
     fun currentTemplate(name: String): AssFxTemplate? {
         if (!valid || name.isBlank()) return null
         return AssFxTemplate(
@@ -91,18 +103,6 @@ internal fun FxCompositionPane(
         }
         templateName = template.name
     }
-
-    val valid =
-        parsedOffset?.isFinite() == true &&
-            parsedScale?.let { it.isFinite() && it > 0.0 } == true &&
-            parsedOpacity?.let { it.isFinite() && it in 0.0..100.0 } == true &&
-            parsedBlur?.let { it.isFinite() && it in 0.0..20.0 } == true &&
-            (!withGlow || (
-                parsedGlowOpacity?.let { it.isFinite() && it in 0.0..100.0 } == true &&
-                    parsedGlowBlur?.let { it.isFinite() && it in 0.0..20.0 } == true &&
-                    parsedGlowBorder?.let { it.isFinite() && it in 0.0..20.0 } == true
-                )) &&
-            (!withEntrance || (parsedEntranceMs != null && parsedEntranceMs >= 2L))
 
     Surface(
         modifier = modifier.fillMaxWidth().testTag("fx-composition-pane"),
