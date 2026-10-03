@@ -110,7 +110,12 @@ object AssFxComposition {
         generated += reflectionResult.generatedEventIds
 
         if (entrance != null) {
-            next = applyFlipEntrance(next, eventId, entrance)
+            // The generated layers are a visual stack, so entrance geometry must remain coherent.
+            // Applying the same relative entrance to each layer preserves each layer's own base
+            // scale/rotation (e.g. reflection ends at frx+180 rather than animating back to source).
+            (listOf(eventId) + generated).forEach { targetId ->
+                next = applyFlipEntrance(next, targetId, entrance)
+            }
         }
 
         return AssFxCompositionResult(
