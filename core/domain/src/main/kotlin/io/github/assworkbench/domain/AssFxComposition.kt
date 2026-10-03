@@ -52,7 +52,13 @@ data class AssFxBatchCompositionResult(
     val generatedEventIds: List<Long>,
 )
 
+private data class DeferredReflectionReveal(
+    val startMs: Long,
+    val endMs: Long,
+)
+
 object AssFxComposition {
+    private const val DEFERRED_REFLECTION_REVEAL_MS = 80L
     fun composeReflection(
         document: AssDocument,
         eventId: Long,
@@ -110,28 +116,49 @@ object AssFxComposition {
         fade: AssReflectionFadeSpec? = null,
         entrance: AssFlipEntranceSpec? = null,
     ): AssFxCompositionResult {
-        require(fade == null || entrance == null) {
-            "空间渐隐使用固定屏幕 Clip 分带，暂不能与翻转/拉伸入场同时启用；静态 Clip 无法可靠跟随旋转与缩放。"
-        }
-
         var next = document
         val generated = mutableListOf<Long>()
+        val glowIds = mutableListOf<Long>()
 
         if (glow != null) {
             val glowResult = createGlow(next, eventId, glow)
             next = glowResult.document
+            glowIds += glowResult.generatedEventIds
             generated += glowResult.generatedEventIds
         }
 
-        val reflectionResult = createReflection(next, eventId, reflection, fade)
+        val sourceBeforeReflection = next.events.firstOrNull { it.id == eventId }
+            ?: error("源字幕不存在。")
+        val eventDurationMs = sourceBeforeReflection.end.millis - sourceBeforeReflection.start.millis
+        val deferredReflectionReveal = if (fade != null && entrance != null) {
+            val settleMs = entrance.durationMs.coerceAtMost(eventDurationMs)
+            require(settleMs < eventDurationMs) {
+                "字幕持续时间不足：空间渐隐倒影需要在翻转/拉伸入场结束后仍保留可见时段。"
+            }
+            val revealEndMs = (settleMs + DEFERRED_REFLECTION_REVEAL_MS)
+                .coerceAtMost(eventDurationMs)
+            DeferredReflectionReveal(settleMs, revealEndMs)
+        } else null
+
+        val reflectionResult = createReflection(
+            document = next,
+            eventId = eventId,
+            spec = reflection,
+            fade = fade,
+            deferredReveal = deferredReflectionReveal,
+        )
         next = reflectionResult.document
-        generated += reflectionResult.generatedEventIds
+        val reflectionIds = reflectionResult.generatedEventIds
+        generated += reflectionIds
 
         if (entrance != null) {
-            // The generated layers are a visual stack, so entrance geometry must remain coherent.
-            // Applying the same relative entrance to each layer preserves each layer's own base
-            // scale/rotation (e.g. reflection ends at frx+180 rather than animating back to source).
-            (listOf(eventId) + generated).forEach { targetId ->
+            // Ordinary generated layers can follow the source's relative entrance directly.
+            // Spatial-fade reflection bands cannot: their rectangular clips live in script/screen
+            // coordinates. In that case the bands stay invisible until the entrance settles, then
+            // reveal at their final geometry. This preserves karaoke timing without shifting the
+            // companion Event start time.
+            val animatedCompanions = if (fade == null) generated else glowIds
+            (listOf(eventId) + animatedCompanions).forEach { targetId ->
                 next = applyFlipEntrance(next, targetId, entrance)
             }
         }
@@ -194,6 +221,7 @@ object AssFxComposition {
         eventId: Long,
         spec: AssReflectionFxSpec = AssReflectionFxSpec(),
         fade: AssReflectionFadeSpec? = null,
+        deferredReveal: DeferredReflectionReveal? = null,
     ): AssFxCompositionResult {
         require(spec.offsetY.isFinite()) { "倒影 Y 偏移必须是有限数字。" }
         require(spec.verticalScalePercent.isFinite() && spec.verticalScalePercent > 0.0) {
@@ -204,6 +232,15 @@ object AssFxComposition {
         }
         require(spec.blur.isFinite() && spec.blur in 0.0..20.0) {
             "倒影 Blur 必须在 0..20 之间。"
+        }
+
+        require(deferredReveal == null || fade != null) {
+            "延后显示只适用于空间渐隐倒影。"
+        }
+        deferredReveal?.let { value ->
+            require(value.startMs >= 0L && value.endMs > value.startMs) {
+                "延后显示时间窗无效。"
+            }
         }
 
         fade?.let { value ->
@@ -415,6 +452,17 @@ object AssFxComposition {
                     bandText,
                     "\\alpha&H" + "%02X".format(bandAlpha) + "&",
                 )
+                deferredReveal?.let { reveal ->
+                    bandText = appendLeadingOverride(
+                        bandText,
+                        buildString {
+                            append("\\alpha&HFF&")
+                            append("\\t(")
+                            append(reveal.startMs).append(',').append(reveal.endMs)
+                            append(",\\alpha&H").append("%02X".format(bandAlpha)).append("&)")
+                        },
+                    )
+                }
                 add(
                     source.copy(
                         id = nextId++,
