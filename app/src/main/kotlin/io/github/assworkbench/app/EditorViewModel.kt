@@ -302,7 +302,6 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         }
         containerScanJob = viewModelScope.launch {
             var imported = 0
-            var skipped = 0
             runCatching {
                 withContext(Dispatchers.IO) {
                     val stream = app.contentResolver.openInputStream(uri) ?: error("无法读取 MKV")
@@ -311,20 +310,15 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                             input = it,
                             retainAttachments = false,
                             onAttachment = { attachment ->
-                                if (!attachment.isSupportedFont) {
-                                    skipped++
-                                } else {
+                                if (attachment.isSupportedFont) {
                                     val asset = runCatching {
                                         fontStore.importEmbeddedFont(scanEpoch, attachment.fileName, attachment.data)
                                     }.getOrNull()
-                                    if (asset != null) imported++ else skipped++
+                                    if (asset != null) imported++
                                 }
                             },
                         )
                     }
-                    // Attachments rejected by the bounded reader (oversize, empty or
-                    // malformed) never reach onAttachment, so account for them here.
-                    skipped += scan.skippedAttachmentCount
                     // Project fonts are exposed to libass through sub-fonts-dir.
                     // Do not rebuild Fontconfig while an MKV is opening: live native cache
                     // mutation has caused process-level crashes on some Android devices.
@@ -349,7 +343,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                             resources = baselineContainerResources(scan),
                             inventoryEvidence = ContainerInventoryEvidence.BASELINE,
                             extractedFontCount = imported,
-                            skippedAttachmentCount = skipped,
+                            skippedAttachmentCount = scan.skippedAttachmentCount,
                             error = null,
                         ),
                         status = "MKV：已检测 " + scan.trackInfos.size + " 条轨道、" +
