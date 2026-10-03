@@ -37,6 +37,12 @@ data class AssFxCompositionResult(
     val generatedEventId: Long get() = generatedEventIds.first()
 }
 
+data class AssFxBatchCompositionResult(
+    val document: AssDocument,
+    val sourceEventIds: List<Long>,
+    val generatedEventIds: List<Long>,
+)
+
 object AssFxComposition {
     fun composeReflection(
         document: AssDocument,
@@ -51,6 +57,37 @@ object AssFxComposition {
             glow = null,
             entrance = entrance,
         )
+
+    fun composeMirrorStackBatch(
+        document: AssDocument,
+        eventIds: Set<Long>,
+        reflection: AssReflectionFxSpec = AssReflectionFxSpec(),
+        glow: AssGlowFxSpec? = AssGlowFxSpec(),
+        entrance: AssFlipEntranceSpec? = null,
+    ): AssFxBatchCompositionResult {
+        require(eventIds.isNotEmpty()) { "至少需要一个源字幕。" }
+        val orderedSourceIds = document.events.map { it.id }.filter { it in eventIds }
+        require(orderedSourceIds.size == eventIds.size) { "选择中包含已经不存在的字幕。" }
+
+        var next = document
+        val generated = mutableListOf<Long>()
+        orderedSourceIds.forEach { sourceId ->
+            val result = composeMirrorStack(
+                document = next,
+                eventId = sourceId,
+                reflection = reflection,
+                glow = glow,
+                entrance = entrance,
+            )
+            next = result.document
+            generated += result.generatedEventIds
+        }
+        return AssFxBatchCompositionResult(
+            document = next,
+            sourceEventIds = orderedSourceIds,
+            generatedEventIds = generated,
+        )
+    }
 
     fun composeMirrorStack(
         document: AssDocument,
