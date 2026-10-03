@@ -41,6 +41,16 @@ sealed interface AssBatchFilter {
         override fun matches(event: AssEvent, document: AssDocument) =
             Regex("""\\${Regex.escape(tag)}(?:[^A-Za-z]|$)""", RegexOption.IGNORE_CASE).containsMatchIn(event.text)
     }
+    data class KaraokeRevealCompatible(
+        val spec: AssKaraokeRevealFxSpec = AssKaraokeRevealFxSpec(),
+    ) : AssBatchFilter {
+        override fun matches(event: AssEvent, document: AssDocument): Boolean =
+            AssKaraokeFxAuthoring.inspectProgressiveRevealCompatibility(
+                document = document,
+                eventId = event.id,
+                spec = spec,
+            ).compatible
+    }
     data class TimeRange(val startMs: Long, val endMs: Long) : AssBatchFilter {
         override fun matches(event: AssEvent, document: AssDocument) = event.end.millis >= startMs && event.start.millis <= endMs
     }
@@ -123,6 +133,27 @@ sealed interface AssBatchAction {
     data class SetMargins(val left: Int? = null, val right: Int? = null, val vertical: Int? = null) : AssBatchAction {
         override fun apply(event: AssEvent, document: AssDocument) = event.copy(
             marginL = left ?: event.marginL, marginR = right ?: event.marginR, marginV = vertical ?: event.marginV)
+    }
+    data class ApplyKaraokeRevealFx(
+        val spec: AssKaraokeRevealFxSpec = AssKaraokeRevealFxSpec(),
+    ) : AssBatchAction {
+        override fun apply(event: AssEvent, document: AssDocument): AssEvent {
+            val workingDocument = document.copy(events = document.events.map { existing ->
+                if (existing.id == event.id) event else existing
+            })
+            val compatibility = AssKaraokeFxAuthoring.inspectProgressiveRevealCompatibility(
+                document = workingDocument,
+                eventId = event.id,
+                spec = spec,
+            )
+            if (!compatibility.compatible) return event
+            val plan = AssKaraokeFxAuthoring.planProgressiveReveal(
+                document = workingDocument,
+                eventId = event.id,
+                spec = spec,
+            )
+            return event.copy(text = plan.generatedText)
+        }
     }
 }
 

@@ -31,6 +31,12 @@ data class AssKaraokeRevealBatchPlan(
     val sourceSegmentCount: Int,
 )
 
+data class AssKaraokeRevealCompatibility(
+    val compatible: Boolean,
+    val segmentCount: Int,
+    val reason: String? = null,
+)
+
 /**
  * Conservative karaoke-FX compiler.
  *
@@ -51,6 +57,39 @@ object AssKaraokeFxAuthoring {
         """\\(?:fscy|frx)(?=[^A-Za-z]|$)""",
         RegexOption.IGNORE_CASE,
     )
+
+    fun inspectProgressiveRevealCompatibility(
+        document: AssDocument,
+        eventId: Long,
+        spec: AssKaraokeRevealFxSpec = AssKaraokeRevealFxSpec(),
+    ): AssKaraokeRevealCompatibility {
+        val event = document.events.firstOrNull { it.id == eventId }
+            ?: return AssKaraokeRevealCompatibility(
+                compatible = false,
+                segmentCount = 0,
+                reason = "源字幕不存在。",
+            )
+        val segmentCount = AssKaraokeCodec.parse(event.text).size
+        return try {
+            val plan = planProgressiveReveal(document, eventId, spec)
+            AssKaraokeRevealCompatibility(
+                compatible = true,
+                segmentCount = plan.sourceSegmentCount,
+            )
+        } catch (error: IllegalArgumentException) {
+            AssKaraokeRevealCompatibility(
+                compatible = false,
+                segmentCount = segmentCount,
+                reason = error.message,
+            )
+        } catch (error: IllegalStateException) {
+            AssKaraokeRevealCompatibility(
+                compatible = false,
+                segmentCount = segmentCount,
+                reason = error.message,
+            )
+        }
+    }
 
     fun planProgressiveRevealBatch(
         document: AssDocument,

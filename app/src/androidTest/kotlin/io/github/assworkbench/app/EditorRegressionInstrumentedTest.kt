@@ -671,6 +671,30 @@ class EditorRegressionInstrumentedTest {
         }
     }
 
+    @Test
+    fun batchKaraokeRevealControlsStayPreviewOnlyUntilCommit() {
+        restoreRecovery()
+        val before = viewModel.state.value.document
+
+        openTool("BATCH")
+        composeRule.onNodeWithTag("batch-karaoke-reveal")
+            .performScrollTo()
+            .assertIsDisplayed()
+        composeRule.onNodeWithTag("batch-karaoke-reveal-enabled")
+            .performScrollTo()
+            .assertIsDisplayed()
+            .performClick()
+        composeRule.onNodeWithTag("batch-karaoke-reveal-ms")
+            .performScrollTo()
+            .assertIsDisplayed()
+        composeRule.onNodeWithTag("batch-karaoke-reveal-blur")
+            .assertIsDisplayed()
+        composeRule.onNodeWithTag("batch-karaoke-reveal-accel")
+            .assertIsDisplayed()
+
+        assertEquals(before, viewModel.state.value.document)
+    }
+
     private fun restoreRecovery() {
         composeRule.onNodeWithTag("recovery-restore")
             .assertIsDisplayed()

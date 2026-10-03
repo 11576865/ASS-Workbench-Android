@@ -244,6 +244,34 @@ class AssKaraokeFxAuthoringTest {
     }
 
     @Test
+    fun compatibilityUsesDocumentContextWithoutMutatingText() {
+        val document = AssDocument(
+            styles = listOf(AssStyle(name = "Alt", scaleY = 82.0)),
+            events = listOf(
+                AssEvent(
+                    id = 11,
+                    start = SubTime(0),
+                    end = SubTime(1000),
+                    style = "Alt",
+                    text = "{\\k20}Hi{\\kf30}there",
+                )
+            ),
+        )
+        val before = document.events.single().text
+        val safe = AssKaraokeFxAuthoring.inspectProgressiveRevealCompatibility(document, 11)
+        assertTrue(safe.compatible)
+        assertEquals(2, safe.segmentCount)
+        assertEquals(before, document.events.single().text)
+
+        val absolute = document.copy(
+            events = listOf(document.events.single().copy(text = "{\\kt50}A"))
+        )
+        val unsafe = AssKaraokeFxAuthoring.inspectProgressiveRevealCompatibility(absolute, 11)
+        assertTrue(!unsafe.compatible)
+        assertTrue(unsafe.reason?.contains("\\kt") == true)
+    }
+
+    @Test
     fun rejectsAbsoluteKtAndExistingControlledFx() {
         assertFailsWith<IllegalArgumentException> {
             AssKaraokeFxAuthoring.applyProgressiveReveal("{\\kt50}A")

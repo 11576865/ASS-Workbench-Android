@@ -8,6 +8,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import io.github.assworkbench.app.EditorState
 import io.github.assworkbench.app.EditorUiBatchDefaultScope
@@ -57,9 +58,32 @@ internal fun RuleBatchPane(
     var overridePropertyName by rememberSaveable { mutableStateOf(AssTransformVisualProperty.BORDER.name) }
     var overrideValue by rememberSaveable { mutableStateOf("") }
 
+    var karaokeRevealEnabled by rememberSaveable { mutableStateOf(false) }
+    var karaokeRevealMs by rememberSaveable { mutableStateOf("160") }
+    var karaokeRevealBlur by rememberSaveable { mutableStateOf("3.5") }
+    var karaokeRevealAccel by rememberSaveable { mutableStateOf("") }
+
+    val parsedKaraokeRevealMs = karaokeRevealMs.toLongOrNull()
+    val parsedKaraokeRevealBlur = karaokeRevealBlur.toDoubleOrNull()
+    val parsedKaraokeRevealAccel = karaokeRevealAccel.takeIf { it.isNotBlank() }?.toDoubleOrNull()
+    val karaokeRevealSpec = if (
+        parsedKaraokeRevealMs != null && parsedKaraokeRevealMs >= 0L &&
+        parsedKaraokeRevealBlur?.let { it.isFinite() && it in 0.0..20.0 } == true &&
+        (karaokeRevealAccel.isBlank() || parsedKaraokeRevealAccel?.let { it.isFinite() && it > 0.0 } == true)
+    ) {
+        AssKaraokeRevealFxSpec(
+            revealMs = parsedKaraokeRevealMs,
+            startBlur = parsedKaraokeRevealBlur,
+            accel = parsedKaraokeRevealAccel,
+        )
+    } else null
+
     fun filter(): AssBatchFilter {
         val filters = buildList<AssBatchFilter> {
             if (selectedOnly) add(AssBatchFilter.EventIds(uiState.selection.eventIds))
+            if (karaokeRevealEnabled && karaokeRevealSpec != null) {
+                add(AssBatchFilter.KaraokeRevealCompatible(karaokeRevealSpec))
+            }
             styleFilter.trim().takeIf(String::isNotEmpty)?.let { add(AssBatchFilter.StyleIs(it)) }
             textFilter.takeIf(String::isNotEmpty)?.let { add(AssBatchFilter.TextContains(it)) }
             actorFilter.takeIf(String::isNotEmpty)?.let { add(AssBatchFilter.ActorContains(it)) }
@@ -117,6 +141,9 @@ internal fun RuleBatchPane(
                     add(AssBatchAction.SetNumericOverride(property, value))
                 }
             }
+            if (karaokeRevealEnabled) {
+                karaokeRevealSpec?.let { add(AssBatchAction.ApplyKaraokeRevealFx(it)) }
+            }
         }
         return AssBatchRecipe("interactive-rule", filter(), actions)
     }
@@ -127,6 +154,7 @@ internal fun RuleBatchPane(
         rawRegexFilter, durationMin, durationMax,
         shiftText, styleText, layerText, actorText, marginL, marginR, marginV, findText, replaceText, commentAction,
         regexFind, regexReplace, regexRaw, timingOrigin, timingNumerator, timingDenominator, overridePropertyName, overrideValue,
+        karaokeRevealEnabled, karaokeRevealMs, karaokeRevealBlur, karaokeRevealAccel,
     ) { recipe() }
     val preview = remember(state.document, recipe) { AssBatchEngine.preview(state.document, recipe) }
     val changedExamples = remember(state.document, preview) {
@@ -211,6 +239,69 @@ internal fun RuleBatchPane(
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             OutlinedTextField(overridePropertyName, { overridePropertyName = it }, label = { Text("数值 override 属性") }, modifier = Modifier.weight(1f))
             OutlinedTextField(overrideValue, { overrideValue = it }, label = { Text("值") }, modifier = Modifier.weight(1f))
+        }
+
+        Surface(
+            tonalElevation = 1.dp,
+            shape = MaterialTheme.shapes.small,
+            modifier = Modifier.fillMaxWidth().testTag("batch-karaoke-reveal"),
+        ) {
+            Column(Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                    Switch(
+                        checked = karaokeRevealEnabled,
+                        onCheckedChange = { karaokeRevealEnabled = it },
+                        modifier = Modifier.testTag("batch-karaoke-reveal-enabled"),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text("Karaoke · 逐音节显现 FX", style = MaterialTheme.typography.labelLarge)
+                        Text(
+                            "启用后只让当前参数下可安全编译的 Karaoke Event 进入批次。",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                if (karaokeRevealEnabled) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        OutlinedTextField(
+                            karaokeRevealMs,
+                            { karaokeRevealMs = it },
+                            label = { Text("显现 ms") },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f).testTag("batch-karaoke-reveal-ms"),
+                        )
+                        OutlinedTextField(
+                            karaokeRevealBlur,
+                            { karaokeRevealBlur = it },
+                            label = { Text("起始 Blur") },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f).testTag("batch-karaoke-reveal-blur"),
+                        )
+                        OutlinedTextField(
+                            karaokeRevealAccel,
+                            { karaokeRevealAccel = it },
+                            label = { Text("Accel") },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f).testTag("batch-karaoke-reveal-accel"),
+                        )
+                    }
+                    if (karaokeRevealSpec == null) {
+                        Text(
+                            "参数无效：显现时长需 ≥ 0；Blur 0..20；Accel 为空或 > 0。",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    } else {
+                        Text(
+                            "不兼容 Event 会被跳过；动作执行时会再次按实际 Event / Style 状态校验，不覆盖已有 FX。",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
         }
 
         HorizontalDivider()

@@ -76,6 +76,45 @@ class AuthoringEngineSuiteTest {
     }
 
     @Test
+    fun karaokeBatchSkipsIncompatibleEventsWithoutAbortingTheBatch() {
+        val document = AssDocument(
+            events = listOf(
+                event(1, 0, 1000, "{\\k20}Hi{\\kf30}there"),
+                event(2, 1000, 2000, "{\\kt50}Absolute"),
+                event(3, 2000, 3000, "{\\k20\\blur2}Already styled"),
+                event(4, 3000, 4000, "Plain text"),
+            )
+        )
+        val spec = AssKaraokeRevealFxSpec(revealMs = 120, startBlur = 3.0)
+        val recipe = AssBatchRecipe(
+            id = "karaoke-reveal",
+            filter = AssBatchFilter.KaraokeRevealCompatible(spec),
+            actions = listOf(AssBatchAction.ApplyKaraokeRevealFx(spec)),
+        )
+
+        val preview = AssBatchEngine.preview(document, recipe)
+
+        assertEquals(listOf(1L), preview.affectedEventIds)
+        assertEquals(listOf(1L), preview.changedEventIds)
+        assertTrue(preview.document.events.first { it.id == 1L }.text.contains("\\t(0,120,"))
+        assertEquals(document.events.first { it.id == 2L }, preview.document.events.first { it.id == 2L })
+        assertEquals(document.events.first { it.id == 3L }, preview.document.events.first { it.id == 3L })
+        assertEquals(document.events.first { it.id == 4L }, preview.document.events.first { it.id == 4L })
+    }
+
+    @Test
+    fun karaokeBatchActionRechecksCurrentEventAfterEarlierActions() {
+        val original = event(9, 0, 1000, "{\\k20}Safe")
+        val document = AssDocument(events = listOf(original))
+        val action = AssBatchAction.ApplyKaraokeRevealFx(
+            AssKaraokeRevealFxSpec(revealMs = 100, startBlur = 2.0)
+        )
+        val nowConflicting = original.copy(text = "{\\k20\\blur4}Now conflicting")
+
+        assertEquals(nowConflicting, action.apply(nowConflicting, document))
+    }
+
+    @Test
     fun expandedBatchRegexAndTimingRemainOnePreviewDocument() {
         val doc = AssDocument(events = listOf(event(1, 1000, 2000, "Hello 123")))
         val recipe = AssBatchRecipe(
