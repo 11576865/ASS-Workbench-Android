@@ -189,6 +189,7 @@ object AssFxComposition {
         require(sourceIndex >= 0) { "源字幕不存在。" }
         val source = document.events[sourceIndex]
         require(!source.comment) { "Comment 事件不能直接生成可见柔光层。" }
+        requireSourceStyle(document, source)
         requireCompositionOwnershipCompatible(
             source.text,
             ownedTags = setOf("alpha", "1a", "2a", "3a", "4a", "blur", "bord"),
@@ -205,7 +206,7 @@ object AssFxComposition {
             },
         )
 
-        val newId = (document.events.maxOfOrNull { it.id } ?: 0L) + 1L
+        val newId = nextEventId(document)
         val glowEvent = source.copy(
             id = newId,
             layer = (source.layer - 1).coerceAtLeast(0),
@@ -279,6 +280,7 @@ object AssFxComposition {
         require(sourceIndex >= 0) { "源字幕不存在。" }
         val source = document.events[sourceIndex]
         require(!source.comment) { "Comment 事件不能直接生成可见倒影。" }
+        val sourceStyle = requireSourceStyle(document, source)
         requireCompositionOwnershipCompatible(
             source.text,
             ownedTags = setOf("alpha", "1a", "2a", "3a", "4a", "blur", "fscy", "frx"),
@@ -326,8 +328,8 @@ object AssFxComposition {
             "倒影暂不自动平移矢量 Clip / iClip；请先转换为普通矩形 Clip 或移除裁剪。"
         }
 
-        val style = document.styles.firstOrNull { it.name.equals(source.style, ignoreCase = true) }
-        val sourceScaleY = geometry.scaleY ?: style?.scaleY ?: 100.0
+        val style = sourceStyle
+        val sourceScaleY = geometry.scaleY ?: style.scaleY
         require(sourceScaleY.isFinite() && sourceScaleY >= 0.0) {
             "源字幕有效 Scale Y 必须是有限且非负的数字。"
         }
@@ -342,7 +344,7 @@ object AssFxComposition {
             "倒影 Rotation X 计算溢出；请缩小源旋转值。"
         }
         val alpha = ((1.0 - spec.opacityPercent / 100.0) * 255.0).roundToInt().coerceIn(0, 255)
-        val alignment = leadingAlignment(source.text) ?: style?.alignment ?: 2
+        val alignment = leadingAlignment(source.text) ?: style.alignment
         val inherited = if (geometry.positionMode == AssPositionMode.INHERITED) {
             inheritedAnchor(document, source, style)
         } else null
@@ -424,7 +426,7 @@ object AssFxComposition {
 
         val reflectionLayer = (source.layer - 1).coerceAtLeast(0)
         if (fade == null) {
-            val newId = (document.events.maxOfOrNull { it.id } ?: 0L) + 1L
+            val newId = nextEventId(document)
             val reflectionEvent = source.copy(
                 id = newId,
                 layer = reflectionLayer,
@@ -472,7 +474,8 @@ object AssFxComposition {
             ).normalized()
         }
 
-        var nextId = (document.events.maxOfOrNull { it.id } ?: 0L) + 1L
+        val reservedIds = nextEventIds(document, fade.bands)
+        var reservedIdIndex = 0
         val bandEvents = buildList {
             repeat(fade.bands) { index ->
                 val start = depth * index / fade.bands.toDouble()
@@ -517,7 +520,7 @@ object AssFxComposition {
                 }
                 add(
                     source.copy(
-                        id = nextId++,
+                        id = reservedIds[reservedIdIndex++],
                         layer = reflectionLayer,
                         text = bandText,
                     )
@@ -557,6 +560,7 @@ object AssFxComposition {
 
         val source = document.events.firstOrNull { it.id == eventId } ?: error("源字幕不存在。")
         require(!source.comment) { "Comment 事件不能添加可见入场动画。" }
+        val sourceStyle = requireSourceStyle(document, source)
         requireCompositionOwnershipCompatible(
             source.text,
             ownedTags = setOf("fscy", "frx", "t"),
@@ -572,8 +576,7 @@ object AssFxComposition {
 
         val geometry = AssGeometrySemantic.inspect(source.text)
         require(!geometry.malformedLeadingBlock) { "源字幕的前导 override block 不完整，不能安全生成 FX。" }
-        val style = document.styles.firstOrNull { it.name.equals(source.style, ignoreCase = true) }
-        val baseScaleY = geometry.scaleY ?: style?.scaleY ?: 100.0
+        val baseScaleY = geometry.scaleY ?: sourceStyle.scaleY
         require(baseScaleY.isFinite() && baseScaleY >= 0.0) {
             "源字幕有效 Scale Y 必须是有限且非负的数字。"
         }
@@ -694,6 +697,22 @@ object AssFxComposition {
         return animation.transforms.any { transform ->
             transform.malformed || transformPayloadOwns(transform.tags, geometryTags)
         }
+    }
+
+    private fun requireSourceStyle(document: AssDocument, event: AssEvent): AssStyle =
+        document.styles.firstOrNull { it.name == event.style }
+            ?: error("源字幕引用不存在的 Style：${event.style}")
+
+    private fun nextEventId(document: AssDocument): Long =
+        nextEventIds(document, 1).single()
+
+    private fun nextEventIds(document: AssDocument, count: Int): LongArray {
+        require(count > 0) { "需要分配至少一个 Event ID。" }
+        val maxId = document.events.maxOfOrNull { it.id } ?: 0L
+        require(maxId <= Long.MAX_VALUE - count.toLong()) {
+            "无法生成 FX Event：Event ID 空间已耗尽。"
+        }
+        return LongArray(count) { offset -> maxId + 1L + offset }
     }
 
     private fun requireFinitePoint(point: AssPoint, label: String) {
