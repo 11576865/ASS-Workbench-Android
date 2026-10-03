@@ -355,10 +355,13 @@ object AssFxComposition {
             AssReflectionFadeDirection.UP -> anchorY
             AssReflectionFadeDirection.AUTO -> error("unreachable")
         }
-        val depth = minOf(fade.depthPx, maxDepth)
-        require(depth > 0.0) {
+        require(maxDepth > 0.0) {
             "倒影锚点已位于画面边界，空间渐隐在所选方向没有可用区域。"
         }
+        require(fade.depthPx <= maxDepth) {
+            "空间渐隐深度 ${format(fade.depthPx)} px 超出所选方向可用的 ${format(maxDepth)} px；请缩短深度或改变方向。"
+        }
+        val depth = fade.depthPx
 
         val shiftedSourceClip = geometry.clipRect?.let { clip ->
             AssClipRect(
