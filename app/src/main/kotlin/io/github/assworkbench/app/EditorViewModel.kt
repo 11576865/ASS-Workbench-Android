@@ -886,13 +886,49 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    fun previewKaraokeRevealFx(
+        eventId: Long,
+        spec: AssKaraokeRevealFxSpec,
+    ) = previewKaraokeRevealFx(setOf(eventId), spec)
+
+    fun previewKaraokeRevealFx(
+        eventIds: Set<Long>,
+        spec: AssKaraokeRevealFxSpec,
+    ) {
+        val document = _state.value.document
+        val plan = runCatching {
+            AssKaraokeFxAuthoring.planProgressiveRevealBatch(document, eventIds, spec)
+        }.getOrElse { error ->
+            _state.update {
+                it.copy(
+                    previewDocument = null,
+                    previewOwnerId = null,
+                    status = "Karaoke FX 预览失败：" + (error.message ?: error::class.java.simpleName),
+                )
+            }
+            return
+        }
+        _state.update {
+            it.copy(
+                previewDocument = plan.document,
+                previewOwnerId = "karaoke-fx",
+                status = "Karaoke FX 预览：${plan.sourceEventIds.size} 条字幕 · ${plan.sourceSegmentCount} 个音节；尚未写入。",
+            )
+        }
+    }
+
     fun applyKaraokeRevealFx(
         eventId: Long,
         spec: AssKaraokeRevealFxSpec,
+    ) = applyKaraokeRevealFx(setOf(eventId), spec)
+
+    fun applyKaraokeRevealFx(
+        eventIds: Set<Long>,
+        spec: AssKaraokeRevealFxSpec,
     ) {
-        val source = _state.value.document.events.firstOrNull { it.id == eventId } ?: return
+        val document = _state.value.document
         val plan = runCatching {
-            AssKaraokeFxAuthoring.planProgressiveReveal(source.text, spec)
+            AssKaraokeFxAuthoring.planProgressiveRevealBatch(document, eventIds, spec)
         }.getOrElse { error ->
             _state.update {
                 it.copy(status = "Karaoke FX 生成失败：" + (error.message ?: error::class.java.simpleName))
@@ -900,11 +936,9 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             return
         }
 
-        editDocument("已为字幕 #$eventId 写入 ${plan.sourceSegmentCount} 个逐音节显现 FX。") { doc ->
-            doc.copy(events = doc.events.map { event ->
-                if (event.id == eventId) event.copy(text = plan.generatedText) else event
-            })
-        }
+        editDocument(
+            "已为 ${plan.sourceEventIds.size} 条字幕写入 ${plan.sourceSegmentCount} 个逐音节显现 FX。"
+        ) { plan.document }
     }
 
     fun saveFxTemplate(template: AssFxTemplate) {
