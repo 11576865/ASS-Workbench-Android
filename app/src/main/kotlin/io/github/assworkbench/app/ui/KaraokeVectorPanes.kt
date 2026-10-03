@@ -10,6 +10,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -53,6 +54,93 @@ internal fun KaraokePane(
                 enabled = !initialSegments.isNullOrEmpty(),
             ) { Text("按词建立 20cs 初始音节") }
         } else {
+            var revealMs by rememberSaveable(event.id) { mutableStateOf("160") }
+            var revealBlur by rememberSaveable(event.id) { mutableStateOf("3.5") }
+            var revealAccel by rememberSaveable(event.id) { mutableStateOf("") }
+            val parsedRevealMs = revealMs.toLongOrNull()
+            val parsedRevealBlur = revealBlur.toDoubleOrNull()
+            val parsedRevealAccel = revealAccel.takeIf { it.isNotBlank() }?.toDoubleOrNull()
+            val revealSpec = if (
+                parsedRevealMs != null && parsedRevealMs >= 0L &&
+                parsedRevealBlur?.let { it.isFinite() && it in 0.0..20.0 } == true &&
+                (revealAccel.isBlank() || parsedRevealAccel?.let { it.isFinite() && it > 0.0 } == true)
+            ) {
+                AssKaraokeRevealFxSpec(
+                    revealMs = parsedRevealMs,
+                    startBlur = parsedRevealBlur,
+                    accel = parsedRevealAccel,
+                )
+            } else null
+            val revealCompatibility = remember(event.text, revealSpec) {
+                revealSpec?.let { spec ->
+                    runCatching { AssKaraokeFxAuthoring.planProgressiveReveal(event.text, spec) }
+                }
+            }
+            val revealError = revealCompatibility?.exceptionOrNull()?.message
+
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.38f),
+                shape = MaterialTheme.shapes.small,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Column(
+                    Modifier.padding(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Text("Karaoke FX · 逐音节显现", style = MaterialTheme.typography.titleSmall)
+                    Text(
+                        "按 Karaoke 累计时间给每个音节写入独立 alpha / blur transform；不拆 Event，也不需要猜测字形宽度。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        OutlinedTextField(
+                            value = revealMs,
+                            onValueChange = { revealMs = it },
+                            label = { Text("显现时长 ms") },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f),
+                        )
+                        OutlinedTextField(
+                            value = revealBlur,
+                            onValueChange = { revealBlur = it },
+                            label = { Text("起始 Blur") },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f),
+                        )
+                        OutlinedTextField(
+                            value = revealAccel,
+                            onValueChange = { revealAccel = it },
+                            label = { Text("Accel") },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                    if (revealSpec == null) {
+                        Text(
+                            "参数无效：显现时长需 ≥ 0；Blur 0..20；Accel 为空或 > 0。",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    } else if (revealError != null) {
+                        Text(
+                            revealError,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                    Button(
+                        enabled = revealSpec != null && revealError == null,
+                        onClick = {
+                            revealSpec?.let { viewModel.applyKaraokeRevealFx(event.id, it) }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("写入 ${segments.size} 个逐音节 FX")
+                    }
+                }
+            }
+
             LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 itemsIndexed(segments) { index, segment ->
                     Row(

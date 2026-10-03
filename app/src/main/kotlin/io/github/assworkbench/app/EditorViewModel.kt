@@ -30,6 +30,13 @@ import io.github.assworkbench.domain.AssSearchReplace
 import io.github.assworkbench.domain.AssAnimationKeyframe
 import io.github.assworkbench.domain.AssAnimationAuthoring
 import io.github.assworkbench.domain.AssTransformVisualProperty
+import io.github.assworkbench.domain.AssFxComposition
+import io.github.assworkbench.domain.AssReflectionFxSpec
+import io.github.assworkbench.domain.AssFlipEntranceSpec
+import io.github.assworkbench.domain.AssGlowFxSpec
+import io.github.assworkbench.domain.AssFxTemplate
+import io.github.assworkbench.domain.AssKaraokeFxAuthoring
+import io.github.assworkbench.domain.AssKaraokeRevealFxSpec
 import io.github.assworkbench.domain.EventFormatClipboard
 import io.github.assworkbench.domain.EventFormatClipboardOps
 import io.github.assworkbench.domain.EventFormatPasteMode
@@ -65,6 +72,12 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     private val recoveryStore = StartupProbe.stage(application, "viewmodel_recovery_store") {
         RecoveryStore(application)
     }
+    private val fxTemplateStore = StartupProbe.stage(application, "viewmodel_fx_template_store") {
+        FxTemplateStore(application)
+    }
+    private val initialFxTemplateSnapshot = StartupProbe.stage(application, "viewmodel_fx_template_load") {
+        fxTemplateStore.load()
+    }
     private var recoveryJob: Job? = null
     private var fontDiagnosticJob: Job? = null
     private var waveformJob: Job? = null
@@ -84,6 +97,9 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         )
     )
     val state: StateFlow<EditorState> = _state.asStateFlow()
+
+    private val _fxTemplates = MutableStateFlow(initialFxTemplateSnapshot.templates)
+    val fxTemplates: StateFlow<List<SavedFxTemplate>> = _fxTemplates.asStateFlow()
 
     // Playback is intentionally outside EditorState. mpv can report position at a
     // high cadence; publishing each tick through the root editor state invalidates
@@ -867,6 +883,154 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                     text = AssAnimationAuthoring.applyNumericTrack(event.text, property, keyframes, accel)
                 )
             })
+        }
+    }
+
+    fun applyKaraokeRevealFx(
+        eventId: Long,
+        spec: AssKaraokeRevealFxSpec,
+    ) {
+        val source = _state.value.document.events.firstOrNull { it.id == eventId } ?: return
+        val plan = runCatching {
+            AssKaraokeFxAuthoring.planProgressiveReveal(source.text, spec)
+        }.getOrElse { error ->
+            _state.update {
+                it.copy(status = "Karaoke FX 生成失败：" + (error.message ?: error::class.java.simpleName))
+            }
+            return
+        }
+
+        editDocument("已为字幕 #$eventId 写入 ${plan.sourceSegmentCount} 个逐音节显现 FX。") { doc ->
+            doc.copy(events = doc.events.map { event ->
+                if (event.id == eventId) event.copy(text = plan.generatedText) else event
+            })
+        }
+    }
+
+    fun saveFxTemplate(template: AssFxTemplate) {
+        val snapshot = runCatching { fxTemplateStore.save(template) }.getOrElse { error ->
+            _state.update {
+                it.copy(status = "保存 FX 模板失败：" + (error.message ?: error::class.java.simpleName))
+            }
+            return
+        }
+        _fxTemplates.value = snapshot.templates
+        _state.update {
+            it.copy(
+                status = buildString {
+                    append("已保存 FX 模板“").append(template.name).append("”。")
+                    if (snapshot.corruptFileCount > 0) {
+                        append(" 另有 ").append(snapshot.corruptFileCount).append(" 个损坏模板文件已跳过。")
+                    }
+                }
+            )
+        }
+    }
+
+    fun deleteFxTemplate(id: String) {
+        val snapshot = runCatching { fxTemplateStore.delete(id) }.getOrElse { error ->
+            _state.update {
+                it.copy(status = "删除 FX 模板失败：" + (error.message ?: error::class.java.simpleName))
+            }
+            return
+        }
+        _fxTemplates.value = snapshot.templates
+        _state.update {
+            it.copy(
+                status = buildString {
+                    append("已删除 FX 模板。")
+                    if (snapshot.corruptFileCount > 0) {
+                        append(" 另有 ").append(snapshot.corruptFileCount).append(" 个损坏模板文件已跳过。")
+                    }
+                }
+            )
+        }
+    }
+
+    fun previewMirrorFxComposition(
+        eventIds: Set<Long>,
+        reflection: AssReflectionFxSpec,
+        glow: AssGlowFxSpec?,
+        entrance: AssFlipEntranceSpec?,
+    ) {
+        val snapshot = _state.value
+        val result = runCatching {
+            AssFxComposition.composeMirrorStackBatch(
+                document = snapshot.document,
+                eventIds = eventIds,
+                reflection = reflection,
+                glow = glow,
+                entrance = entrance,
+            )
+        }.getOrElse { error ->
+            _state.update {
+                it.copy(
+                    previewDocument = null,
+                    previewOwnerId = null,
+                    status = "FX 预览失败：" + (error.message ?: error::class.java.simpleName),
+                )
+            }
+            return
+        }
+        _state.update { current ->
+            current.copy(
+                previewDocument = result.document,
+                previewOwnerId = "fx-composition",
+                status = "FX 预览：${result.sourceEventIds.size} 条源字幕 · ${result.generatedEventIds.size} 个生成层；尚未写入。",
+            )
+        }
+    }
+
+    fun createMirrorFxComposition(
+        eventId: Long,
+        reflection: AssReflectionFxSpec,
+        glow: AssGlowFxSpec?,
+        entrance: AssFlipEntranceSpec?,
+    ) = createMirrorFxComposition(
+        eventIds = setOf(eventId),
+        reflection = reflection,
+        glow = glow,
+        entrance = entrance,
+    )
+
+    fun createMirrorFxComposition(
+        eventIds: Set<Long>,
+        reflection: AssReflectionFxSpec,
+        glow: AssGlowFxSpec?,
+        entrance: AssFlipEntranceSpec?,
+    ) {
+        val snapshot = _state.value
+        val result = runCatching {
+            AssFxComposition.composeMirrorStackBatch(
+                document = snapshot.document,
+                eventIds = eventIds,
+                reflection = reflection,
+                glow = glow,
+                entrance = entrance,
+            )
+        }.getOrElse { error ->
+            _state.update {
+                it.copy(status = "FX 组合失败：" + (error.message ?: error::class.java.simpleName))
+            }
+            return
+        }
+
+        val status = buildString {
+            append("已为 ").append(result.sourceEventIds.size).append(" 条字幕生成 ")
+            append(result.generatedEventIds.size).append(" 个 FX Event")
+            if (glow != null) append("（柔光 + 倒影）") else append("（倒影）")
+            if (entrance != null) append("，并写入主体翻转入场")
+            append("。")
+        }
+        editDocument(status) { result.document }
+        _state.update { state ->
+            state.copy(
+                focusedEventId = result.sourceEventIds.firstOrNull()
+                    ?.takeIf { id -> state.document.events.any { it.id == id } },
+                selectedEventIds = (result.sourceEventIds + result.generatedEventIds)
+                    .filterTo(linkedSetOf()) { id -> state.document.events.any { it.id == id } },
+                selectionAnchorId = null,
+            )
         }
     }
 

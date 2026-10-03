@@ -4339,7 +4339,10 @@ private fun InlineEventEditor(
 
     }
 
-    if (activeSection == WorkbenchTool.EFFECTS) InlineEffectsEditor(event, playbackPositionMs, viewModel)
+    if (activeSection == WorkbenchTool.EFFECTS) {
+        val fxTargets = state.selectedEventIds.ifEmpty { setOf(event.id) }
+        InlineEffectsEditor(event, fxTargets, playbackPositionMs, viewModel)
+    }
 
     if (activeSection == WorkbenchTool.EVENT) {
         Surface(
@@ -4408,7 +4411,12 @@ private fun InlineEventEditor(
 }
 
 @Composable
-private fun InlineEffectsEditor(event: AssEvent, playbackPositionMs: Long, viewModel: EditorViewModel) {
+private fun InlineEffectsEditor(
+    event: AssEvent,
+    fxTargetEventIds: Set<Long>,
+    playbackPositionMs: Long,
+    viewModel: EditorViewModel,
+) {
     val visual = remember(event.id, event.text) { EventOverrideEditor.inspect(event.text) }
     val animation = remember(event.id, event.text) { AssAnimationSemantic.inspect(event.text) }
     var blur by remember(event.id, event.text) { mutableStateOf(visual.blur?.toString().orEmpty()) }
@@ -4442,6 +4450,8 @@ private fun InlineEffectsEditor(event: AssEvent, playbackPositionMs: Long, viewM
         modifier = Modifier.fillMaxWidth(),
     ) {
         Column(Modifier.padding(WorkbenchDimens.Small), verticalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small)) {
+            FxCompositionPane(event, fxTargetEventIds, viewModel)
+            Divider()
             Text("视觉效果", style = MaterialTheme.typography.titleSmall)
             ContinuousParameterControl(
                 label = "Blur",
