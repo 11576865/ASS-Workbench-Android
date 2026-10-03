@@ -123,7 +123,7 @@ class ContainerInventoryTest {
         fileName = name,
         mimeType = "font/otf",
         description = "",
-        sizeBytes = 1024,
+        sizeBytes = 1024L,
         sha256 = sha,
         dataAvailable = true,
     )
