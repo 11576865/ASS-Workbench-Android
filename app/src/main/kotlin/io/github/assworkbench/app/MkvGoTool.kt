@@ -21,6 +21,7 @@ class MkvGoTool(private val context: Context) {
         editedAss: File,
         output: File,
         fonts: List<File> = emptyList(),
+        attachments: List<File> = emptyList(),
     ) {
         require(isAvailable()) { "MKV 写回工具在此 ABI 上不可用" }
         output.parentFile?.mkdirs() ?: error("输出目录不可用")
@@ -39,7 +40,42 @@ class MkvGoTool(private val context: Context) {
                 args += "--font"
                 args += font.absolutePath
             }
+        attachments
+            .distinctBy { it.absolutePath }
+            .filterNot { candidate -> fonts.any { it.absolutePath == candidate.absolutePath } }
+            .forEach { attachment ->
+                require(attachment.isFile && attachment.length() > 0L) { "附件文件不可用：" + attachment.name }
+                args += "--attachment"
+                args += attachment.absolutePath
+            }
         args += editedAss.absolutePath
+        run(*args.toTypedArray())
+        require(output.isFile && output.length() > 0L) { "MKV 写回未生成输出文件" }
+    }
+
+
+    fun addAttachments(
+        source: File,
+        output: File,
+        attachments: List<File>,
+    ) {
+        require(isAvailable()) { "MKV 写回工具在此 ABI 上不可用" }
+        require(attachments.isNotEmpty()) { "没有待封入附件" }
+        output.parentFile?.mkdirs() ?: error("输出目录不可用")
+        output.delete()
+
+        val args = mutableListOf(
+            "add-attachments",
+            source.absolutePath,
+            "-o", output.absolutePath,
+        )
+        attachments
+            .distinctBy { it.absolutePath }
+            .forEach { attachment ->
+                require(attachment.isFile && attachment.length() > 0L) { "附件文件不可用：" + attachment.name }
+                args += "--attachment"
+                args += attachment.absolutePath
+            }
         run(*args.toTypedArray())
         require(output.isFile && output.length() > 0L) { "MKV 写回未生成输出文件" }
     }
