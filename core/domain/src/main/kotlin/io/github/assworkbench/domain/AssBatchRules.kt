@@ -146,7 +146,12 @@ sealed interface AssBatchAction {
                 eventId = event.id,
                 spec = spec,
             )
-            if (!compatibility.compatible) return event
+            require(compatibility.compatible) {
+                buildString {
+                    append("Karaoke FX 在批处理动作阶段失去兼容性")
+                    compatibility.reason?.let { append("：").append(it) }
+                }
+            }
             val plan = AssKaraokeFxAuthoring.planProgressiveReveal(
                 document = workingDocument,
                 eventId = event.id,
