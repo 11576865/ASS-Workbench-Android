@@ -18,6 +18,8 @@ func main() {
 		runReplaceASS(os.Args[2:])
 	case "add-attachments":
 		runAddAttachments(os.Args[2:])
+	case "edit-attachments":
+		runEditAttachments(os.Args[2:])
 	default:
 		fatal(usage())
 	}
@@ -29,7 +31,8 @@ func runReplaceASS(args []string) {
 	}
 	source := args[0]
 	var output, assPath string
-	var fontPaths, attachmentPaths []string
+	var fontPaths, attachmentPaths, removeTargets []string
+	var replacements []ops.AttachmentReplacement
 	var trackID uint64
 	for i := 1; i < len(args); i++ {
 		switch args[i] {
@@ -61,6 +64,21 @@ func runReplaceASS(args []string) {
 				fatal("--attachment needs a value")
 			}
 			attachmentPaths = append(attachmentPaths, args[i])
+		case "--remove-attachment":
+			i++
+			if i >= len(args) {
+				fatal("--remove-attachment needs a value")
+			}
+			removeTargets = append(removeTargets, args[i])
+		case "--replace-attachment":
+			if i+2 >= len(args) {
+				fatal("--replace-attachment needs <target> <file>")
+			}
+			replacements = append(replacements, ops.AttachmentReplacement{
+				Target: args[i+1],
+				Path: args[i+2],
+			})
+			i += 2
 		default:
 			if len(args[i]) > 0 && args[i][0] == '-' {
 				fatal("unknown flag: " + args[i])
@@ -73,7 +91,7 @@ func runReplaceASS(args []string) {
 		fatal(usage())
 	}
 	ensureOutputAbsent(output)
-	if err := ops.ReplaceASSWithFontsAndAttachments(
+	if err := ops.ReplaceASSWithFontsAndAttachmentEdits(
 		context.Background(),
 		source,
 		trackID,
@@ -81,6 +99,8 @@ func runReplaceASS(args []string) {
 		output,
 		fontPaths,
 		attachmentPaths,
+		removeTargets,
+		replacements,
 	); err != nil {
 		fatal(err.Error())
 	}
@@ -120,6 +140,64 @@ func runAddAttachments(args []string) {
 	}
 }
 
+
+func runEditAttachments(args []string) {
+	if len(args) < 4 {
+		fatal(usage())
+	}
+	source := args[0]
+	var output string
+	var attachmentPaths, removeTargets []string
+	var replacements []ops.AttachmentReplacement
+	for i := 1; i < len(args); i++ {
+		switch args[i] {
+		case "-o":
+			i++
+			if i >= len(args) {
+				fatal("-o needs a value")
+			}
+			output = args[i]
+		case "--attachment":
+			i++
+			if i >= len(args) {
+				fatal("--attachment needs a value")
+			}
+			attachmentPaths = append(attachmentPaths, args[i])
+		case "--remove-attachment":
+			i++
+			if i >= len(args) {
+				fatal("--remove-attachment needs a value")
+			}
+			removeTargets = append(removeTargets, args[i])
+		case "--replace-attachment":
+			if i+2 >= len(args) {
+				fatal("--replace-attachment needs <target> <file>")
+			}
+			replacements = append(replacements, ops.AttachmentReplacement{
+				Target: args[i+1],
+				Path: args[i+2],
+			})
+			i += 2
+		default:
+			fatal("unknown argument: " + args[i])
+		}
+	}
+	if output == "" || (len(attachmentPaths) == 0 && len(removeTargets) == 0 && len(replacements) == 0) {
+		fatal(usage())
+	}
+	ensureOutputAbsent(output)
+	if err := ops.EditAttachments(
+		context.Background(),
+		source,
+		output,
+		attachmentPaths,
+		removeTargets,
+		replacements,
+	); err != nil {
+		fatal(err.Error())
+	}
+}
+
 func ensureOutputAbsent(path string) {
 	if _, err := os.Stat(path); err == nil {
 		fatal("output already exists: " + path)
@@ -128,8 +206,9 @@ func ensureOutputAbsent(path string) {
 
 func usage() string {
 	return "usage:\n" +
-		"  asswb-mkvgo replace-ass <file.mkv> -o <out.mkv> -t <trackID> [--font <font.ttf>]... [--attachment <file>]... <edited.ass>\n" +
-		"  asswb-mkvgo add-attachments <file.mkv> -o <out.mkv> --attachment <file> [--attachment <file>]..."
+		"  asswb-mkvgo replace-ass <file.mkv> -o <out.mkv> -t <trackID> [--font <font.ttf>]... [--attachment <file>]... [--remove-attachment <uid-or-name>]... [--replace-attachment <uid-or-name> <file>]... <edited.ass>\n" +
+		"  asswb-mkvgo add-attachments <file.mkv> -o <out.mkv> --attachment <file> [--attachment <file>]...\n" +
+		"  asswb-mkvgo edit-attachments <file.mkv> -o <out.mkv> [--attachment <file>]... [--remove-attachment <uid-or-name>]... [--replace-attachment <uid-or-name> <file>]..."
 }
 
 func fatal(message string) {
