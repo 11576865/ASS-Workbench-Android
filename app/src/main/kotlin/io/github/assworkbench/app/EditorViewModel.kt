@@ -889,10 +889,15 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     fun previewKaraokeRevealFx(
         eventId: Long,
         spec: AssKaraokeRevealFxSpec,
+    ) = previewKaraokeRevealFx(setOf(eventId), spec)
+
+    fun previewKaraokeRevealFx(
+        eventIds: Set<Long>,
+        spec: AssKaraokeRevealFxSpec,
     ) {
         val document = _state.value.document
         val plan = runCatching {
-            AssKaraokeFxAuthoring.planProgressiveReveal(document, eventId, spec)
+            AssKaraokeFxAuthoring.planProgressiveRevealBatch(document, eventIds, spec)
         }.getOrElse { error ->
             _state.update {
                 it.copy(
@@ -903,14 +908,11 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             }
             return
         }
-        val preview = document.copy(events = document.events.map { event ->
-            if (event.id == eventId) event.copy(text = plan.generatedText) else event
-        })
         _state.update {
             it.copy(
-                previewDocument = preview,
-                previewOwnerId = "karaoke-fx:$eventId",
-                status = "Karaoke FX 预览：${plan.sourceSegmentCount} 个音节；尚未写入。",
+                previewDocument = plan.document,
+                previewOwnerId = "karaoke-fx",
+                status = "Karaoke FX 预览：${plan.sourceEventIds.size} 条字幕 · ${plan.sourceSegmentCount} 个音节；尚未写入。",
             )
         }
     }
@@ -918,10 +920,15 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     fun applyKaraokeRevealFx(
         eventId: Long,
         spec: AssKaraokeRevealFxSpec,
+    ) = applyKaraokeRevealFx(setOf(eventId), spec)
+
+    fun applyKaraokeRevealFx(
+        eventIds: Set<Long>,
+        spec: AssKaraokeRevealFxSpec,
     ) {
         val document = _state.value.document
         val plan = runCatching {
-            AssKaraokeFxAuthoring.planProgressiveReveal(document, eventId, spec)
+            AssKaraokeFxAuthoring.planProgressiveRevealBatch(document, eventIds, spec)
         }.getOrElse { error ->
             _state.update {
                 it.copy(status = "Karaoke FX 生成失败：" + (error.message ?: error::class.java.simpleName))
@@ -929,11 +936,9 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             return
         }
 
-        editDocument("已为字幕 #$eventId 写入 ${plan.sourceSegmentCount} 个逐音节显现 FX。") { doc ->
-            doc.copy(events = doc.events.map { event ->
-                if (event.id == eventId) event.copy(text = plan.generatedText) else event
-            })
-        }
+        editDocument(
+            "已为 ${plan.sourceEventIds.size} 条字幕写入 ${plan.sourceSegmentCount} 个逐音节显现 FX。"
+        ) { plan.document }
     }
 
     fun saveFxTemplate(template: AssFxTemplate) {
