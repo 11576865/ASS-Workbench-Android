@@ -691,6 +691,11 @@ class EditorRegressionInstrumentedTest {
             .assertIsDisplayed()
         composeRule.onNodeWithTag("batch-karaoke-reveal-accel")
             .assertIsDisplayed()
+        composeRule.onNodeWithTag("batch-preview-explicit")
+            .performScrollTo()
+            .assertIsDisplayed()
+        composeRule.onNodeWithTag("batch-preview-pending")
+            .assertIsDisplayed()
 
         assertEquals(before, viewModel.state.value.document)
 
