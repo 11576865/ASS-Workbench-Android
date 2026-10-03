@@ -135,6 +135,54 @@ class AssFxCompositionTest {
     }
 
     @Test
+    fun entranceKeepsGlowAndReflectionGeometrySynchronized() {
+        val document = AssDocument(
+            events = listOf(
+                AssEvent(
+                    id = 20,
+                    layer = 3,
+                    start = SubTime(0),
+                    end = SubTime(1200),
+                    text = "{\\pos(500,400)\\fscy80\\frx10}Stack",
+                )
+            )
+        )
+
+        val result = AssFxComposition.composeMirrorStack(
+            document = document,
+            eventId = 20,
+            reflection = AssReflectionFxSpec(
+                offsetY = 48.0,
+                verticalScalePercent = 50.0,
+                opacityPercent = 35.0,
+                blur = 1.5,
+            ),
+            glow = AssGlowFxSpec(opacityPercent = 20.0, blur = 4.0, border = 3.0),
+            entrance = AssFlipEntranceSpec(
+                durationMs = 300L,
+                startScalePercent = 10.0,
+                overshootScalePercent = 125.0,
+                startRotationXDegrees = 90.0,
+            ),
+        )
+
+        val source = result.document.events.first { it.id == 20L }
+        val glow = result.document.events.first { it.id == result.generatedEventIds[0] }
+        val reflection = result.document.events.first { it.id == result.generatedEventIds[1] }
+
+        assertTrue(source.text.contains("\\fscy8"))
+        assertTrue(source.text.contains("\\t(200,300,\\fscy80)"))
+        assertTrue(glow.text.contains("\\fscy8"))
+        assertTrue(glow.text.contains("\\t(200,300,\\fscy80)"))
+
+        // Reflection's own base is 50% of source scale and +180deg X rotation.
+        assertTrue(reflection.text.contains("\\fscy4"))
+        assertTrue(reflection.text.contains("\\t(200,300,\\fscy40)"))
+        assertTrue(reflection.text.contains("\\frx280"))
+        assertTrue(reflection.text.contains("\\t(0,300,\\frx190)"))
+    }
+
+    @Test
     fun batchCompositionIsDeterministicAndAtomic() {
         val document = AssDocument(
             events = listOf(
