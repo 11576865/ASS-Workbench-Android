@@ -151,6 +151,16 @@ class AuthoringEngineSuiteTest {
     }
 
     @Test
+    fun batchTagFilterRejectsMalformedTagNames() {
+        assertFailsWith<IllegalArgumentException> {
+            AssBatchFilter.HasTag("pos(")
+        }
+        assertFailsWith<IllegalArgumentException> {
+            AssBatchFilter.HasTag("")
+        }
+    }
+
+    @Test
     fun batchDomainRejectsInvalidRangesAndNumericOverrides() {
         assertFailsWith<IllegalArgumentException> {
             AssBatchFilter.DurationRange(500L, 100L)
