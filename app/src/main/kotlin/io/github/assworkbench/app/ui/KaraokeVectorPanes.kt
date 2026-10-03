@@ -32,6 +32,7 @@ internal fun KaraokePane(
         return
     }
     val segments = remember(event.text) { AssKaraokeCodec.parse(event.text) }
+    val fxTargetEventIds = state.selectedEventIds.ifEmpty { setOf(event.id) }
     fun commit(next: List<AssKaraokeSegment>) {
         viewModel.updateEventText(event.id, AssKaraokeCodec.write(next))
     }
@@ -92,15 +93,21 @@ internal fun KaraokePane(
                     } else null,
                 )
             } else null
-            val revealCompatibility = remember(event.text, event.style, state.document.styles, revealSpec) {
+            val revealCompatibility = remember(state.document, fxTargetEventIds, revealSpec) {
                 revealSpec?.let { spec ->
-                    runCatching { AssKaraokeFxAuthoring.planProgressiveReveal(state.document, event.id, spec) }
+                    runCatching {
+                        AssKaraokeFxAuthoring.planProgressiveRevealBatch(
+                            state.document,
+                            fxTargetEventIds,
+                            spec,
+                        )
+                    }
                 }
             }
             val revealError = revealCompatibility?.exceptionOrNull()?.message
 
-            DisposableEffect(event.id) {
-                onDispose { viewModel.clearTransientPreview("karaoke-fx:${event.id}") }
+            DisposableEffect(event.id, fxTargetEventIds) {
+                onDispose { viewModel.clearTransientPreview("karaoke-fx") }
             }
 
             Surface(
@@ -118,6 +125,13 @@ internal fun KaraokePane(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                    if (fxTargetEventIds.size > 1) {
+                        Text(
+                            "当前将对选中的 ${fxTargetEventIds.size} 条字幕原子应用同一规则；每条字幕分别解析自己的 Style / Event 基础状态。任一条不兼容则整批不写入。",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         OutlinedTextField(
                             value = revealMs,
@@ -196,7 +210,7 @@ internal fun KaraokePane(
                         OutlinedButton(
                             enabled = revealSpec != null && revealError == null,
                             onClick = {
-                                revealSpec?.let { viewModel.previewKaraokeRevealFx(event.id, it) }
+                                revealSpec?.let { viewModel.previewKaraokeRevealFx(fxTargetEventIds, it) }
                             },
                             modifier = Modifier.weight(1f),
                         ) {
@@ -205,15 +219,18 @@ internal fun KaraokePane(
                         Button(
                             enabled = revealSpec != null && revealError == null,
                             onClick = {
-                                revealSpec?.let { viewModel.applyKaraokeRevealFx(event.id, it) }
+                                revealSpec?.let { viewModel.applyKaraokeRevealFx(fxTargetEventIds, it) }
                             },
                             modifier = Modifier.weight(2f),
                         ) {
+                            val plannedSegments = revealCompatibility?.getOrNull()?.sourceSegmentCount
                             Text(
-                                if (withFlip) {
-                                    "写入 ${segments.size} 个翻转显现 FX"
-                                } else {
-                                    "写入 ${segments.size} 个逐音节 FX"
+                                buildString {
+                                    if (fxTargetEventIds.size > 1) {
+                                        append("对 ").append(fxTargetEventIds.size).append(" 条字幕 · ")
+                                    }
+                                    append(if (withFlip) "写入翻转显现 FX" else "写入逐音节 FX")
+                                    plannedSegments?.let { append(" · ").append(it).append(" 音节") }
                                 }
                             )
                         }
