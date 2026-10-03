@@ -141,22 +141,25 @@ sealed interface AssBatchAction {
             val workingDocument = document.copy(events = document.events.map { existing ->
                 if (existing.id == event.id) event else existing
             })
-            val compatibility = AssKaraokeFxAuthoring.inspectProgressiveRevealCompatibility(
-                document = workingDocument,
-                eventId = event.id,
-                spec = spec,
-            )
-            require(compatibility.compatible) {
-                buildString {
-                    append("Karaoke FX 在批处理动作阶段失去兼容性")
-                    compatibility.reason?.let { append("：").append(it) }
-                }
+            val plan = try {
+                AssKaraokeFxAuthoring.planProgressiveReveal(
+                    document = workingDocument,
+                    eventId = event.id,
+                    spec = spec,
+                )
+            } catch (error: IllegalArgumentException) {
+                throw IllegalArgumentException(
+                    "Karaoke FX 在批处理动作阶段失去兼容性：" +
+                        (error.message ?: error::class.java.simpleName),
+                    error,
+                )
+            } catch (error: IllegalStateException) {
+                throw IllegalArgumentException(
+                    "Karaoke FX 在批处理动作阶段失去兼容性：" +
+                        (error.message ?: error::class.java.simpleName),
+                    error,
+                )
             }
-            val plan = AssKaraokeFxAuthoring.planProgressiveReveal(
-                document = workingDocument,
-                eventId = event.id,
-                spec = spec,
-            )
             return event.copy(text = plan.generatedText)
         }
     }
