@@ -672,6 +672,26 @@ class EditorRegressionInstrumentedTest {
     }
 
     @Test
+    fun batchInvalidRegexFailsClosedInsteadOfDroppingTheFilter() {
+        restoreRecovery()
+        val before = viewModel.state.value.document
+
+        openTool("BATCH")
+        composeRule.onNodeWithTag("batch-preview-pending")
+            .performScrollTo()
+            .assertIsDisplayed()
+        composeRule.onNodeWithTag("batch-raw-regex-filter")
+            .performScrollTo()
+            .assertIsDisplayed()
+            .performTextReplacement("[")
+        composeRule.onNodeWithTag("batch-preview-error")
+            .performScrollTo()
+            .assertIsDisplayed()
+
+        assertEquals(before, viewModel.state.value.document)
+    }
+
+    @Test
     fun batchKaraokeRevealControlsStayPreviewOnlyUntilCommit() {
         restoreRecovery()
         val before = viewModel.state.value.document
