@@ -886,13 +886,42 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    fun previewKaraokeRevealFx(
+        eventId: Long,
+        spec: AssKaraokeRevealFxSpec,
+    ) {
+        val document = _state.value.document
+        val plan = runCatching {
+            AssKaraokeFxAuthoring.planProgressiveReveal(document, eventId, spec)
+        }.getOrElse { error ->
+            _state.update {
+                it.copy(
+                    previewDocument = null,
+                    previewOwnerId = null,
+                    status = "Karaoke FX 预览失败：" + (error.message ?: error::class.java.simpleName),
+                )
+            }
+            return
+        }
+        val preview = document.copy(events = document.events.map { event ->
+            if (event.id == eventId) event.copy(text = plan.generatedText) else event
+        })
+        _state.update {
+            it.copy(
+                previewDocument = preview,
+                previewOwnerId = "karaoke-fx:$eventId",
+                status = "Karaoke FX 预览：${plan.sourceSegmentCount} 个音节；尚未写入。",
+            )
+        }
+    }
+
     fun applyKaraokeRevealFx(
         eventId: Long,
         spec: AssKaraokeRevealFxSpec,
     ) {
-        val source = _state.value.document.events.firstOrNull { it.id == eventId } ?: return
+        val document = _state.value.document
         val plan = runCatching {
-            AssKaraokeFxAuthoring.planProgressiveReveal(source.text, spec)
+            AssKaraokeFxAuthoring.planProgressiveReveal(document, eventId, spec)
         }.getOrElse { error ->
             _state.update {
                 it.copy(status = "Karaoke FX 生成失败：" + (error.message ?: error::class.java.simpleName))
