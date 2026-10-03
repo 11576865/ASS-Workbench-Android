@@ -57,7 +57,7 @@ sealed interface AssBatchFilter {
         override fun matches(event: AssEvent, document: AssDocument): Boolean =
             AssKaraokeFxAuthoring.inspectProgressiveRevealCompatibility(
                 document = document,
-                eventId = event.id,
+                event = event,
                 spec = spec,
             ).compatible
     }
@@ -192,13 +192,10 @@ sealed interface AssBatchAction {
         val spec: AssKaraokeRevealFxSpec = AssKaraokeRevealFxSpec(),
     ) : AssBatchAction {
         override fun apply(event: AssEvent, document: AssDocument): AssEvent {
-            val workingDocument = document.copy(events = document.events.map { existing ->
-                if (existing.id == event.id) event else existing
-            })
             val plan = try {
                 AssKaraokeFxAuthoring.planProgressiveReveal(
-                    document = workingDocument,
-                    eventId = event.id,
+                    document = document,
+                    event = event,
                     spec = spec,
                 )
             } catch (error: IllegalArgumentException) {
