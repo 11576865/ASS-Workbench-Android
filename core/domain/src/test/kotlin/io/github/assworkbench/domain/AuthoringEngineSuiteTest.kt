@@ -2,6 +2,7 @@ package io.github.assworkbench.domain
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
@@ -103,15 +104,28 @@ class AuthoringEngineSuiteTest {
     }
 
     @Test
-    fun karaokeBatchActionRechecksCurrentEventAfterEarlierActions() {
+    fun karaokeBatchFailsClosedWhenEarlierActionInvalidatesCompatibility() {
         val original = event(9, 0, 1000, "{\\k20}Safe")
         val document = AssDocument(events = listOf(original))
-        val action = AssBatchAction.ApplyKaraokeRevealFx(
-            AssKaraokeRevealFxSpec(revealMs = 100, startBlur = 2.0)
+        val spec = AssKaraokeRevealFxSpec(revealMs = 100, startBlur = 2.0)
+        val recipe = AssBatchRecipe(
+            id = "karaoke-conflict",
+            filter = AssBatchFilter.KaraokeRevealCompatible(spec),
+            actions = listOf(
+                AssBatchAction.SetNumericOverride(
+                    property = AssTransformVisualProperty.GAUSSIAN_BLUR,
+                    value = 4.0,
+                ),
+                AssBatchAction.ApplyKaraokeRevealFx(spec),
+            ),
         )
-        val nowConflicting = original.copy(text = "{\\k20\\blur4}Now conflicting")
 
-        assertEquals(nowConflicting, action.apply(nowConflicting, document))
+        val error = assertFailsWith<IllegalArgumentException> {
+            AssBatchEngine.preview(document, recipe)
+        }
+
+        assertTrue(error.message.orEmpty().contains("动作阶段失去兼容性"))
+        assertEquals("{\\k20}Safe", document.events.single().text)
     }
 
     @Test
