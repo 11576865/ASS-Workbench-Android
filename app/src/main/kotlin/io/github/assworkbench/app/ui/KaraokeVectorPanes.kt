@@ -15,6 +15,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import io.github.assworkbench.app.EditorState
 import io.github.assworkbench.app.EditorViewModel
@@ -32,6 +33,7 @@ internal fun KaraokePane(
         return
     }
     val segments = remember(event.text) { AssKaraokeCodec.parse(event.text) }
+    val fxTargetEventIds = state.selectedEventIds.ifEmpty { setOf(event.id) }
     fun commit(next: List<AssKaraokeSegment>) {
         viewModel.updateEventText(event.id, AssKaraokeCodec.write(next))
     }
@@ -57,68 +59,179 @@ internal fun KaraokePane(
             var revealMs by rememberSaveable(event.id) { mutableStateOf("160") }
             var revealBlur by rememberSaveable(event.id) { mutableStateOf("3.5") }
             var revealAccel by rememberSaveable(event.id) { mutableStateOf("") }
+            var withFlip by rememberSaveable(event.id) { mutableStateOf(true) }
+            var fxExpanded by rememberSaveable(event.id) { mutableStateOf(false) }
+            var flipStartScale by rememberSaveable(event.id) { mutableStateOf("12") }
+            var flipOvershoot by rememberSaveable(event.id) { mutableStateOf("118") }
+            var flipRotationX by rememberSaveable(event.id) { mutableStateOf("86") }
+
             val parsedRevealMs = revealMs.toLongOrNull()
             val parsedRevealBlur = revealBlur.toDoubleOrNull()
             val parsedRevealAccel = revealAccel.takeIf { it.isNotBlank() }?.toDoubleOrNull()
+            val parsedFlipStartScale = flipStartScale.toDoubleOrNull()
+            val parsedFlipOvershoot = flipOvershoot.toDoubleOrNull()
+            val parsedFlipRotationX = flipRotationX.toDoubleOrNull()
+
             val revealSpec = if (
                 parsedRevealMs != null && parsedRevealMs >= 0L &&
                 parsedRevealBlur?.let { it.isFinite() && it in 0.0..20.0 } == true &&
-                (revealAccel.isBlank() || parsedRevealAccel?.let { it.isFinite() && it > 0.0 } == true)
+                (revealAccel.isBlank() || parsedRevealAccel?.let { it.isFinite() && it > 0.0 } == true) &&
+                (!withFlip || (
+                    parsedFlipStartScale?.let { it.isFinite() && it > 0.0 } == true &&
+                        parsedFlipOvershoot?.let { it.isFinite() && it > 0.0 } == true &&
+                        parsedFlipRotationX?.isFinite() == true
+                    ))
             ) {
                 AssKaraokeRevealFxSpec(
                     revealMs = parsedRevealMs,
                     startBlur = parsedRevealBlur,
                     accel = parsedRevealAccel,
+                    flip = if (withFlip) {
+                        AssKaraokeFlipFxSpec(
+                            startScalePercent = requireNotNull(parsedFlipStartScale),
+                            overshootScalePercent = requireNotNull(parsedFlipOvershoot),
+                            startRotationXDegrees = requireNotNull(parsedFlipRotationX),
+                        )
+                    } else null,
                 )
             } else null
-            val revealCompatibility = remember(event.text, revealSpec) {
+            // Keep keystroke-time compatibility work scoped to the focused Event.
+            // Full multi-selection preflight runs only on explicit Preview / Apply.
+            val revealCompatibility = remember(state.document, event.id, revealSpec) {
                 revealSpec?.let { spec ->
-                    runCatching { AssKaraokeFxAuthoring.planProgressiveReveal(event.text, spec) }
+                    runCatching {
+                        AssKaraokeFxAuthoring.planProgressiveReveal(
+                            state.document,
+                            event.id,
+                            spec,
+                        )
+                    }
                 }
             }
             val revealError = revealCompatibility?.exceptionOrNull()?.message
 
+            DisposableEffect(event.id, fxTargetEventIds) {
+                onDispose { viewModel.clearTransientPreview("karaoke-fx") }
+            }
+
             Surface(
                 color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.38f),
                 shape = MaterialTheme.shapes.small,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().testTag("karaoke-fx-author"),
             ) {
                 Column(
                     Modifier.padding(8.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    Text("Karaoke FX · 逐音节显现", style = MaterialTheme.typography.titleSmall)
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            "Karaoke FX · 逐音节显现",
+                            style = MaterialTheme.typography.titleSmall,
+                            modifier = Modifier.weight(1f),
+                        )
+                        TextButton(
+                            onClick = { fxExpanded = !fxExpanded },
+                            modifier = Modifier.testTag("karaoke-fx-expand"),
+                        ) {
+                            Text(if (fxExpanded) "收起参数" else "调整参数")
+                        }
+                    }
                     Text(
-                        "按 Karaoke 累计时间给每个音节写入独立 alpha / blur transform；不拆 Event，也不需要猜测字形宽度。",
+                        "按 Karaoke 累计时间给每个音节写入 alpha / blur；可叠加基于本 Event 有效 Scale Y / Rotation X 的翻转拉伸。仍保持单 Event，不猜字形宽度。",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        OutlinedTextField(
-                            value = revealMs,
-                            onValueChange = { revealMs = it },
-                            label = { Text("显现时长 ms") },
-                            singleLine = true,
-                            modifier = Modifier.weight(1f),
+                    if (fxTargetEventIds.size > 1) {
+                        Text(
+                            "当前将对选中的 ${fxTargetEventIds.size} 条字幕原子应用同一规则；每条字幕分别解析自己的 Style / Event 基础状态。完整批次只在“预览/写入”时预检，任一条不兼容则整批不写入。",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-                        OutlinedTextField(
-                            value = revealBlur,
-                            onValueChange = { revealBlur = it },
-                            label = { Text("起始 Blur") },
-                            singleLine = true,
-                            modifier = Modifier.weight(1f),
-                        )
+                    }
+                    if (fxExpanded) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            OutlinedTextField(
+                                value = revealMs,
+                                onValueChange = { revealMs = it },
+                                label = { Text("显现时长 ms") },
+                                singleLine = true,
+                                modifier = Modifier.weight(1f).testTag("karaoke-fx-reveal-ms"),
+                            )
+                            OutlinedTextField(
+                                value = revealBlur,
+                                onValueChange = { revealBlur = it },
+                                label = { Text("起始 Blur") },
+                                singleLine = true,
+                                modifier = Modifier.weight(1f).testTag("karaoke-fx-blur"),
+                            )
+                        }
                         OutlinedTextField(
                             value = revealAccel,
                             onValueChange = { revealAccel = it },
-                            label = { Text("Accel") },
+                            label = { Text("Accel（空=线性）") },
                             singleLine = true,
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier.fillMaxWidth().testTag("karaoke-fx-accel"),
+                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Switch(
+                                checked = withFlip,
+                                onCheckedChange = { withFlip = it },
+                                modifier = Modifier.testTag("karaoke-fx-flip-enabled"),
+                            )
+                            Text("翻转 / 拉伸显现")
+                        }
+                        if (withFlip) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                OutlinedTextField(
+                                    value = flipStartScale,
+                                    onValueChange = { flipStartScale = it },
+                                    label = { Text("起始高度 %") },
+                                    singleLine = true,
+                                    modifier = Modifier.weight(1f).testTag("karaoke-fx-start-scale"),
+                                )
+                                OutlinedTextField(
+                                    value = flipOvershoot,
+                                    onValueChange = { flipOvershoot = it },
+                                    label = { Text("回弹高度 %") },
+                                    singleLine = true,
+                                    modifier = Modifier.weight(1f).testTag("karaoke-fx-overshoot"),
+                                )
+                            }
+                            OutlinedTextField(
+                                value = flipRotationX,
+                                onValueChange = { flipRotationX = it },
+                                label = { Text("起始 X 旋转 °") },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth().testTag("karaoke-fx-rotation-x"),
+                            )
+                        }
+    
+                    } else {
+                        Text(
+                            buildString {
+                                append(revealMs).append(" ms · Blur ").append(revealBlur)
+                                if (withFlip) {
+                                    append(" · Flip ")
+                                    append(flipStartScale).append("→").append(flipOvershoot).append("%")
+                                    append(" · X +").append(flipRotationX).append("°")
+                                } else {
+                                    append(" · 无翻转")
+                                }
+                            },
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.testTag("karaoke-fx-summary"),
                         )
                     }
                     if (revealSpec == null) {
                         Text(
-                            "参数无效：显现时长需 ≥ 0；Blur 0..20；Accel 为空或 > 0。",
+                            "参数无效：显现时长需 ≥ 0；Blur 0..20；Accel 为空或 > 0；翻转开启时起始/回弹高度需 > 0，Rotation X 必须是有限数字。",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.error,
                         )
@@ -129,14 +242,39 @@ internal fun KaraokePane(
                             color = MaterialTheme.colorScheme.error,
                         )
                     }
-                    Button(
-                        enabled = revealSpec != null && revealError == null,
-                        onClick = {
-                            revealSpec?.let { viewModel.applyKaraokeRevealFx(event.id, it) }
-                        },
-                        modifier = Modifier.fillMaxWidth(),
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        Text("写入 ${segments.size} 个逐音节 FX")
+                        OutlinedButton(
+                            enabled = revealSpec != null && revealError == null,
+                            onClick = {
+                                revealSpec?.let { viewModel.previewKaraokeRevealFx(fxTargetEventIds, it) }
+                            },
+                            modifier = Modifier.weight(1f).testTag("karaoke-fx-preview"),
+                        ) {
+                            Text("预览")
+                        }
+                        Button(
+                            enabled = revealSpec != null && revealError == null,
+                            onClick = {
+                                revealSpec?.let { viewModel.applyKaraokeRevealFx(fxTargetEventIds, it) }
+                            },
+                            modifier = Modifier.weight(2f).testTag("karaoke-fx-apply"),
+                        ) {
+                            val focusedSegments = revealCompatibility?.getOrNull()?.sourceSegmentCount
+                            Text(
+                                buildString {
+                                    if (fxTargetEventIds.size > 1) {
+                                        append("对 ").append(fxTargetEventIds.size).append(" 条字幕 · ")
+                                    }
+                                    append(if (withFlip) "写入翻转显现 FX" else "写入逐音节 FX")
+                                    if (fxTargetEventIds.size == 1) {
+                                        focusedSegments?.let { append(" · ").append(it).append(" 音节") }
+                                    }
+                                }
+                            )
+                        }
                     }
                 }
             }
