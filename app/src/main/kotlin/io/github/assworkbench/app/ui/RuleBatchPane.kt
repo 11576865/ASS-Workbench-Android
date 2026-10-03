@@ -156,8 +156,19 @@ internal fun RuleBatchPane(
         regexFind, regexReplace, regexRaw, timingOrigin, timingNumerator, timingDenominator, overridePropertyName, overrideValue,
         karaokeRevealEnabled, karaokeRevealMs, karaokeRevealBlur, karaokeRevealAccel,
     ) { recipe() }
-    val previewResult = remember(state.document, recipe) {
-        runCatching { AssBatchEngine.preview(state.document, recipe) }
+    val previewResult = remember(
+        state.document,
+        recipe,
+        karaokeRevealEnabled,
+        karaokeRevealSpec,
+    ) {
+        if (karaokeRevealEnabled && karaokeRevealSpec == null) {
+            Result.failure<AssBatchPreview>(
+                IllegalArgumentException("Karaoke FX 参数无效，未生成批处理配方。")
+            )
+        } else {
+            runCatching { AssBatchEngine.preview(state.document, recipe) }
+        }
     }
     val preview = previewResult.getOrNull()
     val previewError = previewResult.exceptionOrNull()?.message
