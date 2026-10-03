@@ -129,6 +129,28 @@ class AuthoringEngineSuiteTest {
     }
 
     @Test
+    fun batchTagFilterMatchesParsedOverrideTagsNotVisibleBackslashes() {
+        val document = AssDocument(
+            events = listOf(
+                event(20, 0, 1000, "{\\pos(10,20)}Real tag"),
+                event(21, 1000, 2000, "Visible \\pos(10,20) text"),
+            )
+        )
+        val preview = AssBatchEngine.preview(
+            document,
+            AssBatchRecipe(
+                id = "tag-filter",
+                filter = AssBatchFilter.HasTag("pos"),
+                actions = listOf(AssBatchAction.SetActor("matched")),
+            ),
+        )
+
+        assertEquals(listOf(20L), preview.affectedEventIds)
+        assertEquals("matched", preview.document.events.first { it.id == 20L }.name)
+        assertEquals("", preview.document.events.first { it.id == 21L }.name)
+    }
+
+    @Test
     fun batchDomainRejectsInvalidRangesAndNumericOverrides() {
         assertFailsWith<IllegalArgumentException> {
             AssBatchFilter.DurationRange(500L, 100L)
