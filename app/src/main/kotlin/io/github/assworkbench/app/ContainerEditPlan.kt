@@ -58,7 +58,7 @@ internal fun buildContainerEditPlan(state: EditorState): ContainerEditPlanUi {
     val mutations = mutableListOf<ContainerMutationUi>()
 
     val trackNumber = state.container.selectedTrackNumber
-    if (trackNumber != null && state.subtitleLoaded) {
+    if (trackNumber != null && state.subtitleLoaded && state.dirty) {
         mutations += ContainerMutationUi(
             id = "replace-ass:$trackNumber",
             kind = ContainerMutationKind.REPLACE_ASS_TRACK,
