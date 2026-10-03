@@ -367,7 +367,7 @@ class AssFxCompositionTest {
     }
 
     @Test
-    fun spatialFadeRejectsFlipEntranceBecauseClipBandsStayInScreenSpace() {
+    fun spatialFadeDefersReflectionUntilFlipEntranceSettles() {
         val document = AssDocument(
             scriptInfo = linkedMapOf("PlayResX" to "1920", "PlayResY" to "1080"),
             events = listOf(
@@ -380,23 +380,70 @@ class AssFxCompositionTest {
             )
         )
 
+        val result = AssFxComposition.composeMirrorStack(
+            document = document,
+            eventId = 39,
+            glow = null,
+            fade = AssReflectionFadeSpec(
+                bands = 2,
+                depthPx = 120.0,
+                direction = AssReflectionFadeDirection.DOWN,
+            ),
+            entrance = AssFlipEntranceSpec(
+                durationMs = 300,
+                startScalePercent = 10.0,
+                overshootScalePercent = 120.0,
+                startRotationXDegrees = 90.0,
+            ),
+        )
+
+        val source = result.document.events.first { it.id == 39L }
+        val bands = result.generatedEventIds.map { id ->
+            result.document.events.first { it.id == id }
+        }
+
+        assertTrue(source.text.contains("\\t(0,200,\\fscy120)"))
+        assertTrue(source.text.contains("\\t(0,300,\\frx0)"))
+        assertEquals(2, bands.size)
+        bands.forEach { band ->
+            assertTrue(band.text.contains("\\alpha&HFF&\\t(300,380,\\alpha&H"))
+            assertTrue(!band.text.contains("\\t(0,200,\\fscy"))
+            assertTrue(!band.text.contains("\\t(0,300,\\frx"))
+            assertEquals(SubTime(0), band.start)
+        }
+    }
+
+    @Test
+    fun spatialFadeWithEntranceRejectsEventThatEndsBeforeReflectionCanAppear() {
+        val document = AssDocument(
+            scriptInfo = linkedMapOf("PlayResX" to "1920", "PlayResY" to "1080"),
+            events = listOf(
+                AssEvent(
+                    id = 40,
+                    start = SubTime(100),
+                    end = SubTime(300),
+                    text = "{\\pos(400,300)}Short",
+                )
+            )
+        )
+
         val error = assertFailsWith<IllegalArgumentException> {
             AssFxComposition.composeMirrorStack(
                 document = document,
-                eventId = 39,
+                eventId = 40,
                 glow = null,
                 fade = AssReflectionFadeSpec(
-                    bands = 4,
-                    depthPx = 120.0,
+                    bands = 2,
+                    depthPx = 80.0,
                     direction = AssReflectionFadeDirection.DOWN,
                 ),
-                entrance = AssFlipEntranceSpec(durationMs = 300),
+                entrance = AssFlipEntranceSpec(durationMs = 280),
             )
         }
 
-        assertTrue(error.message.orEmpty().contains("固定屏幕 Clip"))
+        assertTrue(error.message.orEmpty().contains("可见时段"))
         assertEquals(1, document.events.size)
-        assertEquals("{\\pos(400,300)}Fade", document.events.single().text)
+        assertEquals("{\\pos(400,300)}Short", document.events.single().text)
     }
 
     @Test
