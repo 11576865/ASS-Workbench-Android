@@ -135,6 +135,46 @@ class AssFxCompositionTest {
     }
 
     @Test
+    fun batchCompositionIsDeterministicAndAtomic() {
+        val document = AssDocument(
+            events = listOf(
+                AssEvent(1, start = SubTime(0), end = SubTime(1000), text = "{\\pos(200,200)}A"),
+                AssEvent(2, start = SubTime(1000), end = SubTime(2000), text = "{\\pos(300,300)}B"),
+            )
+        )
+
+        val result = AssFxComposition.composeMirrorStackBatch(
+            document = document,
+            eventIds = setOf(2, 1),
+            glow = AssGlowFxSpec(opacityPercent = 20.0, blur = 3.0, border = 2.0),
+            entrance = null,
+        )
+
+        assertEquals(listOf(1L, 2L), result.sourceEventIds)
+        assertEquals(4, result.generatedEventIds.size)
+        assertEquals(6, result.document.events.size)
+        assertTrue(result.generatedEventIds.distinct().size == 4)
+        assertEquals("{\\pos(200,200)}A", result.document.events.first { it.id == 1L }.text)
+        assertEquals("{\\pos(300,300)}B", result.document.events.first { it.id == 2L }.text)
+
+        val invalid = document.copy(
+            events = listOf(
+                document.events[0],
+                document.events[1].copy(text = "{\\pos(300,300)\\move(300,300,400,400)}B"),
+            )
+        )
+        assertFailsWith<IllegalArgumentException> {
+            AssFxComposition.composeMirrorStackBatch(
+                document = invalid,
+                eventIds = setOf(1, 2),
+            )
+        }
+        // Pure compiler semantics: a failed batch cannot partially mutate its input.
+        assertEquals(2, invalid.events.size)
+        assertEquals("{\\pos(200,200)}A", invalid.events[0].text)
+    }
+
+    @Test
     fun flipEntranceUsesExistingScaleAndRotationAsItsFinalState() {
         val document = AssDocument(
             events = listOf(
