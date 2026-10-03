@@ -1098,7 +1098,7 @@
       "fixture": {
         "kind": "generated-local-media",
         "source": "UigsRendererVisualCaptureInstrumentedTest",
-        "state": "real libmpv/libass preview of a deterministic 30-second H.264 color clip with an active ASS Event at pos(960,540); WindowInteractionOverlay renders the production position proxy from the shared registry"
+        "state": "real libmpv/libass preview of a deterministic generated 1280x720 PNG still with an active ASS Event at pos(960,540); WindowInteractionOverlay renders the production position proxy from the shared registry"
       },
       "ready": {
         "test_tag": "rod-handle-position-1-pos",
@@ -1112,9 +1112,9 @@
       ],
       "output_name": "ASS.RENDERER_POSITION.RUNTIME_LANDSCAPE.png",
       "limitations": [
-        "The media input is a deterministic generated color video rather than user media; the mpv/libass/native rendering path is real.",
-        "This is a surface-level runtime fixture hosted by a ComponentActivity rather than a full ModernEditorScreen navigation session.",
-        "It proves renderer-backed preview and integrated interaction-proxy pixels, not OEM-specific physical-device behavior."
+        "Uses a deterministic still image to exercise the real libmpv/libass renderer and interaction overlay without depending on hosted-emulator H.264 decoder liveness.",
+        "This is runtime-backed renderer evidence, but it does not prove the video-decoder path; decoder/device coverage remains separate DEVICE evidence.",
+        "Screenshot is captured from Android UiAutomation at full-display compositor level."
       ],
       "assertions": {
         "image_orientation": "landscape"
