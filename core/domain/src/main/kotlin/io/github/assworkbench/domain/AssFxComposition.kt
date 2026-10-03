@@ -321,11 +321,9 @@ object AssFxComposition {
         } else null
         val reflectionAnchorY = when (geometry.positionMode) {
             AssPositionMode.POSITION ->
-                (requireNotNull(geometry.position).y + spec.offsetY)
-                    .coerceIn(0.0, document.playResY.toDouble())
+                requireNotNull(geometry.position).y + spec.offsetY
             AssPositionMode.INHERITED ->
-                (requireNotNull(inherited).y + spec.offsetY)
-                    .coerceIn(0.0, document.playResY.toDouble())
+                requireNotNull(inherited).y + spec.offsetY
             AssPositionMode.MOVE, AssPositionMode.CONFLICT -> null
         }
 
@@ -336,7 +334,7 @@ object AssFxComposition {
                 AssGeometrySemantic.patchPosition(
                     reflectedText,
                     p.x,
-                    (p.y + spec.offsetY).coerceIn(0.0, document.playResY.toDouble()),
+                    p.y + spec.offsetY,
                 )
             }
             AssPositionMode.MOVE -> {
@@ -345,11 +343,11 @@ object AssFxComposition {
                     reflectedText,
                     start = AssPoint(
                         move.start.x,
-                        (move.start.y + spec.offsetY).coerceIn(0.0, document.playResY.toDouble()),
+                        move.start.y + spec.offsetY,
                     ),
                     end = AssPoint(
                         move.end.x,
-                        (move.end.y + spec.offsetY).coerceIn(0.0, document.playResY.toDouble()),
+                        move.end.y + spec.offsetY,
                     ),
                     startMs = move.startMs,
                     endMs = move.endMs,
@@ -360,7 +358,7 @@ object AssFxComposition {
                 AssGeometrySemantic.patchPosition(
                     reflectedText,
                     anchor.x,
-                    (anchor.y + spec.offsetY).coerceIn(0.0, document.playResY.toDouble()),
+                    anchor.y + spec.offsetY,
                 )
             }
             AssPositionMode.CONFLICT -> error("unreachable")
@@ -370,7 +368,7 @@ object AssFxComposition {
             reflectedText = AssGeometrySemantic.patchOrigin(
                 reflectedText,
                 origin.x,
-                (origin.y + spec.offsetY).coerceIn(0.0, document.playResY.toDouble()),
+                origin.y + spec.offsetY,
             )
         }
 
@@ -379,9 +377,9 @@ object AssFxComposition {
                 reflectedText,
                 AssClipRect(
                     left = clip.left,
-                    top = (clip.top + spec.offsetY).coerceIn(0.0, document.playResY.toDouble()),
+                    top = clip.top + spec.offsetY,
                     right = clip.right,
-                    bottom = (clip.bottom + spec.offsetY).coerceIn(0.0, document.playResY.toDouble()),
+                    bottom = clip.bottom + spec.offsetY,
                 ),
                 inverted = false,
             )
@@ -416,6 +414,9 @@ object AssFxComposition {
         }
 
         val anchorY = requireNotNull(reflectionAnchorY)
+        require(anchorY in 0.0..document.playResY.toDouble()) {
+            "空间渐隐倒影的锚点必须位于画面内；当前锚点 Y=${format(anchorY)}。"
+        }
         val direction = when (fade.direction) {
             AssReflectionFadeDirection.DOWN -> AssReflectionFadeDirection.DOWN
             AssReflectionFadeDirection.UP -> AssReflectionFadeDirection.UP
@@ -437,10 +438,10 @@ object AssFxComposition {
 
         val shiftedSourceClip = geometry.clipRect?.let { clip ->
             AssClipRect(
-                left = clip.left.coerceIn(0.0, document.playResX.toDouble()),
-                top = (clip.top + spec.offsetY).coerceIn(0.0, document.playResY.toDouble()),
-                right = clip.right.coerceIn(0.0, document.playResX.toDouble()),
-                bottom = (clip.bottom + spec.offsetY).coerceIn(0.0, document.playResY.toDouble()),
+                left = clip.left,
+                top = clip.top + spec.offsetY,
+                right = clip.right,
+                bottom = clip.bottom + spec.offsetY,
             ).normalized()
         }
 
@@ -620,10 +621,7 @@ object AssFxComposition {
             4, 5, 6 -> document.playResY / 2.0
             else -> (document.playResY - marginV).toDouble()
         }
-        return AssPoint(
-            x.coerceIn(0.0, document.playResX.toDouble()),
-            y.coerceIn(0.0, document.playResY.toDouble()),
-        )
+        return AssPoint(x, y)
     }
 
     private fun leadingAlignment(text: String): Int? {
