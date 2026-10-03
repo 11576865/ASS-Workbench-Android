@@ -614,6 +614,49 @@ class EditorRegressionInstrumentedTest {
     }
 
     @Test
+    fun karaokeFxPreviewIsNonDestructiveAndBatchApplyCommitsAtomically() {
+        restoreRecovery()
+
+        viewModel.updateEventText(1L, "{\\k20}Ka{\\k20}ra")
+        viewModel.updateEventText(2L, "{\\k20}O{\\k20}ke")
+        viewModel.focusEvent(1L, seek = false)
+        viewModel.toggleSelected(1L)
+        viewModel.toggleSelected(2L)
+
+        val canonicalBeforePreview = viewModel.state.value.document
+        openTool("KARAOKE")
+
+        composeRule.onNodeWithTag("karaoke-fx-author")
+            .performScrollTo()
+            .assertIsDisplayed()
+        composeRule.onNodeWithTag("karaoke-fx-preview")
+            .performScrollTo()
+            .assertIsDisplayed()
+            .performClick()
+
+        composeRule.waitUntil(10_000) {
+            val state = viewModel.state.value
+            state.previewOwnerId == "karaoke-fx" &&
+                state.previewDocument?.events?.firstOrNull { it.id == 1L }?.text?.contains("\\fscy") == true &&
+                state.previewDocument?.events?.firstOrNull { it.id == 2L }?.text?.contains("\\fscy") == true
+        }
+        assertEquals(canonicalBeforePreview, viewModel.state.value.document)
+
+        composeRule.onNodeWithTag("karaoke-fx-apply")
+            .performScrollTo()
+            .assertIsDisplayed()
+            .performClick()
+
+        composeRule.waitUntil(10_000) {
+            val state = viewModel.state.value
+            state.previewDocument == null &&
+                state.document.events.firstOrNull { it.id == 1L }?.text?.contains("\\fscy") == true &&
+                state.document.events.firstOrNull { it.id == 2L }?.text?.contains("\\fscy") == true
+        }
+        assertTrue(viewModel.state.value.dirty)
+    }
+
+    @Test
     fun repeatedActivityRecreationDoesNotMutateDirtyDocument() {
         restoreRecovery()
         viewModel.updateEventText(1L, "{\\bord3}Recovered line RECREATE")
