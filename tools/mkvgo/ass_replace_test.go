@@ -308,3 +308,107 @@ func TestAddAttachmentsSupportsCoverAndArbitraryFiles(t *testing.T) {
 		t.Fatalf("chapters changed: %+v", got.Chapters)
 	}
 }
+
+
+func TestEditAttachmentsRemovesAndReplacesInOneRemux(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "source.mkv")
+	dst := filepath.Join(dir, "updated.mkv")
+	replacePath := filepath.Join(dir, "cover.png")
+	addPath := filepath.Join(dir, "notes.txt")
+
+	replacementData := append([]byte{0x89, 0x50, 0x4e, 0x47}, bytes.Repeat([]byte{0x33}, 48)...)
+	addedData := []byte("container note")
+	if err := os.WriteFile(replacePath, replacementData, 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(addPath, addedData, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	keepData := []byte("keep")
+	removeData := []byte("remove")
+	replaceOldData := []byte("old-cover")
+	container := &mkv.Container{
+		Info: mkv.SegmentInfo{TimecodeScale: 1_000_000, Title: "CRUD fixture"},
+		Attachments: []mkv.Attachment{
+			{ID: 7, Name: "keep.bin", MIMEType: "application/octet-stream", Data: keepData, Size: int64(len(keepData))},
+			{ID: 8, Name: "remove.txt", MIMEType: "text/plain", Data: removeData, Size: int64(len(removeData))},
+			{ID: 9, Name: "old-cover.jpg", MIMEType: "image/jpeg", Description: "cover", Data: replaceOldData, Size: int64(len(replaceOldData))},
+		},
+		Chapters: []mkv.Chapter{{ID: 2, Title: "Chapter", StartMs: 0, EndMs: 1000}},
+	}
+	video := mkv.Track{ID: 1, UID: 101, Type: mkv.VideoTrack, Codec: "vp9", IsDefault: true}
+
+	out, err := os.Create(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mw := writer.NewMKVWriter(out)
+	if err := mw.WriteStart(); err != nil {
+		t.Fatal(err)
+	}
+	if err := mw.WriteMetadata(container, []mkv.Track{video}, 1000); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.WriteCluster(out, 0, 1_000_000, []mkv.Block{
+		{TrackNumber: 1, Timecode: 0, Keyframe: true, Data: []byte{0x01}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := mw.Finalize(); err != nil {
+		t.Fatal(err)
+	}
+	if err := out.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := EditAttachments(
+		context.Background(),
+		src,
+		dst,
+		[]string{addPath},
+		[]string{"8"},
+		[]AttachmentReplacement{{Target: "9", Path: replacePath}},
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := reader.Open(context.Background(), dst)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Tracks) != 1 || got.Tracks[0].ID != 1 || got.Tracks[0].UID != 101 {
+		t.Fatalf("track identity changed: %+v", got.Tracks)
+	}
+	if len(got.Chapters) != 1 || got.Chapters[0].Title != "Chapter" {
+		t.Fatalf("chapters changed: %+v", got.Chapters)
+	}
+	if len(got.Attachments) != 3 {
+		t.Fatalf("attachment count = %d, want 3: %+v", len(got.Attachments), got.Attachments)
+	}
+	byID := make(map[uint64]mkv.Attachment)
+	byName := make(map[string]mkv.Attachment)
+	for _, att := range got.Attachments {
+		byID[att.ID] = att
+		byName[att.Name] = att
+	}
+	if att := byID[7]; att.Name != "keep.bin" || !bytes.Equal(att.Data, keepData) {
+		t.Fatalf("untouched attachment changed: %+v", att)
+	}
+	if _, exists := byID[8]; exists {
+		t.Fatalf("removed attachment UID 8 still exists: %+v", got.Attachments)
+	}
+	replaced := byID[9]
+	if replaced.Name != "cover.png" || replaced.MIMEType != "image/png" ||
+		replaced.Description != "cover" || !bytes.Equal(replaced.Data, replacementData) {
+		t.Fatalf("replacement did not preserve identity/description: %+v", replaced)
+	}
+	added, ok := byName["notes.txt"]
+	if !ok || added.MIMEType != "text/plain" || !bytes.Equal(added.Data, addedData) {
+		t.Fatalf("added attachment missing or changed: %+v", added)
+	}
+	if added.ID == 7 || added.ID == 9 {
+		t.Fatalf("added attachment reused surviving UID: %+v", added)
+	}
+}
