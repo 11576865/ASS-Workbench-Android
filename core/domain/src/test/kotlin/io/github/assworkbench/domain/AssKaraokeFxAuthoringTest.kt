@@ -40,6 +40,9 @@ class AssKaraokeFxAuthoringTest {
             AssKaraokeFxAuthoring.applyProgressiveReveal("{\\kt50}A")
         }
         assertFailsWith<IllegalArgumentException> {
+            AssKaraokeFxAuthoring.applyProgressiveReveal("{\\blur2}{\\k20}A")
+        }
+        assertFailsWith<IllegalArgumentException> {
             AssKaraokeFxAuthoring.applyProgressiveReveal("{\\k20\\blur2}A")
         }
         assertFailsWith<IllegalArgumentException> {
