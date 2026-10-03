@@ -1,17 +1,9 @@
 package io.github.assworkbench.app.ui
 
 import androidx.compose.foundation.layout.*
-import androidx.compose.material3.Button
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
-import androidx.compose.material3.Text
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -21,6 +13,7 @@ import io.github.assworkbench.domain.AssEvent
 import io.github.assworkbench.domain.AssFlipEntranceSpec
 import io.github.assworkbench.domain.AssGlowFxSpec
 import io.github.assworkbench.domain.AssReflectionFxSpec
+import io.github.assworkbench.domain.AssFxTemplate
 
 /**
  * First composition-level FX authoring slice.
@@ -46,6 +39,10 @@ internal fun FxCompositionPane(
     var withEntrance by rememberSaveable(event.id) { mutableStateOf(true) }
     var entranceMs by rememberSaveable(event.id) { mutableStateOf("280") }
 
+    val savedTemplates by viewModel.fxTemplates.collectAsState()
+    var templateName by rememberSaveable { mutableStateOf("") }
+    var selectedTemplateId by rememberSaveable { mutableStateOf<String?>(null) }
+
     val parsedOffset = offsetY.toDoubleOrNull()
     val parsedScale = scaleY.toDoubleOrNull()
     val parsedOpacity = opacity.toDoubleOrNull()
@@ -54,6 +51,47 @@ internal fun FxCompositionPane(
     val parsedGlowBlur = glowBlur.toDoubleOrNull()
     val parsedGlowBorder = glowBorder.toDoubleOrNull()
     val parsedEntranceMs = entranceMs.toLongOrNull()
+    fun currentTemplate(name: String): AssFxTemplate? {
+        if (!valid || name.isBlank()) return null
+        return AssFxTemplate(
+            name = name.trim(),
+            reflection = AssReflectionFxSpec(
+                offsetY = requireNotNull(parsedOffset),
+                verticalScalePercent = requireNotNull(parsedScale),
+                opacityPercent = requireNotNull(parsedOpacity),
+                blur = requireNotNull(parsedBlur),
+            ),
+            glow = if (withGlow) {
+                AssGlowFxSpec(
+                    opacityPercent = requireNotNull(parsedGlowOpacity),
+                    blur = requireNotNull(parsedGlowBlur),
+                    border = requireNotNull(parsedGlowBorder),
+                )
+            } else null,
+            entrance = if (withEntrance) {
+                AssFlipEntranceSpec(durationMs = requireNotNull(parsedEntranceMs))
+            } else null,
+        )
+    }
+
+    fun loadTemplate(template: AssFxTemplate) {
+        offsetY = template.reflection.offsetY.toString()
+        scaleY = template.reflection.verticalScalePercent.toString()
+        opacity = template.reflection.opacityPercent.toString()
+        blur = template.reflection.blur.toString()
+        withGlow = template.glow != null
+        template.glow?.let { glow ->
+            glowOpacity = glow.opacityPercent.toString()
+            glowBlur = glow.blur.toString()
+            glowBorder = glow.border.toString()
+        }
+        withEntrance = template.entrance != null
+        template.entrance?.let { entrance ->
+            entranceMs = entrance.durationMs.toString()
+        }
+        templateName = template.name
+    }
+
     val valid =
         parsedOffset?.isFinite() == true &&
             parsedScale?.let { it.isFinite() && it > 0.0 } == true &&
@@ -85,6 +123,65 @@ internal fun FxCompositionPane(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+
+            Text("可复用模板", style = MaterialTheme.typography.labelMedium)
+            if (savedTemplates.isNotEmpty()) {
+                Row(
+                    Modifier.fillMaxWidth().horizontalScroll(androidx.compose.foundation.rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    savedTemplates.forEach { saved ->
+                        FilterChip(
+                            selected = selectedTemplateId == saved.id,
+                            onClick = {
+                                selectedTemplateId = saved.id
+                                loadTemplate(saved.template)
+                            },
+                            label = { Text(saved.template.name) },
+                        )
+                    }
+                }
+                if (selectedTemplateId != null) {
+                    TextButton(
+                        onClick = {
+                            selectedTemplateId?.let(viewModel::deleteFxTemplate)
+                            selectedTemplateId = null
+                        },
+                        modifier = Modifier.testTag("fx-template-delete"),
+                    ) {
+                        Text("删除已选模板")
+                    }
+                }
+            } else {
+                Text(
+                    "尚未保存模板。模板只保存 FX 参数，不写入 ASS；应用时仍编译成普通 Event。",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                OutlinedTextField(
+                    value = templateName,
+                    onValueChange = { templateName = it.take(80) },
+                    label = { Text("模板名称") },
+                    singleLine = true,
+                    modifier = Modifier.weight(1f).testTag("fx-template-name"),
+                )
+                Button(
+                    enabled = currentTemplate(templateName) != null,
+                    onClick = {
+                        currentTemplate(templateName)?.let(viewModel::saveFxTemplate)
+                        selectedTemplateId = null
+                    },
+                    modifier = Modifier.testTag("fx-template-save"),
+                ) {
+                    Text("保存")
+                }
+            }
 
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 OutlinedTextField(
