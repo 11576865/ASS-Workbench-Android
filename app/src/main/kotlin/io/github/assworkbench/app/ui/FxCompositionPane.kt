@@ -78,7 +78,9 @@ internal fun FxCompositionPane(
             (!withFade || (
                 parsedFadeBands != null && parsedFadeBands in 2..16 &&
                     parsedFadeDepth?.let { it.isFinite() && it > 0.0 } == true &&
-                    parsedFadeFarOpacity?.let { it.isFinite() && it in 0.0..100.0 } == true &&
+                    parsedFadeFarOpacity?.let {
+                        it.isFinite() && it in 0.0..100.0 && it <= parsedOpacity
+                    } == true &&
                     runCatching { AssReflectionFadeDirection.valueOf(fadeDirection) }.isSuccess
                 )) &&
             (!withGlow || (
@@ -426,7 +428,7 @@ internal fun FxCompositionPane(
 
             if (!valid) {
                 Text(
-                    "参数无效：高度需 > 0；各不透明度 0..100；Blur/Border 0..20；渐隐分段 2..16、深度 > 0；入场至少 2 ms；起始/回弹高度需 > 0；Accel 为空或 > 0。",
+                    "参数无效：高度需 > 0；各不透明度 0..100；渐隐末端不透明度不得高于倒影；Blur/Border 0..20；渐隐分段 2..16、深度 > 0；入场至少 2 ms；起始/回弹高度需 > 0；Accel 为空或 > 0。",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.error,
                 )
