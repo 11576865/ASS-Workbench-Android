@@ -48,6 +48,7 @@ object AssKaraokeFxAuthoring {
         var cursorMs = 0L
         val patched = segments.mapIndexed { index, segment ->
             val ownedSyntax = buildString {
+                if (index == 0) append(segment.leadingText)
                 append(segment.overridePrefix)
                 append(segment.overrideSuffix)
                 append(segment.text)
