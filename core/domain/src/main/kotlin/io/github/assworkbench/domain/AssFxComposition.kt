@@ -547,7 +547,7 @@ object AssFxComposition {
     }
 
     private fun overrideBlocks(text: String): Sequence<String> =
-        Regex("""\{[^}]*}""").findAll(text).map { it.value }
+        Regex("""\{[^}]*\}""").findAll(text).map { it.value }
 
     private fun containsSpatialFadeAlphaControl(text: String): Boolean {
         val alpha = Regex("""\\(?:alpha|[1-4]a)(?=[^A-Za-z]|$)""", RegexOption.IGNORE_CASE)
