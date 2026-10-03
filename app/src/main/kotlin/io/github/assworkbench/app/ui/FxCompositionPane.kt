@@ -330,7 +330,7 @@ internal fun FxCompositionPane(
                     }
                 }
                 Text(
-                    "渐隐通过多个互不重叠的矩形 Clip Event 近似空间透明度梯度。当前拒绝 \\move、矢量 Clip 与 iClip，避免生成与源几何脱节的结果。",
+                    "渐隐通过多个互不重叠的矩形 Clip Event 近似空间透明度梯度。当前拒绝 \\move、矢量/iClip、额外行内 Clip，以及已有 alpha/fad/fade 控制，避免语义覆盖或几何脱节。",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
