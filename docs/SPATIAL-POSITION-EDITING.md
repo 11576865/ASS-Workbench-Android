@@ -10,7 +10,7 @@ GeometryParameterDisplay now selects the preview Event only when its owner is `g
 - Standalone Kotlin 2.2.0 / JUnit run: all 163 domain tests and 5 display-projection tests passed (168 total). This is supplemental evidence; the repository's pinned Android CI remains authoritative for Compose compilation.
 - Added editor instrumentation: transient X/Y display, cancellation restores typed draft, and preview adds no document Undo entry.
 - Added native instrumentation: production VideoPreview, production InfiniteCanvasHost, production rod registry and EditorViewModel preview/commit/Undo; one released gesture is one history step; changing target mid-drag cancels rather than writing either Event.
-- The native fixture shares the existing deterministic MP4. Its canvas-host harness exercises the actual media/rod/editor chain; it does not substitute for full ModernEditorScreen workflow acceptance.
+- The native fixture shares main's deterministic PNG media input, avoiding hosted-emulator H.264 decoder liveness failures. Its canvas-host harness exercises the actual media/rod/editor chain; it does not substitute for real moving-video playback or full ModernEditorScreen workflow acceptance.
 - Android compilation and the new connected tests are Pending CI at submission. No local Android SDK/emulator is provisioned.
 
 ## Boundaries

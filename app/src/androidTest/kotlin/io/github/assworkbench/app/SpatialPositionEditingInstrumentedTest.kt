@@ -1,7 +1,6 @@
 package io.github.assworkbench.app
 
 import android.app.Application
-import android.util.Base64
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -43,9 +42,7 @@ class SpatialPositionEditingInstrumentedTest {
 
     @Before fun mount() {
         val app = ApplicationProvider.getApplicationContext<Application>()
-        video = File(app.filesDir, "spatial-position-fixture.mp4").apply {
-            writeBytes(Base64.decode(NativePreviewFixture.VIDEO_BASE64, Base64.DEFAULT))
-        }
+        video = NativePreviewFixture.create(app.filesDir, "spatial-position-fixture.png")
         configDir = File(app.filesDir, "spatial-position/config").apply { mkdirs() }
         fontsDir = File(app.filesDir, "spatial-position/fonts").apply { mkdirs() }
         vm = ViewModelProvider(composeRule.activity)[EditorViewModel::class.java]

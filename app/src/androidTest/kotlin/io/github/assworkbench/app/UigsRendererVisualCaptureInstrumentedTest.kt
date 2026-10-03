@@ -2,7 +2,6 @@ package io.github.assworkbench.app
 
 import android.app.Application
 import android.graphics.Bitmap
-import android.util.Base64
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -35,8 +34,9 @@ import org.junit.runner.RunWith
 
 /**
  * Runtime-backed visual evidence for the real mpv/libass preview plus the shared
- * interaction overlay. The generated video is only a deterministic media input;
- * rendering is performed by the production native preview stack.
+ * interaction overlay. The generated PNG is only a deterministic media input;
+ * rendering is performed by the production native preview stack. This avoids
+ * making visual-capture liveness depend on a hosted-emulator H.264 decoder path.
  */
 @RunWith(AndroidJUnit4::class)
 class UigsRendererVisualCaptureInstrumentedTest {
@@ -44,7 +44,7 @@ class UigsRendererVisualCaptureInstrumentedTest {
     val composeRule = createAndroidComposeRule<ComponentActivity>()
 
     private lateinit var application: Application
-    private lateinit var video: File
+    private lateinit var media: File
     private lateinit var configDir: File
     private lateinit var fontsDir: File
     private val diagnostics = AtomicReference<List<String>>(emptyList())
@@ -53,9 +53,7 @@ class UigsRendererVisualCaptureInstrumentedTest {
     @Before
     fun setUp() {
         application = ApplicationProvider.getApplicationContext()
-        video = File(application.filesDir, "uigs-runtime-fixture.mp4").apply {
-            writeBytes(Base64.decode(VIDEO_BASE64, Base64.DEFAULT))
-        }
+        media = NativePreviewFixture.create(application.filesDir, "uigs-runtime-fixture.png")
         configDir = File(application.filesDir, "uigs-runtime-renderer/config").apply {
             deleteRecursively()
             mkdirs()
@@ -92,7 +90,7 @@ class UigsRendererVisualCaptureInstrumentedTest {
                 SideEffect { interactionRegistry.set(registry) }
                 Box(Modifier.fillMaxSize()) {
                     VideoPreview(
-                        videoUri = video.absolutePath,
+                        videoUri = media.absolutePath,
                         document = document,
                         renderDocument = document,
                         seekRequestMs = null,
@@ -102,7 +100,7 @@ class UigsRendererVisualCaptureInstrumentedTest {
                         configDir = configDir,
                         fontsDir = fontsDir,
                         fontRevision = 0L,
-                        initialPositionMs = 1_000L,
+                        initialPositionMs = 0L,
                         focusedEventId = 1L,
                         positionEditEventId = 1L,
                         onPreviewEventPosition = { _, _ -> },
@@ -157,9 +155,5 @@ class UigsRendererVisualCaptureInstrumentedTest {
         }
         bitmap.recycle()
         assertTrue(target.isFile && target.length() > 0L)
-    }
-
-    private companion object {
-        const val VIDEO_BASE64 = NativePreviewFixture.VIDEO_BASE64
     }
 }
