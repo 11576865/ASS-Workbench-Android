@@ -79,6 +79,8 @@ internal fun RuleBatchPane(
     } else null
 
     val parsedLayerFilter = layerFilter.trim().takeIf { it.isNotEmpty() }?.toIntOrNull()
+    val parsedTagFilter = tagFilter.trim().removePrefix("\\").takeIf { it.isNotEmpty() }
+    val tagFilterValid = parsedTagFilter == null || Regex("""[A-Za-z0-9_-]+""").matches(parsedTagFilter)
     val parsedRawRegexFilter = rawRegexFilter.takeIf { it.isNotBlank() }?.let { raw ->
         runCatching { Regex(raw) }.getOrNull()
     }
@@ -105,6 +107,9 @@ internal fun RuleBatchPane(
     val batchInputError = buildList {
         if (layerFilter.isNotBlank() && parsedLayerFilter == null) {
             add("Layer Filter 必须是整数。")
+        }
+        if (!tagFilterValid) {
+            add("Tag Filter 只能包含字母、数字、下划线或连字符。")
         }
         if (rawRegexFilter.isNotBlank() && parsedRawRegexFilter == null) {
             add("Raw ASS Regex filter 无效。")
@@ -179,7 +184,7 @@ internal fun RuleBatchPane(
             textFilter.takeIf(String::isNotEmpty)?.let { add(AssBatchFilter.TextContains(it)) }
             actorFilter.takeIf(String::isNotEmpty)?.let { add(AssBatchFilter.ActorContains(it)) }
             parsedLayerFilter?.let { add(AssBatchFilter.LayerIs(it)) }
-            tagFilter.trim().removePrefix("\\").takeIf(String::isNotEmpty)?.let { add(AssBatchFilter.HasTag(it)) }
+            parsedTagFilter?.takeIf { tagFilterValid }?.let { add(AssBatchFilter.HasTag(it)) }
             when (commentFilter) {
                 "DIALOGUE" -> add(AssBatchFilter.CommentIs(false))
                 "COMMENT" -> add(AssBatchFilter.CommentIs(true))
