@@ -81,9 +81,6 @@ internal fun RuleBatchPane(
     fun filter(): AssBatchFilter {
         val filters = buildList<AssBatchFilter> {
             if (selectedOnly) add(AssBatchFilter.EventIds(uiState.selection.eventIds))
-            if (karaokeRevealEnabled && karaokeRevealSpec != null) {
-                add(AssBatchFilter.KaraokeRevealCompatible(karaokeRevealSpec))
-            }
             styleFilter.trim().takeIf(String::isNotEmpty)?.let { add(AssBatchFilter.StyleIs(it)) }
             textFilter.takeIf(String::isNotEmpty)?.let { add(AssBatchFilter.TextContains(it)) }
             actorFilter.takeIf(String::isNotEmpty)?.let { add(AssBatchFilter.ActorContains(it)) }
@@ -100,6 +97,11 @@ internal fun RuleBatchPane(
             val maxDuration = durationMax.toLongOrNull()
             if (minDuration != null || maxDuration != null) {
                 add(AssBatchFilter.DurationRange(minDuration ?: 0L, maxDuration ?: Long.MAX_VALUE))
+            }
+            // Keep the compiler-backed compatibility filter last so cheap scope/text/style
+            // predicates can short-circuit before full Karaoke FX inspection.
+            if (karaokeRevealEnabled && karaokeRevealSpec != null) {
+                add(AssBatchFilter.KaraokeRevealCompatible(karaokeRevealSpec))
             }
         }
         return when (filters.size) {
