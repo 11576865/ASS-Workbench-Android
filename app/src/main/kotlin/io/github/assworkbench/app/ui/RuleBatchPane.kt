@@ -143,11 +143,11 @@ internal fun RuleBatchPane(
             }
             if (parsedOverrideValue?.isFinite() != true) {
                 add("数值 override 必须是有限数字。")
-            } else if (
-                parsedOverrideProperty?.minimum != null &&
-                parsedOverrideValue < parsedOverrideProperty.minimum
-            ) {
-                add("${parsedOverrideProperty.name} 不能小于 ${parsedOverrideProperty.minimum}。")
+            } else {
+                val minimum = parsedOverrideProperty?.minimum
+                if (minimum != null && parsedOverrideValue != null && parsedOverrideValue < minimum) {
+                    add("${parsedOverrideProperty.name} 不能小于 $minimum。")
+                }
             }
         }
         if (karaokeRevealEnabled && karaokeRevealSpec == null) {
@@ -295,7 +295,12 @@ internal fun RuleBatchPane(
             OutlinedTextField(layerFilter, { layerFilter = it }, label = { Text("Layer =") }, modifier = Modifier.weight(1f))
             OutlinedTextField(tagFilter, { tagFilter = it }, label = { Text("含 tag，例如 pos") }, modifier = Modifier.weight(1f))
         }
-        OutlinedTextField(rawRegexFilter, { rawRegexFilter = it }, label = { Text("Raw ASS Regex filter") }, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(
+            rawRegexFilter,
+            { rawRegexFilter = it },
+            label = { Text("Raw ASS Regex filter") },
+            modifier = Modifier.fillMaxWidth().testTag("batch-raw-regex-filter"),
+        )
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             OutlinedTextField(durationMin, { durationMin = it }, label = { Text("最短时长 ms") }, modifier = Modifier.weight(1f))
             OutlinedTextField(durationMax, { durationMax = it }, label = { Text("最长时长 ms") }, modifier = Modifier.weight(1f))
