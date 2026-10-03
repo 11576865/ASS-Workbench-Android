@@ -129,6 +129,28 @@ class AuthoringEngineSuiteTest {
     }
 
     @Test
+    fun batchDomainRejectsInvalidRangesAndNumericOverrides() {
+        assertFailsWith<IllegalArgumentException> {
+            AssBatchFilter.DurationRange(500L, 100L)
+        }
+        assertFailsWith<IllegalArgumentException> {
+            AssBatchFilter.TimeRange(1000L, 900L)
+        }
+        assertFailsWith<IllegalArgumentException> {
+            AssBatchAction.SetNumericOverride(
+                property = AssTransformVisualProperty.GAUSSIAN_BLUR,
+                value = -1.0,
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            AssBatchAction.SetNumericOverride(
+                property = AssTransformVisualProperty.ROTATION_X,
+                value = Double.POSITIVE_INFINITY,
+            )
+        }
+    }
+
+    @Test
     fun batchRejectsUnknownStyleAndNegativeMargins() {
         val document = AssDocument(
             styles = listOf(AssStyle(name = "Default")),
