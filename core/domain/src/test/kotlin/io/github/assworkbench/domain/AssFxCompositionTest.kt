@@ -98,6 +98,41 @@ class AssFxCompositionTest {
     }
 
     @Test
+    fun generatedFxRejectsStyleResetInsteadOfLosingOwnedPropertiesMidLine() {
+        val document = AssDocument(
+            styles = listOf(
+                AssStyle(),
+                AssStyle(name = "Alt", scaleY = 72.0),
+            ),
+            events = listOf(
+                AssEvent(
+                    id = 44,
+                    start = SubTime(0),
+                    end = SubTime(1200),
+                    text = "{\\rAlt}Reset style",
+                )
+            )
+        )
+
+        val reflectionError = assertFailsWith<IllegalArgumentException> {
+            AssFxComposition.createReflection(document, 44)
+        }
+        assertTrue(reflectionError.message.orEmpty().contains("Style reset"))
+
+        val glowError = assertFailsWith<IllegalArgumentException> {
+            AssFxComposition.createGlow(document, 44)
+        }
+        assertTrue(glowError.message.orEmpty().contains("Style reset"))
+
+        val entranceError = assertFailsWith<IllegalArgumentException> {
+            AssFxComposition.applyFlipEntrance(document, 44)
+        }
+        assertTrue(entranceError.message.orEmpty().contains("Style reset"))
+
+        assertEquals("{\\rAlt}Reset style", document.events.single().text)
+    }
+
+    @Test
     fun reflectionRejectsKaraokeSpanThatReownsReflectionProperties() {
         val document = AssDocument(
             events = listOf(
