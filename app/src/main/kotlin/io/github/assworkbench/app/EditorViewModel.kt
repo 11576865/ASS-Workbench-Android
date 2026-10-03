@@ -947,6 +947,40 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    fun previewMirrorFxComposition(
+        eventIds: Set<Long>,
+        reflection: AssReflectionFxSpec,
+        glow: AssGlowFxSpec?,
+        entrance: AssFlipEntranceSpec?,
+    ) {
+        val snapshot = _state.value
+        val result = runCatching {
+            AssFxComposition.composeMirrorStackBatch(
+                document = snapshot.document,
+                eventIds = eventIds,
+                reflection = reflection,
+                glow = glow,
+                entrance = entrance,
+            )
+        }.getOrElse { error ->
+            _state.update {
+                it.copy(
+                    previewDocument = null,
+                    previewOwnerId = null,
+                    status = "FX 预览失败：" + (error.message ?: error::class.java.simpleName),
+                )
+            }
+            return
+        }
+        _state.update { current ->
+            current.copy(
+                previewDocument = result.document,
+                previewOwnerId = "fx-composition",
+                status = "FX 预览：${result.sourceEventIds.size} 条源字幕 · ${result.generatedEventIds.size} 个生成层；尚未写入。",
+            )
+        }
+    }
+
     fun createMirrorFxComposition(
         eventId: Long,
         reflection: AssReflectionFxSpec,
