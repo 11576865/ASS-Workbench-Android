@@ -30,6 +30,9 @@ import io.github.assworkbench.domain.AssSearchReplace
 import io.github.assworkbench.domain.AssAnimationKeyframe
 import io.github.assworkbench.domain.AssAnimationAuthoring
 import io.github.assworkbench.domain.AssTransformVisualProperty
+import io.github.assworkbench.domain.AssFxComposition
+import io.github.assworkbench.domain.AssReflectionFxSpec
+import io.github.assworkbench.domain.AssFlipEntranceSpec
 import io.github.assworkbench.domain.EventFormatClipboard
 import io.github.assworkbench.domain.EventFormatClipboardOps
 import io.github.assworkbench.domain.EventFormatPasteMode
@@ -867,6 +870,43 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                     text = AssAnimationAuthoring.applyNumericTrack(event.text, property, keyframes, accel)
                 )
             })
+        }
+    }
+
+    fun createReflectionFxComposition(
+        eventId: Long,
+        reflection: AssReflectionFxSpec,
+        entrance: AssFlipEntranceSpec?,
+    ) {
+        val snapshot = _state.value
+        val result = runCatching {
+            AssFxComposition.composeReflection(
+                document = snapshot.document,
+                eventId = eventId,
+                reflection = reflection,
+                entrance = entrance,
+            )
+        }.getOrElse { error ->
+            _state.update {
+                it.copy(status = "FX 组合失败：" + (error.message ?: error::class.java.simpleName))
+            }
+            return
+        }
+
+        val status = buildString {
+            append("已从字幕 #").append(eventId)
+            append(" 生成倒影 Event #").append(result.generatedEventId)
+            if (entrance != null) append("，并写入主体翻转入场")
+            append("。")
+        }
+        editDocument(status) { result.document }
+        _state.update { state ->
+            state.copy(
+                focusedEventId = eventId.takeIf { id -> state.document.events.any { it.id == id } },
+                selectedEventIds = setOf(eventId, result.generatedEventId)
+                    .filterTo(linkedSetOf()) { id -> state.document.events.any { it.id == id } },
+                selectionAnchorId = null,
+            )
         }
     }
 
