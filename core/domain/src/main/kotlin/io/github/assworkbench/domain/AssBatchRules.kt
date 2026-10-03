@@ -44,8 +44,12 @@ sealed interface AssBatchFilter {
         override fun matches(event: AssEvent, document: AssDocument) = event.comment == comment
     }
     data class HasTag(val tag: String) : AssBatchFilter {
+        private val pattern = Regex(
+            """\\${Regex.escape(tag)}(?:[^A-Za-z]|$)""",
+            RegexOption.IGNORE_CASE,
+        )
         override fun matches(event: AssEvent, document: AssDocument) =
-            Regex("""\\${Regex.escape(tag)}(?:[^A-Za-z]|$)""", RegexOption.IGNORE_CASE).containsMatchIn(event.text)
+            pattern.containsMatchIn(event.text)
     }
     data class KaraokeRevealCompatible(
         val spec: AssKaraokeRevealFxSpec = AssKaraokeRevealFxSpec(),
@@ -58,7 +62,12 @@ sealed interface AssBatchFilter {
             ).compatible
     }
     data class TimeRange(val startMs: Long, val endMs: Long) : AssBatchFilter {
-        override fun matches(event: AssEvent, document: AssDocument) = event.end.millis >= startMs && event.start.millis <= endMs
+        init {
+            require(startMs >= 0L) { "时间范围起点不能为负数。" }
+            require(endMs >= startMs) { "时间范围终点不能早于起点。" }
+        }
+        override fun matches(event: AssEvent, document: AssDocument) =
+            event.end.millis >= startMs && event.start.millis <= endMs
     }
     data class And(val filters: List<AssBatchFilter>) : AssBatchFilter {
         override fun matches(event: AssEvent, document: AssDocument) = filters.all { it.matches(event, document) }
@@ -152,8 +161,16 @@ sealed interface AssBatchAction {
         val property: AssTransformVisualProperty,
         val value: Double?,
     ) : AssBatchAction {
+        init {
+            if (value != null) {
+                require(value.isFinite()) { "数值 override 必须是有限数字。" }
+                property.minimum?.let { minimum ->
+                    require(value >= minimum) { "${property.name} 不能小于 $minimum。" }
+                }
+            }
+        }
         override fun apply(event: AssEvent, document: AssDocument): AssEvent {
-            val leading = Regex("""^(?:\{[^}]*\})*""").find(event.text)?.value.orEmpty()
+            val leading = LEADING_OVERRIDE_BLOCKS.find(event.text)?.value.orEmpty()
             val body = event.text.removePrefix(leading)
             val block = leading.takeIf { it.contains('\\') } ?: "{}"
             val content = block.removePrefix("{").removeSuffix("}")
@@ -206,6 +223,7 @@ data class AssBatchRecipe(val id: String, val filter: AssBatchFilter = AssBatchF
 data class AssBatchPreview(val document: AssDocument, val affectedEventIds: List<Long>, val changedEventIds: List<Long>)
 
 private val LONG_MAX_BIG_INTEGER: BigInteger = BigInteger.valueOf(Long.MAX_VALUE)
+private val LEADING_OVERRIDE_BLOCKS = Regex("""^(?:\{[^}]*\})*""")
 
 object AssBatchEngine {
     fun preview(document: AssDocument, recipe: AssBatchRecipe): AssBatchPreview {
