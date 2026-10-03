@@ -110,6 +110,10 @@ object AssFxComposition {
         fade: AssReflectionFadeSpec? = null,
         entrance: AssFlipEntranceSpec? = null,
     ): AssFxCompositionResult {
+        require(fade == null || entrance == null) {
+            "空间渐隐使用固定屏幕 Clip 分带，暂不能与翻转/拉伸入场同时启用；静态 Clip 无法可靠跟随旋转与缩放。"
+        }
+
         var next = document
         val generated = mutableListOf<Long>()
 
