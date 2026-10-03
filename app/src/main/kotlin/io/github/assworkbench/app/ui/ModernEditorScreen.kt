@@ -69,6 +69,7 @@ import io.github.assworkbench.app.EditorViewModelUiActions
 import io.github.assworkbench.app.toEditorUiState
 import io.github.assworkbench.app.WaveformLiteState
 import io.github.assworkbench.app.WaveformLiteStatus
+import io.github.assworkbench.app.buildContainerEditPlan
 import io.github.assworkbench.app.ui.interaction.InteractionOverlayRegistry
 import io.github.assworkbench.app.ui.interaction.PrecisionInteractionOverlay
 import io.github.assworkbench.app.ui.interaction.WindowInteractionOverlay
@@ -7253,7 +7254,13 @@ private fun ProjectPane(state: EditorState, viewModel: EditorViewModel, onSaveMk
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         if (state.container.uri != null) {
-            ContainerBridgePanel(state.container, viewModel, onSaveMkv, dirty = state.dirty)
+            ContainerBridgePanel(
+                state = state.container,
+                editPlan = buildContainerEditPlan(state),
+                viewModel = viewModel,
+                onSaveMkv = onSaveMkv,
+                dirty = state.dirty,
+            )
         } else {
             Text("独立 ASS 工程", style = MaterialTheme.typography.titleSmall)
             Text(state.project.title)
