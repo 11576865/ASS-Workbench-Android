@@ -14,6 +14,8 @@ import io.github.assworkbench.domain.AssEvent
 import io.github.assworkbench.domain.AssFlipEntranceSpec
 import io.github.assworkbench.domain.AssGlowFxSpec
 import io.github.assworkbench.domain.AssReflectionFxSpec
+import io.github.assworkbench.domain.AssReflectionFadeSpec
+import io.github.assworkbench.domain.AssReflectionFadeDirection
 import io.github.assworkbench.domain.AssFxTemplate
 
 /**
@@ -33,6 +35,11 @@ internal fun FxCompositionPane(
     var scaleY by rememberSaveable(event.id) { mutableStateOf("35") }
     var opacity by rememberSaveable(event.id) { mutableStateOf("35") }
     var blur by rememberSaveable(event.id) { mutableStateOf("1.5") }
+    var withFade by rememberSaveable(event.id) { mutableStateOf(false) }
+    var fadeBands by rememberSaveable(event.id) { mutableStateOf("6") }
+    var fadeDepth by rememberSaveable(event.id) { mutableStateOf("120") }
+    var fadeFarOpacity by rememberSaveable(event.id) { mutableStateOf("0") }
+    var fadeDirection by rememberSaveable(event.id) { mutableStateOf(AssReflectionFadeDirection.AUTO.name) }
     var withGlow by rememberSaveable(event.id) { mutableStateOf(true) }
     var glowOpacity by rememberSaveable(event.id) { mutableStateOf("22") }
     var glowBlur by rememberSaveable(event.id) { mutableStateOf("4") }
@@ -52,6 +59,9 @@ internal fun FxCompositionPane(
     val parsedScale = scaleY.toDoubleOrNull()
     val parsedOpacity = opacity.toDoubleOrNull()
     val parsedBlur = blur.toDoubleOrNull()
+    val parsedFadeBands = fadeBands.toIntOrNull()
+    val parsedFadeDepth = fadeDepth.toDoubleOrNull()
+    val parsedFadeFarOpacity = fadeFarOpacity.toDoubleOrNull()
     val parsedGlowOpacity = glowOpacity.toDoubleOrNull()
     val parsedGlowBlur = glowBlur.toDoubleOrNull()
     val parsedGlowBorder = glowBorder.toDoubleOrNull()
@@ -65,6 +75,14 @@ internal fun FxCompositionPane(
             parsedScale?.let { it.isFinite() && it > 0.0 } == true &&
             parsedOpacity?.let { it.isFinite() && it in 0.0..100.0 } == true &&
             parsedBlur?.let { it.isFinite() && it in 0.0..20.0 } == true &&
+            (!withFade || (
+                parsedFadeBands != null && parsedFadeBands in 2..16 &&
+                    parsedFadeDepth?.let { it.isFinite() && it > 0.0 } == true &&
+                    parsedFadeFarOpacity?.let {
+                        it.isFinite() && it in 0.0..100.0 && it <= parsedOpacity
+                    } == true &&
+                    runCatching { AssReflectionFadeDirection.valueOf(fadeDirection) }.isSuccess
+                )) &&
             (!withGlow || (
                 parsedGlowOpacity?.let { it.isFinite() && it in 0.0..100.0 } == true &&
                     parsedGlowBlur?.let { it.isFinite() && it in 0.0..20.0 } == true &&
@@ -95,6 +113,14 @@ internal fun FxCompositionPane(
                     border = requireNotNull(parsedGlowBorder),
                 )
             } else null,
+            fade = if (withFade) {
+                AssReflectionFadeSpec(
+                    bands = requireNotNull(parsedFadeBands),
+                    depthPx = requireNotNull(parsedFadeDepth),
+                    farOpacityPercent = requireNotNull(parsedFadeFarOpacity),
+                    direction = AssReflectionFadeDirection.valueOf(fadeDirection),
+                )
+            } else null,
             entrance = if (withEntrance) {
                 AssFlipEntranceSpec(
                     durationMs = requireNotNull(parsedEntranceMs),
@@ -112,6 +138,13 @@ internal fun FxCompositionPane(
         scaleY = template.reflection.verticalScalePercent.toString()
         opacity = template.reflection.opacityPercent.toString()
         blur = template.reflection.blur.toString()
+        withFade = template.fade != null
+        template.fade?.let { fade ->
+            fadeBands = fade.bands.toString()
+            fadeDepth = fade.depthPx.toString()
+            fadeFarOpacity = fade.farOpacityPercent.toString()
+            fadeDirection = fade.direction.name
+        }
         withGlow = template.glow != null
         template.glow?.let { glow ->
             glowOpacity = glow.opacityPercent.toString()
@@ -250,6 +283,64 @@ internal fun FxCompositionPane(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Switch(
+                    checked = withFade,
+                    onCheckedChange = { withFade = it },
+                    modifier = Modifier.testTag("fx-reflection-with-fade"),
+                )
+                Text("空间渐隐 · 分带 Clip")
+            }
+            if (withFade) {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    OutlinedTextField(
+                        value = fadeBands,
+                        onValueChange = { fadeBands = it },
+                        label = { Text("分段 2..16") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f).testTag("fx-fade-bands"),
+                    )
+                    OutlinedTextField(
+                        value = fadeDepth,
+                        onValueChange = { fadeDepth = it },
+                        label = { Text("深度 px") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f).testTag("fx-fade-depth"),
+                    )
+                    OutlinedTextField(
+                        value = fadeFarOpacity,
+                        onValueChange = { fadeFarOpacity = it },
+                        label = { Text("末端不透明度 %") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f).testTag("fx-fade-far-opacity"),
+                    )
+                }
+                Row(
+                    Modifier.fillMaxWidth().horizontalScroll(androidx.compose.foundation.rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    listOf(
+                        AssReflectionFadeDirection.AUTO to "自动",
+                        AssReflectionFadeDirection.DOWN to "向下",
+                        AssReflectionFadeDirection.UP to "向上",
+                    ).forEach { (direction, label) ->
+                        FilterChip(
+                            selected = fadeDirection == direction.name,
+                            onClick = { fadeDirection = direction.name },
+                            label = { Text(label) },
+                        )
+                    }
+                }
+                Text(
+                    "渐隐通过多个互不重叠的矩形 Clip Event 近似空间透明度梯度。当前拒绝 \\move、矢量/iClip、额外行内 Clip，以及已有 alpha/fad/fade 控制，避免语义覆盖或几何脱节。",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Switch(
                     checked = withGlow,
                     onCheckedChange = { withGlow = it },
                     modifier = Modifier.testTag("fx-mirror-with-glow"),
@@ -337,13 +428,29 @@ internal fun FxCompositionPane(
 
             if (!valid) {
                 Text(
-                    "参数无效：高度需 > 0；各不透明度 0..100；Blur/Border 0..20；入场至少 2 ms；起始/回弹高度需 > 0；Accel 为空或 > 0。",
+                    "参数无效：高度需 > 0；各不透明度 0..100；渐隐末端不透明度不得高于倒影；Blur/Border 0..20；渐隐分段 2..16、深度 > 0；入场至少 2 ms；起始/回弹高度需 > 0；Accel 为空或 > 0。",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.error,
                 )
             }
 
             val currentRecipe = currentTemplate("当前参数")
+            currentRecipe?.let { recipe ->
+                val generatedPerSource = (if (recipe.glow != null) 1 else 0) +
+                    (recipe.fade?.bands ?: 1)
+                val estimatedGenerated = generatedPerSource * targetEventIds.size
+                Text(
+                    "预计生成 ${estimatedGenerated} 个 companion Event（不含 ${targetEventIds.size} 个源 Event）。" +
+                        if (estimatedGenerated >= 128) " 当前批次较大，建议先预览并分批提交。" else "",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (estimatedGenerated >= 128) {
+                        MaterialTheme.colorScheme.error
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                    modifier = Modifier.testTag("fx-generated-event-estimate"),
+                )
+            }
             Row(
                 Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -356,6 +463,7 @@ internal fun FxCompositionPane(
                                 eventIds = targetEventIds,
                                 reflection = recipe.reflection,
                                 glow = recipe.glow,
+                                fade = recipe.fade,
                                 entrance = recipe.entrance,
                             )
                         }
@@ -372,6 +480,7 @@ internal fun FxCompositionPane(
                                 eventIds = targetEventIds,
                                 reflection = recipe.reflection,
                                 glow = recipe.glow,
+                                fade = recipe.fade,
                                 entrance = recipe.entrance,
                             )
                         }
@@ -380,18 +489,17 @@ internal fun FxCompositionPane(
                 ) {
                     Text(
                         (if (targetEventIds.size > 1) "对 ${targetEventIds.size} 条字幕 · " else "") +
-                        when {
-                            withGlow && withEntrance -> "生成柔光 + 倒影 + 翻转入场"
-                            withGlow -> "生成柔光 + 倒影"
-                            withEntrance -> "生成倒影 + 翻转入场"
-                            else -> "生成倒影 Event"
-                        }
+                        buildList {
+                            if (withGlow) add("柔光")
+                            add(if (withFade) "渐隐倒影" else "倒影")
+                            if (withEntrance) add("翻转入场")
+                        }.joinToString(" + ")
                     )
                 }
             }
 
             Text(
-                "位置继承会被解析成显式 \\pos；已有 \\move 会整体偏移路径。若源 Event 同时含 \\pos 与 \\move，工具会拒绝猜测。",
+                "位置继承会被解析成显式 \\pos；普通倒影可整体偏移 \\move 路径。启用空间渐隐后，由于 Clip 固定在屏幕坐标中，\\move 会被明确拒绝。",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

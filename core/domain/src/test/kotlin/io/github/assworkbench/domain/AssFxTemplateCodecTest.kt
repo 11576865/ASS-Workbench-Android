@@ -21,6 +21,12 @@ class AssFxTemplateCodecTest {
                 blur = 4.5,
                 border = 2.25,
             ),
+            fade = AssReflectionFadeSpec(
+                bands = 8,
+                depthPx = 144.0,
+                farOpacityPercent = 3.0,
+                direction = AssReflectionFadeDirection.UP,
+            ),
             entrance = AssFlipEntranceSpec(
                 durationMs = 360,
                 startScalePercent = 6.0,
@@ -43,8 +49,29 @@ class AssFxTemplateCodecTest {
         )
         val decoded = AssFxTemplateCodec.decode(AssFxTemplateCodec.encode(template))
         assertNull(decoded.glow)
+        assertNull(decoded.fade)
         assertNull(decoded.entrance)
         assertEquals(template.reflection, decoded.reflection)
+    }
+
+    @Test
+    fun readsLegacyV1TemplateWithoutInventingFade() {
+        val legacy = """
+            ASSWB_FX_TEMPLATE_V1
+            name64=T2xk
+            reflection.offsetY=56
+            reflection.verticalScalePercent=35
+            reflection.opacityPercent=35
+            reflection.blur=1.5
+            glow.enabled=false
+            entrance.enabled=false
+        """.trimIndent()
+
+        val decoded = AssFxTemplateCodec.decode(legacy)
+        assertEquals("Old", decoded.name)
+        assertNull(decoded.fade)
+        assertNull(decoded.glow)
+        assertNull(decoded.entrance)
     }
 
     @Test
