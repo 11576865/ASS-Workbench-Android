@@ -201,7 +201,7 @@ internal fun buildContainerEditPlan(state: EditorState): ContainerEditPlanUi {
 
     val hasGenericAttachment = mutations.any {
         it.source == ContainerMutationSource.GENERIC_ATTACHMENT ||
-            it.kind == ContainerMutationKind.REPLACE_ATTACHMENT
+            it.source == ContainerMutationSource.EXISTING_ATTACHMENT
     }
     val hasFontAttachment = mutations.any { it.source == ContainerMutationSource.FONT_PACKAGE }
     val hasAss = mutations.any { it.kind == ContainerMutationKind.REPLACE_ASS_TRACK }
