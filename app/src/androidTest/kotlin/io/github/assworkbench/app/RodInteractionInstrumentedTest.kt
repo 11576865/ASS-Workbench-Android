@@ -25,6 +25,92 @@ import org.junit.runner.RunWith
 class RodInteractionInstrumentedTest {
     @get:Rule val composeRule = createAndroidComposeRule<EditorRegressionHostActivity>()
 
+    @Test fun touchAxisSelectorsExposeExplicitScaleAndRotationAdapters() {
+        val registry = InteractionOverlayRegistry()
+        var selected = ""
+        composeRule.activityRule.scenario.onActivity { activity ->
+            val suffixes = listOf(
+                "pos", "scale", "scale-x", "scale-y", "shear",
+                "rotation", "rotation-x", "rotation-y",
+            )
+            registry.publish("position-42", suffixes.map { suffix ->
+                InteractionProxySpec(
+                    "position-42-$suffix",
+                    suffix,
+                    Offset(400f, 650f),
+                    Offset(100f, -100f),
+                    onDragDelta = { selected = suffix },
+                    onCommit = {},
+                    onCancel = {},
+                )
+            })
+            activity.setContent {
+                MaterialTheme(colorScheme = darkColorScheme()) {
+                    WindowInteractionOverlay(registry)
+                }
+            }
+        }
+
+        composeRule.onNodeWithTag("rod-mode-SCALE").performScrollTo().performClick()
+        composeRule.onNodeWithTag("rod-handle-position-42-scale").assertIsDisplayed()
+        composeRule.onNodeWithTag("rod-scale-axis-X").performScrollTo().performClick()
+        composeRule.onNodeWithTag("rod-handle-position-42-scale-x").assertIsDisplayed().performTouchInput {
+            swipe(start = center, end = center + Offset(80f, 0f), durationMillis = 300)
+        }
+        composeRule.waitForIdle()
+        assertEquals("scale-x", selected)
+
+        composeRule.onNodeWithTag("rod-mode-ROTATION").performScrollTo().performClick()
+        composeRule.onNodeWithTag("rod-handle-position-42-rotation").assertIsDisplayed()
+        composeRule.onNodeWithTag("rod-rotation-axis-Y").performScrollTo().performClick()
+        composeRule.onNodeWithTag("rod-handle-position-42-rotation-y").assertIsDisplayed().performTouchInput {
+            swipe(start = center, end = center + Offset(70f, 55f), durationMillis = 300)
+        }
+        composeRule.waitForIdle()
+        assertEquals("rotation-y", selected)
+    }
+
+    @Test fun scaleConstraintControlsAreExplicitTouchActions() {
+        val registry = InteractionOverlayRegistry()
+        var lockRequest: Boolean? = null
+        var snapRequest: Double? = null
+        composeRule.activityRule.scenario.onActivity { activity ->
+            registry.publish(
+                "position-42",
+                listOf(
+                    InteractionProxySpec(
+                        "position-42-scale",
+                        "scale",
+                        Offset(400f, 650f),
+                        Offset(100f, -100f),
+                        onDragDelta = {},
+                        onCommit = {},
+                        onCancel = {},
+                    )
+                ),
+            )
+            activity.setContent {
+                MaterialTheme(colorScheme = darkColorScheme()) {
+                    WindowInteractionOverlay(
+                        registry = registry,
+                        scaleLocked = false,
+                        onScaleLockedChange = { lockRequest = it },
+                        scaleSnapStep = null,
+                        onScaleSnapStepChange = { snapRequest = it },
+                    )
+                }
+            }
+        }
+
+        composeRule.onNodeWithTag("rod-mode-SCALE").performScrollTo().performClick()
+        composeRule.onNodeWithTag("rod-scale-lock").performScrollTo().performClick()
+        composeRule.onNodeWithTag("rod-scale-snap").performScrollTo().performClick()
+        composeRule.waitForIdle()
+
+        assertEquals(true, lockRequest)
+        assertEquals(5.0, snapRequest)
+    }
+
     @Test fun oneRodSwitchesSemanticsAndOrbitNeverCommits() {
         val registry = InteractionOverlayRegistry()
         var previews = 0

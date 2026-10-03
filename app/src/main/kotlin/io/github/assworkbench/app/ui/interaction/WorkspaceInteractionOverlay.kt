@@ -96,21 +96,40 @@ internal fun ClearInteractionOwnerOnDispose(
 @Composable
 internal fun WindowInteractionOverlay(
     registry: InteractionOverlayRegistry,
+    scaleLocked: Boolean = false,
+    onScaleLockedChange: (Boolean) -> Unit = {},
+    scaleSnapStep: Double? = null,
+    onScaleSnapStepChange: (Double?) -> Unit = {},
     visible: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
     var modeName by rememberSaveable { mutableStateOf(RodMode.POSITION.name) }
+    var scaleAxis by rememberSaveable { mutableStateOf("XY") }
+    var rotationAxis by rememberSaveable { mutableStateOf("Z") }
     var orbitOnly by rememberSaveable { mutableStateOf(false) }
     val angles = remember { mutableStateMapOf<String, Float>() }
     if (!visible) return
     val mode = RodMode.valueOf(modeName)
+    val selectedSuffix = when (mode) {
+        RodMode.SCALE -> when (scaleAxis) {
+            "X" -> "scale-x"
+            "Y" -> "scale-y"
+            else -> "scale"
+        }
+        RodMode.ROTATION -> when (rotationAxis) {
+            "X" -> "rotation-x"
+            "Y" -> "rotation-y"
+            else -> "rotation"
+        }
+        else -> mode.suffix
+    }
     BoxWithConstraints(modifier.fillMaxSize()) {
         var rootOrigin by remember { mutableStateOf(Offset.Zero) }
         val allHandles = registry.handles
-        // Four semantic adapters share one physical rod and one placement.
+        // Semantic adapters share one physical rod; axis choice is explicit on touch.
         val positionHandles = allHandles.filter { it.id.startsWith("position-") }
         val handles = allHandles.filter {
-            !it.id.startsWith("position-") || it.id.endsWith("-${mode.suffix}") || it.id.endsWith("-org")
+            !it.id.startsWith("position-") || it.id.endsWith("-$selectedSuffix") || it.id.endsWith("-org")
         }
         val activeId = registry.activeHandleId
         val density = androidx.compose.ui.platform.LocalDensity.current
@@ -181,7 +200,11 @@ internal fun WindowInteractionOverlay(
                                             val delta = when {
                                                 isPosition -> Offset(step.dx, step.dy)
                                                 mode == RodMode.SCALE -> Offset(step.radial, -step.radial)
-                                                mode == RodMode.ROTATION -> Offset(FixedRod.assRotationDegrees(previousAngle, step.angle) / 0.35f, 0f)
+                                                mode == RodMode.ROTATION -> {
+                                                    val degrees = FixedRod.assRotationDegrees(previousAngle, step.angle)
+                                                    if (spec.id.endsWith("-rotation-x")) Offset(0f, -degrees / 0.35f)
+                                                    else Offset(degrees / 0.35f, 0f)
+                                                }
                                                 else -> Offset(step.radial, angular * radius)
                                             }
                                             if (delta.getDistance() > 0.001f) {
@@ -224,6 +247,49 @@ internal fun WindowInteractionOverlay(
                         RodMode.entries.forEach { entry ->
                             FilterChip(selected = mode == entry, onClick = { modeName = entry.name; orbitOnly = false },
                                 label = { Text(entry.label) }, modifier = Modifier.testTag("rod-mode-${entry.name}"))
+                        }
+                        if (mode == RodMode.SCALE) {
+                            listOf("X", "Y", "XY").forEach { axis ->
+                                FilterChip(
+                                    selected = scaleAxis == axis,
+                                    onClick = { scaleAxis = axis; orbitOnly = false },
+                                    label = { Text(axis) },
+                                    modifier = Modifier.testTag("rod-scale-axis-$axis"),
+                                )
+                            }
+                            FilterChip(
+                                selected = scaleLocked,
+                                onClick = { onScaleLockedChange(!scaleLocked); orbitOnly = false },
+                                label = { Text(if (scaleLocked) "比例锁" else "独立") },
+                                modifier = Modifier.testTag("rod-scale-lock"),
+                            )
+                            FilterChip(
+                                selected = scaleSnapStep != null,
+                                onClick = {
+                                    val next = when (scaleSnapStep?.toInt()) {
+                                        null -> 5.0
+                                        5 -> 10.0
+                                        10 -> 25.0
+                                        else -> null
+                                    }
+                                    onScaleSnapStepChange(next)
+                                    orbitOnly = false
+                                },
+                                label = {
+                                    Text(scaleSnapStep?.let { "吸附 ${it.toInt()}%" } ?: "吸附关")
+                                },
+                                modifier = Modifier.testTag("rod-scale-snap"),
+                            )
+                        }
+                        if (mode == RodMode.ROTATION) {
+                            listOf("X", "Y", "Z").forEach { axis ->
+                                FilterChip(
+                                    selected = rotationAxis == axis,
+                                    onClick = { rotationAxis = axis; orbitOnly = false },
+                                    label = { Text(axis) },
+                                    modifier = Modifier.testTag("rod-rotation-axis-$axis"),
+                                )
+                            }
                         }
                         FilterChip(selected = orbitOnly, onClick = { orbitOnly = !orbitOnly },
                             label = { Text("仅转杆") }, modifier = Modifier.testTag("rod-orbit-only"))

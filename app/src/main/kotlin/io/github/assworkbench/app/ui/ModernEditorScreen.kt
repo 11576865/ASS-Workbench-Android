@@ -827,6 +827,10 @@ fun ModernEditorScreen(
 
         WindowInteractionOverlay(
             registry = interactionRegistry,
+            scaleLocked = state.geometryScaleLocked,
+            onScaleLockedChange = viewModel::setGeometryScaleLocked,
+            scaleSnapStep = state.geometryScaleSnapStep,
+            onScaleSnapStepChange = viewModel::setGeometryScaleSnapStep,
             visible = when (workspaceMode) {
                 WorkspacePresentationMode.FIXED -> fixedTool == WorkbenchTool.POSITION
                 WorkspacePresentationMode.CANVAS_EXPERIMENTAL -> !workspaceState.surfacesHidden
@@ -842,6 +846,10 @@ fun ModernEditorScreen(
         )
         PrecisionInteractionOverlay(
             registry = interactionRegistry,
+            scaleLocked = state.geometryScaleLocked,
+            onScaleLockedChange = viewModel::setGeometryScaleLocked,
+            scaleSnapStep = state.geometryScaleSnapStep,
+            onScaleSnapStepChange = viewModel::setGeometryScaleSnapStep,
             visible = workspaceMode == WorkspacePresentationMode.PRECISION_LENS_EXPERIMENTAL,
             modifier = Modifier.fillMaxSize(),
         )
@@ -1531,6 +1539,23 @@ private fun PrecisionLensWorkspace(
                     AssistChip(
                         onClick = { viewModel.setGeometryScaleLocked(!state.geometryScaleLocked) },
                         label = { Text(if (state.geometryScaleLocked) "XY 缩放锁定" else "XY 独立缩放") },
+                    )
+                    AssistChip(
+                        onClick = {
+                            val next = when (state.geometryScaleSnapStep?.toInt()) {
+                                null -> 5.0
+                                5 -> 10.0
+                                10 -> 25.0
+                                else -> null
+                            }
+                            viewModel.setGeometryScaleSnapStep(next)
+                        },
+                        label = {
+                            Text(
+                                state.geometryScaleSnapStep?.let { "缩放吸附 ${it.toInt()}%" }
+                                    ?: "缩放吸附关闭"
+                            )
+                        },
                     )
                     AssistChip(
                         onClick = { viewModel.clearTransientPreview() },
@@ -3563,6 +3588,18 @@ private fun WorkbenchPreview(
         onSetEventOrigin = { x, y ->
             positionEditEventId?.let { viewModel.setEventOrigin(it, x, y) }
         },
+        onPreviewEventRotationX = { angle ->
+            positionEditEventId?.let { viewModel.previewEventRotationX(it, angle) }
+        },
+        onSetEventRotationX = { angle ->
+            positionEditEventId?.let { viewModel.setEventRotationX(it, angle) }
+        },
+        onPreviewEventRotationY = { angle ->
+            positionEditEventId?.let { viewModel.previewEventRotationY(it, angle) }
+        },
+        onSetEventRotationY = { angle ->
+            positionEditEventId?.let { viewModel.setEventRotationY(it, angle) }
+        },
         onPreviewEventRotation = { angle ->
             positionEditEventId?.let { viewModel.previewEventRotationZ(it, angle) }
         },
@@ -3570,6 +3607,7 @@ private fun WorkbenchPreview(
             positionEditEventId?.let { viewModel.setEventRotationZ(it, angle) }
         },
         scaleLocked = state.geometryScaleLocked,
+        scaleSnapStep = state.geometryScaleSnapStep,
         onPreviewEventScale = { sx, sy ->
             positionEditEventId?.let { viewModel.previewEventScale(it, sx, sy) }
         },
@@ -5285,8 +5323,8 @@ private fun AddTransformCard(
 
 @Composable
 private fun ModernTimelinePane(state: EditorState, viewModel: EditorViewModel, modifier: Modifier = Modifier, compact: Boolean = false) {
-    val zoomSteps = listOf(5, 10, 30, 60, 120)
-    var windowSeconds by rememberSaveable { mutableStateOf(30) }
+    val zoomStepsMs = listOf(500L, 1_000L, 2_000L, 5_000L, 10_000L, 30_000L, 60_000L, 120_000L)
+    var windowDurationMs by rememberSaveable { mutableLongStateOf(30_000L) }
     var viewportCenterMs by rememberSaveable { mutableLongStateOf(viewModel.playbackPositionMs.value) }
     var followPlayhead by rememberSaveable { mutableStateOf(true) }
     var snapEnabled by rememberSaveable { mutableStateOf(true) }
@@ -5299,7 +5337,6 @@ private fun ModernTimelinePane(state: EditorState, viewModel: EditorViewModel, m
 
     val playheadMs by viewModel.playbackPositionMs.collectAsState()
     val focusedEvent = state.document.events.firstOrNull { it.id == state.focusedEventId }
-    val windowDurationMs = windowSeconds * 1000L
     val halfWindowMs = windowDurationMs / 2L
 
     LaunchedEffect(playheadMs, followPlayhead, halfWindowMs) {
@@ -5340,7 +5377,15 @@ private fun ModernTimelinePane(state: EditorState, viewModel: EditorViewModel, m
     }
     val activeSnapStrength = TimelineSnapStrength.entries
         .firstOrNull { it.name == snapStrength } ?: TimelineSnapStrength.NORMAL
-    val zoomIndex = zoomSteps.indexOf(windowSeconds).coerceAtLeast(0)
+    val zoomInTarget = zoomStepsMs.lastOrNull { it < windowDurationMs }
+    val zoomOutTarget = zoomStepsMs.firstOrNull { it > windowDurationMs }
+    val timelineWindowLabel = if (windowDurationMs % 1000L == 0L) {
+        "${windowDurationMs / 1000L}s"
+    } else {
+        "%.1fs".format(java.util.Locale.US, windowDurationMs / 1000.0)
+    }
+    val latestWindowDurationMs by rememberUpdatedState(windowDurationMs)
+    val latestViewportCenterMs by rememberUpdatedState(viewportCenterMs)
 
     Column(modifier.padding(WorkbenchDimens.Small), verticalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro)) {
         Row(
@@ -5365,14 +5410,14 @@ private fun ModernTimelinePane(state: EditorState, viewModel: EditorViewModel, m
                 label = { Text("跟随播放头") },
             )
             OutlinedButton(
-                onClick = { if (zoomIndex > 0) windowSeconds = zoomSteps[zoomIndex - 1] },
-                enabled = zoomIndex > 0,
+                onClick = { zoomInTarget?.let { windowDurationMs = it } },
+                enabled = zoomInTarget != null,
             ) { Text("放大") }
             OutlinedButton(
-                onClick = { if (zoomIndex < zoomSteps.lastIndex) windowSeconds = zoomSteps[zoomIndex + 1] },
-                enabled = zoomIndex < zoomSteps.lastIndex,
+                onClick = { zoomOutTarget?.let { windowDurationMs = it } },
+                enabled = zoomOutTarget != null,
             ) { Text("缩小") }
-            Text("${windowSeconds}s", style = MaterialTheme.typography.labelMedium)
+            Text(timelineWindowLabel, style = MaterialTheme.typography.labelMedium)
             if (!followPlayhead) {
                 TextButton(onClick = {
                     viewportCenterMs = TimelineViewportPolicy.resolveCenter(
@@ -5449,20 +5494,39 @@ private fun ModernTimelinePane(state: EditorState, viewModel: EditorViewModel, m
                 .fillMaxWidth()
                 .height(if (compact) 24.dp else 34.dp)
                 .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.38f))
-                .pointerInput(windowDurationMs, halfWindowMs) {
-                    detectHorizontalDragGestures(
-                        onDragStart = { followPlayhead = false },
-                        onHorizontalDrag = { change, dragAmount ->
-                            change.consume()
-                            viewportCenterMs = TimelineViewportPolicy.panCenter(
-                                currentCenterMs = viewportCenterMs,
-                                dragAmountPx = dragAmount,
+                .pointerInput(Unit) {
+                    detectTransformGestures { centroid, pan, zoom, _ ->
+                        val oldDuration = latestWindowDurationMs.coerceAtLeast(1L)
+                        val safeZoom = zoom.takeIf { it.isFinite() && it > 0f } ?: 1f
+                        val newDuration = kotlin.math.round(oldDuration.toDouble() / safeZoom.toDouble())
+                            .toLong()
+                            .coerceIn(500L, 120_000L)
+                        val anchorFraction = if (size.width > 0) {
+                            (centroid.x / size.width.toFloat()).coerceIn(0f, 1f)
+                        } else {
+                            0.5f
+                        }
+                        var center = TimelineViewportPolicy.zoomCenterAroundAnchor(
+                            currentCenterMs = latestViewportCenterMs,
+                            oldWindowDurationMs = oldDuration,
+                            newWindowDurationMs = newDuration,
+                            anchorFraction = anchorFraction,
+                        )
+                        if (pan.x.isFinite() && kotlin.math.abs(pan.x) > 0.01f) {
+                            center = TimelineViewportPolicy.panCenter(
+                                currentCenterMs = center,
+                                dragAmountPx = pan.x,
                                 widthPx = size.width,
-                                windowDurationMs = windowDurationMs,
-                                halfWindowMs = halfWindowMs,
+                                windowDurationMs = newDuration,
+                                halfWindowMs = newDuration / 2L,
                             )
-                        },
-                    )
+                        }
+                        if (newDuration != oldDuration || kotlin.math.abs(pan.x) > 0.01f) {
+                            followPlayhead = false
+                        }
+                        viewportCenterMs = center
+                        windowDurationMs = newDuration
+                    }
                 },
         ) {
             val viewportColors = MaterialTheme.colorScheme
@@ -5502,18 +5566,27 @@ private fun ModernTimelinePane(state: EditorState, viewModel: EditorViewModel, m
             )
         }
 
-        TimelineWaveformLite(
+        CoRegisteredTimelineCanvas(
+            events = visible,
             waveform = state.waveform,
             windowStartMs = windowStart,
             windowEndMs = windowEnd,
             playheadMs = playheadMs,
+            focusedEventId = state.focusedEventId,
+            snapTargets = snapTargets,
+            snapEnabled = snapEnabled,
+            snapGrid = snapGrid,
+            snapGridMs = snapGridMs,
+            snapStrength = activeSnapStrength,
+            onFocus = { id -> viewModel.focusEvent(id, seek = true) },
+            onCommit = { id, startMs, endMs -> viewModel.setEventTiming(id, startMs, endMs) },
             onSeek = viewModel::seekPreviewTo,
             compact = compact,
         )
 
         if (!compact) {
         Text(
-            "拖上方时间标尺平移视窗；关闭“跟随播放头”后，播放继续也不会把视窗拉回。Event：拖左右边缘调整 Start / End，拖主体整体平移。",
+            "拖上方时间标尺平移视窗，双指捏合连续缩放；关闭“跟随播放头”后，播放继续也不会把视窗拉回。Event：拖左右边缘调整 Start / End，拖主体整体平移。",
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -5546,34 +5619,347 @@ private fun ModernTimelinePane(state: EditorState, viewModel: EditorViewModel, m
             }
         }
         }
-        Divider()
         if (visible.isEmpty()) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("当前视窗没有字幕事件。拖动上方时间标尺，或回到播放头。")
-            }
-        } else {
-            LazyColumn(Modifier.fillMaxSize()) {
-                items(visible, key = { it.id }) { event ->
-                    ModernTimelineEventRow(
-                        event = event,
-                        relation = relationByEventId[event.id],
-                        windowStartMs = windowStart,
-                        windowEndMs = windowEnd,
-                        playheadMs = playheadMs,
-                        focused = event.id == state.focusedEventId,
-                        snapTargets = snapTargets,
-                        snapEnabled = snapEnabled,
-                        snapGrid = snapGrid,
-                        snapGridMs = snapGridMs,
-                        snapStrength = activeSnapStrength,
-                        onFocus = { viewModel.focusEvent(event.id, seek = true) },
-                        onCommit = { a, b -> viewModel.setEventTiming(event.id, a, b) },
-                    )
-                }
-            }
+            Text(
+                "当前视窗没有字幕事件。拖动上方时间标尺，或回到播放头。",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }
+@Composable
+private fun CoRegisteredTimelineCanvas(
+    events: List<AssEvent>,
+    waveform: WaveformLiteState,
+    windowStartMs: Long,
+    windowEndMs: Long,
+    playheadMs: Long,
+    focusedEventId: Long?,
+    snapTargets: List<Long>,
+    snapEnabled: Boolean,
+    snapGrid: Boolean,
+    snapGridMs: Long,
+    snapStrength: TimelineSnapStrength,
+    onFocus: (Long) -> Unit,
+    onCommit: (Long, Long, Long) -> Unit,
+    onSeek: (Long) -> Unit,
+    compact: Boolean,
+) {
+    val placements = remember(events) {
+        val byId = events.associateBy { it.id }
+        TimelineLaneLayout.assign(
+            events.map { TimelineLayerItem(it.id, it.start.millis, it.end.millis) }
+        ).mapNotNull { placement ->
+            byId[placement.item.id]?.let { event -> placement to event }
+        }
+    }
+    val maxLanes = if (compact) 4 else 8
+    val shown = placements.filter { it.first.lane < maxLanes }
+    val hiddenCount = placements.size - shown.size
+    val laneCount = (shown.maxOfOrNull { it.first.lane } ?: 0) + 1
+    val laneHeight = if (compact) 28.dp else 34.dp
+    val topPadding = if (compact) 4.dp else 8.dp
+    val canvasHeight = (topPadding * 2 + laneHeight * laneCount).coerceAtLeast(if (compact) 48.dp else 86.dp)
+    val colors = MaterialTheme.colorScheme
+    val density = LocalDensity.current
+
+    var activeEventId by remember { mutableStateOf<Long?>(null) }
+    var dragMode by remember { mutableStateOf<ModernTimelineDragMode?>(null) }
+    var baseStart by remember { mutableLongStateOf(0L) }
+    var baseEnd by remember { mutableLongStateOf(0L) }
+    var previewStart by remember { mutableLongStateOf(0L) }
+    var previewEnd by remember { mutableLongStateOf(0L) }
+    var dragPx by remember { mutableFloatStateOf(0f) }
+
+    BoxWithConstraints(
+        Modifier
+            .fillMaxWidth()
+            .height(canvasHeight)
+            .clipToBounds()
+            .background(colors.surfaceVariant.copy(alpha = 0.22f))
+            .testTag("timeline-temporal-canvas")
+    ) {
+        val widthPx = with(density) { maxWidth.toPx() }.coerceAtLeast(1f)
+        val laneHeightPx = with(density) { laneHeight.toPx() }
+        val topPaddingPx = with(density) { topPadding.toPx() }
+        val spanMs = (windowEndMs - windowStartMs).coerceAtLeast(1L)
+
+        fun xFor(ms: Long): Float =
+            ((ms - windowStartMs).toFloat() / spanMs)
+                .coerceIn(0f, 1f) * widthPx
+
+        fun currentStart(event: AssEvent): Long =
+            if (activeEventId == event.id && dragMode != null) previewStart else event.start.millis
+
+        fun currentEnd(event: AssEvent): Long =
+            if (activeEventId == event.id && dragMode != null) previewEnd else event.end.millis
+
+        fun laneAt(y: Float): Int =
+            ((y - topPaddingPx) / laneHeightPx).toInt().coerceAtLeast(0)
+
+        fun eventAt(x: Float, y: Float): AssEvent? {
+            val lane = laneAt(y)
+            val tolerance = with(density) { 14.dp.toPx() }
+            return shown.asSequence()
+                .filter { it.first.lane == lane }
+                .map { it.second }
+                .filter { event ->
+                    x >= xFor(currentStart(event)) - tolerance &&
+                        x <= xFor(currentEnd(event)) + tolerance
+                }
+                .minByOrNull { event ->
+                    val center = (xFor(currentStart(event)) + xFor(currentEnd(event))) / 2f
+                    kotlin.math.abs(x - center)
+                }
+        }
+
+        fun thresholdMs(): Long {
+            val base = minOf(120L, maxOf(24L, spanMs / 220L))
+            return (base * snapStrength.factor).toLong().coerceIn(12L, 240L)
+        }
+
+        fun activeTargets(): List<Long> = snapTargets.toMutableList().apply {
+            remove(baseStart)
+            remove(baseEnd)
+        }
+
+        fun snapPoint(candidate: Long): Long {
+            if (!snapEnabled) return candidate
+            return AssTimelineSnap.snapPoint(
+                candidateMs = candidate,
+                targets = activeTargets(),
+                thresholdMs = thresholdMs(),
+                gridMs = snapGridMs.takeIf { snapGrid },
+            )
+        }
+
+        fun snapMove(start: Long, end: Long): AssTimelineSpan {
+            if (!snapEnabled) return AssTimelineSpan(start, end)
+            return AssTimelineSnap.snapSpan(
+                startMs = start,
+                endMs = end,
+                targets = activeTargets(),
+                thresholdMs = thresholdMs(),
+                gridMs = snapGridMs.takeIf { snapGrid },
+            )
+        }
+
+        Canvas(
+            Modifier
+                .fillMaxSize()
+                .pointerInput(
+                    events,
+                    windowStartMs,
+                    windowEndMs,
+                    focusedEventId,
+                    snapTargets,
+                    snapEnabled,
+                    snapGrid,
+                    snapGridMs,
+                    snapStrength,
+                ) {
+                    detectTapGestures { offset ->
+                        val event = eventAt(offset.x, offset.y)
+                        if (event != null) {
+                            onFocus(event.id)
+                        } else {
+                            val fraction = (offset.x / size.width.coerceAtLeast(1)).coerceIn(0f, 1f)
+                            onSeek(windowStartMs + (spanMs * fraction).toLong())
+                        }
+                    }
+                }
+                .pointerInput(
+                    events,
+                    windowStartMs,
+                    windowEndMs,
+                    focusedEventId,
+                    snapTargets,
+                    snapEnabled,
+                    snapGrid,
+                    snapGridMs,
+                    snapStrength,
+                ) {
+                    detectDragGestures(
+                        onDragStart = { offset ->
+                            val event = eventAt(offset.x, offset.y)
+                            activeEventId = event?.id
+                            dragMode = null
+                            dragPx = 0f
+                            if (event != null) {
+                                onFocus(event.id)
+                                baseStart = event.start.millis
+                                baseEnd = event.end.millis
+                                previewStart = baseStart
+                                previewEnd = baseEnd
+                                if (event.id == focusedEventId) {
+                                    val sx = xFor(baseStart)
+                                    val ex = xFor(baseEnd)
+                                    val hit = with(density) { 24.dp.toPx() }
+                                    dragMode = when {
+                                        kotlin.math.abs(offset.x - sx) <= hit -> ModernTimelineDragMode.START
+                                        kotlin.math.abs(offset.x - ex) <= hit -> ModernTimelineDragMode.END
+                                        offset.x in sx..ex -> ModernTimelineDragMode.MOVE
+                                        else -> null
+                                    }
+                                }
+                            }
+                        },
+                        onDrag = { change, amount ->
+                            val mode = dragMode ?: return@detectDragGestures
+                            change.consume()
+                            dragPx += amount.x
+                            val delta = (dragPx / size.width.coerceAtLeast(1) * spanMs).toLong()
+                            when (mode) {
+                                ModernTimelineDragMode.START ->
+                                    previewStart = snapPoint(baseStart + delta)
+                                        .coerceIn(0L, (previewEnd - 10L).coerceAtLeast(0L))
+                                ModernTimelineDragMode.END ->
+                                    previewEnd = snapPoint(baseEnd + delta).coerceAtLeast(previewStart + 10L)
+                                ModernTimelineDragMode.MOVE -> {
+                                    val duration = (baseEnd - baseStart).coerceAtLeast(10L)
+                                    val rawStart = (baseStart + delta).coerceAtLeast(0L)
+                                    val snapped = snapMove(rawStart, rawStart + duration)
+                                    val clampedStart = snapped.startMs.coerceAtLeast(0L)
+                                    previewStart = clampedStart
+                                    previewEnd = clampedStart + duration
+                                }
+                            }
+                        },
+                        onDragEnd = {
+                            val id = activeEventId
+                            if (id != null && dragMode != null) onCommit(id, previewStart, previewEnd)
+                            activeEventId = null
+                            dragMode = null
+                        },
+                        onDragCancel = {
+                            activeEventId = null
+                            dragMode = null
+                        },
+                    )
+                }
+        ) {
+            val waveformEnvelope = waveform.envelope
+            if (waveform.status == WaveformLiteStatus.READY && waveformEnvelope != null) {
+                val samples = WaveformViewportSampler.sample(
+                    envelope = waveformEnvelope,
+                    startMs = windowStartMs,
+                    endMs = windowEndMs,
+                    columns = size.width.roundToInt().coerceIn(1, 1200),
+                )
+                if (samples.isNotEmpty()) {
+                    val centerY = size.height / 2f
+                    val amplitude = size.height * 0.44f
+                    val xStep = size.width / samples.size
+                    samples.forEachIndexed { index, bucket ->
+                        val x = (index + 0.5f) * xStep
+                        val high = bucket.maximum.toFloat() / Short.MAX_VALUE.toFloat()
+                        val lowMagnitude = -bucket.minimum.toFloat() / -Short.MIN_VALUE.toFloat()
+                        drawLine(
+                            color = colors.onSurfaceVariant.copy(alpha = 0.28f),
+                            start = Offset(x, centerY - high * amplitude),
+                            end = Offset(x, centerY + lowMagnitude * amplitude),
+                            strokeWidth = maxOf(1f, xStep.coerceAtMost(2f)),
+                        )
+                    }
+                }
+            }
+
+            for (i in 1..3) {
+                val x = size.width * (i / 4f)
+                drawLine(
+                    colors.outline.copy(alpha = 0.18f),
+                    Offset(x, 0f),
+                    Offset(x, size.height),
+                    1.dp.toPx(),
+                )
+            }
+
+            shown.forEach { (placement, event) ->
+                val start = currentStart(event)
+                val end = currentEnd(event)
+                val left = xFor(start)
+                val right = xFor(end).coerceAtLeast(left + 1f)
+                val top = topPaddingPx + placement.lane * laneHeightPx + 2.dp.toPx()
+                val bottom = top + laneHeightPx - 4.dp.toPx()
+                val focused = event.id == focusedEventId
+                drawRoundRect(
+                    color = if (focused) colors.primary.copy(alpha = 0.78f)
+                    else colors.secondaryContainer.copy(alpha = 0.76f),
+                    topLeft = Offset(left, top),
+                    size = androidx.compose.ui.geometry.Size(right - left, bottom - top),
+                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(5.dp.toPx(), 5.dp.toPx()),
+                )
+                if (focused) {
+                    drawLine(colors.onPrimary, Offset(left, top), Offset(left, bottom), 3.dp.toPx())
+                    drawLine(colors.onPrimary, Offset(right, top), Offset(right, bottom), 3.dp.toPx())
+                }
+            }
+
+            if (playheadMs in windowStartMs..windowEndMs) {
+                val x = xFor(playheadMs)
+                drawLine(colors.primary, Offset(x, 0f), Offset(x, size.height), 2.dp.toPx())
+            }
+        }
+
+        shown.forEach { (placement, event) ->
+            val start = currentStart(event)
+            val end = currentEnd(event)
+            val leftFraction = ((start - windowStartMs).toFloat() / spanMs).coerceIn(0f, 1f)
+            val rightFraction = ((end - windowStartMs).toFloat() / spanMs).coerceIn(0f, 1f)
+            val barWidth = maxWidth * (rightFraction - leftFraction).coerceAtLeast(0f)
+            val label = when {
+                barWidth < 34.dp -> ""
+                spanMs <= 30_000L -> AssInlineSyntax.visibleText(event.text)
+                spanMs <= 60_000L -> "#${event.id} " + AssInlineSyntax.visibleText(event.text)
+                else -> "#${event.id}"
+            }
+            if (label.isNotBlank()) {
+                Text(
+                    label,
+                    modifier = Modifier
+                        .offset(
+                            x = maxWidth * leftFraction + 4.dp,
+                            y = topPadding + laneHeight * placement.lane + 6.dp,
+                        )
+                        .width((barWidth - 8.dp).coerceAtLeast(1.dp)),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (event.id == focusedEventId) colors.onPrimary else colors.onSecondaryContainer,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+
+        if (waveform.status == WaveformLiteStatus.ANALYZING) {
+            Text(
+                "Waveform Lite · 后台分析音轨…",
+                modifier = Modifier.align(Alignment.BottomStart).padding(4.dp),
+                style = MaterialTheme.typography.labelSmall,
+                color = colors.onSurfaceVariant,
+            )
+        } else if (waveform.status == WaveformLiteStatus.UNAVAILABLE) {
+            Text(
+                "Waveform unavailable" + waveform.error?.let { " · $it" }.orEmpty(),
+                modifier = Modifier.align(Alignment.BottomStart).padding(4.dp),
+                style = MaterialTheme.typography.labelSmall,
+                color = colors.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+
+        if (hiddenCount > 0) {
+            Text(
+                "+$hiddenCount Event 位于隐藏重叠 lane",
+                modifier = Modifier.align(Alignment.BottomEnd).padding(4.dp),
+                style = MaterialTheme.typography.labelSmall,
+                color = colors.tertiary,
+            )
+        }
+    }
+}
+
 @Composable
 private fun TimelineWaveformLite(
     waveform: WaveformLiteState,
@@ -5917,11 +6303,27 @@ private fun PositionPane(
     var moveEndY by remember(event.id, event.text) { mutableStateOf(geometry.move?.end?.y?.toString().orEmpty()) }
     var originX by remember(event.id, event.text) { mutableStateOf(geometry.origin?.x?.toString().orEmpty()) }
     var originY by remember(event.id, event.text) { mutableStateOf(geometry.origin?.y?.toString().orEmpty()) }
+    var rotationXText by remember(event.id, event.text) {
+        mutableStateOf((geometry.rotationX ?: 0.0).toString())
+    }
+    var rotationYText by remember(event.id, event.text) {
+        mutableStateOf((geometry.rotationY ?: 0.0).toString())
+    }
     var rotationText by remember(event.id, event.text, style?.angle) {
         mutableStateOf((geometry.rotationZ ?: style?.angle ?: 0.0).toString())
     }
+    var rotationXGestureActive by remember(event.id) { mutableStateOf(false) }
+    var rotationYGestureActive by remember(event.id) { mutableStateOf(false) }
     var rotationGestureActive by remember(event.id) { mutableStateOf(false) }
+    var rotationXDraftChanged by remember(event.id) { mutableStateOf(false) }
+    var rotationYDraftChanged by remember(event.id) { mutableStateOf(false) }
     var rotationDraftChanged by remember(event.id) { mutableStateOf(false) }
+    var rotationXPreviewValue by remember(event.id, event.text) {
+        mutableStateOf(geometry.rotationX ?: 0.0)
+    }
+    var rotationYPreviewValue by remember(event.id, event.text) {
+        mutableStateOf(geometry.rotationY ?: 0.0)
+    }
     var rotationPreviewValue by remember(event.id, event.text, style?.angle) {
         mutableStateOf(geometry.rotationZ ?: style?.angle ?: 0.0)
     }
@@ -5956,6 +6358,24 @@ private fun PositionPane(
     var styleMarginR by remember(style?.name, style?.marginR) { mutableStateOf((style?.marginR ?: 0).toString()) }
     var styleMarginV by remember(style?.name, style?.marginV) { mutableStateOf((style?.marginV ?: 0).toString()) }
 
+    LaunchedEffect(event.id, rotationXText, rotationXGestureActive, rotationXDraftChanged) {
+        if (!rotationXDraftChanged || rotationXGestureActive) return@LaunchedEffect
+        val value = rotationXText.toDoubleOrNull() ?: return@LaunchedEffect
+        rotationXPreviewValue = value
+        viewModel.previewEventRotationX(event.id, value)
+        kotlinx.coroutines.delay(320)
+        viewModel.setEventRotationX(event.id, value)
+        rotationXDraftChanged = false
+    }
+    LaunchedEffect(event.id, rotationYText, rotationYGestureActive, rotationYDraftChanged) {
+        if (!rotationYDraftChanged || rotationYGestureActive) return@LaunchedEffect
+        val value = rotationYText.toDoubleOrNull() ?: return@LaunchedEffect
+        rotationYPreviewValue = value
+        viewModel.previewEventRotationY(event.id, value)
+        kotlinx.coroutines.delay(320)
+        viewModel.setEventRotationY(event.id, value)
+        rotationYDraftChanged = false
+    }
     LaunchedEffect(event.id, rotationText, rotationGestureActive, rotationDraftChanged) {
         if (!rotationDraftChanged || rotationGestureActive) return@LaunchedEffect
         val value = rotationText.toDoubleOrNull() ?: return@LaunchedEffect
@@ -6126,9 +6546,84 @@ private fun PositionPane(
         }
         item { Divider() }
         item {
-            Text("旋转 · \\frz", style = MaterialTheme.typography.titleSmall)
+            Text("正交旋转 · \\frx / \\fry / \\frz", style = MaterialTheme.typography.titleSmall)
+            Text(
+                "X / Y 用于正交轴旋转，Z 为平面旋转；三轴与 \\org 共用同一 renderer 预览。触屏操控杆的轴必须显式选择，不根据手势猜测。",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             ContinuousParameterControl(
-                label = "Rotation Z",
+                label = "Rotation X · \\frx",
+                valueText = rotationXText,
+                onValueTextChange = {
+                    rotationXText = it
+                    rotationXDraftChanged = true
+                },
+                range = -180f..180f,
+                step = 1.0,
+                suffix = "°",
+                supportingText = if (geometry.rotationX != null) {
+                    "Event override：${geometry.rotationX}°"
+                } else {
+                    "无 Event override：0°"
+                },
+                resetLabel = if (geometry.rotationX != null) "清除 X override" else null,
+                onReset = if (geometry.rotationX != null) ({
+                    rotationXDraftChanged = false
+                    rotationXGestureActive = false
+                    rotationXText = "0"
+                    rotationXPreviewValue = 0.0
+                    viewModel.clearEventRotationX(event.id)
+                }) else null,
+                onPreview = { value ->
+                    rotationXPreviewValue = value
+                    viewModel.previewEventRotationX(event.id, value)
+                },
+                onGestureActive = { active ->
+                    rotationXGestureActive = active
+                    if (!active) {
+                        viewModel.setEventRotationX(event.id, rotationXPreviewValue)
+                        rotationXDraftChanged = false
+                    }
+                },
+            )
+            ContinuousParameterControl(
+                label = "Rotation Y · \\fry",
+                valueText = rotationYText,
+                onValueTextChange = {
+                    rotationYText = it
+                    rotationYDraftChanged = true
+                },
+                range = -180f..180f,
+                step = 1.0,
+                suffix = "°",
+                supportingText = if (geometry.rotationY != null) {
+                    "Event override：${geometry.rotationY}°"
+                } else {
+                    "无 Event override：0°"
+                },
+                resetLabel = if (geometry.rotationY != null) "清除 Y override" else null,
+                onReset = if (geometry.rotationY != null) ({
+                    rotationYDraftChanged = false
+                    rotationYGestureActive = false
+                    rotationYText = "0"
+                    rotationYPreviewValue = 0.0
+                    viewModel.clearEventRotationY(event.id)
+                }) else null,
+                onPreview = { value ->
+                    rotationYPreviewValue = value
+                    viewModel.previewEventRotationY(event.id, value)
+                },
+                onGestureActive = { active ->
+                    rotationYGestureActive = active
+                    if (!active) {
+                        viewModel.setEventRotationY(event.id, rotationYPreviewValue)
+                        rotationYDraftChanged = false
+                    }
+                },
+            )
+            ContinuousParameterControl(
+                label = "Rotation Z · \\frz",
                 valueText = rotationText,
                 onValueTextChange = {
                     rotationText = it

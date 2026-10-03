@@ -109,12 +109,18 @@ internal object PrecisionInteractionMath {
 @Composable
 internal fun PrecisionInteractionOverlay(
     registry: InteractionOverlayRegistry,
+    scaleLocked: Boolean = false,
+    onScaleLockedChange: (Boolean) -> Unit = {},
+    scaleSnapStep: Double? = null,
+    onScaleSnapStepChange: (Double?) -> Unit = {},
     visible: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
     if (!visible) return
 
     var modeName by rememberSaveable { mutableStateOf(RodMode.POSITION.name) }
+    var scaleAxis by rememberSaveable { mutableStateOf("XY") }
+    var rotationAxis by rememberSaveable { mutableStateOf("Z") }
     var gainName by rememberSaveable { mutableStateOf(PrecisionGain.COARSE.name) }
     var lensName by rememberSaveable { mutableStateOf(PrecisionLensPresentation.FLOATING_LENS.name) }
     var snappingEnabled by rememberSaveable { mutableStateOf(true) }
@@ -125,6 +131,19 @@ internal fun PrecisionInteractionOverlay(
     var rootOrigin by remember { mutableStateOf(Offset.Zero) }
 
     val mode = RodMode.valueOf(modeName)
+    val selectedSuffix = when (mode) {
+        RodMode.SCALE -> when (scaleAxis) {
+            "X" -> "scale-x"
+            "Y" -> "scale-y"
+            else -> "scale"
+        }
+        RodMode.ROTATION -> when (rotationAxis) {
+            "X" -> "rotation-x"
+            "Y" -> "rotation-y"
+            else -> "rotation"
+        }
+        else -> mode.suffix
+    }
     val gain = PrecisionGain.valueOf(gainName)
     val lens = PrecisionLensPresentation.valueOf(lensName)
     val gainUpdated by rememberUpdatedState(gain)
@@ -170,7 +189,7 @@ internal fun PrecisionInteractionOverlay(
         val positionHandles = allHandles.filter { it.id.startsWith("position-") }
         val handles = allHandles.filter {
             !it.id.startsWith("position-") ||
-                it.id.endsWith("-${mode.suffix}") ||
+                it.id.endsWith("-$selectedSuffix") ||
                 it.id.endsWith("-org")
         }
         val activeId = registry.activeHandleId
@@ -377,8 +396,11 @@ internal fun PrecisionInteractionOverlay(
                                     var delta = when {
                                         isPositionLike -> Offset(step.dx, step.dy)
                                         mode == RodMode.SCALE -> Offset(step.radial, -step.radial)
-                                        mode == RodMode.ROTATION ->
-                                            Offset(FixedRod.assRotationDegrees(previousAngle, step.angle) / 0.35f, 0f)
+                                        mode == RodMode.ROTATION -> {
+                                            val degrees = FixedRod.assRotationDegrees(previousAngle, step.angle)
+                                            if (spec.id.endsWith("-rotation-x")) Offset(0f, -degrees / 0.35f)
+                                            else Offset(degrees / 0.35f, 0f)
+                                        }
                                         else -> Offset(step.radial, angular * radius)
                                     }
                                     delta = PrecisionInteractionMath.applyGain(delta, gainUpdated)
@@ -470,6 +492,48 @@ internal fun PrecisionInteractionOverlay(
                             modifier = Modifier.testTag("precision-mode-${entry.name}"),
                         )
                     }
+                    if (mode == RodMode.SCALE) {
+                        listOf("X", "Y", "XY").forEach { axis ->
+                            FilterChip(
+                                selected = scaleAxis == axis,
+                                onClick = { scaleAxis = axis },
+                                label = { Text(axis) },
+                                modifier = Modifier.testTag("precision-scale-axis-$axis"),
+                            )
+                        }
+                        FilterChip(
+                            selected = scaleLocked,
+                            onClick = { onScaleLockedChange(!scaleLocked) },
+                            label = { Text(if (scaleLocked) "比例锁" else "独立") },
+                            modifier = Modifier.testTag("precision-scale-lock"),
+                        )
+                        FilterChip(
+                            selected = scaleSnapStep != null,
+                            onClick = {
+                                val next = when (scaleSnapStep?.toInt()) {
+                                    null -> 5.0
+                                    5 -> 10.0
+                                    10 -> 25.0
+                                    else -> null
+                                }
+                                onScaleSnapStepChange(next)
+                            },
+                            label = {
+                                Text(scaleSnapStep?.let { "吸附 ${it.toInt()}%" } ?: "吸附关")
+                            },
+                            modifier = Modifier.testTag("precision-scale-snap"),
+                        )
+                    }
+                    if (mode == RodMode.ROTATION) {
+                        listOf("X", "Y", "Z").forEach { axis ->
+                            FilterChip(
+                                selected = rotationAxis == axis,
+                                onClick = { rotationAxis = axis },
+                                label = { Text(axis) },
+                                modifier = Modifier.testTag("precision-rotation-axis-$axis"),
+                            )
+                        }
+                    }
                 }
                 PrecisionGain.entries.forEach { entry ->
                     FilterChip(
@@ -522,8 +586,13 @@ internal fun PrecisionInteractionOverlay(
         }
 
         if (activeSpec != null) {
-            val deltaText = if (activeSpec.id.endsWith("-rotation")) {
-                "Δθ %.1f°".format(activeDelta.x * 0.35f)
+            val deltaText = if (activeSpec.id.contains("-rotation")) {
+                val degrees = if (activeSpec.id.endsWith("-rotation-x")) {
+                    -activeDelta.y * 0.35f
+                } else {
+                    activeDelta.x * 0.35f
+                }
+                "Δθ %.1f°".format(degrees)
             } else {
                 "Δx %.1f · Δy %.1f px".format(activeDelta.x, activeDelta.y)
             }

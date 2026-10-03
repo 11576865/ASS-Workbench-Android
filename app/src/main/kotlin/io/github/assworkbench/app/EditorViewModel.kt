@@ -1203,6 +1203,26 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    private fun withEventRotationX(document: AssDocument, id: Long, angle: Double): AssDocument {
+        if (!angle.isFinite()) return document
+        val event = document.events.firstOrNull { it.id == id } ?: return document
+        val patched = AssGeometrySemantic.patchRotationX(event.text, angle.coerceIn(-3600.0, 3600.0))
+        if (patched == event.text) return document
+        return document.copy(events = document.events.map { candidate ->
+            if (candidate.id == id) candidate.copy(text = patched) else candidate
+        })
+    }
+
+    private fun withEventRotationY(document: AssDocument, id: Long, angle: Double): AssDocument {
+        if (!angle.isFinite()) return document
+        val event = document.events.firstOrNull { it.id == id } ?: return document
+        val patched = AssGeometrySemantic.patchRotationY(event.text, angle.coerceIn(-3600.0, 3600.0))
+        if (patched == event.text) return document
+        return document.copy(events = document.events.map { candidate ->
+            if (candidate.id == id) candidate.copy(text = patched) else candidate
+        })
+    }
+
     private fun withEventRotationZ(document: AssDocument, id: Long, angle: Double): AssDocument {
         if (!angle.isFinite()) return document
         val event = document.events.firstOrNull { it.id == id } ?: return document
@@ -1215,6 +1235,11 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
 
     fun setGeometryScaleLocked(locked: Boolean) {
         _state.update { it.copy(geometryScaleLocked = locked) }
+    }
+
+    fun setGeometryScaleSnapStep(step: Double?) {
+        val normalized = step?.takeIf { it.isFinite() && it > 0.0 }?.coerceIn(1.0, 100.0)
+        _state.update { it.copy(geometryScaleSnapStep = normalized) }
     }
 
     fun previewFocusedScale(scaleX: Double, scaleY: Double) {
@@ -1457,6 +1482,62 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         editDocument("已移除字幕 #$id 的 \\org。") { doc ->
             doc.copy(events = doc.events.map { event ->
                 if (event.id == id) event.copy(text = AssGeometrySemantic.removeOrigin(event.text))
+                else event
+            })
+        }
+    }
+
+    fun previewEventRotationX(id: Long, angle: Double) {
+        val state = _state.value
+        if (state.document.events.none { it.id == id }) return
+        val preview = withEventRotationX(state.document, id, angle)
+        _state.update { current ->
+            current.copy(
+                previewDocument = if (preview == state.document) null else preview,
+                previewOwnerId = if (preview == state.document) null else "geometry:$id",
+            )
+        }
+    }
+
+    fun setEventRotationX(id: Long, angle: Double) {
+        if (_state.value.document.events.none { it.id == id }) return
+        editDocument("已更新字幕 #$id 的 X 轴旋转。") { doc ->
+            withEventRotationX(doc, id, angle)
+        }
+    }
+
+    fun clearEventRotationX(id: Long) {
+        editDocument("已清除字幕 #$id 的 X 轴旋转。") { doc ->
+            doc.copy(events = doc.events.map { event ->
+                if (event.id == id) event.copy(text = AssGeometrySemantic.removeRotationX(event.text))
+                else event
+            })
+        }
+    }
+
+    fun previewEventRotationY(id: Long, angle: Double) {
+        val state = _state.value
+        if (state.document.events.none { it.id == id }) return
+        val preview = withEventRotationY(state.document, id, angle)
+        _state.update { current ->
+            current.copy(
+                previewDocument = if (preview == state.document) null else preview,
+                previewOwnerId = if (preview == state.document) null else "geometry:$id",
+            )
+        }
+    }
+
+    fun setEventRotationY(id: Long, angle: Double) {
+        if (_state.value.document.events.none { it.id == id }) return
+        editDocument("已更新字幕 #$id 的 Y 轴旋转。") { doc ->
+            withEventRotationY(doc, id, angle)
+        }
+    }
+
+    fun clearEventRotationY(id: Long) {
+        editDocument("已清除字幕 #$id 的 Y 轴旋转。") { doc ->
+            doc.copy(events = doc.events.map { event ->
+                if (event.id == id) event.copy(text = AssGeometrySemantic.removeRotationY(event.text))
                 else event
             })
         }

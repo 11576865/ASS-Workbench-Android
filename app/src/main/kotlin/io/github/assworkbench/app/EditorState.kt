@@ -31,6 +31,8 @@ data class EditorState(
     val selectedAudioTrackIndex: Int? = null,
     val sceneCutsMs: List<Long> = emptyList(),
     val geometryScaleLocked: Boolean = true,
+    /** Null disables touch scale quantization; otherwise value is percentage points per snap step. */
+    val geometryScaleSnapStep: Double? = null,
     val subtitleLoaded: Boolean = false,
     val subtitleTextEncoding: AssTextEncoding = AssTextEncoding.UTF8,
     val sourceFormat: SubtitleSourceFormat = SubtitleSourceFormat.ASS,

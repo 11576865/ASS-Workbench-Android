@@ -22,6 +22,32 @@ class AssGeometrySemanticTest {
     }
 
     @Test
+    fun orthogonalRotationPatchPreservesNestedTransformsAndAliases() {
+        val source = "{\\frx10\\fry-20\\fr15\\t(0,500,\\frx90\\fry45\\frz30)\\x-custom(foo)}Text"
+        val snapshot = AssGeometrySemantic.inspect(source)
+        assertEquals(10.0, snapshot.rotationX)
+        assertEquals(-20.0, snapshot.rotationY)
+        assertEquals(15.0, snapshot.rotationZ)
+
+        val output = AssGeometrySemantic.patchRotation3D(source, 25.0, 35.0, 45.0)
+        assertEquals(
+            "{\\frx25\\fry35\\fr45\\t(0,500,\\frx90\\fry45\\frz30)\\x-custom(foo)}Text",
+            output,
+        )
+    }
+
+    @Test
+    fun removingOrthogonalRotationKeepsNestedTransform() {
+        val source = "{\\frx10\\fry20\\frz30\\t(0,500,\\frx90\\fry45\\frz60)\\bord2}Text"
+        val output = AssGeometrySemantic.removeRotation3D(source)
+        assertEquals("{\\t(0,500,\\frx90\\fry45\\frz60)\\bord2}Text", output)
+        val snapshot = AssGeometrySemantic.inspect(output)
+        assertNull(snapshot.rotationX)
+        assertNull(snapshot.rotationY)
+        assertNull(snapshot.rotationZ)
+    }
+
+    @Test
     fun moveIsNotSilentlyConvertedToPosition() {
         val source = "{\\move(100,200,300,400)\\bord2}Text"
         val snapshot = AssGeometrySemantic.inspect(source)
