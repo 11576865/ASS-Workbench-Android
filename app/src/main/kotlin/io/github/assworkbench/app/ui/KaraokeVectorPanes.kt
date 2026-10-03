@@ -94,12 +94,14 @@ internal fun KaraokePane(
                     } else null,
                 )
             } else null
-            val revealCompatibility = remember(state.document, fxTargetEventIds, revealSpec) {
+            // Keep keystroke-time compatibility work scoped to the focused Event.
+            // Full multi-selection preflight runs only on explicit Preview / Apply.
+            val revealCompatibility = remember(state.document, event.id, revealSpec) {
                 revealSpec?.let { spec ->
                     runCatching {
-                        AssKaraokeFxAuthoring.planProgressiveRevealBatch(
+                        AssKaraokeFxAuthoring.planProgressiveReveal(
                             state.document,
-                            fxTargetEventIds,
+                            event.id,
                             spec,
                         )
                     }
@@ -128,7 +130,7 @@ internal fun KaraokePane(
                     )
                     if (fxTargetEventIds.size > 1) {
                         Text(
-                            "当前将对选中的 ${fxTargetEventIds.size} 条字幕原子应用同一规则；每条字幕分别解析自己的 Style / Event 基础状态。任一条不兼容则整批不写入。",
+                            "当前将对选中的 ${fxTargetEventIds.size} 条字幕原子应用同一规则；每条字幕分别解析自己的 Style / Event 基础状态。完整批次只在“预览/写入”时预检，任一条不兼容则整批不写入。",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -225,14 +227,16 @@ internal fun KaraokePane(
                             },
                             modifier = Modifier.weight(2f).testTag("karaoke-fx-apply"),
                         ) {
-                            val plannedSegments = revealCompatibility?.getOrNull()?.sourceSegmentCount
+                            val focusedSegments = revealCompatibility?.getOrNull()?.sourceSegmentCount
                             Text(
                                 buildString {
                                     if (fxTargetEventIds.size > 1) {
                                         append("对 ").append(fxTargetEventIds.size).append(" 条字幕 · ")
                                     }
                                     append(if (withFlip) "写入翻转显现 FX" else "写入逐音节 FX")
-                                    plannedSegments?.let { append(" · ").append(it).append(" 音节") }
+                                    if (fxTargetEventIds.size == 1) {
+                                        focusedSegments?.let { append(" · ").append(it).append(" 音节") }
+                                    }
                                 }
                             )
                         }
