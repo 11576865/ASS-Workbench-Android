@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Pause
@@ -34,6 +35,7 @@ import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.PlainTooltip
+import androidx.compose.material3.Slider
 import androidx.compose.material3.TooltipBox
 import androidx.compose.material3.TooltipDefaults
 import androidx.compose.material3.Surface
@@ -50,6 +52,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.SideEffect
 import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.setValue
@@ -62,6 +65,10 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.unit.dp
@@ -93,10 +100,13 @@ import io.github.yuroyami.libmpvkt.compose.rememberMpv
 import io.github.yuroyami.libmpvkt.stream.ContentResolverStreamProvider
 import io.github.yuroyami.libmpvkt.view.MpvOptions
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.concurrent.atomic.AtomicLong
+import kotlin.math.roundToInt
 
 internal data class PreviewObjectPick(
     val frozenPositionMs: Long,
@@ -638,6 +648,7 @@ private fun AuthoritativeMpvPreview(
     var osdMarginLeft by remember(mpv, videoUri) { mutableIntStateOf(0) }
     var osdMarginRight by remember(mpv, videoUri) { mutableIntStateOf(0) }
     var playbackControlsVisible by remember(mpv, videoUri) { mutableStateOf(true) }
+    var transportInteracting by remember(mpv, videoUri) { mutableStateOf(false) }
     var targetCandidates by remember(mpv, videoUri) { mutableStateOf<List<PreviewTargetCandidate>>(emptyList()) }
     var targetPickerOpen by remember(mpv, videoUri) { mutableStateOf(false) }
     var viewportScale by remember(videoUri) { mutableStateOf(1f) }
@@ -701,8 +712,8 @@ private fun AuthoritativeMpvPreview(
         }
     }
 
-    LaunchedEffect(playbackControlsVisible, playback.status, positionEditEventId) {
-        if (!playbackControlsVisible || positionEditEventId != null) return@LaunchedEffect
+    LaunchedEffect(playbackControlsVisible, playback.status, positionEditEventId, transportInteracting) {
+        if (!playbackControlsVisible || positionEditEventId != null || transportInteracting) return@LaunchedEffect
         delay(2_600)
         playbackControlsVisible = false
     }
@@ -1042,6 +1053,10 @@ private fun AuthoritativeMpvPreview(
                             onSeek = { seconds ->
                                 playbackControlsVisible = true
                                 mpv.command("seek", seconds.toString(), "absolute+exact")
+                            },
+                            onInteractionChanged = { active ->
+                                transportInteracting = active
+                                if (active) playbackControlsVisible = true
                             },
                             onOpenTimeline = onOpenTimeline,
                         )
@@ -2215,6 +2230,11 @@ private fun RectClipOverlay(
         )
     }
 }
+internal fun frameRepeatDelayMs(repeatCount: Int): Long =
+    (120L - repeatCount.coerceAtLeast(0) * 6L).coerceAtLeast(55L)
+
+internal fun frameJogTarget(value: Float): Int = value.roundToInt().coerceIn(-12, 12)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun PlaybackBar(
@@ -2229,6 +2249,7 @@ private fun PlaybackBar(
     onFrameBack: () -> Unit,
     onFrameForward: () -> Unit,
     onSeek: (Double) -> Unit,
+    onInteractionChanged: (Boolean) -> Unit,
     onOpenTimeline: () -> Unit,
 ) {
     val duration = (playback.durationSeconds ?: 0.0).coerceAtLeast(0.0)
@@ -2236,6 +2257,8 @@ private fun PlaybackBar(
         .coerceIn(0.0, if (duration > 0.0) duration else Double.MAX_VALUE)
     var scrubPosition by remember { mutableStateOf<Double?>(null) }
     var actionHint by remember { mutableStateOf<String?>(null) }
+    var fineJogValue by remember { mutableStateOf(0f) }
+    var fineJogEmitted by remember { mutableIntStateOf(0) }
     val displayPosition = scrubPosition ?: position
     LaunchedEffect(actionHint) {
         if (actionHint != null) {
@@ -2245,84 +2268,155 @@ private fun PlaybackBar(
     }
 
     BoxWithConstraints {
-    val showMetrics = maxWidth >= 560.dp
-    val showClock = maxWidth >= 440.dp
-    CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides WorkbenchDimens.MinTouchTarget) {
-        Row(
-            Modifier.fillMaxWidth()
-                .height(WorkbenchDimens.TransportHeight)
-                .background(MaterialTheme.colorScheme.surface)
-                .padding(horizontal = WorkbenchDimens.Micro),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(0.dp),
-        ) {
-            TransportTooltipButton("后退 1 帧 · mpv frame-back-step", {
-                onFrameBack()
-                actionHint = "后退 1 帧"
-            }) {
-                Text("−1帧", style = MaterialTheme.typography.labelSmall)
-            }
-            TransportTooltipButton(
-                if (playback.status == MpvPlaybackState.Status.Playing ||
-                    playback.status == MpvPlaybackState.Status.Buffering) "暂停" else "播放",
-                {
-                    onPlayPause()
-                    actionHint = if (playback.status == MpvPlaybackState.Status.Playing ||
-                        playback.status == MpvPlaybackState.Status.Buffering) "暂停" else "播放"
-                },
+        val showMetrics = maxWidth >= 560.dp
+        val showClock = maxWidth >= 440.dp
+        CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides WorkbenchDimens.MinTouchTarget) {
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.surface)
+                    .padding(horizontal = WorkbenchDimens.Micro),
             ) {
-                val playing = playback.status == MpvPlaybackState.Status.Playing ||
-                    playback.status == MpvPlaybackState.Status.Buffering
-                Icon(if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow, null)
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(WorkbenchDimens.TransportHeight),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(0.dp),
+                ) {
+                    RepeatTransportTooltipButton(
+                        label = "后退 1 帧；长按连续步退 · mpv frame-back-step",
+                        onClick = {
+                            onFrameBack()
+                            actionHint = "后退 1 帧"
+                        },
+                        onRepeat = {
+                            onFrameBack()
+                            actionHint = "连续步退"
+                        },
+                        onPressStateChange = onInteractionChanged,
+                    ) {
+                        Text("−1帧", style = MaterialTheme.typography.labelSmall)
+                    }
+                    TransportTooltipButton(
+                        if (playback.status == MpvPlaybackState.Status.Playing ||
+                            playback.status == MpvPlaybackState.Status.Buffering) "暂停" else "播放",
+                        {
+                            onPlayPause()
+                            actionHint = if (playback.status == MpvPlaybackState.Status.Playing ||
+                                playback.status == MpvPlaybackState.Status.Buffering) "暂停" else "播放"
+                        },
+                    ) {
+                        val playing = playback.status == MpvPlaybackState.Status.Playing ||
+                            playback.status == MpvPlaybackState.Status.Buffering
+                        Icon(if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow, null)
+                    }
+                    RepeatTransportTooltipButton(
+                        label = "前进 1 帧；长按连续步进 · mpv frame-step",
+                        onClick = {
+                            onFrameForward()
+                            actionHint = "前进 1 帧"
+                        },
+                        onRepeat = {
+                            onFrameForward()
+                            actionHint = "连续步进"
+                        },
+                        onPressStateChange = onInteractionChanged,
+                    ) {
+                        Text("+1帧", style = MaterialTheme.typography.labelSmall)
+                    }
+                    if (showClock) Text(formatClock(displayPosition), style = MaterialTheme.typography.labelSmall)
+                    estimatedFrameNumber?.takeIf { showMetrics && it >= 0L }?.let { frameNumber ->
+                        Text(
+                            "F$frameNumber",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    estimatedVideoFps?.takeIf { showMetrics && it.isFinite() && it > 0.0 }?.let { fps ->
+                        Text(
+                            "%.3f".format(java.util.Locale.US, fps) + "fps",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    actionHint?.takeIf { showMetrics }?.let {
+                        Text(
+                            it,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(horizontal = WorkbenchDimens.Micro),
+                        )
+                    }
+                    TimelineProgressStrip(
+                        durationSeconds = duration,
+                        positionSeconds = displayPosition,
+                        events = document.events,
+                        focusedEventId = focusedEventId,
+                        onFocusEvent = onFocusEvent,
+                        onSetEventTiming = onSetEventTiming,
+                        onScrub = { scrubPosition = it },
+                        onScrubFinished = {
+                            val target = scrubPosition
+                            if (target != null) onSeek(target)
+                            scrubPosition = null
+                        },
+                        onOpenTimeline = onOpenTimeline,
+                        modifier = Modifier.weight(1f).height(WorkbenchDimens.TransportHeight),
+                    )
+                    if (showClock) Text(formatClock(duration), style = MaterialTheme.typography.labelSmall)
+                }
+
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(40.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Text(
+                        "逐帧微调",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Slider(
+                        value = fineJogValue,
+                        onValueChange = { raw ->
+                            onInteractionChanged(true)
+                            val target = frameJogTarget(raw)
+                            val delta = target - fineJogEmitted
+                            if (delta < 0) {
+                                repeat(-delta) { onFrameBack() }
+                            } else if (delta > 0) {
+                                repeat(delta) { onFrameForward() }
+                            }
+                            fineJogEmitted = target
+                            fineJogValue = target.toFloat()
+                            if (delta != 0) {
+                                actionHint = "微调 " + (if (target > 0) "+" else "") + target + " 帧"
+                            }
+                        },
+                        onValueChangeFinished = {
+                            fineJogValue = 0f
+                            fineJogEmitted = 0
+                            onInteractionChanged(false)
+                        },
+                        valueRange = -12f..12f,
+                        steps = 23,
+                        modifier = Modifier.weight(1f).testTag("preview-frame-jog-slider"),
+                    )
+                    Text(
+                        (if (fineJogEmitted > 0) "+" else "") + fineJogEmitted + "f",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (fineJogEmitted == 0) {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        } else {
+                            MaterialTheme.colorScheme.primary
+                        },
+                    )
+                }
             }
-            TransportTooltipButton("前进 1 帧 · mpv frame-step", {
-                onFrameForward()
-                actionHint = "前进 1 帧"
-            }) {
-                Text("+1帧", style = MaterialTheme.typography.labelSmall)
-            }
-            if (showClock) Text(formatClock(displayPosition), style = MaterialTheme.typography.labelSmall)
-            estimatedFrameNumber?.takeIf { showMetrics && it >= 0L }?.let { frameNumber ->
-                Text(
-                    "F$frameNumber",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            estimatedVideoFps?.takeIf { showMetrics && it.isFinite() && it > 0.0 }?.let { fps ->
-                Text(
-                    "%.3f".format(java.util.Locale.US, fps) + "fps",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            actionHint?.takeIf { showMetrics }?.let {
-                Text(
-                    it,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(horizontal = WorkbenchDimens.Micro),
-                )
-            }
-            TimelineProgressStrip(
-                durationSeconds = duration,
-                positionSeconds = displayPosition,
-                events = document.events,
-                focusedEventId = focusedEventId,
-                onFocusEvent = onFocusEvent,
-                onSetEventTiming = onSetEventTiming,
-                onScrub = { scrubPosition = it },
-                onScrubFinished = {
-                    val target = scrubPosition
-                    if (target != null) onSeek(target)
-                    scrubPosition = null
-                },
-                onOpenTimeline = onOpenTimeline,
-                modifier = Modifier.weight(1f).height(WorkbenchDimens.TransportHeight),
-            )
-            if (showClock) Text(formatClock(duration), style = MaterialTheme.typography.labelSmall)
         }
-    }
     }
 }
 
@@ -2339,6 +2433,67 @@ private fun TransportTooltipButton(
         state = rememberTooltipState(),
     ) {
         IconButton(onClick = onClick) { content() }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun RepeatTransportTooltipButton(
+    label: String,
+    onClick: () -> Unit,
+    onRepeat: () -> Unit,
+    onPressStateChange: (Boolean) -> Unit,
+    content: @Composable () -> Unit,
+) {
+    val currentOnClick by rememberUpdatedState(onClick)
+    val currentOnRepeat by rememberUpdatedState(onRepeat)
+    val currentOnPressStateChange by rememberUpdatedState(onPressStateChange)
+    TooltipBox(
+        positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+        tooltip = { PlainTooltip { Text(label) } },
+        state = rememberTooltipState(),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(WorkbenchDimens.MinTouchTarget)
+                .semantics {
+                    role = Role.Button
+                    onClick(label = label) {
+                        currentOnClick()
+                        true
+                    }
+                }
+                .pointerInput(Unit) {
+                    detectTapGestures(
+                        onPress = {
+                            currentOnPressStateChange(true)
+                            try {
+                                coroutineScope {
+                                    var repeatCount = 0
+                                    val repeatJob = launch {
+                                        delay(360L)
+                                        while (true) {
+                                            currentOnRepeat()
+                                            repeatCount += 1
+                                            delay(frameRepeatDelayMs(repeatCount))
+                                        }
+                                    }
+                                    val released = tryAwaitRelease()
+                                    repeatJob.cancel()
+                                    if (released && repeatCount == 0) {
+                                        currentOnClick()
+                                    }
+                                }
+                            } finally {
+                                currentOnPressStateChange(false)
+                            }
+                        },
+                    )
+                },
+            contentAlignment = Alignment.Center,
+        ) {
+            content()
+        }
     }
 }
 
