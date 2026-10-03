@@ -586,6 +586,9 @@ object AssFxComposition {
     ) {
         val analysis = AssInlineSyntax.analyze(text)
         require(!analysis.hasErrors) { "$effectLabel 无法安全处理包含损坏 override block 的字幕。" }
+        require(analysis.tags.none { it.name.equals("r", ignoreCase = true) }) {
+            "$effectLabel 暂不支持 \\r Style reset；重置可能在行内重新接管生成层的透明度、模糊或几何属性。"
+        }
 
         val firstKaraoke = analysis.tags.firstOrNull { tag ->
             tag.name.equals("k", true) ||
