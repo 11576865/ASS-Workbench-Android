@@ -210,6 +210,9 @@ object AssFxComposition {
             require(value.farOpacityPercent.isFinite() && value.farOpacityPercent in 0.0..100.0) {
                 "空间渐隐末端不透明度必须在 0..100% 之间。"
             }
+            require(value.farOpacityPercent <= spec.opacityPercent) {
+                "空间渐隐末端不透明度不能高于倒影起始不透明度。"
+            }
         }
 
         val sourceIndex = document.events.indexOfFirst { it.id == eventId }
