@@ -367,6 +367,39 @@ class AssFxCompositionTest {
     }
 
     @Test
+    fun spatialFadeRejectsFlipEntranceBecauseClipBandsStayInScreenSpace() {
+        val document = AssDocument(
+            scriptInfo = linkedMapOf("PlayResX" to "1920", "PlayResY" to "1080"),
+            events = listOf(
+                AssEvent(
+                    id = 39,
+                    start = SubTime(0),
+                    end = SubTime(1000),
+                    text = "{\\pos(400,300)}Fade",
+                )
+            )
+        )
+
+        val error = assertFailsWith<IllegalArgumentException> {
+            AssFxComposition.composeMirrorStack(
+                document = document,
+                eventId = 39,
+                glow = null,
+                fade = AssReflectionFadeSpec(
+                    bands = 4,
+                    depthPx = 120.0,
+                    direction = AssReflectionFadeDirection.DOWN,
+                ),
+                entrance = AssFlipEntranceSpec(durationMs = 300),
+            )
+        }
+
+        assertTrue(error.message.orEmpty().contains("固定屏幕 Clip"))
+        assertEquals(1, document.events.size)
+        assertEquals("{\\pos(400,300)}Fade", document.events.single().text)
+    }
+
+    @Test
     fun entranceKeepsGlowAndReflectionGeometrySynchronized() {
         val document = AssDocument(
             events = listOf(
