@@ -233,6 +233,13 @@ object AssFxComposition {
             require(!geometry.clipNonRectangular && !geometry.clipInverted) {
                 "带空间渐隐的倒影暂不支持矢量 Clip / iClip；无法安全与渐隐分带合成。"
             }
+            require(!containsSpatialFadeAlphaControl(source.text)) {
+                "源字幕已有 alpha / fad / fade 控制；当前空间渐隐不能安全合成这些透明度语义。"
+            }
+            val allowedLeadingRectClipCount = if (geometry.clipRect != null) 1 else 0
+            require(countOverrideClipTags(source.text) <= allowedLeadingRectClipCount) {
+                "源字幕包含额外或行内 Clip；空间渐隐只支持一个前导矩形 Clip。"
+            }
         }
         require(!geometry.clipNonRectangular && !geometry.clipInverted) {
             "倒影暂不自动平移矢量 Clip / iClip；请先转换为普通矩形 Clip 或移除裁剪。"
@@ -537,6 +544,22 @@ object AssFxComposition {
             cursor = close + 1
         }
         return out.toString()
+    }
+
+    private fun overrideBlocks(text: String): Sequence<String> =
+        Regex("""\{[^}]*}""").findAll(text).map { it.value }
+
+    private fun containsSpatialFadeAlphaControl(text: String): Boolean {
+        val alpha = Regex("""\\(?:alpha|[1-4]a)(?=[^A-Za-z]|$)""", RegexOption.IGNORE_CASE)
+        val fade = Regex("""\\(?:fad|fade)\s*\(""", RegexOption.IGNORE_CASE)
+        return overrideBlocks(text).any { block ->
+            alpha.containsMatchIn(block) || fade.containsMatchIn(block)
+        }
+    }
+
+    private fun countOverrideClipTags(text: String): Int {
+        val clip = Regex("""\\(?:clip|iclip)\s*\(""", RegexOption.IGNORE_CASE)
+        return overrideBlocks(text).sumOf { block -> clip.findAll(block).count() }
     }
 
     private fun intersect(a: AssClipRect, b: AssClipRect): AssClipRect? {
