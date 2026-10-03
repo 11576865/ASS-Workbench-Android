@@ -35,6 +35,8 @@ import io.github.assworkbench.domain.AssReflectionFxSpec
 import io.github.assworkbench.domain.AssFlipEntranceSpec
 import io.github.assworkbench.domain.AssGlowFxSpec
 import io.github.assworkbench.domain.AssFxTemplate
+import io.github.assworkbench.domain.AssKaraokeFxAuthoring
+import io.github.assworkbench.domain.AssKaraokeRevealFxSpec
 import io.github.assworkbench.domain.EventFormatClipboard
 import io.github.assworkbench.domain.EventFormatClipboardOps
 import io.github.assworkbench.domain.EventFormatPasteMode
@@ -877,6 +879,27 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 if (event.id != eventId) event else event.copy(
                     text = AssAnimationAuthoring.applyNumericTrack(event.text, property, keyframes, accel)
                 )
+            })
+        }
+    }
+
+    fun applyKaraokeRevealFx(
+        eventId: Long,
+        spec: AssKaraokeRevealFxSpec,
+    ) {
+        val source = _state.value.document.events.firstOrNull { it.id == eventId } ?: return
+        val plan = runCatching {
+            AssKaraokeFxAuthoring.planProgressiveReveal(source.text, spec)
+        }.getOrElse { error ->
+            _state.update {
+                it.copy(status = "Karaoke FX 生成失败：" + (error.message ?: error::class.java.simpleName))
+            }
+            return
+        }
+
+        editDocument("已为字幕 #$eventId 写入 ${plan.sourceSegmentCount} 个逐音节显现 FX。") { doc ->
+            doc.copy(events = doc.events.map { event ->
+                if (event.id == eventId) event.copy(text = plan.generatedText) else event
             })
         }
     }
