@@ -63,6 +63,8 @@ class EditorUiContractTest {
         assertEquals(3, ui.objects.currentEvent?.layer)
         assertFalse(ui.preview.active)
         assertEquals(null, ui.preview.ownerId)
+        assertEquals(EditorUiBatchDefaultScope.SELECTION, ui.batch.defaultScope)
+        assertEquals(2, ui.batch.selectedEventCount)
         assertTrue(ui.history.canUndo)
         assertFalse(ui.history.canRedo)
         assertEquals(42L, ui.workspaceSessionId)
@@ -70,6 +72,16 @@ class EditorUiContractTest {
         selected += 99L
         assertFalse(99L in ui.selection.eventIds)
         assertFalse(99L in ui.objects.existingEventIds)
+    }
+
+    @Test
+    fun batchIntentDefaultsToAllEventsWithoutSelection() {
+        val ui = EditorState(
+            selectedEventIds = emptySet(),
+        ).toEditorUiState()
+
+        assertEquals(EditorUiBatchDefaultScope.ALL_EVENTS, ui.batch.defaultScope)
+        assertEquals(0, ui.batch.selectedEventCount)
     }
 
     @Test
