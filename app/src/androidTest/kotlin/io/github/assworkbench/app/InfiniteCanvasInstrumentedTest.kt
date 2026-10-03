@@ -18,6 +18,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import kotlin.math.roundToInt
 
 @RunWith(AndroidJUnit4::class)
 class InfiniteCanvasInstrumentedTest {
@@ -30,7 +31,7 @@ class InfiniteCanvasInstrumentedTest {
         composeRule.activityRule.scenario.onActivity { activity ->
             activity.setContent {
                 MaterialTheme {
-                    expectedWidth = (900f * LocalDensity.current.density).toInt()
+                    expectedWidth = (900f * LocalDensity.current.density).roundToInt()
                     InfiniteCanvasHost(
                         sessionId = 1L, savedScene = scene, onSaveScene = {},
                         entries = listOf(InfiniteCanvasEntry("preview", "Video")),
