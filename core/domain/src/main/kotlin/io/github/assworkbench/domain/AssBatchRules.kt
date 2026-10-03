@@ -41,6 +41,10 @@ sealed interface AssBatchFilter {
         override fun matches(event: AssEvent, document: AssDocument) =
             Regex("""\\${Regex.escape(tag)}(?:[^A-Za-z]|$)""", RegexOption.IGNORE_CASE).containsMatchIn(event.text)
     }
+    data object KaraokeRevealCompatible : AssBatchFilter {
+        override fun matches(event: AssEvent, document: AssDocument): Boolean =
+            AssKaraokeFxAuthoring.inspectProgressiveRevealCompatibility(event.text).compatible
+    }
     data class TimeRange(val startMs: Long, val endMs: Long) : AssBatchFilter {
         override fun matches(event: AssEvent, document: AssDocument) = event.end.millis >= startMs && event.start.millis <= endMs
     }
@@ -123,6 +127,17 @@ sealed interface AssBatchAction {
     data class SetMargins(val left: Int? = null, val right: Int? = null, val vertical: Int? = null) : AssBatchAction {
         override fun apply(event: AssEvent, document: AssDocument) = event.copy(
             marginL = left ?: event.marginL, marginR = right ?: event.marginR, marginV = vertical ?: event.marginV)
+    }
+    data class ApplyKaraokeRevealFx(
+        val spec: AssKaraokeRevealFxSpec = AssKaraokeRevealFxSpec(),
+    ) : AssBatchAction {
+        override fun apply(event: AssEvent, document: AssDocument): AssEvent {
+            val compatibility = AssKaraokeFxAuthoring.inspectProgressiveRevealCompatibility(event.text)
+            if (!compatibility.compatible) return event
+            return event.copy(
+                text = AssKaraokeFxAuthoring.applyProgressiveReveal(event.text, spec)
+            )
+        }
     }
 }
 
