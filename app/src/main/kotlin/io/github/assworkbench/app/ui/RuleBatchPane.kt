@@ -85,6 +85,7 @@ internal fun RuleBatchPane(
     val parsedDurationMin = durationMin.takeIf { it.isNotBlank() }?.toLongOrNull()
     val parsedDurationMax = durationMax.takeIf { it.isNotBlank() }?.toLongOrNull()
     val parsedShift = shiftText.takeIf { it.isNotBlank() }?.toLongOrNull()
+    val parsedStyleAction = styleText.trim().takeIf { it.isNotEmpty() }
     val parsedLayerAction = layerText.takeIf { it.isNotBlank() }?.toIntOrNull()
     val parsedMarginL = marginL.takeIf { it.isNotBlank() }?.toIntOrNull()
     val parsedMarginR = marginR.takeIf { it.isNotBlank() }?.toIntOrNull()
@@ -95,7 +96,8 @@ internal fun RuleBatchPane(
     val parsedTimingOrigin = timingOrigin.toLongOrNull()
     val parsedTimingNumerator = timingNumerator.takeIf { it.isNotBlank() }?.toLongOrNull()
     val parsedTimingDenominator = timingDenominator.takeIf { it.isNotBlank() }?.toLongOrNull()
-    val timingScaleRequested = timingNumerator.isNotBlank() || timingDenominator.isNotBlank()
+    val timingScaleRequested =
+        timingOrigin.trim() != "0" || timingNumerator.isNotBlank() || timingDenominator.isNotBlank()
     val parsedOverrideProperty = AssTransformVisualProperty.entries
         .firstOrNull { it.name == overridePropertyName }
     val parsedOverrideValue = overrideValue.takeIf { it.isNotBlank() }?.toDoubleOrNull()
@@ -119,12 +121,27 @@ internal fun RuleBatchPane(
         if (shiftText.isNotBlank() && parsedShift == null) {
             add("时间平移必须是整数毫秒。")
         }
+        if (
+            parsedStyleAction != null &&
+            state.document.styles.none { it.name == parsedStyleAction }
+        ) {
+            add("目标 Style 不存在：$parsedStyleAction")
+        }
         if (layerText.isNotBlank() && parsedLayerAction == null) {
             add("目标 Layer 必须是整数。")
         }
-        if (marginL.isNotBlank() && parsedMarginL == null) add("MarginL 必须是整数。")
-        if (marginR.isNotBlank() && parsedMarginR == null) add("MarginR 必须是整数。")
-        if (marginV.isNotBlank() && parsedMarginV == null) add("MarginV 必须是整数。")
+        if (marginL.isNotBlank()) {
+            if (parsedMarginL == null) add("MarginL 必须是整数。")
+            else if (parsedMarginL < 0) add("MarginL 不能为负数。")
+        }
+        if (marginR.isNotBlank()) {
+            if (parsedMarginR == null) add("MarginR 必须是整数。")
+            else if (parsedMarginR < 0) add("MarginR 不能为负数。")
+        }
+        if (marginV.isNotBlank()) {
+            if (parsedMarginV == null) add("MarginV 必须是整数。")
+            else if (parsedMarginV < 0) add("MarginV 不能为负数。")
+        }
         if (regexFind.isNotBlank() && parsedReplaceRegex == null) {
             add("Regex 查找表达式无效。")
         }
@@ -187,7 +204,7 @@ internal fun RuleBatchPane(
     fun recipe(): AssBatchRecipe {
         val actions = buildList<AssBatchAction> {
             parsedShift?.takeIf { it != 0L }?.let { add(AssBatchAction.ShiftTime(it)) }
-            styleText.trim().takeIf(String::isNotEmpty)?.let { add(AssBatchAction.SetStyle(it)) }
+            parsedStyleAction?.let { add(AssBatchAction.SetStyle(it)) }
             parsedLayerAction?.let { add(AssBatchAction.SetLayer(it)) }
             actorText.takeIf(String::isNotEmpty)?.let { add(AssBatchAction.SetActor(it)) }
             if (marginL.isNotBlank() || marginR.isNotBlank() || marginV.isNotBlank()) {
