@@ -49,6 +49,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import io.github.assworkbench.app.ContainerBridgeState
+import io.github.assworkbench.app.ContainerCompatibilityStatus
+import io.github.assworkbench.app.ContainerEditPlanUi
 import io.github.assworkbench.app.ContainerInventoryEvidence
 import io.github.assworkbench.app.ContainerResourceChange
 import io.github.assworkbench.app.ContainerResourceKind
@@ -59,6 +61,7 @@ import io.github.assworkbench.app.EditorViewModel
 @Composable
 fun ContainerBridgePanel(
     state: ContainerBridgeState,
+    editPlan: ContainerEditPlanUi,
     viewModel: EditorViewModel,
     onSaveMkv: () -> Unit,
     dirty: Boolean,
@@ -134,10 +137,9 @@ fun ContainerBridgePanel(
             }
             ContainerIconButton(
                 label = "保存为新 MKV；验证通过后写入，源文件不原地修改",
-                enabled = state.writeBackAvailable &&
+                enabled = editPlan.executable &&
                     !state.loading &&
-                    !state.writeBackBusy &&
-                    (state.selectedTrackNumber != null || state.pendingAttachments.isNotEmpty()),
+                    !state.writeBackBusy,
                 onClick = onSaveMkv,
             ) {
                 Icon(Icons.Filled.Save, contentDescription = "保存为新 MKV")
@@ -234,6 +236,12 @@ fun ContainerBridgePanel(
             }
         }
 
+        HorizontalDivider()
+        ContainerPreflightSummary(
+            plan = editPlan,
+            modifier = Modifier.testTag("container-preflight-summary"),
+        )
+
         if (state.skippedAttachmentCount > 0) {
             Text(
                 "${state.skippedAttachmentCount} 个附件未完整载入（大小限制或结构异常）。",
@@ -270,6 +278,92 @@ fun ContainerBridgePanel(
                     TextButton(onClick = { pendingTrackNumber = null }) { Text("取消") }
                 },
             )
+        }
+    }
+}
+
+
+@Composable
+internal fun ContainerPreflightSummary(
+    plan: ContainerEditPlanUi,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Row(
+            Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                "写入计划",
+                style = MaterialTheme.typography.titleSmall,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                if (plan.executable) "可执行 · ${plan.mutations.size} 项" else "未就绪 · ${plan.mutations.size} 项",
+                style = MaterialTheme.typography.labelSmall,
+                color = if (plan.executable) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
+            )
+        }
+
+        if (plan.mutations.isEmpty()) {
+            Text(
+                "当前没有待写入修改。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        } else {
+            plan.mutations.forEach { mutation ->
+                Column(Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
+                    Text(mutation.title, style = MaterialTheme.typography.bodySmall)
+                    Text(
+                        mutation.detail,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+
+        Text("兼容性 / 能力预检", style = MaterialTheme.typography.labelLarge)
+        plan.checks.forEach { check ->
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.Top,
+            ) {
+                Text(
+                    when (check.status) {
+                        ContainerCompatibilityStatus.SUPPORTED -> "支持"
+                        ContainerCompatibilityStatus.WARNING -> "警告"
+                        ContainerCompatibilityStatus.UNSUPPORTED -> "阻塞"
+                        ContainerCompatibilityStatus.UNKNOWN -> "未知"
+                    },
+                    style = MaterialTheme.typography.labelSmall,
+                    color = when (check.status) {
+                        ContainerCompatibilityStatus.SUPPORTED -> MaterialTheme.colorScheme.primary
+                        ContainerCompatibilityStatus.WARNING -> MaterialTheme.colorScheme.tertiary
+                        ContainerCompatibilityStatus.UNSUPPORTED -> MaterialTheme.colorScheme.error
+                        ContainerCompatibilityStatus.UNKNOWN -> MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                    modifier = Modifier.padding(top = 2.dp),
+                )
+                Column(Modifier.weight(1f)) {
+                    Text(check.title, style = MaterialTheme.typography.bodySmall)
+                    Text(
+                        check.detail,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
         }
     }
 }
