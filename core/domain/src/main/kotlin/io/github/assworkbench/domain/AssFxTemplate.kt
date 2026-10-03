@@ -155,6 +155,9 @@ object AssFxTemplateCodec {
             require(fade.farOpacityPercent.isFinite() && fade.farOpacityPercent in 0.0..100.0) {
                 "空间渐隐末端不透明度必须在 0..100% 之间。"
             }
+            require(fade.farOpacityPercent <= reflection.opacityPercent) {
+                "空间渐隐末端不透明度不能高于倒影起始不透明度。"
+            }
         }
 
         template.entrance?.let { entrance ->
