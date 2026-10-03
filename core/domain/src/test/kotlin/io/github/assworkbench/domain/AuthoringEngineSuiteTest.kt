@@ -76,6 +76,46 @@ class AuthoringEngineSuiteTest {
     }
 
     @Test
+    fun karaokeBatchSkipsIncompatibleEventsWithoutAbortingTheBatch() {
+        val document = AssDocument(
+            events = listOf(
+                event(1, 0, 1000, "{\\k20}Hi{\\kf30}there"),
+                event(2, 1000, 2000, "{\\kt50}Absolute"),
+                event(3, 2000, 3000, "{\\k20\\blur2}Already styled"),
+                event(4, 3000, 4000, "Plain text"),
+            )
+        )
+        val recipe = AssBatchRecipe(
+            id = "karaoke-reveal",
+            filter = AssBatchFilter.KaraokeRevealCompatible,
+            actions = listOf(
+                AssBatchAction.ApplyKaraokeRevealFx(
+                    AssKaraokeRevealFxSpec(revealMs = 120, startBlur = 3.0)
+                )
+            ),
+        )
+
+        val preview = AssBatchEngine.preview(document, recipe)
+
+        assertEquals(listOf(1L), preview.affectedEventIds)
+        assertEquals(listOf(1L), preview.changedEventIds)
+        assertTrue(preview.document.events.first { it.id == 1L }.text.contains("\\t(0,120,\\alpha&H00&\\blur0)"))
+        assertEquals(document.events.first { it.id == 2L }, preview.document.events.first { it.id == 2L })
+        assertEquals(document.events.first { it.id == 3L }, preview.document.events.first { it.id == 3L })
+        assertEquals(document.events.first { it.id == 4L }, preview.document.events.first { it.id == 4L })
+    }
+
+    @Test
+    fun karaokeBatchActionIsFailClosedEvenWithoutCompatibilityFilter() {
+        val incompatible = event(9, 0, 1000, "{\\kt50}Absolute")
+        val action = AssBatchAction.ApplyKaraokeRevealFx(
+            AssKaraokeRevealFxSpec(revealMs = 100, startBlur = 2.0)
+        )
+
+        assertEquals(incompatible, action.apply(incompatible, AssDocument(events = listOf(incompatible))))
+    }
+
+    @Test
     fun expandedBatchRegexAndTimingRemainOnePreviewDocument() {
         val doc = AssDocument(events = listOf(event(1, 1000, 2000, "Hello 123")))
         val recipe = AssBatchRecipe(
