@@ -1,0 +1,131 @@
+package io.github.assworkbench.domain
+
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertTrue
+
+class AssFxCompositionTest {
+    @Test
+    fun reflectionCreatesIndependentCompanionFromInheritedAnchor() {
+        val document = AssDocument(
+            scriptInfo = linkedMapOf("ScriptType" to "v4.00+", "PlayResX" to "1920", "PlayResY" to "1080"),
+            styles = listOf(
+                AssStyle(
+                    name = "Top",
+                    alignment = 8,
+                    marginV = 100,
+                    scaleY = 80.0,
+                )
+            ),
+            events = listOf(
+                AssEvent(
+                    id = 7,
+                    layer = 3,
+                    start = SubTime(1000),
+                    end = SubTime(3000),
+                    style = "Top",
+                    text = "{\\an8\\bord2}Hello",
+                )
+            ),
+        )
+
+        val result = AssFxComposition.createReflection(
+            document,
+            7,
+            AssReflectionFxSpec(
+                offsetY = 60.0,
+                verticalScalePercent = 35.0,
+                opacityPercent = 40.0,
+                blur = 1.5,
+            ),
+        )
+
+        assertEquals(2, result.document.events.size)
+        assertEquals(8L, result.generatedEventId)
+        val reflection = result.document.events.first()
+        val source = result.document.events.last()
+        assertEquals(2, reflection.layer)
+        assertEquals(document.events.single().text, source.text)
+        assertTrue(reflection.text.contains("\\pos(960,160)"))
+        assertTrue(reflection.text.contains("\\frx180"))
+        assertTrue(reflection.text.contains("\\fscy28"))
+        assertTrue(reflection.text.contains("\\alpha&H99&"))
+        assertTrue(reflection.text.contains("\\blur1.5"))
+    }
+
+    @Test
+    fun reflectionOffsetsMoveAndTransformOriginWithoutDestroyingTiming() {
+        val document = AssDocument(
+            events = listOf(
+                AssEvent(
+                    id = 1,
+                    start = SubTime(0),
+                    end = SubTime(2000),
+                    text = "{\\move(100,120,300,320,20,900)\\org(200,200)}Move",
+                )
+            )
+        )
+
+        val result = AssFxComposition.createReflection(
+            document,
+            1,
+            AssReflectionFxSpec(offsetY = 50.0),
+        )
+        val reflection = result.document.events.first()
+
+        assertTrue(reflection.text.contains("\\move(100,170,300,370,20,900)"))
+        assertTrue(reflection.text.contains("\\org(200,250)"))
+    }
+
+    @Test
+    fun positionConflictIsRejectedInsteadOfGuessing() {
+        val document = AssDocument(
+            events = listOf(
+                AssEvent(
+                    id = 1,
+                    start = SubTime(0),
+                    end = SubTime(1000),
+                    text = "{\\pos(100,100)\\move(100,100,200,200)}Conflict",
+                )
+            )
+        )
+
+        assertFailsWith<IllegalArgumentException> {
+            AssFxComposition.createReflection(document, 1)
+        }
+    }
+
+    @Test
+    fun flipEntranceUsesExistingScaleAndRotationAsItsFinalState() {
+        val document = AssDocument(
+            events = listOf(
+                AssEvent(
+                    id = 4,
+                    start = SubTime(0),
+                    end = SubTime(1000),
+                    text = "{\\fscy80\\frx10}Flip",
+                )
+            )
+        )
+
+        val next = AssFxComposition.applyFlipEntrance(
+            document,
+            4,
+            AssFlipEntranceSpec(
+                durationMs = 300,
+                startScalePercent = 10.0,
+                overshootScalePercent = 125.0,
+                startRotationXDegrees = 90.0,
+            ),
+        )
+        val text = next.events.single().text
+
+        assertTrue(text.contains("\\fscy8"))
+        assertTrue(text.contains("\\t(0,200,\\fscy100)"))
+        assertTrue(text.contains("\\t(200,300,\\fscy80)"))
+        assertTrue(text.contains("\\frx100"))
+        assertTrue(text.contains("\\t(0,300,\\frx10)"))
+        assertTrue(text.endsWith("Flip"))
+    }
+}
