@@ -435,6 +435,22 @@ internal fun FxCompositionPane(
             }
 
             val currentRecipe = currentTemplate("当前参数")
+            currentRecipe?.let { recipe ->
+                val generatedPerSource = (if (recipe.glow != null) 1 else 0) +
+                    (recipe.fade?.bands ?: 1)
+                val estimatedGenerated = generatedPerSource * targetEventIds.size
+                Text(
+                    "预计生成 ${estimatedGenerated} 个 companion Event（不含 ${targetEventIds.size} 个源 Event）。" +
+                        if (estimatedGenerated >= 128) " 当前批次较大，建议先预览并分批提交。" else "",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (estimatedGenerated >= 128) {
+                        MaterialTheme.colorScheme.error
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                    modifier = Modifier.testTag("fx-generated-event-estimate"),
+                )
+            }
             Row(
                 Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
