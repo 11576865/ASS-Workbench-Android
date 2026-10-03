@@ -21,6 +21,7 @@ class FxTemplateStore(context: Context) {
 
     @Synchronized
     fun load(): FxTemplateStoreSnapshot {
+        recoverInterruptedWrites()
         var corrupt = 0
         val templates = dir.listFiles()
             .orEmpty()
@@ -55,22 +56,24 @@ class FxTemplateStore(context: Context) {
         val id = existing?.id ?: UUID.randomUUID().toString()
         val target = File(dir, "$id.$EXTENSION")
         val staging = File(dir, ".$id.$EXTENSION.tmp")
+        val backup = File(dir, ".$id.$EXTENSION.bak")
         val payload = AssFxTemplateCodec.encode(template)
 
         staging.writeText(payload, Charsets.UTF_8)
-        if (target.exists() && !target.delete()) {
+        if (backup.exists() && !backup.delete()) {
             staging.delete()
-            error("无法替换已有 FX 模板。")
+            error("无法清理旧的 FX 模板备份。")
+        }
+        if (target.exists() && !target.renameTo(backup)) {
+            staging.delete()
+            error("无法暂存已有 FX 模板。")
         }
         if (!staging.renameTo(target)) {
-            runCatching {
-                target.writeText(payload, Charsets.UTF_8)
-            }.getOrElse { error ->
-                staging.delete()
-                throw error
-            }
+            if (backup.exists()) backup.renameTo(target)
             staging.delete()
+            error("无法提交 FX 模板；原模板已尝试恢复。")
         }
+        backup.delete()
         return load()
     }
 
@@ -80,6 +83,29 @@ class FxTemplateStore(context: Context) {
         val target = File(dir, "$id.$EXTENSION")
         if (target.exists() && !target.delete()) error("无法删除 FX 模板。")
         return load()
+    }
+
+    private fun recoverInterruptedWrites() {
+        dir.listFiles().orEmpty().forEach { file ->
+            when {
+                file.name.endsWith(".$EXTENSION.tmp") -> {
+                    // A staging file without a commit is never authoritative.
+                    file.delete()
+                }
+                file.name.endsWith(".$EXTENSION.bak") -> {
+                    val id = file.name
+                        .removePrefix(".")
+                        .removeSuffix(".$EXTENSION.bak")
+                    if (!ID_PATTERN.matches(id)) return@forEach
+                    val target = File(dir, "$id.$EXTENSION")
+                    if (target.exists()) {
+                        file.delete()
+                    } else {
+                        file.renameTo(target)
+                    }
+                }
+            }
+        }
     }
 
     companion object {
