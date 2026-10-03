@@ -156,12 +156,20 @@ internal fun RuleBatchPane(
         regexFind, regexReplace, regexRaw, timingOrigin, timingNumerator, timingDenominator, overridePropertyName, overrideValue,
         karaokeRevealEnabled, karaokeRevealMs, karaokeRevealBlur, karaokeRevealAccel,
     ) { recipe() }
-    val preview = remember(state.document, recipe) { AssBatchEngine.preview(state.document, recipe) }
+    val previewResult = remember(state.document, recipe) {
+        runCatching { AssBatchEngine.preview(state.document, recipe) }
+    }
+    val preview = previewResult.getOrNull()
+    val previewError = previewResult.exceptionOrNull()?.message
     val changedExamples = remember(state.document, preview) {
-        preview.changedEventIds.take(5).mapNotNull { id ->
-            val before = state.document.events.firstOrNull { it.id == id } ?: return@mapNotNull null
-            val after = preview.document.events.firstOrNull { it.id == id } ?: return@mapNotNull null
-            before to after
+        if (preview == null) {
+            emptyList()
+        } else {
+            preview.changedEventIds.take(5).mapNotNull { id ->
+                val before = state.document.events.firstOrNull { it.id == id } ?: return@mapNotNull null
+                val after = preview.document.events.firstOrNull { it.id == id } ?: return@mapNotNull null
+                before to after
+            }
         }
     }
 
@@ -295,7 +303,7 @@ internal fun RuleBatchPane(
                         )
                     } else {
                         Text(
-                            "不兼容 Event 会被跳过；动作执行时会再次按实际 Event / Style 状态校验，不覆盖已有 FX。",
+                            "初始不兼容 Event 会被筛掉；若同一批处理中的前序动作使 Event 在执行阶段失去兼容性，预览/提交会整体失败，避免只应用部分动作。",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -306,26 +314,35 @@ internal fun RuleBatchPane(
 
         HorizontalDivider()
         Text("Preview", style = MaterialTheme.typography.labelLarge)
-        Text("命中 ${preview.affectedEventIds.size} 条 · 实际变化 ${preview.changedEventIds.size} 条")
-        changedExamples.forEach { (before, after) ->
-            Surface(tonalElevation = 1.dp, shape = MaterialTheme.shapes.small) {
-                Column(Modifier.fillMaxWidth().padding(6.dp)) {
-                    Text("#${before.id} · ${before.start.millis}-${before.end.millis} → ${after.start.millis}-${after.end.millis}",
-                        style = MaterialTheme.typography.labelSmall)
-                    if (before.style != after.style || before.layer != after.layer) {
-                        Text("${before.style}/L${before.layer} → ${after.style}/L${after.layer}",
+        if (preview == null) {
+            Text(
+                "预览失败：" + (previewError ?: "unknown"),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.testTag("batch-preview-error"),
+            )
+        } else {
+            Text("命中 ${preview.affectedEventIds.size} 条 · 实际变化 ${preview.changedEventIds.size} 条")
+            changedExamples.forEach { (before, after) ->
+                Surface(tonalElevation = 1.dp, shape = MaterialTheme.shapes.small) {
+                    Column(Modifier.fillMaxWidth().padding(6.dp)) {
+                        Text("#${before.id} · ${before.start.millis}-${before.end.millis} → ${after.start.millis}-${after.end.millis}",
                             style = MaterialTheme.typography.labelSmall)
-                    }
-                    if (before.text != after.text) {
-                        Text(AssInlineSyntax.visibleText(before.text) + " → " + AssInlineSyntax.visibleText(after.text),
-                            style = MaterialTheme.typography.bodySmall)
+                        if (before.style != after.style || before.layer != after.layer) {
+                            Text("${before.style}/L${before.layer} → ${after.style}/L${after.layer}",
+                                style = MaterialTheme.typography.labelSmall)
+                        }
+                        if (before.text != after.text) {
+                            Text(AssInlineSyntax.visibleText(before.text) + " → " + AssInlineSyntax.visibleText(after.text),
+                                style = MaterialTheme.typography.bodySmall)
+                        }
                     }
                 }
             }
         }
         Button(
             onClick = { uiActions.applyBatchRecipe(recipe) },
-            enabled = preview.changedEventIds.isNotEmpty(),
+            enabled = preview?.changedEventIds?.isNotEmpty() == true,
             modifier = Modifier.fillMaxWidth(),
         ) { Text("应用为一个事务") }
 
