@@ -4,6 +4,11 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class InfiniteCanvasModelTest {
+    @Test fun explicitFocusShowsContentAtPhoneFitScale() {
+        assertTrue(showCanvasContent(0.43f, "preview", "preview"))
+        assertFalse(showCanvasContent(0.43f, "preview", null))
+        assertTrue(showCanvasContent(0.8f, "preview", null))
+    }
     @Test fun zoomKeepsTheWorldPointUnderTheAnchor() {
         val camera = InfiniteCanvasCamera(80f, -40f, 0.7f)
         val next = camera.zoomAt(330f, 240f, 1.4f)

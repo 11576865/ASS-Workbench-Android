@@ -252,7 +252,8 @@ fun ModernEditorScreen(
 
         workspaceState = workspaceState.openPrimary(next.name, next.descriptor.defaultBinding)
         if (workspaceMode == WorkspacePresentationMode.FIXED ||
-            workspaceMode == WorkspacePresentationMode.PAGER_EXPERIMENTAL
+            workspaceMode == WorkspacePresentationMode.PAGER_EXPERIMENTAL ||
+            workspaceMode == WorkspacePresentationMode.SPATIAL_EXPERIMENTAL
         ) {
             fixedListRequested = next == WorkbenchTool.SUBTITLES
             fixedNavigationRevision += 1
@@ -2830,8 +2831,8 @@ private fun SpatialWorkspace(
     }
     InfiniteCanvasHost(
         sessionId = state.workspaceSessionId,
-        savedScene = surfaceController.infiniteScene,
-        onSaveScene = surfaceController::saveInfiniteScene,
+        savedScene = surfaceController.infiniteSceneForSession(state.workspaceSessionId),
+        onSaveScene = { surfaceController.saveInfiniteScene(state.workspaceSessionId, it) },
         entries = entries,
         gestureOwned = interactionRegistry.activeHandleId != null,
         onAddTool = { onActiveTool(WorkbenchTool.CAPABILITIES) },

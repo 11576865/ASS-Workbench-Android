@@ -19,7 +19,15 @@ internal class WorkbenchSurfaceController(restored: List<WorkspaceSurfaceState> 
     var infiniteScene by androidx.compose.runtime.mutableStateOf(emptyList<String>())
         private set
 
-    fun saveInfiniteScene(encoded: List<String>) { infiniteScene = encoded }
+    private var infiniteSceneSessionId: Long? = null
+
+    fun infiniteSceneForSession(sessionId: Long): List<String> =
+        if (infiniteSceneSessionId == null || infiniteSceneSessionId == sessionId) infiniteScene else emptyList()
+
+    fun saveInfiniteScene(sessionId: Long, encoded: List<String>) {
+        infiniteSceneSessionId = sessionId
+        infiniteScene = encoded
+    }
 
     private val resizeGestures = mutableSetOf<String>()
     private val candidates = mutableMapOf<String, MutableState<SurfaceGeometry?>>()
@@ -155,6 +163,7 @@ internal class WorkbenchSurfaceController(restored: List<WorkspaceSurfaceState> 
         candidates.values.forEach { it.value = null }
         resizeGestures.clear()
         surfaces.clear()
+        infiniteSceneSessionId = null
         val boundary = encoded.indexOf("infinite-scene")
         val surfaceRows = if (boundary < 0) encoded else encoded.take(boundary)
         infiniteScene = if (boundary < 0) emptyList() else encoded.drop(boundary + 1)

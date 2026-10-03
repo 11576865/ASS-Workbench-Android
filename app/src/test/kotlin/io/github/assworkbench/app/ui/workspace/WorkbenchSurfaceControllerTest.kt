@@ -9,9 +9,12 @@ class WorkbenchSurfaceControllerTest {
         controller.ensure("A", SurfaceGeometry())
         val scene = InfiniteCanvasPersistence.encode(InfiniteCanvasCamera(-300f, 20f, 0.8f),
             listOf(InfiniteCanvasNode("audio", alpha = 0.2f, passthrough = true)))
-        controller.saveInfiniteScene(scene)
+        controller.saveInfiniteScene(1L, scene)
+        assertEquals(scene, controller.infiniteSceneForSession(1L))
+        assertTrue(controller.infiniteSceneForSession(2L).isEmpty())
         val restored = WorkbenchSurfaceController().apply { restore(controller.save()) }
         assertEquals(scene, restored.infiniteScene)
+        assertEquals(scene, restored.infiniteSceneForSession(10L))
         assertEquals(controller.state("A", SurfaceGeometry()), restored.state("A", SurfaceGeometry()))
         restored.restore(WorkspaceSurfacePersistence.encode(listOf(WorkspaceSurfaceState("B"))))
         assertTrue(restored.infiniteScene.isEmpty())

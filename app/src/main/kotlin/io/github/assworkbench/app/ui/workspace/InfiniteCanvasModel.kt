@@ -29,6 +29,9 @@ internal data class InfiniteCanvasNode(
             copy(width = (width + dw).coerceIn(220f, 2400f), height = (height + dh).coerceIn(160f, 1800f)) else this
 }
 
+internal fun showCanvasContent(scale: Float, id: String, detailedId: String?): Boolean =
+    scale >= 0.55f || id == detailedId
+
 internal fun raiseCanvasNode(nodes: List<InfiniteCanvasNode>, id: String): List<InfiniteCanvasNode> {
     val normalized = if ((nodes.maxOfOrNull { it.z } ?: 0) >= 999_999)
         nodes.sortedBy { it.z }.mapIndexed { i, n -> n.copy(z = i + 1) } else nodes

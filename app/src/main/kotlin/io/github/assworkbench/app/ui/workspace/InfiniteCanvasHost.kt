@@ -52,6 +52,7 @@ internal fun InfiniteCanvasHost(
             else InfiniteCanvasPersistence.decode(savedScene))
     }
     SideEffect { onSaveScene(InfiniteCanvasPersistence.encode(scene.first, scene.second)) }
+    var detailedId by rememberSaveable { mutableStateOf<String?>(null) }
     var recall by remember { mutableStateOf(false) }
     val camera = scene.first
     val nodes = scene.second
@@ -82,12 +83,15 @@ internal fun InfiniteCanvasHost(
         val viewportW = maxWidth.value
         val viewportH = maxHeight.value
         fun focus(node: InfiniteCanvasNode) {
+            if (captured) return
+            detailedId = node.id
             val scale = minOf(1f, (viewportW - 32f) / node.width, (viewportH - 96f) / node.height).coerceIn(0.25f, 2f)
             scene = InfiniteCanvasCamera(
                 (viewportW - node.width * scale) / 2f - node.x * scale,
                 64f - node.y * scale, scale) to scene.second.map { if (it.id == node.id) it.copy(hidden = false) else it }
         }
         fun overview() {
+            detailedId = null
             val shown = scene.second.filter { !it.hidden && entries.any { e -> e.id == it.id } }
             if (shown.isEmpty()) return
             val left = shown.minOf { it.x }; val top = shown.minOf { it.y }
@@ -116,7 +120,8 @@ internal fun InfiniteCanvasHost(
                     val zoom by rememberUpdatedState(scene.first.scale)
                     Column(
                         Modifier.offset((camera.x + node.x * camera.scale).dp, (camera.y + node.y * camera.scale).dp)
-                            .size((node.width * camera.scale).dp, (node.height * camera.scale).dp)
+                            .wrapContentSize(Alignment.TopStart, unbounded = true)
+                            .requiredSize((node.width * camera.scale).dp, (node.height * camera.scale).dp)
                             .zIndex(node.z.toFloat()).testTag("spatial-node-" + entry.id.replace(':', '-')),
                     ) {
                         Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh, shape = MaterialTheme.shapes.medium) {
@@ -176,7 +181,7 @@ internal fun InfiniteCanvasHost(
                                 }
                             })
                             .background(MaterialTheme.colorScheme.surface.copy(alpha = node.alpha))) {
-                            if (camera.scale < 0.55f) {
+                            if (!showCanvasContent(camera.scale, entry.id, detailedId)) {
                                 TextButton(onClick = { focus(node) }, modifier = Modifier.align(Alignment.Center)) { Text("靠近 " + entry.title) }
                             } else {
                                 content(entry.id, !node.passthrough)
@@ -203,13 +208,17 @@ internal fun InfiniteCanvasHost(
         Surface(Modifier.align(Alignment.TopCenter).padding(8.dp).zIndex(1_000_010f),
             shape = MaterialTheme.shapes.large, shadowElevation = 2.dp) {
             Row(Modifier.horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically) {
-                TextButton(onClick = onAddTool) { Text("＋ 工具") }
+                TextButton(onClick = {
+                    scene = scene.first to scene.second.map { if (it.id == "CAPABILITIES:primary") it.copy(hidden = false) else it }
+                    onAddTool()
+                }) { Text("＋ 工具") }
                 TextButton(onClick = ::overview, enabled = !gestureOwned, modifier = Modifier.testTag("spatial-overview")) { Text("总览") }
                 Box {
                     TextButton(onClick = { recall = true }) { Text("召回") }
                     DropdownMenu(expanded = recall, onDismissRequest = { recall = false }) {
                         entries.forEach { entry ->
-                            DropdownMenuItem(text = { Text(entry.title) }, onClick = {
+                            DropdownMenuItem(text = { Text(entry.title) },
+                                modifier = Modifier.testTag("spatial-recall-" + entry.id.replace(':', '-')), enabled = !gestureOwned, onClick = {
                                 scene.second.firstOrNull { it.id == entry.id }?.let { focus(it) }; recall = false
                             })
                         }
