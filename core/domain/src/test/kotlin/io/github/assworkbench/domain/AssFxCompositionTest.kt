@@ -55,6 +55,89 @@ class AssFxCompositionTest {
     }
 
     @Test
+    fun reflectionPreservesZeroScaleAndRejectsNonFiniteDerivedGeometry() {
+        val zeroScale = AssDocument(
+            events = listOf(
+                AssEvent(
+                    id = 60,
+                    start = SubTime(0),
+                    end = SubTime(1000),
+                    text = "{\\fscy0\\pos(100,200)}Zero scale",
+                )
+            )
+        )
+        val zeroResult = AssFxComposition.createReflection(zeroScale, 60)
+        val zeroReflection = zeroResult.document.events.first {
+            it.id == zeroResult.generatedEventId
+        }
+        assertTrue(zeroReflection.text.contains("\\fscy0"))
+
+        val coordinateOverflow = AssDocument(
+            events = listOf(
+                AssEvent(
+                    id = 61,
+                    start = SubTime(0),
+                    end = SubTime(1000),
+                    text = "{\\pos(100,1e308)}Huge coordinate",
+                )
+            )
+        )
+        val coordinateError = assertFailsWith<IllegalArgumentException> {
+            AssFxComposition.createReflection(
+                coordinateOverflow,
+                61,
+                AssReflectionFxSpec(offsetY = 1e308),
+            )
+        }
+        assertTrue(coordinateError.message.orEmpty().contains("平移结果溢出"))
+        assertEquals("{\\pos(100,1e308)}Huge coordinate", coordinateOverflow.events.single().text)
+
+        val scaleOverflow = AssDocument(
+            events = listOf(
+                AssEvent(
+                    id = 62,
+                    start = SubTime(0),
+                    end = SubTime(1000),
+                    text = "{\\fscy1e308}Huge scale",
+                )
+            )
+        )
+        val scaleError = assertFailsWith<IllegalArgumentException> {
+            AssFxComposition.createReflection(
+                scaleOverflow,
+                62,
+                AssReflectionFxSpec(verticalScalePercent = 1e308),
+            )
+        }
+        assertTrue(scaleError.message.orEmpty().contains("Scale Y 计算溢出"))
+        assertEquals("{\\fscy1e308}Huge scale", scaleOverflow.events.single().text)
+    }
+
+    @Test
+    fun flipEntranceComputesTwoThirdsWithoutLongOverflow() {
+        val document = AssDocument(
+            events = listOf(
+                AssEvent(
+                    id = 63,
+                    start = SubTime(0),
+                    end = SubTime(Long.MAX_VALUE),
+                    text = "Long event",
+                )
+            )
+        )
+
+        val result = AssFxComposition.applyFlipEntrance(
+            document = document,
+            eventId = 63,
+            spec = AssFlipEntranceSpec(durationMs = Long.MAX_VALUE),
+        )
+
+        val text = result.events.single().text
+        assertTrue(text.contains("\\t(0,6148914691236517204,"))
+        assertTrue(text.contains("\\t(6148914691236517204,9223372036854775807,"))
+    }
+
+    @Test
     fun reflectionOffsetsMoveAndTransformOriginWithoutDestroyingTiming() {
         val document = AssDocument(
             events = listOf(
