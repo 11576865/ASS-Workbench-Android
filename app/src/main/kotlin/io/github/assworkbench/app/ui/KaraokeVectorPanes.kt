@@ -60,6 +60,7 @@ internal fun KaraokePane(
             var revealBlur by rememberSaveable(event.id) { mutableStateOf("3.5") }
             var revealAccel by rememberSaveable(event.id) { mutableStateOf("") }
             var withFlip by rememberSaveable(event.id) { mutableStateOf(true) }
+            var fxExpanded by rememberSaveable(event.id) { mutableStateOf(false) }
             var flipStartScale by rememberSaveable(event.id) { mutableStateOf("12") }
             var flipOvershoot by rememberSaveable(event.id) { mutableStateOf("118") }
             var flipRotationX by rememberSaveable(event.id) { mutableStateOf("86") }
@@ -122,7 +123,22 @@ internal fun KaraokePane(
                     Modifier.padding(8.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    Text("Karaoke FX · 逐音节显现", style = MaterialTheme.typography.titleSmall)
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            "Karaoke FX · 逐音节显现",
+                            style = MaterialTheme.typography.titleSmall,
+                            modifier = Modifier.weight(1f),
+                        )
+                        TextButton(
+                            onClick = { fxExpanded = !fxExpanded },
+                            modifier = Modifier.testTag("karaoke-fx-expand"),
+                        ) {
+                            Text(if (fxExpanded) "收起参数" else "调整参数")
+                        }
+                    }
                     Text(
                         "按 Karaoke 累计时间给每个音节写入 alpha / blur；可叠加基于本 Event 有效 Scale Y / Rotation X 的翻转拉伸。仍保持单 Event，不猜字形宽度。",
                         style = MaterialTheme.typography.bodySmall,
@@ -135,63 +151,82 @@ internal fun KaraokePane(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        OutlinedTextField(
-                            value = revealMs,
-                            onValueChange = { revealMs = it },
-                            label = { Text("显现时长 ms") },
-                            singleLine = true,
-                            modifier = Modifier.weight(1f).testTag("karaoke-fx-reveal-ms"),
-                        )
-                        OutlinedTextField(
-                            value = revealBlur,
-                            onValueChange = { revealBlur = it },
-                            label = { Text("起始 Blur") },
-                            singleLine = true,
-                            modifier = Modifier.weight(1f).testTag("karaoke-fx-blur"),
-                        )
-                    }
-                    OutlinedTextField(
-                        value = revealAccel,
-                        onValueChange = { revealAccel = it },
-                        label = { Text("Accel（空=线性）") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth().testTag("karaoke-fx-accel"),
-                    )
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        Switch(
-                            checked = withFlip,
-                            onCheckedChange = { withFlip = it },
-                            modifier = Modifier.testTag("karaoke-fx-flip-enabled"),
-                        )
-                        Text("翻转 / 拉伸显现")
-                    }
-                    if (withFlip) {
+                    if (fxExpanded) {
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             OutlinedTextField(
-                                value = flipStartScale,
-                                onValueChange = { flipStartScale = it },
-                                label = { Text("起始高度 %") },
+                                value = revealMs,
+                                onValueChange = { revealMs = it },
+                                label = { Text("显现时长 ms") },
                                 singleLine = true,
-                                modifier = Modifier.weight(1f).testTag("karaoke-fx-start-scale"),
+                                modifier = Modifier.weight(1f).testTag("karaoke-fx-reveal-ms"),
                             )
                             OutlinedTextField(
-                                value = flipOvershoot,
-                                onValueChange = { flipOvershoot = it },
-                                label = { Text("回弹高度 %") },
+                                value = revealBlur,
+                                onValueChange = { revealBlur = it },
+                                label = { Text("起始 Blur") },
                                 singleLine = true,
-                                modifier = Modifier.weight(1f).testTag("karaoke-fx-overshoot"),
+                                modifier = Modifier.weight(1f).testTag("karaoke-fx-blur"),
                             )
                         }
                         OutlinedTextField(
-                            value = flipRotationX,
-                            onValueChange = { flipRotationX = it },
-                            label = { Text("起始 X 旋转 °") },
+                            value = revealAccel,
+                            onValueChange = { revealAccel = it },
+                            label = { Text("Accel（空=线性）") },
                             singleLine = true,
-                            modifier = Modifier.fillMaxWidth().testTag("karaoke-fx-rotation-x"),
+                            modifier = Modifier.fillMaxWidth().testTag("karaoke-fx-accel"),
+                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Switch(
+                                checked = withFlip,
+                                onCheckedChange = { withFlip = it },
+                                modifier = Modifier.testTag("karaoke-fx-flip-enabled"),
+                            )
+                            Text("翻转 / 拉伸显现")
+                        }
+                        if (withFlip) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                OutlinedTextField(
+                                    value = flipStartScale,
+                                    onValueChange = { flipStartScale = it },
+                                    label = { Text("起始高度 %") },
+                                    singleLine = true,
+                                    modifier = Modifier.weight(1f).testTag("karaoke-fx-start-scale"),
+                                )
+                                OutlinedTextField(
+                                    value = flipOvershoot,
+                                    onValueChange = { flipOvershoot = it },
+                                    label = { Text("回弹高度 %") },
+                                    singleLine = true,
+                                    modifier = Modifier.weight(1f).testTag("karaoke-fx-overshoot"),
+                                )
+                            }
+                            OutlinedTextField(
+                                value = flipRotationX,
+                                onValueChange = { flipRotationX = it },
+                                label = { Text("起始 X 旋转 °") },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth().testTag("karaoke-fx-rotation-x"),
+                            )
+                        }
+    
+                    } else {
+                        Text(
+                            buildString {
+                                append(revealMs).append(" ms · Blur ").append(revealBlur)
+                                if (withFlip) {
+                                    append(" · Flip ")
+                                    append(flipStartScale).append("→").append(flipOvershoot).append("%")
+                                    append(" · X +").append(flipRotationX).append("°")
+                                } else {
+                                    append(" · 无翻转")
+                                }
+                            },
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.testTag("karaoke-fx-summary"),
                         )
                     }
                     if (revealSpec == null) {
