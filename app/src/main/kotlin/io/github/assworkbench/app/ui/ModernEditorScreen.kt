@@ -7248,15 +7248,26 @@ private fun FontManagerPane(
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun ProjectPane(state: EditorState, viewModel: EditorViewModel, onSaveMkv: () -> Unit, modifier: Modifier = Modifier) {
-    Column(modifier.verticalScroll(rememberScrollState()).padding(WorkbenchDimens.Small), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(if (state.container.uri != null) "MKV 工程" else "独立 ASS 工程", style = MaterialTheme.typography.titleSmall)
-        Text(state.project.title)
-        Text("PlayRes ${state.document.playResX}×${state.document.playResY} · ${state.document.styles.size} Style · ${state.document.events.size} Event", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Column(
+        modifier.verticalScroll(rememberScrollState()).padding(WorkbenchDimens.Small),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
         if (state.container.uri != null) {
-            Divider()
             ContainerBridgePanel(state.container, viewModel, onSaveMkv, dirty = state.dirty)
+        } else {
+            Text("独立 ASS 工程", style = MaterialTheme.typography.titleSmall)
+            Text(state.project.title)
+            Text(
+                "PlayRes ${state.document.playResX}×${state.document.playResY} · " +
+                    "${state.document.styles.size} Style · ${state.document.events.size} Event",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                if (state.project.videoUri == null) "未附加参考视频" else "已附加参考视频",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
-        else Text(if (state.project.videoUri == null) "未附加参考视频" else "已附加参考视频", color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
