@@ -69,6 +69,7 @@ fun ContainerBridgePanel(
 ) {
     if (state.uri == null) return
     var pendingTrackNumber by remember { mutableStateOf<Long?>(null) }
+    var replacementTarget by remember { mutableStateOf<ContainerResourceUi?>(null) }
     val context = LocalContext.current
     val attachmentPicker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenMultipleDocuments()
@@ -83,6 +84,25 @@ fun ContainerBridgePanel(
             }
         }
         viewModel.addContainerAttachments(uris)
+    }
+    val replacementPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        val target = replacementTarget
+        replacementTarget = null
+        if (uri == null || target == null) return@rememberLauncherForActivityResult
+        runCatching {
+            context.contentResolver.takePersistableUriPermission(
+                uri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION,
+            )
+        }
+        val attachmentTarget = target.attachmentTarget ?: return@rememberLauncherForActivityResult
+        viewModel.planExistingAttachmentReplacement(
+            target = attachmentTarget,
+            originalName = target.title,
+            uri = uri,
+        )
     }
 
     val actualCount = state.resources.count { it.change != ContainerResourceChange.REMOVED }
@@ -111,7 +131,13 @@ fun ContainerBridgePanel(
                             ContainerInventoryEvidence.VERIFIED_OUTPUT -> "已验证输出"
                         })
                         if (state.pendingAttachments.isNotEmpty()) {
-                            append(" · 待写入附件 ").append(state.pendingAttachments.size)
+                            append(" · 待添加 ").append(state.pendingAttachments.size)
+                        }
+                        if (state.pendingAttachmentRemovals.isNotEmpty()) {
+                            append(" · 待删除 ").append(state.pendingAttachmentRemovals.size)
+                        }
+                        if (state.pendingAttachmentReplacements.isNotEmpty()) {
+                            append(" · 待替换 ").append(state.pendingAttachmentReplacements.size)
                         }
                     },
                     style = MaterialTheme.typography.labelSmall,
@@ -178,12 +204,25 @@ fun ContainerBridgePanel(
 
         state.resources.forEachIndexed { index, resource ->
             if (index > 0) HorizontalDivider()
+            val attachmentTarget = resource.attachmentTarget
+            val pendingRemoval = attachmentTarget?.let { target ->
+                state.pendingAttachmentRemovals.any { it.target == target }
+            } == true
+            val pendingReplacement = attachmentTarget?.let { target ->
+                state.pendingAttachmentReplacements.firstOrNull { it.target == target }
+            }
             ContainerResourceRow(
                 resource = resource,
                 selected = resource.editableAss && resource.trackNumber == state.selectedTrackNumber,
                 enabled = resource.editableAss &&
                     resource.change != ContainerResourceChange.REMOVED &&
                     !state.writeBackBusy,
+                attachmentActionsEnabled = attachmentTarget != null &&
+                    resource.change != ContainerResourceChange.REMOVED &&
+                    !state.writeBackBusy &&
+                    state.inventoryEvidence != ContainerInventoryEvidence.VERIFIED_OUTPUT,
+                pendingRemoval = pendingRemoval,
+                pendingReplacementName = pendingReplacement?.name,
                 onClick = {
                     val trackNumber = resource.trackNumber ?: return@ContainerResourceRow
                     if (trackNumber == state.selectedTrackNumber) return@ContainerResourceRow
@@ -191,6 +230,26 @@ fun ContainerBridgePanel(
                         pendingTrackNumber = trackNumber
                     } else {
                         viewModel.selectContainerTrack(trackNumber)
+                    }
+                },
+                onRemoveAttachment = attachmentTarget?.let { target ->
+                    {
+                        viewModel.planExistingAttachmentRemoval(
+                            target = target,
+                            name = resource.title,
+                        )
+                    }
+                },
+                onReplaceAttachment = attachmentTarget?.let {
+                    {
+                        replacementTarget = resource
+                        replacementPicker.launch(arrayOf("*/*"))
+                    }
+                },
+                onCancelAttachmentEdit = attachmentTarget?.let { target ->
+                    {
+                        viewModel.cancelExistingAttachmentRemoval(target)
+                        viewModel.cancelExistingAttachmentReplacement(target)
                     }
                 },
             )
@@ -373,7 +432,13 @@ private fun ContainerResourceRow(
     resource: ContainerResourceUi,
     selected: Boolean,
     enabled: Boolean,
+    attachmentActionsEnabled: Boolean,
+    pendingRemoval: Boolean,
+    pendingReplacementName: String?,
     onClick: () -> Unit,
+    onRemoveAttachment: (() -> Unit)?,
+    onReplaceAttachment: (() -> Unit)?,
+    onCancelAttachmentEdit: (() -> Unit)?,
 ) {
     val background = if (selected) {
         MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.45f)
@@ -423,6 +488,34 @@ private fun ContainerResourceRow(
                     modifier = Modifier.size(18.dp),
                     tint = MaterialTheme.colorScheme.primary,
                 )
+            }
+            when {
+                pendingRemoval -> {
+                    Text("待删除", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+                    TextButton(onClick = { onCancelAttachmentEdit?.invoke() }) { Text("取消") }
+                }
+                pendingReplacementName != null -> {
+                    Text(
+                        "→ $pendingReplacementName",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    TextButton(onClick = { onCancelAttachmentEdit?.invoke() }) { Text("取消") }
+                }
+                attachmentActionsEnabled -> {
+                    IconButton(
+                        onClick = { onReplaceAttachment?.invoke() },
+                        enabled = onReplaceAttachment != null,
+                    ) {
+                        Icon(Icons.Filled.Edit, contentDescription = "替换附件")
+                    }
+                    IconButton(
+                        onClick = { onRemoveAttachment?.invoke() },
+                        enabled = onRemoveAttachment != null,
+                    ) {
+                        Icon(Icons.Filled.RemoveCircle, contentDescription = "删除附件")
+                    }
+                }
             }
             ResourceChangeMark(resource.change)
         }
