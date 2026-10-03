@@ -303,6 +303,34 @@ class AssFxCompositionTest {
     }
 
     @Test
+    fun spatialFadeRejectsDepthThatWouldBeSilentlyTruncated() {
+        val document = AssDocument(
+            scriptInfo = linkedMapOf("PlayResX" to "1920", "PlayResY" to "1080"),
+            events = listOf(
+                AssEvent(
+                    id = 36,
+                    start = SubTime(0),
+                    end = SubTime(1000),
+                    text = "{\\pos(400,300)}Fade",
+                )
+            )
+        )
+
+        assertFailsWith<IllegalArgumentException> {
+            AssFxComposition.createReflection(
+                document = document,
+                eventId = 36,
+                spec = AssReflectionFxSpec(offsetY = 40.0),
+                fade = AssReflectionFadeSpec(
+                    bands = 6,
+                    depthPx = 800.0,
+                    direction = AssReflectionFadeDirection.DOWN,
+                ),
+            )
+        }
+    }
+
+    @Test
     fun entranceKeepsGlowAndReflectionGeometrySynchronized() {
         val document = AssDocument(
             events = listOf(
