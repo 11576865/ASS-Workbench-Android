@@ -83,6 +83,7 @@ internal fun FxCompositionPane(
                     } == true &&
                     runCatching { AssReflectionFadeDirection.valueOf(fadeDirection) }.isSuccess
                 )) &&
+            !(withFade && withEntrance) &&
             (!withGlow || (
                 parsedGlowOpacity?.let { it.isFinite() && it in 0.0..100.0 } == true &&
                     parsedGlowBlur?.let { it.isFinite() && it in 0.0..20.0 } == true &&
@@ -428,7 +429,11 @@ internal fun FxCompositionPane(
 
             if (!valid) {
                 Text(
-                    "参数无效：高度需 > 0；各不透明度 0..100；渐隐末端不透明度不得高于倒影；Blur/Border 0..20；渐隐分段 2..16、深度 > 0；入场至少 2 ms；起始/回弹高度需 > 0；Accel 为空或 > 0。",
+                    if (withFade && withEntrance) {
+                        "空间渐隐与翻转/拉伸入场暂不能同时启用：渐隐 Clip 固定在屏幕坐标中，无法可靠跟随旋转与缩放。"
+                    } else {
+                        "参数无效：高度需 > 0；各不透明度 0..100；渐隐末端不透明度不得高于倒影；Blur/Border 0..20；渐隐分段 2..16、深度 > 0；入场至少 2 ms；起始/回弹高度需 > 0；Accel 为空或 > 0。"
+                    },
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.error,
                 )
