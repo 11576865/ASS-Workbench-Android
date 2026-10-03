@@ -2,7 +2,7 @@ package io.github.assworkbench.app
 
 import android.app.Application
 import android.graphics.Bitmap
-import android.util.Base64
+import android.graphics.Color
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -23,10 +23,10 @@ import io.github.assworkbench.app.ui.interaction.rememberInteractionOverlayRegis
 import io.github.assworkbench.domain.AssDocument
 import io.github.assworkbench.domain.AssEvent
 import io.github.assworkbench.domain.AssStyle
-import io.github.assworkbench.domain.AssFxComposition
-import io.github.assworkbench.domain.AssReflectionFxSpec
-import io.github.assworkbench.domain.AssReflectionFadeSpec
 import io.github.assworkbench.domain.AssReflectionFadeDirection
+import io.github.assworkbench.domain.AssReflectionFadeSpec
+import io.github.assworkbench.domain.AssReflectionFxSpec
+import io.github.assworkbench.domain.AssFxComposition
 import io.github.assworkbench.domain.SubTime
 import java.io.File
 import java.io.FileOutputStream
@@ -39,8 +39,9 @@ import org.junit.runner.RunWith
 
 /**
  * Runtime-backed visual evidence for the real mpv/libass preview plus the shared
- * interaction overlay. The generated video is only a deterministic media input;
- * rendering is performed by the production native preview stack.
+ * interaction overlay. The generated PNG is only a deterministic media input;
+ * rendering is performed by the production native preview stack. This avoids
+ * making visual-capture liveness depend on a hosted-emulator H.264 decoder path.
  */
 @RunWith(AndroidJUnit4::class)
 class UigsRendererVisualCaptureInstrumentedTest {
@@ -48,7 +49,7 @@ class UigsRendererVisualCaptureInstrumentedTest {
     val composeRule = createAndroidComposeRule<ComponentActivity>()
 
     private lateinit var application: Application
-    private lateinit var video: File
+    private lateinit var media: File
     private lateinit var configDir: File
     private lateinit var fontsDir: File
     private val diagnostics = AtomicReference<List<String>>(emptyList())
@@ -57,9 +58,17 @@ class UigsRendererVisualCaptureInstrumentedTest {
     @Before
     fun setUp() {
         application = ApplicationProvider.getApplicationContext()
-        video = File(application.filesDir, "uigs-runtime-fixture.mp4").apply {
-            writeBytes(Base64.decode(VIDEO_BASE64, Base64.DEFAULT))
+        media = File(application.filesDir, "uigs-runtime-fixture.png")
+        val bitmap = Bitmap.createBitmap(1280, 720, Bitmap.Config.ARGB_8888)
+        bitmap.eraseColor(Color.rgb(24, 32, 48))
+        FileOutputStream(media).use { stream ->
+            assertTrue(
+                "Deterministic renderer fixture must encode as PNG",
+                bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream),
+            )
         }
+        bitmap.recycle()
+        assertTrue(media.isFile && media.length() > 0L)
         configDir = File(application.filesDir, "uigs-runtime-renderer/config").apply {
             deleteRecursively()
             mkdirs()
@@ -96,7 +105,7 @@ class UigsRendererVisualCaptureInstrumentedTest {
                 SideEffect { interactionRegistry.set(registry) }
                 Box(Modifier.fillMaxSize()) {
                     VideoPreview(
-                        videoUri = video.absolutePath,
+                        videoUri = media.absolutePath,
                         document = document,
                         renderDocument = document,
                         seekRequestMs = null,
@@ -106,7 +115,7 @@ class UigsRendererVisualCaptureInstrumentedTest {
                         configDir = configDir,
                         fontsDir = fontsDir,
                         fontRevision = 0L,
-                        initialPositionMs = 1_000L,
+                        initialPositionMs = 0L,
                         focusedEventId = 1L,
                         positionEditEventId = 1L,
                         onPreviewEventPosition = { _, _ -> },
@@ -207,7 +216,7 @@ class UigsRendererVisualCaptureInstrumentedTest {
                 SideEffect { interactionRegistry.set(registry) }
                 Box(Modifier.fillMaxSize()) {
                     VideoPreview(
-                        videoUri = video.absolutePath,
+                        videoUri = media.absolutePath,
                         document = document,
                         renderDocument = document,
                         seekRequestMs = null,
@@ -217,7 +226,7 @@ class UigsRendererVisualCaptureInstrumentedTest {
                         configDir = configDir,
                         fontsDir = fontsDir,
                         fontRevision = 0L,
-                        initialPositionMs = 1_000L,
+                        initialPositionMs = 0L,
                         focusedEventId = 1L,
                         positionEditEventId = null,
                         onPreviewEventPosition = { _, _ -> },
@@ -265,9 +274,5 @@ class UigsRendererVisualCaptureInstrumentedTest {
         }
         bitmap.recycle()
         assertTrue(target.isFile && target.length() > 0L)
-    }
-
-    private companion object {
-        const val VIDEO_BASE64 = "AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDEAAAObbW9vdgAAAGxtdmhkAAAAAAAAAAAAAAAAAAAD6AAAdTAAAQAAAQAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgAAAsZ0cmFrAAAAXHRraGQAAAADAAAAAAAAAAAAAAABAAAAAAAAdTAAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAABAAAAAAUAAAAC0AAAAAAAkZWR0cwAAABxlbHN0AAAAAAAAAAEAAHUwAAAAAAABAAAAAAI+bWRpYQAAACBtZGhkAAAAAAAAAAAAAAAAAABAAAAHgABVxAAAAAAALWhkbHIAAAAAAAAAAHZpZGUAAAAAAAAAAAAAAABWaWRlb0hhbmRsZXIAAAAB6W1pbmYAAAAUdm1oZAAAAAEAAAAAAAAAAAAAACRkaW5mAAAAHGRyZWYAAAAAAAAAAQAAAAx1cmwgAAAAAQAAAalzdGJsAAAAuXN0c2QAAAAAAAAAAQAAAKlhdmMxAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAUAAtABIAAAASAAAAAAAAAABFUxhdmM2MS4xOS4xMDEgbGlieDI2NAAAAAAAAAAAAAAAGP//AAAAL2F2Y0MBQsAL/+EAGGdCwAvaBQZ+fARAAAADAEAAAAMAg8UKqAEABGjOD8gAAAAQcGFzcAAAAAEAAAABAAAAFGJ0cnQAAAAAAAABKgAAAAAAAAAYc3R0cwAAAAAAAAABAAAAHgAAQAAAAAAUc3RzcwAAAAAAAAABAAAAAQAAABxzdHNjAAAAAAAAAAEAAAABAAAAHgAAAAEAAACMc3RzegAAAAAAAAAAAAAAHgAAAx8AAAALAAAACwAAAAsAAAALAAAACwAAAAsAAAALAAAACwAAAAsAAAALAAAACwAAAAsAAAALAAAACwAAAAsAAAALAAAACwAAAAsAAAALAAAACwAAAAsAAAALAAAACwAAAAsAAAALAAAACwAAAAsAAAALAAAACwAAABRzdGNvAAAAAAAAAAEAAAPLAAAAYXVkdGEAAABZbWV0YQAAAAAAAAAhaGRscgAAAAAAAAAAbWRpcmFwcGwAAAAAAAAAAAAAAAAsaWxzdAAAACSpdG9vAAAAHGRhdGEAAAABAAAAAExhdmY2MS43LjEwMwAAAAhmcmVlAAAEZm1kYXQAAAJVBgX//1HcRem95tlIt5Ys2CDZI+7veDI2NCAtIGNvcmUgMTY0IHIzMTA4IDMxZTE5ZjkgLSBILjI2NC9NUEVHLTQgQVZDIGNvZGVjIC0gQ29weWxlZnQgMjAwMy0yMDIzIC0gaHR0cDovL3d3dy52aWRlb2xhbi5vcmcveDI2NC5odG1sIC0gb3B0aW9uczogY2FiYWM9MCByZWY9MSBkZWJsb2NrPTA6LTM6LTMgYW5hbHlzZT0wOjAgbWU9ZGlhIHN1Ym1lPTAgcHN5PTEgcHN5X3JkPTIuMDA6MC43MCBtaXhlZF9yZWY9MCBtZV9yYW5nZT0xNiBjaHJvbWFfbWU9MSB0cmVsbGlzPTAgOHg4ZGN0PTAgY3FtPTAgZGVhZHpvbmU9MjEsMTEgZmFzdF9wc2tpcD0xIGNocm9tYV9xcF9vZmZzZXQ9MCB0aHJlYWRzPTYgbG9va2FoZWFkX3RocmVhZHM9MSBzbGljZWRfdGhyZWFkcz0wIG5yPTAgZGVjaW1hdGU9MSBpbnRlcmxhY2VkPTAgYmx1cmF5X2NvbXBhdD0wIGNvbnN0cmFpbmVkX2ludHJhPTAgYmZyYW1lcz0wIHdlaWdodHA9MCBrZXlpbnQ9MjUwIGtleWludF9taW49MSBzY2VuZWN1dD0wIGludHJhX3JlZnJlc2g9MCByYz1jcmYgbWJ0cmVlPTAgY3JmPTIzLjAgcWNvbXA9MC42MCBxcG1pbj0wIHFwbWF4PTY5IHFwc3RlcD00IGlwX3JhdGlvPTEuNDAgYXE9MACAAAAAwmWIhDomKAAIwMnJycnJycnJycnJycnJycnJycnXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXgAAAAB0GaIBWgHjAAAAAHQZpAFqAeMAAAAAdBmmAWoB4wAAAAB0GagBagHjAAAAAHQZqgFqAeMAAAAAdBmsAWoB4wAAAAB0Ga4BagHjAAAAAHQZsAF6AeMAAAAAdBmyAXoB4wAAAAB0GbQBegHjAAAAAHQZtgF6AeMAAAAAdBm4AXoB4wAAAAB0GboBegHjAAAAAHQZvAF6AeMAAAAAdBm+AXoB4wAAAAB0GaABegHjAAAAAHQZogF6AeMAAAAAdBmkAXoB4wAAAAB0GaYBegHjAAAAAHQZqAF6AeMAAAAAdBmqAXoB4wAAAAB0GawBegHjAAAAAHQZrgF6AeMAAAAAdBmwAXoB4wAAAAB0GbIBegHjAAAAAHQZtAF6AeMAAAAAdBm2AXoB4wAAAAB0GbgBegHjAAAAAHQZugF6AeMA=="
     }
 }
