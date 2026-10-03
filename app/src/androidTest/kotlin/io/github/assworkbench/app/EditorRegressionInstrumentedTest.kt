@@ -693,6 +693,13 @@ class EditorRegressionInstrumentedTest {
             .assertIsDisplayed()
 
         assertEquals(before, viewModel.state.value.document)
+
+        composeRule.onNodeWithTag("batch-karaoke-reveal-ms")
+            .performTextReplacement("-1")
+        composeRule.onNodeWithTag("batch-preview-error")
+            .performScrollTo()
+            .assertIsDisplayed()
+        assertEquals(before, viewModel.state.value.document)
     }
 
     private fun restoreRecovery() {
