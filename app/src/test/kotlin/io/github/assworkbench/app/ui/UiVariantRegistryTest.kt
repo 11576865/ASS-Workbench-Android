@@ -6,6 +6,10 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class UiVariantRegistryTest {
+    @Test fun newWorkspacesDefaultToInfiniteCanvas() {
+        assertSame(WorkspacePresentationMode.SPATIAL_EXPERIMENTAL, UiVariantRegistry.default)
+    }
+
     @Test
     fun registryContainsExistingPresentations() {
         assertTrue(UiVariantRegistry.entries.contains(WorkspacePresentationMode.FIXED))

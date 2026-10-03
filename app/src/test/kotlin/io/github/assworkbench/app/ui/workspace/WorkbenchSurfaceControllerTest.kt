@@ -4,6 +4,19 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class WorkbenchSurfaceControllerTest {
+    @Test fun infiniteScenePersistsAlongsideLegacySurfaceState() {
+        val controller = WorkbenchSurfaceController()
+        controller.ensure("A", SurfaceGeometry())
+        val scene = InfiniteCanvasPersistence.encode(InfiniteCanvasCamera(-300f, 20f, 0.8f),
+            listOf(InfiniteCanvasNode("audio", alpha = 0.2f, passthrough = true)))
+        controller.saveInfiniteScene(scene)
+        val restored = WorkbenchSurfaceController().apply { restore(controller.save()) }
+        assertEquals(scene, restored.infiniteScene)
+        assertEquals(controller.state("A", SurfaceGeometry()), restored.state("A", SurfaceGeometry()))
+        restored.restore(WorkspaceSurfacePersistence.encode(listOf(WorkspaceSurfaceState("B"))))
+        assertTrue(restored.infiniteScene.isEmpty())
+    }
+
     private val fallback = SurfaceGeometry(20f, 30f)
 
     @Test fun gestureCandidatesAreNotSavedAndCancellationRestoresLayout() {

@@ -4,6 +4,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
@@ -40,6 +41,31 @@ class PresentationStateSmokeInstrumentedTest {
     @Test
     fun spatialPreservesCanonicalStateAndExistingHistory() =
         assertPresentationInvariant("SPATIAL_EXPERIMENTAL", "spatial-workspace")
+
+    @Test fun spatialCameraAndOverlayDoNotEditDocument() {
+        composeRule.activityRule.scenario.onActivity { it.restoreDeterministicFixture() }
+        composeRule.waitUntil(10_000) { viewModel.state.value.document.events.size == 2 }
+        viewModel.focusEvent(1L, seek = false)
+        viewModel.updateEventText(1L, "Overlay invariant")
+        switchPresentation("SPATIAL_EXPERIMENTAL", "spatial-workspace")
+        val document = viewModel.state.value.document
+        val selection = viewModel.state.value.focusedEventId
+        composeRule.onNodeWithTag("spatial-zoom-out").performClick()
+        composeRule.onNodeWithTag("spatial-zoom-in").performClick()
+        composeRule.onNodeWithText("召回").performClick()
+        composeRule.onNodeWithText("波形", useUnmergedTree = true).performClick()
+        composeRule.onNodeWithTag("spatial-menu-audio").performClick()
+        composeRule.onNodeWithText("恢复实底").performClick()
+        composeRule.onNodeWithTag("spatial-menu-audio").performClick()
+        composeRule.onNodeWithText("透明叠加").performClick()
+        composeRule.onNodeWithTag("spatial-menu-audio").performClick()
+        composeRule.onNodeWithText("穿透操作视频").performClick()
+        composeRule.waitForIdle()
+        assertEquals(document, viewModel.state.value.document)
+        assertEquals(selection, viewModel.state.value.focusedEventId)
+        viewModel.undo()
+        composeRule.waitUntil(5_000) { eventText(1L) == "Recovered line" }
+    }
 
     @Test
     fun toolInstancesPreserveCanonicalStateAndExistingHistory() =

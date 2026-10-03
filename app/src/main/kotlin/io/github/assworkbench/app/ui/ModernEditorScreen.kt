@@ -76,6 +76,8 @@ import io.github.assworkbench.app.ui.interaction.rememberInteractionOverlayRegis
 import io.github.assworkbench.app.ui.preview.PreviewTargetCandidate
 import io.github.assworkbench.app.ui.preview.PreviewTargetConfidence
 import io.github.assworkbench.app.ui.preview.PreviewTargetResolver
+import io.github.assworkbench.app.ui.workspace.InfiniteCanvasHost
+import io.github.assworkbench.app.ui.workspace.InfiniteCanvasEntry
 import io.github.assworkbench.app.ui.workspace.WorkspaceBinding
 import io.github.assworkbench.app.ui.workspace.SurfaceGeometry
 import io.github.assworkbench.app.ui.workspace.FloatingWorkbenchSurface
@@ -115,6 +117,7 @@ fun ModernEditorScreen(
     onEnableRenderer: () -> Unit,
     appearance: WorkbenchAppearance = WorkbenchAppearance.SYSTEM,
     onAppearanceChange: (WorkbenchAppearance) -> Unit = {},
+    initialWorkspaceModeName: String = UiVariantRegistry.default.name,
 ) {
     var workspaceState by rememberSaveable(
         stateSaver = listSaver(
@@ -139,7 +142,7 @@ fun ModernEditorScreen(
     var mkvConfirmOpen by remember { mutableStateOf(false) }
     var destructiveWorkspaceAction by remember { mutableStateOf<DestructiveWorkspaceAction?>(null) }
     val context = LocalContext.current
-    var workspaceModeName by rememberSaveable { mutableStateOf(WorkspacePresentationMode.FIXED.name) }
+    var workspaceModeName by rememberSaveable { mutableStateOf(initialWorkspaceModeName) }
     var fixedToolName by rememberSaveable { mutableStateOf(WorkbenchTool.STYLE.name) }
     var fixedNavigationRevision by rememberSaveable { mutableIntStateOf(0) }
     var fixedListRequested by rememberSaveable { mutableStateOf(false) }
@@ -155,7 +158,7 @@ fun ModernEditorScreen(
             expandedEventId = null
             fixedToolName = WorkbenchTool.STYLE.name
             fixedListRequested = false
-            workspaceModeName = WorkspacePresentationMode.FIXED.name
+            workspaceModeName = initialWorkspaceModeName
         }
     }
 
@@ -554,6 +557,14 @@ fun ModernEditorScreen(
                 )
             } else if (workspaceMode == WorkspacePresentationMode.SPATIAL_EXPERIMENTAL) {
                 SpatialWorkspace(
+                    surfaceController = surfaceController,
+                    workspaceState = workspaceState,
+                    interactionRegistry = interactionRegistry,
+                    positionEditEventId = positionEditEventId,
+                    onActivateInstance = { id ->
+                        workspaceState = workspaceState.activate(id)
+                        workspaceState.tools.firstOrNull { it.id == id }?.let { fixedToolName = it.toolKey }
+                    },
                     state = state,
                     viewModel = viewModel,
                     issues = issues,
@@ -835,7 +846,7 @@ fun ModernEditorScreen(
                 WorkspacePresentationMode.FIXED -> fixedTool == WorkbenchTool.POSITION
                 WorkspacePresentationMode.CANVAS_EXPERIMENTAL -> !workspaceState.surfacesHidden
                 WorkspacePresentationMode.PAGER_EXPERIMENTAL -> false
-                WorkspacePresentationMode.SPATIAL_EXPERIMENTAL -> false
+                WorkspacePresentationMode.SPATIAL_EXPERIMENTAL -> fixedTool == WorkbenchTool.POSITION
                 WorkspacePresentationMode.PRECISION_LENS_EXPERIMENTAL -> false
                 WorkspacePresentationMode.TOOL_INSTANCES_EXPERIMENTAL -> false
                 WorkspacePresentationMode.GLASS_LAYERED_EXPERIMENTAL -> false
@@ -2782,6 +2793,11 @@ private fun ObjectRelationPanel(
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun SpatialWorkspace(
+    surfaceController: WorkbenchSurfaceController,
+    workspaceState: WorkspaceState,
+    interactionRegistry: InteractionOverlayRegistry,
+    positionEditEventId: Long?,
+    onActivateInstance: (String) -> Unit,
     state: EditorState,
     viewModel: EditorViewModel,
     issues: List<AssQcIssue>,
@@ -2801,280 +2817,69 @@ private fun SpatialWorkspace(
     onCloseSearch: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val worldWidth = 1800.dp
-    val worldHeight = 1320.dp
-    var scale by rememberSaveable { mutableFloatStateOf(0.82f) }
-    var offsetX by rememberSaveable { mutableFloatStateOf(-80f) }
-    var offsetY by rememberSaveable { mutableFloatStateOf(-60f) }
-    var navigationMode by rememberSaveable { mutableStateOf(false) }
-
-    BoxWithConstraints(modifier.clipToBounds()) {
-        val density = LocalDensity.current
-        val fitScale = minOf(
-            maxWidth.value / worldWidth.value,
-            maxHeight.value / worldHeight.value,
-        ).coerceIn(0.2f, 1f)
-
-        fun focusWorldPoint(x: Dp, y: Dp, targetScale: Float = 0.9f) {
-            scale = targetScale.coerceIn(0.35f, 1.6f)
-            with(density) {
-                offsetX = -(x.toPx() * scale) + 20.dp.toPx()
-                offsetY = -(y.toPx() * scale) + 20.dp.toPx()
-            }
-        }
-
-        fun transform(pan: Offset, zoom: Float) {
-            val nextScale = (scale * zoom).coerceIn(0.25f, 1.8f)
-            offsetX += pan.x
-            offsetY += pan.y
-            scale = nextScale
-        }
-
-        Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceContainerLowest)) {
-            Box(
-                Modifier.fillMaxSize()
-                    .testTag("spatial-background")
-                    .pointerInput(scale) {
-                        detectTransformGestures { _, pan, zoom, _ -> transform(pan, zoom) }
-                    }
-            )
-
-            Box(
-                Modifier.size(worldWidth, worldHeight)
-                    .graphicsLayer {
-                        scaleX = scale
-                        scaleY = scale
-                        translationX = offsetX
-                        translationY = offsetY
-                        transformOrigin = TransformOrigin(0f, 0f)
-                    }
-                    .testTag("spatial-world"),
-            ) {
-                SpatialNode(
-                    title = "预览",
-                    subtitle = "实时视频 / ASS",
-                    modifier = Modifier.offset(x = 72.dp, y = 72.dp).size(760.dp, 460.dp)
-                        .testTag("spatial-node-preview"),
-                ) {
-                    WorkbenchPreview(
-                        state = state,
-                        viewModel = viewModel,
-                        positionEditEventId = null,
-                        onOpenVideo = onOpenVideo,
-                        onOpenTimeline = { onActiveTool(WorkbenchTool.TIMELINE) },
-                        rendererEnabled = rendererEnabled,
-                        onEnableRenderer = onEnableRenderer,
-                        onEditEventPosition = { eventId ->
-                            onEditEventPosition(eventId)
-                            onActiveTool(WorkbenchTool.POSITION)
-                        },
-                        viewportGesturesEnabled = true,
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                }
-
-                SpatialNode(
-                    title = "字幕导航",
-                    subtitle = "Event / Search / Selection",
-                    modifier = Modifier.offset(x = 900.dp, y = 92.dp).size(520.dp, 620.dp)
-                        .testTag("spatial-node-subtitles"),
-                ) {
-                    Column(Modifier.fillMaxSize()) {
-                        if (searchOpen) SearchStrip(state.query, viewModel::setQuery, onCloseSearch)
-                        EventWorkspace(
-                            state = state,
-                            viewModel = viewModel,
-                            issuesByEvent = issues.groupBy { it.eventId },
-                            expandedEventId = expandedEventId,
-                            onExpandedChange = { next ->
-                                onExpandedChange(next)
-                                if (next != null) onActiveTool(WorkbenchTool.TEXT)
-                            },
-                            onTool = onActiveTool,
-                            eventEditorStateHolder = eventEditorStateHolder,
-                            tool = WorkbenchTool.TEXT,
-                            modifier = Modifier.fillMaxSize(),
-                        ) { }
-                    }
-                }
-
-                SpatialNode(
-                    title = activeTool.title,
-                    subtitle = "当前工具 · " + activeTool.group.title,
-                    modifier = Modifier.offset(x = 300.dp, y = 660.dp).size(720.dp, 560.dp)
-                        .testTag("spatial-node-tool"),
-                ) {
-                    Column(Modifier.fillMaxSize()) {
-                        Row(
-                            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
-                                .padding(horizontal = 8.dp, vertical = 4.dp),
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        ) {
-                            AssistChip(
-                                onClick = { onActiveTool(WorkbenchTool.CAPABILITIES) },
-                                label = { Text("全部工具") },
-                                leadingIcon = { Icon(Icons.Filled.Apps, null, Modifier.size(18.dp)) },
-                            )
-                            WorkbenchTool.entries
-                                .filter {
-                                    it.group == activeTool.group &&
-                                        it != WorkbenchTool.SUBTITLES &&
-                                        it != WorkbenchTool.CAPABILITIES
-                                }
-                                .forEach { tool ->
-                                    FilterChip(
-                                        selected = tool == activeTool,
-                                        onClick = { onActiveTool(tool) },
-                                        label = { Text(tool.title) },
-                                    )
-                                }
-                        }
-                        FloatingToolContent(
-                            instance = instance,
-                            tool = activeTool,
-                            state = state,
-                            viewModel = viewModel,
-                            issues = issues,
-                            expandedEventId = expandedEventId,
-                            onExpandedChange = onExpandedChange,
-                            onImportFont = onImportFont,
-                            onSaveMkv = onSaveMkv,
-                            eventEditorStateHolder = eventEditorStateHolder,
-                            onOpenTool = onActiveTool,
-                            onCloseText = { onExpandedChange(null) },
-                            searchOpen = searchOpen,
-                            onCloseSearch = onCloseSearch,
-                        )
-                    }
-                }
-
-                Surface(
-                    modifier = Modifier.offset(x = 1120.dp, y = 820.dp).size(420.dp, 230.dp)
-                        .testTag("spatial-node-map"),
-                    shape = RoundedCornerShape(24.dp),
-                    color = MaterialTheme.colorScheme.surfaceContainerLow,
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                ) {
-                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("工作现场索引", style = MaterialTheme.typography.titleMedium)
-                        Text(
-                            "预览 · 字幕导航 · 当前工具",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Text(
-                            "缩放 ${(scale * 100).roundToInt()}% · X ${offsetX.roundToInt()} · Y ${offsetY.roundToInt()}",
-                            style = MaterialTheme.typography.labelMedium,
-                        )
-                    }
-                }
-            }
-
-            if (navigationMode) {
-                Box(
-                    Modifier.fillMaxSize()
-                        .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.06f))
-                        .testTag("spatial-navigation-overlay")
-                        .pointerInput(scale) {
-                            detectTransformGestures { _, pan, zoom, _ -> transform(pan, zoom) }
-                        }
-                )
-            }
-
-            Surface(
-                modifier = Modifier.align(Alignment.TopCenter).padding(8.dp),
-                shape = RoundedCornerShape(22.dp),
-                tonalElevation = 4.dp,
-                color = MaterialTheme.colorScheme.surfaceContainerHigh,
-            ) {
-                Row(
-                    Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp, vertical = 4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    FilterChip(
-                        selected = navigationMode,
-                        onClick = { navigationMode = !navigationMode },
-                        label = { Text(if (navigationMode) "导航中" else "导航") },
-                        leadingIcon = { Icon(Icons.Filled.OpenWith, null, Modifier.size(18.dp)) },
-                        modifier = Modifier.testTag("spatial-navigation-mode"),
-                    )
-                    AssistChip(
-                        onClick = {
-                            scale = fitScale
-                            offsetX = 0f
-                            offsetY = 0f
-                        },
-                        label = { Text("鸟瞰") },
-                        leadingIcon = { Icon(Icons.Filled.GridView, null, Modifier.size(18.dp)) },
-                        modifier = Modifier.testTag("spatial-overview"),
-                    )
-                    AssistChip(
-                        onClick = { focusWorldPoint(72.dp, 72.dp, 0.92f) },
-                        label = { Text("预览") },
-                        leadingIcon = { Icon(Icons.Filled.Movie, null, Modifier.size(18.dp)) },
-                        modifier = Modifier.testTag("spatial-focus-preview"),
-                    )
-                    AssistChip(
-                        onClick = { focusWorldPoint(900.dp, 92.dp, 0.9f) },
-                        label = { Text("当前字幕") },
-                        leadingIcon = { Icon(Icons.Filled.Subtitles, null, Modifier.size(18.dp)) },
-                        modifier = Modifier.testTag("spatial-focus-subtitles"),
-                    )
-                    AssistChip(
-                        onClick = { focusWorldPoint(300.dp, 660.dp, 0.9f) },
-                        label = { Text("工具") },
-                        leadingIcon = { Icon(Icons.Filled.Tune, null, Modifier.size(18.dp)) },
-                        modifier = Modifier.testTag("spatial-focus-tool"),
-                    )
-                    IconButton(
-                        onClick = { scale = (scale / 1.15f).coerceAtLeast(0.25f) },
-                        modifier = Modifier.testTag("spatial-zoom-out"),
-                    ) { Icon(Icons.Filled.Remove, "缩小工作区") }
-                    Text("${(scale * 100).roundToInt()}%", style = MaterialTheme.typography.labelLarge)
-                    IconButton(
-                        onClick = { scale = (scale * 1.15f).coerceAtMost(1.8f) },
-                        modifier = Modifier.testTag("spatial-zoom-in"),
-                    ) { Icon(Icons.Filled.Add, "放大工作区") }
-                }
-            }
+    val visibleTools = workspaceState.tools.filter { it.presence != WorkspaceToolPresence.HIDDEN }
+    val entries = listOf(
+        InfiniteCanvasEntry("preview", "视频", "实时视频 / ASS"),
+        InfiniteCanvasEntry("subtitles", "字幕", "选择 / 文本"),
+        InfiniteCanvasEntry("audio", "波形", "真实音轨 · 与视频同步"),
+    ) + visibleTools.mapNotNull { toolInstance ->
+        WorkbenchTool.entries.firstOrNull { it.name == toolInstance.toolKey }?.let { tool ->
+            InfiniteCanvasEntry(toolInstance.id, tool.title,
+                if (toolInstance.binding is WorkspaceBinding.PinnedEvent) "固定字幕对象" else "跟随当前选择")
         }
     }
-}
-
-@Composable
-private fun SpatialNode(
-    title: String,
-    subtitle: String,
-    modifier: Modifier = Modifier,
-    content: @Composable () -> Unit,
-) {
-    Surface(
+    InfiniteCanvasHost(
+        sessionId = state.workspaceSessionId,
+        savedScene = surfaceController.infiniteScene,
+        onSaveScene = surfaceController::saveInfiniteScene,
+        entries = entries,
+        gestureOwned = interactionRegistry.activeHandleId != null,
+        onAddTool = { onActiveTool(WorkbenchTool.CAPABILITIES) },
+        onActivate = { id -> if (visibleTools.any { it.id == id }) onActivateInstance(id) },
+        onUndo = viewModel::undo,
+        onRedo = viewModel::redo,
+        canUndo = state.canUndo,
+        canRedo = state.canRedo,
         modifier = modifier,
-        shape = RoundedCornerShape(24.dp),
-        tonalElevation = 2.dp,
-        shadowElevation = 5.dp,
-        color = MaterialTheme.colorScheme.surfaceContainer,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-    ) {
-        Column(Modifier.fillMaxSize()) {
-            Row(
-                Modifier.fillMaxWidth().height(46.dp).padding(horizontal = 14.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(Modifier.weight(1f)) {
-                    Text(title, style = MaterialTheme.typography.titleSmall, maxLines = 1)
-                    Text(
-                        subtitle,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                    )
-                }
-                Icon(Icons.Filled.DragIndicator, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+    ) { id, interactive ->
+        when (id) {
+            "preview" -> WorkbenchPreview(
+                state = state, viewModel = viewModel,
+                positionEditEventId = if (activeTool == WorkbenchTool.POSITION) positionEditEventId else null,
+                onOpenVideo = onOpenVideo,
+                onOpenTimeline = { onActiveTool(WorkbenchTool.TIMELINE) },
+                rendererEnabled = rendererEnabled, onEnableRenderer = onEnableRenderer,
+                onEditEventPosition = onEditEventPosition,
+                interactionRegistry = if (activeTool == WorkbenchTool.POSITION) interactionRegistry else null,
+                viewportGesturesEnabled = activeTool != WorkbenchTool.POSITION,
+                modifier = Modifier.fillMaxSize(),
+            )
+            "subtitles" -> Column(Modifier.fillMaxSize()) {
+                if (searchOpen) SearchStrip(state.query, viewModel::setQuery, onCloseSearch)
+                EventWorkspace(
+                    state = state, viewModel = viewModel,
+                    issuesByEvent = issues.groupBy { it.eventId },
+                    expandedEventId = expandedEventId,
+                    onExpandedChange = { next ->
+                        onExpandedChange(next)
+                        if (next != null) onActiveTool(WorkbenchTool.TEXT)
+                    },
+                    onTool = onActiveTool, eventEditorStateHolder = eventEditorStateHolder,
+                    tool = WorkbenchTool.TEXT, modifier = Modifier.fillMaxSize(),
+                ) { }
             }
-            HorizontalDivider()
-            Box(Modifier.weight(1f).fillMaxWidth()) { content() }
+            "audio" -> InfiniteAudioEvidence(state, viewModel, interactive)
+            else -> visibleTools.firstOrNull { it.id == id }?.let { toolInstance ->
+                val tool = WorkbenchTool.entries.firstOrNull { it.name == toolInstance.toolKey } ?: return@let
+                FloatingToolContent(
+                    instance = toolInstance, tool = tool, state = state, viewModel = viewModel,
+                    issues = issues, expandedEventId = expandedEventId,
+                    onExpandedChange = onExpandedChange, onImportFont = onImportFont,
+                    onSaveMkv = onSaveMkv, eventEditorStateHolder = eventEditorStateHolder,
+                    onOpenTool = onActiveTool, onCloseText = { onExpandedChange(null) },
+                    searchOpen = searchOpen, onCloseSearch = onCloseSearch,
+                )
+            }
         }
     }
 }

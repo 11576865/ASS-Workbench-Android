@@ -33,9 +33,9 @@ internal enum class WorkspacePresentationMode(
         description = "字幕、预览、当前工具三页切换；一次只把一个主要任务放到前台。",
     ),
     SPATIAL_EXPERIMENTAL(
-        title = "空间工作现场",
+        title = "无限画布",
         status = UiVariantStatus.EXPERIMENTAL,
-        description = "把预览、字幕与工具放进大于屏幕的二维工作区；支持平移、缩放、鸟瞰与节点召回。",
+        description = "自由组织真实视频、字幕与工具；支持无限平移、触点缩放、透明波形叠加与召回。",
     ),
     PRECISION_LENS_EXPERIMENTAL(
         title = "操纵杆精密放大工作台",
@@ -74,7 +74,7 @@ internal enum class WorkspacePresentationMode(
 internal object UiVariantRegistry {
     val entries: List<WorkspacePresentationMode> = WorkspacePresentationMode.entries
 
-    val default: WorkspacePresentationMode = WorkspacePresentationMode.FIXED
+    val default: WorkspacePresentationMode = WorkspacePresentationMode.SPATIAL_EXPERIMENTAL
 
     fun resolve(persistedName: String?): WorkspacePresentationMode =
         WorkspacePresentationMode.entries.firstOrNull { it.name == persistedName } ?: default
