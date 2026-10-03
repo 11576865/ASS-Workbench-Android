@@ -35,6 +35,74 @@ class AssKaraokeFxAuthoringTest {
     }
 
     @Test
+    fun batchRevealPreservesDocumentOrderAndFailsAtomically() {
+        val document = AssDocument(
+            events = listOf(
+                AssEvent(
+                    id = 7,
+                    start = SubTime(0),
+                    end = SubTime(1000),
+                    text = "{\\k10}A{\\k20}B",
+                ),
+                AssEvent(
+                    id = 3,
+                    start = SubTime(1000),
+                    end = SubTime(2000),
+                    text = "{\\kf15}C{\\ko15}D",
+                ),
+            )
+        )
+
+        val result = AssKaraokeFxAuthoring.planProgressiveRevealBatch(
+            document = document,
+            eventIds = setOf(3, 7),
+            spec = AssKaraokeRevealFxSpec(revealMs = 80, startBlur = 2.0),
+        )
+
+        assertEquals(listOf(7L, 3L), result.sourceEventIds)
+        assertEquals(mapOf(7L to 2, 3L to 2), result.segmentCountByEvent)
+        assertEquals(4, result.totalSegmentCount)
+        assertTrue(result.document.events[0].text.contains("\\t(0,80,\\alpha&H00&\\blur0)"))
+        assertTrue(result.document.events[1].text.contains("\\t(0,80,\\alpha&H00&\\blur0)"))
+
+        val invalid = document.copy(
+            events = listOf(
+                document.events[0],
+                document.events[1].copy(text = "{\\kt15}C"),
+            )
+        )
+        val error = assertFailsWith<IllegalArgumentException> {
+            AssKaraokeFxAuthoring.planProgressiveRevealBatch(
+                document = invalid,
+                eventIds = setOf(7, 3),
+            )
+        }
+        assertTrue(error.message.orEmpty().contains("字幕 #3"))
+        assertEquals(document.events[0].text, invalid.events[0].text)
+        assertEquals("{\\kt15}C", invalid.events[1].text)
+    }
+
+    @Test
+    fun batchRejectsCommentEventsInsteadOfGeneratingInvisibleFx() {
+        val document = AssDocument(
+            events = listOf(
+                AssEvent(
+                    id = 1,
+                    comment = true,
+                    start = SubTime(0),
+                    end = SubTime(1000),
+                    text = "{\\k20}Hidden",
+                )
+            )
+        )
+
+        val error = assertFailsWith<IllegalArgumentException> {
+            AssKaraokeFxAuthoring.planProgressiveRevealBatch(document, setOf(1))
+        }
+        assertTrue(error.message.orEmpty().contains("Comment"))
+    }
+
+    @Test
     fun rejectsAbsoluteKtAndExistingControlledFx() {
         assertFailsWith<IllegalArgumentException> {
             AssKaraokeFxAuthoring.applyProgressiveReveal("{\\kt50}A")
