@@ -19,9 +19,15 @@ data class MatroskaTrackInfo(
     val kind: MatroskaTrackKind,
     val name: String,
     val language: String,
+    val languageBcp47: String = "",
     val codecId: String,
     val isDefault: Boolean,
     val isForced: Boolean,
+    val hearingImpaired: Boolean = false,
+    val visualImpaired: Boolean = false,
+    val textDescriptions: Boolean = false,
+    val original: Boolean = false,
+    val commentary: Boolean = false,
     val contentHash: String? = null,
 )
 
