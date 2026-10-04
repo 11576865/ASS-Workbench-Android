@@ -84,9 +84,15 @@ internal fun MatroskaScanResult.trackPreservationSignature(): List<String> =
             it.typeCode.toString(),
             it.codecId,
             it.language,
+            it.languageBcp47,
             it.name,
             it.isDefault.toString(),
             it.isForced.toString(),
+            it.hearingImpaired.toString(),
+            it.visualImpaired.toString(),
+            it.textDescriptions.toString(),
+            it.original.toString(),
+            it.commentary.toString(),
         ).joinToString("\u001f")
     }
 
@@ -122,8 +128,14 @@ internal fun verifyContainerTrackMutations(
             require(
                 after.name == before.name &&
                     after.language == before.language &&
+                    after.languageBcp47 == before.languageBcp47 &&
                     after.isDefault == before.isDefault &&
-                    after.isForced == before.isForced
+                    after.isForced == before.isForced &&
+                    after.hearingImpaired == before.hearingImpaired &&
+                    after.visualImpaired == before.visualImpaired &&
+                    after.textDescriptions == before.textDescriptions &&
+                    after.original == before.original &&
+                    after.commentary == before.commentary
             ) {
                 "写回验证失败：未计划修改的 Track #${before.number} 元数据发生变化"
             }
@@ -139,6 +151,24 @@ internal fun verifyContainerTrackMutations(
             }
             require(after.isForced == edit.isForced) {
                 "写回验证失败：Track #${before.number} Forced 标志修改未生效"
+            }
+            require(after.languageBcp47 == edit.languageBcp47) {
+                "写回验证失败：Track #${before.number} BCP 47 语言修改未生效"
+            }
+            require(after.hearingImpaired == edit.hearingImpaired) {
+                "写回验证失败：Track #${before.number} HearingImpaired 标志修改未生效"
+            }
+            require(after.visualImpaired == edit.visualImpaired) {
+                "写回验证失败：Track #${before.number} VisualImpaired 标志修改未生效"
+            }
+            require(after.textDescriptions == edit.textDescriptions) {
+                "写回验证失败：Track #${before.number} TextDescriptions 标志修改未生效"
+            }
+            require(after.original == edit.original) {
+                "写回验证失败：Track #${before.number} Original 标志修改未生效"
+            }
+            require(after.commentary == edit.commentary) {
+                "写回验证失败：Track #${before.number} Commentary 标志修改未生效"
             }
         }
     }
@@ -172,8 +202,14 @@ internal fun verifyContainerTrackMutations(
         require(
             actual.name == planned.name &&
                 actual.language == planned.language &&
+                actual.languageBcp47 == planned.languageBcp47 &&
                 actual.isDefault == planned.isDefault &&
-                actual.isForced == planned.isForced
+                actual.isForced == planned.isForced &&
+                actual.hearingImpaired == planned.hearingImpaired &&
+                actual.visualImpaired == planned.visualImpaired &&
+                actual.textDescriptions == planned.textDescriptions &&
+                actual.original == planned.original &&
+                actual.commentary == planned.commentary
         ) {
             "写回验证失败：导入轨道 metadata 与计划不一致：${planned.sourceName} Track #${planned.sourceTrackNumber}"
         }
@@ -223,10 +259,16 @@ private fun MatroskaScanResult.inventoryItems(): List<InventoryItem> {
         }
         val detail = buildList {
             if (info.codecId.isNotBlank()) add(info.codecId)
-            if (info.language.isNotBlank()) add(info.language)
+            if (info.languageBcp47.isNotBlank()) add(info.languageBcp47)
+            else if (info.language.isNotBlank()) add(info.language)
             add("Track #${info.number}")
             if (info.isDefault) add("Default")
             if (info.isForced) add("Forced")
+            if (info.hearingImpaired) add("Hearing impaired")
+            if (info.visualImpaired) add("Visual impaired")
+            if (info.textDescriptions) add("Text descriptions")
+            if (info.original) add("Original")
+            if (info.commentary) add("Commentary")
             assEvents[info.number]?.let { add("$it events") }
         }.joinToString(" · ")
         val strongKey = info.uid?.let { "track:uid:$it" }
@@ -236,9 +278,15 @@ private fun MatroskaScanResult.inventoryItems(): List<InventoryItem> {
             info.kind.name,
             info.codecId,
             info.language,
+            info.languageBcp47,
             info.name,
             info.isDefault.toString(),
             info.isForced.toString(),
+            info.hearingImpaired.toString(),
+            info.visualImpaired.toString(),
+            info.textDescriptions.toString(),
+            info.original.toString(),
+            info.commentary.toString(),
             info.contentHash.orEmpty(),
         ).joinToString("\u001f")
         items += InventoryItem(
@@ -258,8 +306,14 @@ private fun MatroskaScanResult.inventoryItems(): List<InventoryItem> {
                 trackCodecId = info.codecId,
                 trackName = info.name,
                 trackLanguage = info.language,
+                trackLanguageBcp47 = info.languageBcp47,
                 trackIsDefault = info.isDefault,
                 trackIsForced = info.isForced,
+                trackHearingImpaired = info.hearingImpaired,
+                trackVisualImpaired = info.visualImpaired,
+                trackTextDescriptions = info.textDescriptions,
+                trackOriginal = info.original,
+                trackCommentary = info.commentary,
                 editableAss = info.kind == MatroskaTrackKind.SUBTITLE && info.codecId == "S_TEXT/ASS",
             ),
         )
