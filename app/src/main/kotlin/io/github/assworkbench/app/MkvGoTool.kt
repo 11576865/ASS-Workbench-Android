@@ -313,7 +313,7 @@ class MkvGoTool(private val context: Context) {
                     ContainerTrackImportSourceKind.STANDALONE_SRT -> {
                         val sha256 = addition.sourceSha256.orEmpty()
                         require(sha256.matches(Regex("[0-9a-fA-F]{64}"))) {
-                            "独立 ASS 来源缺少有效 SHA-256 证据"
+                            "独立字幕规范化来源缺少有效 SHA-256 证据"
                         }
                         args += "--add-ass-track"
                         args += addition.source.absolutePath
