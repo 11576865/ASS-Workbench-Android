@@ -244,6 +244,84 @@ class ContainerEditPlanTest {
     }
 
     @Test
+    fun trackMetadataV2AppearsInMutationDetail() {
+        val resource = ContainerResourceUi(
+            rowKey = "track:uid:101",
+            kind = ContainerResourceKind.AUDIO,
+            title = "Commentary",
+            detail = "A_OPUS · Track #1",
+            trackNumber = 1L,
+            trackTarget = "uid:101",
+            trackLanguage = "eng",
+            trackLanguageBcp47 = "en-US",
+        )
+        val state = EditorState(
+            container = ContainerBridgeState(
+                uri = "fixture-source",
+                writeBackAvailable = true,
+                resources = listOf(resource),
+                pendingTrackMetadataEdits = listOf(
+                    PendingContainerTrackMetadataUi(
+                        target = "uid:101",
+                        number = 1L,
+                        originalName = "Commentary",
+                        name = "Director commentary",
+                        language = "eng",
+                        isDefault = false,
+                        isForced = false,
+                        languageBcp47 = "en-GB",
+                        hearingImpaired = true,
+                        commentary = true,
+                    )
+                ),
+            ),
+        )
+
+        val plan = buildContainerEditPlan(state)
+
+        assertTrue(plan.executable)
+        val mutation = plan.mutations.single()
+        assertEquals(ContainerMutationKind.EDIT_TRACK_METADATA, mutation.kind)
+        assertTrue(mutation.detail.contains("BCP 47 en-GB"))
+        assertTrue(mutation.detail.contains("Hearing impaired"))
+        assertTrue(mutation.detail.contains("Commentary"))
+    }
+
+    @Test
+    fun invalidBcp47BlocksPreflight() {
+        val state = EditorState(
+            container = ContainerBridgeState(
+                uri = "fixture-source",
+                writeBackAvailable = true,
+                pendingTrackImports = listOf(
+                    PendingContainerTrackImportUi(
+                        sourceUri = "content://fixture/external.mkv",
+                        sourceName = "external.mkv",
+                        sourceTrackNumber = 3L,
+                        sourceTrackUid = 303L,
+                        kind = ContainerResourceKind.AUDIO,
+                        codecId = "A_OPUS",
+                        name = "Commentary",
+                        language = "eng",
+                        isDefault = false,
+                        isForced = false,
+                        sourceAttachmentCount = 0,
+                        languageBcp47 = "en--US",
+                    )
+                ),
+            ),
+        )
+
+        val plan = buildContainerEditPlan(state)
+
+        assertFalse(plan.executable)
+        assertEquals(
+            ContainerCompatibilityStatus.UNSUPPORTED,
+            plan.checks.single { it.dimension == ContainerCompatibilityDimension.CONTAINER_STRUCTURE }.status,
+        )
+    }
+
+    @Test
     fun removingAllTracksBlocksPreflight() {
         val resources = listOf(
             ContainerResourceUi(
