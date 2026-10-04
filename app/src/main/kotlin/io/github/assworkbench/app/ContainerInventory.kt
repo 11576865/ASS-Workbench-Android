@@ -218,6 +218,7 @@ private fun MatroskaScanResult.inventoryItems(): List<InventoryItem> {
                 trackTarget = info.uid?.let { "uid:$it" } ?: "number:${info.number}",
                 trackUid = info.uid,
                 trackCodecId = info.codecId,
+                trackName = info.name,
                 trackLanguage = info.language,
                 trackIsDefault = info.isDefault,
                 trackIsForced = info.isForced,
