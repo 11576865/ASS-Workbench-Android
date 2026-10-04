@@ -1264,6 +1264,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                             TrackAdditionInput(
                                 source = sourceFile,
                                 sourceTrackNumber = addition.sourceTrackNumber,
+                                sourceTrackUid = addition.sourceTrackUid,
                                 name = addition.name,
                                 language = addition.language,
                                 isDefault = addition.isDefault,
