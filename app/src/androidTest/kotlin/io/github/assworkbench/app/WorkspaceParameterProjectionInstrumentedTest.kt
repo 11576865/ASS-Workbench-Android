@@ -4,11 +4,16 @@ import androidx.activity.ComponentActivity
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextReplacement
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.geometry.Offset
 import androidx.lifecycle.ViewModelProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.assworkbench.app.ui.workspace.WorkspaceBinding
@@ -80,12 +85,15 @@ class WorkspaceParameterProjectionInstrumentedTest {
         composeRule.setContent {
             MaterialTheme {
                 val state by viewModel.state.collectAsState()
+                var presentation by remember {
+                    mutableStateOf(WorkspaceParameterPresentation.NUMBER)
+                }
                 WorkspaceParameterProjectionPane(
-                    projection = projection,
+                    projection = projection.copy(presentation = presentation),
                     state = state,
                     viewModel = viewModel,
                     onRemove = {},
-                    onPresentationChange = {},
+                    onPresentationChange = { presentation = it },
                 )
             }
         }
@@ -126,5 +134,34 @@ class WorkspaceParameterProjectionInstrumentedTest {
         assertEquals(before, viewModel.state.value.document)
         assertFalse(viewModel.state.value.canUndo)
         assertNull(viewModel.state.value.previewDocument)
+    }
+
+    @Test
+    fun angleDialUsesSamePreviewCommitUndoBoundary() {
+        val before = viewModel.state.value.document
+        val suffix = projection.id.replace(':', '-')
+
+        composeRule.onNodeWithText("角度盘").performClick()
+        composeRule.onNodeWithTag("parameter-projection-dial-$suffix")
+            .assertIsDisplayed()
+            .performTouchInput {
+                down(center)
+                moveBy(Offset(80f, 0f))
+                up()
+            }
+
+        composeRule.waitUntil(5_000) {
+            viewModel.state.value.previewDocument == null &&
+                viewModel.state.value.document != before
+        }
+        val angle = AssGeometrySemantic.inspect(
+            viewModel.state.value.document.events.single().text
+        ).rotationZ ?: Double.NaN
+        assertEquals(90.0, angle, 3.0)
+
+        composeRule.runOnIdle { viewModel.undo() }
+        composeRule.waitForIdle()
+        assertEquals(before, viewModel.state.value.document)
+        assertFalse(viewModel.state.value.canUndo)
     }
 }
