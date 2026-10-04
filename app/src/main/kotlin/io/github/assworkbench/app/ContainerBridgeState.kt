@@ -94,6 +94,7 @@ data class PendingContainerTrackMetadataUi(
     val originalName: String,
     val name: String,
     val language: String,
+    val sourceIsDefault: Boolean = false,
     val isDefault: Boolean,
     val isForced: Boolean,
 )
