@@ -796,6 +796,7 @@ class EditorRegressionInstrumentedTest {
             .performScrollTo()
             .assertIsDisplayed()
         composeRule.onNodeWithTag("batch-preview-pending")
+            .performScrollTo()
             .assertIsDisplayed()
 
         assertEquals(before, viewModel.state.value.document)
