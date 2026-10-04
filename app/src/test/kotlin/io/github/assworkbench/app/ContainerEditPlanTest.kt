@@ -327,4 +327,108 @@ class ContainerEditPlanTest {
             plan.checks.single { it.dimension == ContainerCompatibilityDimension.CONTAINER_STRUCTURE }.status,
         )
     }
+
+    @Test
+    fun externalTrackImportIsExplicitMutation() {
+        val state = EditorState(
+            container = ContainerBridgeState(
+                uri = "fixture-source",
+                writeBackAvailable = true,
+                pendingTrackImports = listOf(
+                    PendingContainerTrackImportUi(
+                        sourceUri = "content://fixture/external.mkv",
+                        sourceName = "external.mkv",
+                        sourceTrackNumber = 3L,
+                        sourceTrackUid = 303L,
+                        kind = ContainerResourceKind.AUDIO,
+                        codecId = "A_OPUS",
+                        name = "Commentary",
+                        language = "eng",
+                        isDefault = false,
+                        isForced = false,
+                        sourceAttachmentCount = 0,
+                    )
+                ),
+            ),
+        )
+
+        val plan = buildContainerEditPlan(state)
+
+        assertTrue(plan.executable)
+        assertEquals(ContainerMutationKind.ADD_TRACK, plan.mutations.single().kind)
+        assertEquals(ContainerMutationSource.EXTERNAL_TRACK, plan.mutations.single().source)
+        assertTrue(plan.mutations.single().detail.contains("external.mkv"))
+        assertEquals(
+            ContainerCompatibilityStatus.WARNING,
+            plan.checks.single { it.dimension == ContainerCompatibilityDimension.DOWNSTREAM }.status,
+        )
+    }
+
+    @Test
+    fun duplicateTrackImportBlocksPreflight() {
+        val imported = PendingContainerTrackImportUi(
+            sourceUri = "content://fixture/external.mkv",
+            sourceName = "external.mkv",
+            sourceTrackNumber = 3L,
+            sourceTrackUid = 303L,
+            kind = ContainerResourceKind.AUDIO,
+            codecId = "A_OPUS",
+            name = "Commentary",
+            language = "eng",
+            isDefault = false,
+            isForced = false,
+            sourceAttachmentCount = 0,
+        )
+        val state = EditorState(
+            container = ContainerBridgeState(
+                uri = "fixture-source",
+                writeBackAvailable = true,
+                pendingTrackImports = listOf(imported, imported.copy(name = "Duplicate")),
+            ),
+        )
+
+        val plan = buildContainerEditPlan(state)
+
+        assertFalse(plan.executable)
+        assertEquals(
+            ContainerCompatibilityStatus.UNSUPPORTED,
+            plan.checks.single { it.dimension == ContainerCompatibilityDimension.CONTAINER_STRUCTURE }.status,
+        )
+    }
+
+    @Test
+    fun subtitleTrackImportWithSourceAttachmentsProducesExplicitWarning() {
+        val state = EditorState(
+            container = ContainerBridgeState(
+                uri = "fixture-source",
+                writeBackAvailable = true,
+                pendingTrackImports = listOf(
+                    PendingContainerTrackImportUi(
+                        sourceUri = "content://fixture/subtitles.mkv",
+                        sourceName = "subtitles.mkv",
+                        sourceTrackNumber = 4L,
+                        sourceTrackUid = 404L,
+                        kind = ContainerResourceKind.SUBTITLE,
+                        codecId = "S_TEXT/ASS",
+                        name = "Signs",
+                        language = "eng",
+                        isDefault = false,
+                        isForced = false,
+                        sourceAttachmentCount = 6,
+                    )
+                ),
+            ),
+        )
+
+        val plan = buildContainerEditPlan(state)
+
+        assertTrue(plan.executable)
+        assertTrue(
+            plan.checks.any {
+                it.dimension == ContainerCompatibilityDimension.SOURCE_INVENTORY &&
+                    it.status == ContainerCompatibilityStatus.WARNING &&
+                    it.title.contains("不自动复制来源附件")
+            }
+        )
+    }
 }
