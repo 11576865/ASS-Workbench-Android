@@ -634,9 +634,9 @@ object AssFxComposition {
         }
 
         val normalizedOwnedTags = ownedTags.mapTo(linkedSetOf()) { it.lowercase() }
-        val leadingEnd = leadingOverridePrefix(text).length
+        val spanStart = semanticSpanStart(text, analysis)
         val spanConflict = analysis.tags.firstOrNull { tag ->
-            tag.start >= leadingEnd && tag.name.lowercase() in normalizedOwnedTags
+            tag.start >= spanStart && tag.name.lowercase() in normalizedOwnedTags
         }
         require(spanConflict == null) {
             "$effectLabel 与后续行内 \\${spanConflict?.name} 存在属性所有权冲突；" +
@@ -675,6 +675,11 @@ object AssFxComposition {
         return analysis.tags.any { it.name.lowercase() in ownedTags }
     }
 
+    private fun semanticSpanStart(text: String, analysis: AssInlineAnalysis): Int =
+        analysis.tags.firstOrNull { tag ->
+            tag.name.lowercase() in setOf("k", "kf", "ko", "kt")
+        }?.start ?: leadingOverridePrefix(text).length
+
     private fun containsSpatialFadeAnimatedGeometry(text: String): Boolean {
         val geometryTags = setOf(
             "pos", "move", "org",
@@ -683,11 +688,11 @@ object AssFxComposition {
             "fax", "fay",
             "clip", "iclip",
         )
-        val leadingEnd = leadingOverridePrefix(text).length
         val analysis = AssInlineSyntax.analyze(text)
         if (analysis.hasErrors) return true
+        val spanStart = semanticSpanStart(text, analysis)
         if (analysis.tags.any { tag ->
-                tag.start >= leadingEnd && tag.name.lowercase() in geometryTags
+                tag.start >= spanStart && tag.name.lowercase() in geometryTags
             }) {
             return true
         }
