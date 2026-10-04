@@ -1,7 +1,6 @@
 package io.github.assworkbench.app.ui.preview
 
 import io.github.assworkbench.domain.AssDocument
-import io.github.assworkbench.domain.AssEffectiveInspector
 import io.github.assworkbench.domain.AssEvent
 import io.github.assworkbench.domain.AssGeometrySemantic
 import io.github.assworkbench.domain.AssInlineSyntax
@@ -64,11 +63,18 @@ internal object PreviewTargetResolver {
     ): PreviewTargetCandidate {
         val geometry = AssGeometrySemantic.inspect(event.text)
         val resolved = when (geometry.positionMode) {
-            AssPositionMode.POSITION -> geometry.position to PreviewTargetConfidence.EXACT_ANCHOR
+            AssPositionMode.POSITION -> geometry.position
+                ?.takeIf(::isFinitePoint)
+                ?.let { it to PreviewTargetConfidence.EXACT_ANCHOR }
+                ?: (null to PreviewTargetConfidence.UNRESOLVED)
             AssPositionMode.MOVE -> geometry.move?.let {
-                movePoint(event, it, positionMs) to PreviewTargetConfidence.EXACT_ANCHOR
+                movePoint(event, it, positionMs)
+                    .takeIf(::isFinitePoint)
+                    ?.let { point -> point to PreviewTargetConfidence.EXACT_ANCHOR }
             } ?: (null to PreviewTargetConfidence.UNRESOLVED)
-            AssPositionMode.INHERITED -> inheritedAnchor(document, event) to PreviewTargetConfidence.APPROXIMATE_ANCHOR
+            AssPositionMode.INHERITED -> inheritedAnchor(document, event)
+                ?.let { it to PreviewTargetConfidence.APPROXIMATE_ANCHOR }
+                ?: (null to PreviewTargetConfidence.UNRESOLVED)
             AssPositionMode.CONFLICT -> null to PreviewTargetConfidence.UNRESOLVED
         }
         val anchor = resolved.first
@@ -109,11 +115,22 @@ internal object PreviewTargetResolver {
     }
 
     private fun inheritedAnchor(document: AssDocument, event: AssEvent): AssPoint? {
-        val effective = AssEffectiveInspector.inspect(document, event).associateBy { it.name }
-        val alignment = effective["Alignment"]?.effectiveValue?.toIntOrNull()?.coerceIn(1, 9) ?: return null
-        val marginL = effective["Margin L"]?.effectiveValue?.toDoubleOrNull() ?: return null
-        val marginR = effective["Margin R"]?.effectiveValue?.toDoubleOrNull() ?: return null
-        val marginV = effective["Margin V"]?.effectiveValue?.toDoubleOrNull() ?: return null
+        val style = document.styles.firstOrNull { it.name == event.style } ?: return null
+        val analysis = AssInlineSyntax.analyze(event.text)
+        if (analysis.hasErrors) return null
+
+        val leadingEnd = leadingOverridePrefixLength(event.text)
+        val alignmentTags = analysis.tags.filter { it.name.equals("an", ignoreCase = true) }
+        if (alignmentTags.any { it.start >= leadingEnd }) return null
+
+        val alignment = alignmentTags.lastOrNull()?.value?.toIntOrNull() ?: style.alignment
+        if (alignment !in 1..9) return null
+        if (event.marginL < 0 || event.marginR < 0 || event.marginV < 0) return null
+        if (style.marginL < 0 || style.marginR < 0 || style.marginV < 0) return null
+
+        val marginL = if (event.marginL > 0) event.marginL.toDouble() else style.marginL.toDouble()
+        val marginR = if (event.marginR > 0) event.marginR.toDouble() else style.marginR.toDouble()
+        val marginV = if (event.marginV > 0) event.marginV.toDouble() else style.marginV.toDouble()
 
         val x = when (alignment) {
             1, 4, 7 -> marginL
@@ -125,6 +142,19 @@ internal object PreviewTargetResolver {
             4, 5, 6 -> document.playResY / 2.0
             else -> document.playResY - marginV
         }
-        return AssPoint(x, y)
+        return AssPoint(x, y).takeIf(::isFinitePoint)
     }
+
+    private fun leadingOverridePrefixLength(text: String): Int {
+        var cursor = 0
+        while (cursor < text.length && text[cursor] == '{') {
+            val close = text.indexOf('}', cursor + 1)
+            if (close < 0) return cursor
+            cursor = close + 1
+        }
+        return cursor
+    }
+
+    private fun isFinitePoint(point: AssPoint): Boolean =
+        point.x.isFinite() && point.y.isFinite()
 }
