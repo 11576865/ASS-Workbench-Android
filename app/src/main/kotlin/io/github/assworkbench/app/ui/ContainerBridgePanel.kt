@@ -497,8 +497,8 @@ fun ContainerBridgePanel(
                         OutlinedTextField(
                             value = trackMetadataLanguage,
                             onValueChange = { trackMetadataLanguage = it },
-                            label = { Text("语言代码") },
-                            supportingText = { Text("保持原始 Matroska language；显式未知建议使用 und") },
+                            label = { Text("Language（ISO 639-2）") },
+                            supportingText = { Text("3 字母 legacy language，例如 jpn / eng / und；BCP 47 另行建模") },
                             singleLine = true,
                         )
                         Row(
