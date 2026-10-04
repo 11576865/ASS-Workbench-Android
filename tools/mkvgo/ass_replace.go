@@ -257,7 +257,7 @@ func ReplaceASSWithAttachmentEdits(
 	meta, durationMs := metaForMergedSubs(c, subBlocks)
 	if addedDurationMs > durationMs {
 		durationMs = addedDurationMs
-		meta = *metaForNewDuration(&meta)
+		meta = metaForNewDuration(&meta)
 	}
 	meta.Info.SegmentUID = derivedSegmentUID(&c.Info, srcPath, "replace-ass")
 	meta.Tags = nil
