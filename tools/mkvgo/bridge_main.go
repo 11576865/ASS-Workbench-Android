@@ -348,7 +348,7 @@ func runEditContainer(args []string) {
 		fatal(usage())
 	}
 	ensureOutputAbsent(output)
-	if err := ops.EditContainerResources(
+	if err := ops.EditContainerResourcesWithTrackImports(
 		context.Background(),
 		source,
 		output,
