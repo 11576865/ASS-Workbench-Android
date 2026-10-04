@@ -614,6 +614,33 @@ class EditorRegressionInstrumentedTest {
     }
 
     @Test
+    fun semanticSearchInvalidAuxiliaryFiltersStayFailClosed() {
+        restoreRecovery()
+        val before = viewModel.state.value.document
+
+        openTool("BATCH")
+        composeRule.onNodeWithTag("search-style-regex")
+            .performScrollTo()
+            .assertIsDisplayed()
+            .performTextReplacement("[")
+        composeRule.onNodeWithTag("search-replace-error")
+            .performScrollTo()
+            .assertIsDisplayed()
+        assertEquals(before, viewModel.state.value.document)
+
+        composeRule.onNodeWithTag("search-style-regex")
+            .performTextReplacement("")
+        composeRule.onNodeWithTag("search-forbidden-tag")
+            .performScrollTo()
+            .assertIsDisplayed()
+            .performTextReplacement("pos(")
+        composeRule.onNodeWithTag("search-replace-error")
+            .performScrollTo()
+            .assertIsDisplayed()
+        assertEquals(before, viewModel.state.value.document)
+    }
+
+    @Test
     fun karaokeFxPreviewIsNonDestructiveAndBatchApplyCommitsAtomically() {
         restoreRecovery()
 
