@@ -31,8 +31,12 @@ data class ContainerResourceUi(
     val detail: String,
     val trackNumber: Long? = null,
     val editableAss: Boolean = false,
-    /** Stable mkvgo removal/replacement target: FileUID when available, otherwise a unique filename. */
+    /** Stable mkvgo mutation/extraction target: FileUID when available, otherwise a unique filename. */
     val attachmentTarget: String? = null,
+    val attachmentMimeType: String = "",
+    val attachmentDescription: String = "",
+    val attachmentSizeBytes: Long? = null,
+    val attachmentSha256: String? = null,
     val change: ContainerResourceChange = ContainerResourceChange.UNCHANGED,
 )
 
@@ -64,6 +68,13 @@ data class PendingContainerAttachmentReplacementUi(
     val sizeBytes: Long? = null,
 )
 
+data class PendingContainerAttachmentMetadataUi(
+    val target: String,
+    val originalName: String,
+    val name: String,
+    val description: String,
+)
+
 data class ContainerBridgeState(
     val uri: String? = null,
     val name: String = "",
@@ -75,6 +86,7 @@ data class ContainerBridgeState(
     val pendingAttachments: List<PendingContainerAttachmentUi> = emptyList(),
     val pendingAttachmentRemovals: List<PendingContainerAttachmentRemovalUi> = emptyList(),
     val pendingAttachmentReplacements: List<PendingContainerAttachmentReplacementUi> = emptyList(),
+    val pendingAttachmentMetadataEdits: List<PendingContainerAttachmentMetadataUi> = emptyList(),
     val extractedFontCount: Int = 0,
     val skippedAttachmentCount: Int = 0,
     val writeBackAvailable: Boolean = false,
