@@ -1,0 +1,36 @@
+# Workspace Parameter Descriptor / Intent Contract
+
+This slice establishes the semantic boundary required before arbitrary controls are
+extracted from existing tools into independent infinite-canvas surfaces.
+
+## Contract
+
+A **descriptor** identifies what is edited. It owns a stable semantic key, source
+tool, context, value shape and the set of presentations allowed for that value.
+
+A **presentation** identifies only how a descriptor is shown. Numeric fields,
+sliders, angle dials and XY pads do not create different parameter identities.
+
+An **address** combines one projection instance with the existing WorkspaceBinding.
+Event parameters therefore continue to use FollowFocus or PinnedEvent instead of
+mutating global focus to reach a target.
+
+An **intent** is PREVIEW, COMMIT or CANCEL plus a monotonic revision. The contract
+validates descriptor existence, binding compatibility, arity and finite values.
+It intentionally does not call EditorViewModel yet.
+
+Initial descriptors cover Position XY, Rotation Z, Scale XY and Shear XY because
+those parameters already have stable preview/commit owners in the Position tool.
+
+## Deliberate boundary
+
+This is the contract-first slice for UI-240 items 109/110. It does **not** yet:
+
+- add drag-to-extract UI;
+- persist extracted parameter instances in WorkspaceState;
+- route intents into EditorViewModel;
+- claim that arbitrary controls can already be composed;
+- mark either 240 item complete.
+
+Those steps must build on the descriptor/intent identity rather than coupling a
+new canvas control directly to an existing pane's local draft state.
