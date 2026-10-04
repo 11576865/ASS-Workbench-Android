@@ -116,22 +116,27 @@ func runReplaceASS(args []string) {
 			})
 			i += 5
 		case "--add-track":
-			if i+6 >= len(args) {
-				fatal("--add-track needs <source.mkv> <trackID> <name> <language> <default> <forced>")
+			if i+7 >= len(args) {
+				fatal("--add-track needs <source.mkv> <trackID> <trackUID-or-0> <name> <language> <default> <forced>")
 			}
 			sourceTrackID, err := strconv.ParseUint(args[i+2], 10, 64)
 			if err != nil || sourceTrackID == 0 {
 				fatal("invalid --add-track trackID")
 			}
+			sourceTrackUID, err := strconv.ParseUint(args[i+3], 10, 64)
+			if err != nil {
+				fatal("invalid --add-track trackUID")
+			}
 			trackAdditions = append(trackAdditions, ops.TrackAddition{
 				SourcePath: args[i+1],
 				SourceTrackID: sourceTrackID,
-				Name: args[i+3],
-				Language: args[i+4],
-				IsDefault: parseBoolFlag(args[i+5], "--add-track default"),
-				IsForced: parseBoolFlag(args[i+6], "--add-track forced"),
+				SourceTrackUID: sourceTrackUID,
+				Name: args[i+4],
+				Language: args[i+5],
+				IsDefault: parseBoolFlag(args[i+6], "--add-track default"),
+				IsForced: parseBoolFlag(args[i+7], "--add-track forced"),
 			})
-			i += 6
+			i += 7
 		default:
 			if len(args[i]) > 0 && args[i][0] == '-' {
 				fatal("unknown flag: " + args[i])
@@ -336,22 +341,27 @@ func runEditContainer(args []string) {
 			})
 			i += 5
 		case "--add-track":
-			if i+6 >= len(args) {
-				fatal("--add-track needs <source.mkv> <trackID> <name> <language> <default> <forced>")
+			if i+7 >= len(args) {
+				fatal("--add-track needs <source.mkv> <trackID> <trackUID-or-0> <name> <language> <default> <forced>")
 			}
 			sourceTrackID, err := strconv.ParseUint(args[i+2], 10, 64)
 			if err != nil || sourceTrackID == 0 {
 				fatal("invalid --add-track trackID")
 			}
+			sourceTrackUID, err := strconv.ParseUint(args[i+3], 10, 64)
+			if err != nil {
+				fatal("invalid --add-track trackUID")
+			}
 			trackAdditions = append(trackAdditions, ops.TrackAddition{
 				SourcePath: args[i+1],
 				SourceTrackID: sourceTrackID,
-				Name: args[i+3],
-				Language: args[i+4],
-				IsDefault: parseBoolFlag(args[i+5], "--add-track default"),
-				IsForced: parseBoolFlag(args[i+6], "--add-track forced"),
+				SourceTrackUID: sourceTrackUID,
+				Name: args[i+4],
+				Language: args[i+5],
+				IsDefault: parseBoolFlag(args[i+6], "--add-track default"),
+				IsForced: parseBoolFlag(args[i+7], "--add-track forced"),
 			})
-			i += 6
+			i += 7
 		default:
 			fatal("unknown argument: " + args[i])
 		}
@@ -441,10 +451,10 @@ func ensureOutputAbsent(path string) {
 
 func usage() string {
 	return "usage:\n" +
-		"  asswb-mkvgo replace-ass <file.mkv> -o <out.mkv> -t <trackID> [--font <font.ttf>]... [--attachment <file>]... [--remove-attachment <uid-or-name>]... [--replace-attachment <uid-or-name> <file>]... [--edit-attachment-meta <uid-or-name> <name> <description>]... [--remove-track <uid:id|number:id>]... [--edit-track-meta <uid:id|number:id> <name> <language> <default> <forced>]... [--add-track <source.mkv> <trackID> <name> <language> <default> <forced>]... <edited.ass>\n" +
+		"  asswb-mkvgo replace-ass <file.mkv> -o <out.mkv> -t <trackID> [--font <font.ttf>]... [--attachment <file>]... [--remove-attachment <uid-or-name>]... [--replace-attachment <uid-or-name> <file>]... [--edit-attachment-meta <uid-or-name> <name> <description>]... [--remove-track <uid:id|number:id>]... [--edit-track-meta <uid:id|number:id> <name> <language> <default> <forced>]... [--add-track <source.mkv> <trackID> <trackUID-or-0> <name> <language> <default> <forced>]... <edited.ass>\n" +
 		"  asswb-mkvgo add-attachments <file.mkv> -o <out.mkv> --attachment <file> [--attachment <file>]...\n" +
 		"  asswb-mkvgo edit-attachments <file.mkv> -o <out.mkv> [--attachment <file>]... [--remove-attachment <uid-or-name>]... [--replace-attachment <uid-or-name> <file>]... [--edit-attachment-meta <uid-or-name> <name> <description>]...\n" +
-		"  asswb-mkvgo edit-container <file.mkv> -o <out.mkv> [attachment edits] [--remove-track <uid:id|number:id>]... [--edit-track-meta <uid:id|number:id> <name> <language> <default> <forced>]... [--add-track <source.mkv> <trackID> <name> <language> <default> <forced>]...\n" +
+		"  asswb-mkvgo edit-container <file.mkv> -o <out.mkv> [attachment edits] [--remove-track <uid:id|number:id>]... [--edit-track-meta <uid:id|number:id> <name> <language> <default> <forced>]... [--add-track <source.mkv> <trackID> <trackUID-or-0> <name> <language> <default> <forced>]...\n" +
 		"  asswb-mkvgo extract-attachment <file.mkv> -o <file> --target <uid-or-name>"
 }
 
