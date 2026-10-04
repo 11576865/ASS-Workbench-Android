@@ -21,6 +21,12 @@ data class TrackMetadataEditInput(
     val language: String,
     val isDefault: Boolean,
     val isForced: Boolean,
+    val languageBcp47: String = "",
+    val hearingImpaired: Boolean = false,
+    val visualImpaired: Boolean = false,
+    val textDescriptions: Boolean = false,
+    val original: Boolean = false,
+    val commentary: Boolean = false,
 )
 
 data class TrackImportInput(
@@ -30,6 +36,12 @@ data class TrackImportInput(
     val language: String,
     val isDefault: Boolean,
     val isForced: Boolean,
+    val languageBcp47: String = "",
+    val hearingImpaired: Boolean = false,
+    val visualImpaired: Boolean = false,
+    val textDescriptions: Boolean = false,
+    val original: Boolean = false,
+    val commentary: Boolean = false,
 )
 
 class MkvGoTool(private val context: Context) {
@@ -116,12 +128,18 @@ class MkvGoTool(private val context: Context) {
             .distinctBy { it.target }
             .forEach { metadata ->
                 require(metadata.target.isNotBlank()) { "轨道元数据目标不能为空" }
-                args += "--edit-track-meta"
+                args += "--edit-track-meta-v2"
                 args += metadata.target
                 args += metadata.name
                 args += metadata.language
+                args += metadata.languageBcp47
                 args += if (metadata.isDefault) "1" else "0"
                 args += if (metadata.isForced) "1" else "0"
+                args += if (metadata.hearingImpaired) "1" else "0"
+                args += if (metadata.visualImpaired) "1" else "0"
+                args += if (metadata.textDescriptions) "1" else "0"
+                args += if (metadata.original) "1" else "0"
+                args += if (metadata.commentary) "1" else "0"
             }
         args += editedAss.absolutePath
         run(*args.toTypedArray())
@@ -227,12 +245,18 @@ class MkvGoTool(private val context: Context) {
             .distinctBy { it.target }
             .forEach { metadata ->
                 require(metadata.target.isNotBlank()) { "轨道元数据目标不能为空" }
-                args += "--edit-track-meta"
+                args += "--edit-track-meta-v2"
                 args += metadata.target
                 args += metadata.name
                 args += metadata.language
+                args += metadata.languageBcp47
                 args += if (metadata.isDefault) "1" else "0"
                 args += if (metadata.isForced) "1" else "0"
+                args += if (metadata.hearingImpaired) "1" else "0"
+                args += if (metadata.visualImpaired) "1" else "0"
+                args += if (metadata.textDescriptions) "1" else "0"
+                args += if (metadata.original) "1" else "0"
+                args += if (metadata.commentary) "1" else "0"
             }
         trackImports
             .distinctBy { it.source.absolutePath to it.trackNumber }
@@ -241,13 +265,19 @@ class MkvGoTool(private val context: Context) {
                     "轨道来源文件不可用：" + import.source.name
                 }
                 require(import.trackNumber > 0L) { "来源 TrackNumber 必须大于 0" }
-                args += "--add-track"
+                args += "--add-track-v2"
                 args += import.source.absolutePath
                 args += import.trackNumber.toString()
                 args += import.name
                 args += import.language
+                args += import.languageBcp47
                 args += if (import.isDefault) "1" else "0"
                 args += if (import.isForced) "1" else "0"
+                args += if (import.hearingImpaired) "1" else "0"
+                args += if (import.visualImpaired) "1" else "0"
+                args += if (import.textDescriptions) "1" else "0"
+                args += if (import.original) "1" else "0"
+                args += if (import.commentary) "1" else "0"
             }
         run(*args.toTypedArray())
         require(output.isFile && output.length() > 0L) { "MKV 写回未生成输出文件" }
