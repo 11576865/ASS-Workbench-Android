@@ -182,6 +182,7 @@ internal fun buildContainerEditPlan(state: EditorState): ContainerEditPlanUi {
                 append("add-track:").append(addition.sourceKind.name)
                 append(':').append(addition.sourceUri)
                 addition.sourceTrackNumber?.let { append(':').append(it) }
+                addition.sourceExtractorIndex?.let { append(":extractor:").append(it) }
             },
             kind = ContainerMutationKind.ADD_TRACK,
             source = ContainerMutationSource.EXTERNAL_TRACK,
@@ -192,6 +193,8 @@ internal fun buildContainerEditPlan(state: EditorState): ContainerEditPlanUi {
                     ContainerTrackImportSourceKind.STANDALONE_ASS,
                     ContainerTrackImportSourceKind.STANDALONE_SRT ->
                         addition.sourceName
+                    ContainerTrackImportSourceKind.NORMALIZED_MEDIA_PACKETS ->
+                        addition.name.ifBlank { "A_MPEG/L3 · extractor Track #${addition.sourceExtractorIndex}" }
                 }
             },
             detail = buildString {
@@ -203,6 +206,14 @@ internal fun buildContainerEditPlan(state: EditorState): ContainerEditPlanUi {
                         append(" · standalone ASS → normalized ASS → S_TEXT/ASS · normalized SHA-256 pinned")
                     ContainerTrackImportSourceKind.STANDALONE_SRT ->
                         append(" · standalone SRT → normalized ASS → S_TEXT/ASS · normalized SHA-256 pinned")
+                    ContainerTrackImportSourceKind.NORMALIZED_MEDIA_PACKETS -> {
+                        append(" · MediaExtractor compressed packet stream-copy")
+                        addition.sourceExtractorIndex?.let { append(" · extractor Track #").append(it) }
+                        addition.packetCount?.let { append(" · ").append(it).append(" packets") }
+                        addition.sampleRate?.let { append(" · ").append(it).append("Hz") }
+                        addition.channelCount?.let { append(" · ").append(it).append("ch") }
+                        append(" · bundle/content SHA-256 pinned")
+                    }
                 }
                 append(" · ").append(addition.codecId)
                 if (addition.language.isNotBlank()) append(" · ").append(addition.language)
@@ -252,7 +263,12 @@ internal fun buildContainerEditPlan(state: EditorState): ContainerEditPlanUi {
     val missingTrackTargets =
         (trackRemovalTargets + trackMetadataTargets).filterNot { it in currentTrackTargets }
     val trackAdditionKeys = state.container.pendingTrackAdditions.map {
-        it.sourceKind.name + "\u0000" + it.sourceUri + "\u0000" + (it.sourceTrackNumber ?: 0L)
+        buildString {
+            append(it.sourceKind.name)
+            append("\u0000").append(it.sourceUri)
+            append("\u0000").append(it.sourceTrackNumber ?: 0L)
+            append("\u0000").append(it.sourceExtractorIndex ?: -1)
+        }
     }
     val duplicateTrackAdditions = trackAdditionKeys.groupingBy { it }.eachCount()
         .filterValues { it > 1 }
@@ -267,6 +283,20 @@ internal fun buildContainerEditPlan(state: EditorState): ContainerEditPlanUi {
                     addition.typeCode != 17L ||
                     addition.codecId != "S_TEXT/ASS" ||
                     !addition.sourceSha256.orEmpty().matches(Regex("[0-9a-fA-F]{64}"))
+            ContainerTrackImportSourceKind.NORMALIZED_MEDIA_PACKETS ->
+                addition.kind != ContainerResourceKind.AUDIO ||
+                    addition.typeCode != 2L ||
+                    addition.codecId != "A_MPEG/L3" ||
+                    addition.sourceExtractorIndex == null ||
+                    addition.sourceExtractorIndex < 0 ||
+                    !addition.sourceSha256.orEmpty().matches(Regex("[0-9a-fA-F]{64}")) ||
+                    !addition.sourceContentSha256.orEmpty().matches(Regex("[0-9a-fA-F]{64}")) ||
+                    addition.sampleRate == null ||
+                    addition.sampleRate <= 0 ||
+                    addition.channelCount == null ||
+                    addition.channelCount !in 1..255 ||
+                    addition.packetCount == null ||
+                    addition.packetCount <= 0L
         }
     }
     val remainingTrackCount =
@@ -334,7 +364,7 @@ internal fun buildContainerEditPlan(state: EditorState): ContainerEditPlanUi {
         dimension = ContainerCompatibilityDimension.OUTPUT_VERIFICATION,
         status = ContainerCompatibilityStatus.SUPPORTED,
         title = "输出验证",
-        detail = "写回后重新扫描实际 MKV，并验证幸存轨身份、追加轨的新 TrackNumber / TrackUID、codec / 顺序、章节、未改附件，以及计划中的 Track 与 Attachment 修改。",
+        detail = "写回后重新扫描实际 MKV，并验证幸存轨身份、追加轨的新 TrackNumber / TrackUID、codec / 顺序、章节、未改附件，以及计划中的 Track 与 Attachment 修改；packet stream-copy 额外验证实际输出 Track 的时间戳+payload digest 与 packet count。",
     )
 
     val hasGenericAttachment = mutations.any {
@@ -351,6 +381,9 @@ internal fun buildContainerEditPlan(state: EditorState): ContainerEditPlanUi {
     val hasStandaloneSubtitleImport = state.container.pendingTrackAdditions.any {
         it.sourceKind.isStandaloneSubtitleSource()
     }
+    val hasPacketStreamCopyImport = state.container.pendingTrackAdditions.any {
+        it.sourceKind == ContainerTrackImportSourceKind.NORMALIZED_MEDIA_PACKETS
+    }
     val hasFontAttachment = mutations.any { it.source == ContainerMutationSource.FONT_PACKAGE }
     val hasAss = mutations.any { it.kind == ContainerMutationKind.REPLACE_ASS_TRACK }
 
@@ -366,6 +399,9 @@ internal fun buildContainerEditPlan(state: EditorState): ContainerEditPlanUi {
                 }
                 if (hasStandaloneSubtitleImport) {
                     append(" 独立 ASS / SRT 会先规范化为确定性的 UTF-8 ASS execution representation；保存前按其 SHA-256 重新验证，再封装为 S_TEXT/ASS。这不是对原始字幕文件字节的直接复制。")
+                }
+                if (hasPacketStreamCopyImport) {
+                    append(" MP3 导入使用 MediaExtractor 直接复制压缩 packet，不经过 MediaCodec 解码/重编码；计划期与保存期都固定 normalized packet bundle/content digest，输出 Track 还会再次按实际 block 验证 payload/timestamp digest。")
                 }
             },
         )
