@@ -269,6 +269,12 @@ class MkvBridgeInstrumentedTest {
                     language = "und",
                     isDefault = false,
                     isForced = true,
+                    languageBcp47 = "ja-JP",
+                    hearingImpaired = true,
+                    visualImpaired = true,
+                    textDescriptions = true,
+                    original = true,
+                    commentary = true,
                 )
             ),
         )
@@ -282,8 +288,14 @@ class MkvBridgeInstrumentedTest {
         assertEquals(video.codecId, remaining.codecId)
         assertEquals("Main picture", remaining.name)
         assertEquals("und", remaining.language)
+        assertEquals("ja-JP", remaining.languageBcp47)
         assertFalse(remaining.isDefault)
         assertTrue(remaining.isForced)
+        assertTrue(remaining.hearingImpaired)
+        assertTrue(remaining.visualImpaired)
+        assertTrue(remaining.textDescriptions)
+        assertTrue(remaining.original)
+        assertTrue(remaining.commentary)
         assertTrue(after.trackInfos.none { it.number == subtitle.number })
         assertTrue(after.subtitleTracks.isEmpty())
 
@@ -327,6 +339,9 @@ class MkvBridgeInstrumentedTest {
                     language = "und",
                     isDefault = false,
                     isForced = false,
+                    languageBcp47 = "en-US",
+                    hearingImpaired = true,
+                    commentary = true,
                 )
             ),
         )
@@ -346,8 +361,11 @@ class MkvBridgeInstrumentedTest {
         assertEquals(sourceVideo.codecId, imported.codecId)
         assertEquals("Second video", imported.name)
         assertEquals("und", imported.language)
+        assertEquals("en-US", imported.languageBcp47)
         assertFalse(imported.isDefault)
         assertFalse(imported.isForced)
+        assertTrue(imported.hearingImpaired)
+        assertTrue(imported.commentary)
 
         assertEquals(before.chapterCount, after.chapterCount)
         assertEquals(

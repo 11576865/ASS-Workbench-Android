@@ -168,9 +168,16 @@ internal fun buildContainerEditPlan(state: EditorState): ContainerEditPlanUi {
             title = "修改轨道信息 Track #${metadata.number}",
             detail = buildString {
                 append(metadata.name.ifBlank { "未命名" })
-                append(" · ").append(metadata.language.ifBlank { "语言未声明" })
+                if (metadata.language.isNotBlank()) append(" · legacy ").append(metadata.language)
+                if (metadata.languageBcp47.isNotBlank()) append(" · BCP 47 ").append(metadata.languageBcp47)
+                if (metadata.language.isBlank() && metadata.languageBcp47.isBlank()) append(" · 语言未声明")
                 if (metadata.isDefault) append(" · Default")
                 if (metadata.isForced) append(" · Forced")
+                if (metadata.hearingImpaired) append(" · Hearing impaired")
+                if (metadata.visualImpaired) append(" · Visual impaired")
+                if (metadata.textDescriptions) append(" · Text descriptions")
+                if (metadata.original) append(" · Original")
+                if (metadata.commentary) append(" · Commentary")
                 append(" · 保留 TrackNumber / TrackUID / codec / payload")
             },
         )
@@ -187,9 +194,15 @@ internal fun buildContainerEditPlan(state: EditorState): ContainerEditPlanUi {
                 append(" · Track #").append(import.sourceTrackNumber)
                 append(" · ").append(import.codecId)
                 if (import.name.isNotBlank()) append(" · ").append(import.name)
-                if (import.language.isNotBlank()) append(" · ").append(import.language)
+                if (import.language.isNotBlank()) append(" · legacy ").append(import.language)
+                if (import.languageBcp47.isNotBlank()) append(" · BCP 47 ").append(import.languageBcp47)
                 if (import.isDefault) append(" · Default")
                 if (import.isForced) append(" · Forced")
+                if (import.hearingImpaired) append(" · Hearing impaired")
+                if (import.visualImpaired) append(" · Visual impaired")
+                if (import.textDescriptions) append(" · Text descriptions")
+                if (import.original) append(" · Original")
+                if (import.commentary) append(" · Commentary")
             },
         )
     }
@@ -242,9 +255,21 @@ internal fun buildContainerEditPlan(state: EditorState): ContainerEditPlanUi {
         it.sourceUri to it.sourceTrackNumber
     }
     val duplicateTrackImports = importKeys.size != importKeys.distinct().size
-    val invalidTrackImportLanguage = state.container.pendingTrackImports.any {
-        it.language.isNotEmpty() && !it.language.matches(Regex("[a-z]{3}"))
-    }
+    val invalidTrackLegacyLanguage =
+        state.container.pendingTrackMetadataEdits.any {
+            it.language.isNotEmpty() && !it.language.matches(Regex("[a-z]{3}"))
+        } ||
+            state.container.pendingTrackImports.any {
+                it.language.isNotEmpty() && !it.language.matches(Regex("[a-z]{3}"))
+            }
+    val bcp47Pattern = Regex("[A-Za-z0-9]{1,8}(?:-[A-Za-z0-9]{1,8})*")
+    val invalidTrackBcp47 =
+        state.container.pendingTrackMetadataEdits.any {
+            it.languageBcp47.isNotEmpty() && !it.languageBcp47.matches(bcp47Pattern)
+        } ||
+            state.container.pendingTrackImports.any {
+                it.languageBcp47.isNotEmpty() && !it.languageBcp47.matches(bcp47Pattern)
+            }
 
     checks += ContainerCompatibilityCheckUi(
         dimension = ContainerCompatibilityDimension.CONTAINER_STRUCTURE,
@@ -256,7 +281,8 @@ internal fun buildContainerEditPlan(state: EditorState): ContainerEditPlanUi {
             trackRemovalTargets.isNotEmpty() && remainingTrackCount <= 0 -> ContainerCompatibilityStatus.UNSUPPORTED
             removesDirtySelectedAss -> ContainerCompatibilityStatus.UNSUPPORTED
             duplicateTrackImports -> ContainerCompatibilityStatus.UNSUPPORTED
-            invalidTrackImportLanguage -> ContainerCompatibilityStatus.UNSUPPORTED
+            invalidTrackLegacyLanguage -> ContainerCompatibilityStatus.UNSUPPORTED
+            invalidTrackBcp47 -> ContainerCompatibilityStatus.UNSUPPORTED
             mutations.isEmpty() -> ContainerCompatibilityStatus.WARNING
             else -> ContainerCompatibilityStatus.SUPPORTED
         },
@@ -276,8 +302,10 @@ internal fun buildContainerEditPlan(state: EditorState): ContainerEditPlanUi {
                 "当前正在编辑且未保存的 ASS 轨被计划删除；请先保存、放弃修改或取消删除。"
             duplicateTrackImports ->
                 "同一个外部来源 Track 不能在一次计划中重复导入。"
-            invalidTrackImportLanguage ->
-                "待导入轨道的 legacy Language 必须为空或 3 字母 ISO 639-2 代码。"
+            invalidTrackLegacyLanguage ->
+                "Track 的 legacy Language 必须为空或 3 字母 ISO 639-2 代码。"
+            invalidTrackBcp47 ->
+                "Track 的 Language IETF / BCP 47 必须是由 1–8 位字母数字 subtags 组成的连字符标签。"
             mutations.isEmpty() -> "尚无待执行的容器修改。"
             else ->
                 "当前计划中的 ASS、Track 添加 / 删除 / 元数据修改与 Attachment 修改均有明确写入路径；Track 添加在结构层追加新 TrackNumber / TrackUID。" 
@@ -334,7 +362,7 @@ internal fun buildContainerEditPlan(state: EditorState): ContainerEditPlanUi {
             dimension = ContainerCompatibilityDimension.DOWNSTREAM,
             status = ContainerCompatibilityStatus.WARNING,
             title = "播放器轨道选择行为需验证",
-            detail = "Track 添加 / 删除与 Language / Default / Forced 会影响播放器自动选轨；容器结构可验证，但不同播放器的选择策略不是 Matroska 结构保证。",
+            detail = "Track 添加 / 删除、legacy Language、BCP 47、Default / Forced 与无障碍/语义 disposition 可能影响播放器选轨、标签和呈现；容器结构可验证，但播放器策略不是 Matroska 结构保证。",
         )
         hasGenericAttachment -> ContainerCompatibilityCheckUi(
             dimension = ContainerCompatibilityDimension.DOWNSTREAM,

@@ -608,8 +608,14 @@ func TestEditContainerResourcesPreservesSurvivingTrackIdentity(t *testing.T) {
 			Target: "uid:101",
 			Name: "Main picture",
 			Language: "und",
+			LanguageBCP47: "ja-JP",
 			IsDefault: false,
 			IsForced: false,
+			HearingImpaired: true,
+			VisualImpaired: true,
+			TextDescriptions: true,
+			Original: true,
+			Commentary: true,
 		}},
 	); err != nil {
 		t.Fatal(err)
@@ -626,7 +632,11 @@ func TestEditContainerResourcesPreservesSurvivingTrackIdentity(t *testing.T) {
 		t.Fatalf("video identity changed: %+v", got.Tracks[0])
 	}
 	if got.Tracks[0].Name != "Main picture" || got.Tracks[0].Language != "und" ||
-		got.Tracks[0].IsDefault || got.Tracks[0].IsForced {
+		got.Tracks[0].LanguageBCP47 != "ja-JP" ||
+		got.Tracks[0].IsDefault || got.Tracks[0].IsForced ||
+		!got.Tracks[0].HearingImpaired || !got.Tracks[0].VisualImpaired ||
+		!got.Tracks[0].TextDescriptions || !got.Tracks[0].Original ||
+		!got.Tracks[0].Commentary {
 		t.Fatalf("video metadata edit not applied: %+v", got.Tracks[0])
 	}
 	if got.Tracks[1].ID != 5 || got.Tracks[1].UID != 505 ||
@@ -823,8 +833,11 @@ func TestEditContainerResourcesImportsExternalTrackWithFreshIdentity(t *testing.
 			TrackID: 2,
 			Name: "Commentary",
 			Language: "eng",
+			LanguageBCP47: "en-GB",
 			IsDefault: false,
 			IsForced: true,
+			HearingImpaired: true,
+			Commentary: true,
 		}},
 	); err != nil {
 		t.Fatal(err)
@@ -850,7 +863,9 @@ func TestEditContainerResourcesImportsExternalTrackWithFreshIdentity(t *testing.
 	}
 	if imported.Type != mkv.AudioTrack || imported.Codec != "opus" ||
 		imported.Name != "Commentary" || imported.Language != "eng" ||
-		imported.IsDefault || !imported.IsForced {
+		imported.LanguageBCP47 != "en-GB" ||
+		imported.IsDefault || !imported.IsForced ||
+		!imported.HearingImpaired || !imported.Commentary {
 		t.Fatalf("imported track metadata/codec wrong: %+v", imported)
 	}
 	if len(got.Attachments) != 1 || got.Attachments[0].Name != "target-note.txt" ||

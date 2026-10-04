@@ -779,14 +779,27 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         originalName: String,
         name: String,
         language: String,
+        languageBcp47: String,
         isDefault: Boolean,
         isForced: Boolean,
+        hearingImpaired: Boolean,
+        visualImpaired: Boolean,
+        textDescriptions: Boolean,
+        original: Boolean,
+        commentary: Boolean,
     ) {
         if (target.isBlank()) return
         val cleanLanguage = language.trim().lowercase()
+        val cleanBcp47 = languageBcp47.trim()
         if (cleanLanguage.isNotEmpty() && !cleanLanguage.matches(Regex("[a-z]{3}"))) {
             _state.update {
-                it.copy(status = "轨道 Language 当前编辑的是 legacy ISO 639-2 字段；请输入 3 字母代码（例如 jpn / eng / und）或留空。")
+                it.copy(status = "轨道 legacy Language 请输入 3 字母 ISO 639-2 代码（例如 jpn / eng / und）或留空。")
+            }
+            return
+        }
+        if (cleanBcp47.isNotEmpty() && !cleanBcp47.matches(Regex("[A-Za-z0-9]{1,8}(?:-[A-Za-z0-9]{1,8})*"))) {
+            _state.update {
+                it.copy(status = "轨道 Language IETF / BCP 47 格式无效；例如 ja-JP、en、zh-Hant。")
             }
             return
         }
@@ -802,8 +815,14 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 current != null &&
                 name == current.trackName &&
                 cleanLanguage == current.trackLanguage &&
+                cleanBcp47 == current.trackLanguageBcp47 &&
                 isDefault == current.trackIsDefault &&
-                isForced == current.trackIsForced
+                isForced == current.trackIsForced &&
+                hearingImpaired == current.trackHearingImpaired &&
+                visualImpaired == current.trackVisualImpaired &&
+                textDescriptions == current.trackTextDescriptions &&
+                original == current.trackOriginal &&
+                commentary == current.trackCommentary
             ) {
                 return@update state.copy(
                     container = state.container.copy(
@@ -821,6 +840,12 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 language = cleanLanguage,
                 isDefault = isDefault,
                 isForced = isForced,
+                languageBcp47 = cleanBcp47,
+                hearingImpaired = hearingImpaired,
+                visualImpaired = visualImpaired,
+                textDescriptions = textDescriptions,
+                original = original,
+                commentary = commentary,
             )
             state.copy(
                 container = state.container.copy(
@@ -904,6 +929,12 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                         isDefault = info.isDefault,
                         isForced = info.isForced,
                         sourceAttachmentCount = scan.attachmentInfos.size,
+                        languageBcp47 = info.languageBcp47,
+                        hearingImpaired = info.hearingImpaired,
+                        visualImpaired = info.visualImpaired,
+                        textDescriptions = info.textDescriptions,
+                        original = info.original,
+                        commentary = info.commentary,
                     )
                 }
                 _state.update {
@@ -957,13 +988,26 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         candidate: ContainerTrackImportCandidateUi,
         name: String,
         language: String,
+        languageBcp47: String,
         isDefault: Boolean,
         isForced: Boolean,
+        hearingImpaired: Boolean,
+        visualImpaired: Boolean,
+        textDescriptions: Boolean,
+        original: Boolean,
+        commentary: Boolean,
     ) {
         val cleanLanguage = language.trim().lowercase()
+        val cleanBcp47 = languageBcp47.trim()
         if (cleanLanguage.isNotEmpty() && !cleanLanguage.matches(Regex("[a-z]{3}"))) {
             _state.update {
-                it.copy(status = "导入轨道的 Language 当前写入 legacy ISO 639-2；请输入 3 字母代码（例如 jpn / eng / und）或留空。")
+                it.copy(status = "导入轨道的 legacy Language 请输入 3 字母 ISO 639-2 代码（例如 jpn / eng / und）或留空。")
+            }
+            return
+        }
+        if (cleanBcp47.isNotEmpty() && !cleanBcp47.matches(Regex("[A-Za-z0-9]{1,8}(?:-[A-Za-z0-9]{1,8})*"))) {
+            _state.update {
+                it.copy(status = "导入轨道的 Language IETF / BCP 47 格式无效；例如 ja-JP、en、zh-Hant。")
             }
             return
         }
@@ -993,6 +1037,12 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 isDefault = isDefault,
                 isForced = isForced,
                 sourceAttachmentCount = candidate.sourceAttachmentCount,
+                languageBcp47 = cleanBcp47,
+                hearingImpaired = hearingImpaired,
+                visualImpaired = visualImpaired,
+                textDescriptions = textDescriptions,
+                original = original,
+                commentary = commentary,
             )
             state.copy(
                 container = state.container.copy(
@@ -1308,6 +1358,12 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                                 language = metadata.language,
                                 isDefault = metadata.isDefault,
                                 isForced = metadata.isForced,
+                                languageBcp47 = metadata.languageBcp47,
+                                hearingImpaired = metadata.hearingImpaired,
+                                visualImpaired = metadata.visualImpaired,
+                                textDescriptions = metadata.textDescriptions,
+                                original = metadata.original,
+                                commentary = metadata.commentary,
                             )
                         }
                         val importSourceFiles = linkedMapOf<String, File>()
@@ -1330,6 +1386,12 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                                 language = planned.language,
                                 isDefault = planned.isDefault,
                                 isForced = planned.isForced,
+                                languageBcp47 = planned.languageBcp47,
+                                hearingImpaired = planned.hearingImpaired,
+                                visualImpaired = planned.visualImpaired,
+                                textDescriptions = planned.textDescriptions,
+                                original = planned.original,
+                                commentary = planned.commentary,
                             )
                         }
 
