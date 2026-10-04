@@ -293,4 +293,65 @@ class MkvBridgeInstrumentedTest {
             after.attachmentInfos.map { listOf(it.uid, it.fileName, it.mimeType, it.sizeBytes) },
         )
     }
+
+    @Test
+    fun nativeBridgeAddsSecondVideoTrackWithFreshIdentity() {
+        val source = File(workDir, "track-add-base.mkv")
+        val external = File(workDir, "track-add-external.mkv")
+        InstrumentationRegistry.getInstrumentation().context.assets
+            .open("mkv/source.mkv")
+            .use { input -> source.outputStream().use { output -> input.copyTo(output) } }
+        InstrumentationRegistry.getInstrumentation().context.assets
+            .open("mkv/source.mkv")
+            .use { input -> external.outputStream().use { output -> input.copyTo(output) } }
+
+        val before = source.inputStream().use { MatroskaReader().scan(it) }
+        val externalScan = external.inputStream().use { MatroskaReader().scan(it) }
+        val sourceVideo = externalScan.trackInfos.single { it.kind == MatroskaTrackKind.VIDEO }
+        val maxOriginalNumber = before.trackInfos.maxOf { it.number }
+        val originalUids = before.trackInfos.mapNotNull { it.uid }.toSet()
+
+        val output = File(workDir, "track-add-updated.mkv")
+        val tool = MkvGoTool(application)
+        assertTrue("x86_64 emulator APK must package the mkvgo helper", tool.isAvailable())
+        tool.editContainer(
+            source = source,
+            output = output,
+            addTracks = listOf(
+                TrackAdditionInput(
+                    source = external,
+                    sourceTrackNumber = sourceVideo.number,
+                    name = "Alternate video",
+                    language = "und",
+                    isDefault = false,
+                    isForced = false,
+                )
+            ),
+        )
+
+        val after = output.inputStream().use { MatroskaReader().scan(it) }
+        assertEquals(before.trackInfos.size + 1, after.trackInfos.size)
+        assertEquals(
+            before.trackPreservationSignature(),
+            after.copy(trackInfos = after.trackInfos.take(before.trackInfos.size))
+                .trackPreservationSignature(),
+        )
+
+        val added = after.trackInfos.last()
+        assertEquals(MatroskaTrackKind.VIDEO, added.kind)
+        assertEquals(sourceVideo.codecId, added.codecId)
+        assertTrue(added.number > maxOriginalNumber)
+        assertTrue(added.uid != null && added.uid !in originalUids)
+        assertEquals("Alternate video", added.name)
+        assertEquals("und", added.language)
+        assertFalse(added.isDefault)
+        assertFalse(added.isForced)
+
+        assertEquals(2, after.trackInfos.count { it.kind == MatroskaTrackKind.VIDEO })
+        assertEquals(before.chapterCount, after.chapterCount)
+        assertEquals(
+            before.attachmentInfos.map { listOf(it.uid, it.fileName, it.mimeType, it.sizeBytes) },
+            after.attachmentInfos.map { listOf(it.uid, it.fileName, it.mimeType, it.sizeBytes) },
+        )
+    }
 }
