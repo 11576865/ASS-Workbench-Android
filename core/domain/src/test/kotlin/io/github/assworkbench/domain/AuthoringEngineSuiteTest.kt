@@ -2,6 +2,7 @@ package io.github.assworkbench.domain
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
@@ -33,6 +34,58 @@ class AuthoringEngineSuiteTest {
             forbiddenTags = setOf("move"),
         )
         assertTrue(AssSearchReplace.matches(e, query))
+    }
+
+    @Test
+    fun semanticSearchUsesAllDirectTagsButIgnoresTransformPayloadTags() {
+        val laterSpan = event(2, 0, 1000, "A{\\bord4}B")
+        val nestedOnly = event(3, 0, 1000, "{\\t(0,500,\\bord8)}Animated")
+
+        assertTrue(
+            AssSearchReplace.matches(
+                laterSpan,
+                AssSearchQuery(requiredTags = setOf("bord")),
+            )
+        )
+        assertTrue(
+            !AssSearchReplace.matches(
+                nestedOnly,
+                AssSearchQuery(requiredTags = setOf("bord")),
+            )
+        )
+        assertTrue(
+            AssSearchReplace.matches(
+                nestedOnly,
+                AssSearchQuery(requiredTags = setOf("t")),
+            )
+        )
+    }
+
+    @Test
+    fun semanticSearchRejectsMalformedTagNamesAndUnknownStyleTargets() {
+        assertFailsWith<IllegalArgumentException> {
+            AssSearchQuery(requiredTags = setOf("pos("))
+        }
+
+        val document = AssDocument(
+            styles = listOf(AssStyle(name = "Default")),
+            events = listOf(event(4, 0, 1000, "Text")),
+        )
+        val query = AssSearchQuery(stylePattern = Regex("Default"))
+        val error = assertFailsWith<IllegalArgumentException> {
+            AssSearchReplace.preview(
+                document = document,
+                query = query,
+                replacement = AssSearchReplacement(
+                    scope = AssReplaceScope.STYLE,
+                    pattern = Regex("Default"),
+                    replacement = "Missing",
+                ),
+            )
+        }
+
+        assertTrue(error.message.orEmpty().contains("Style"))
+        assertEquals("Default", document.events.single().style)
     }
 
     @Test

@@ -72,6 +72,70 @@ class PreviewTargetResolverTest {
     }
 
     @Test
+    fun inheritedAnchorFailsClosedWhenStyleReferenceIsMissing() {
+        val document = AssDocument(
+            styles = listOf(AssStyle(name = "Default", alignment = 2)),
+            events = listOf(event(10, "Text", style = "Missing")),
+        )
+
+        val candidate = PreviewTargetResolver.candidates(document, 500, 960.0, 1000.0).single()
+
+        assertEquals(PreviewTargetConfidence.UNRESOLVED, candidate.confidence)
+        assertTrue(candidate.anchor == null)
+        assertTrue(candidate.distance.isInfinite())
+    }
+
+    @Test
+    fun spanLocalAlignmentIsAmbiguousInsteadOfRepositioningTheWholePreviewTarget() {
+        val document = AssDocument(
+            styles = listOf(AssStyle(name = "Default", alignment = 2, marginV = 40)),
+            events = listOf(event(11, "A{\\an9}B")),
+        )
+
+        val candidate = PreviewTargetResolver.candidates(document, 500, 960.0, 1040.0).single()
+
+        assertEquals(PreviewTargetConfidence.UNRESOLVED, candidate.confidence)
+        assertTrue(candidate.anchor == null)
+    }
+
+    @Test
+    fun spanLocalPositionIsAmbiguousInsteadOfBecomingInheritedPlacement() {
+        val document = AssDocument(
+            events = listOf(event(13, "A{\\pos(100,100)}B")),
+        )
+
+        val candidate = PreviewTargetResolver.candidates(document, 500, 100.0, 100.0).single()
+
+        assertEquals(PreviewTargetConfidence.UNRESOLVED, candidate.confidence)
+        assertTrue(candidate.anchor == null)
+    }
+
+    @Test
+    fun invalidMoveTimingIsUnresolvedInsteadOfBeingInterpolated() {
+        val document = AssDocument(
+            events = listOf(event(14, "{\\move(0,0,100,100,900,100)}Move")),
+        )
+
+        val candidate = PreviewTargetResolver.candidates(document, 500, 50.0, 50.0).single()
+
+        assertEquals(PreviewTargetConfidence.UNRESOLVED, candidate.confidence)
+        assertTrue(candidate.anchor == null)
+    }
+
+    @Test
+    fun nonFiniteExplicitGeometryIsUnresolvedRatherThanAnExactAnchor() {
+        val document = AssDocument(
+            events = listOf(event(12, "{\\pos(1e309,100)}Huge")),
+        )
+
+        val candidate = PreviewTargetResolver.candidates(document, 500, 100.0, 100.0).single()
+
+        assertEquals(PreviewTargetConfidence.UNRESOLVED, candidate.confidence)
+        assertTrue(candidate.anchor == null)
+        assertTrue(candidate.distance.isInfinite())
+    }
+
+    @Test
     fun inactiveAndCommentEventsAreNotCandidates() {
         val document = AssDocument(
             events = listOf(

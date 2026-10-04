@@ -17,7 +17,7 @@
 - #76 Canvas Production Visual Evidence: merged；Canvas workspace 已有确定性 Android compositor production-rendered 证据。
 - #80 UI Contract Slice E（write target / batch intent）: current PR；typed Write Target + selection-derived batch default + batch commit action 正在验收。
 - Current main 已登记：Spatial、Tool Instances、Glass Layered、Precision Lens、Subtitle Object、Edge Bookmark 等实验 presentation。
-- `TIMELINE_DOCK_EXPERIMENTAL` 不在 current-main registry；#56 仅作为历史原型证据，不作为 current-main 实现 authority。
+- `TIMELINE_DOCK_EXPERIMENTAL` 仍不在 current main；#98 从 current main 语义重落地 Timeline Dock，#56/#82 保留为历史实现与测试 provenance。
 
 ## 状态口径
 
@@ -137,8 +137,8 @@
 
 | ID | 原始要求 | 状态 | Authority | Surface / code | 自动证据 | Visual | DEVICE / 阻塞 |
 |---|---|---|---|---|---|---|---|
-| 073 | 主界面底部常驻紧凑时间轴，包含播放头、字幕事件条与播放控制。 | **Partial** | main timeline core · #56 historical only | `ModernTimelinePane` + `core/domain/Timeline*`; dedicated Timeline Dock absent from registry | `TimelineViewportPolicyTest` / `AssTimelineSnapTest` / `AssTimelineRelationsTest`; no dock gate | Not 240-ID mapped | Not item-mapped；Timeline exists, but the dedicated persistent Timeline Dock presentation is not in current main. |
-| 074 | 上拉展开多轨时间轴，下拉恢复紧凑状态，时间视口和选择不丢失。 | **Planned** | main timeline core · #56 historical only | `ModernTimelinePane` + `core/domain/Timeline*`; dedicated Timeline Dock absent from registry | `TimelineViewportPolicyTest` / `AssTimelineSnapTest` / `AssTimelineRelationsTest`; no dock gate | Not 240-ID mapped | Not item-mapped；Historical #56 prototype only; not current-main authority. |
+| 073 | 主界面底部常驻紧凑时间轴，包含播放头、字幕事件条与播放控制。 | **Implemented** | #98 Timeline Dock re-land candidate | `TIMELINE_DOCK_EXPERIMENTAL` + `WorkbenchPreview` transport/event strip + `ModernTimelinePane(compact=true)` | `TimelineDockPolicyTest` + `UiVariantRegistryTest` + `PresentationStateSmokeInstrumentedTest` | Not 240-ID mapped | DEVICE 未验证；#98 合入 main 前保持 candidate authority。 |
+| 074 | 上拉展开多轨时间轴，下拉恢复紧凑状态，时间视口和选择不丢失。 | **Partial** | #98 Timeline Dock re-land candidate · main timeline core | 单一 `ModernTimelinePane` 实例在 compact / expanded 之间只改变约束与密度；上拉展开、下拉收拢 | `TimelineDockPolicyTest` + presentation invariant gate；现有 timeline viewport tests | Not 240-ID mapped | 展开/收拢与局部现场连续性已实现；真正多轨模型仍未实现，因此不得标 Implemented。 |
 | 075 | 双指缩放时间尺度，水平拖动浏览时间，纵向拖动浏览轨道。 | **Partial** | main timeline core · #56 historical only | `ModernTimelinePane` + `core/domain/Timeline*`; dedicated Timeline Dock absent from registry | `TimelineViewportPolicyTest` / `AssTimelineSnapTest` / `AssTimelineRelationsTest`; no dock gate | Not 240-ID mapped | Not item-mapped |
 | 076 | 拖动事件条调整整条时间，拖动左右端点分别调整开始与结束。 | **Implemented** | main timeline core · #56 historical only | `ModernTimelinePane` + `core/domain/Timeline*`; dedicated Timeline Dock absent from registry | `TimelineViewportPolicyTest` / `AssTimelineSnapTest` / `AssTimelineRelationsTest`; no dock gate | Not 240-ID mapped | Not item-mapped |
 | 077 | 起止点附近出现局部时间放大区与精确读数，避免短事件难以抓取。 | **Planned** | main timeline core · #56 historical only | `ModernTimelinePane` + `core/domain/Timeline*`; dedicated Timeline Dock absent from registry | `TimelineViewportPolicyTest` / `AssTimelineSnapTest` / `AssTimelineRelationsTest`; no dock gate | Not 240-ID mapped | Not item-mapped；No local endpoint time magnifier evidenced. |
@@ -148,7 +148,7 @@
 | 081 | ASS Layer 与 UI 轨道分开建模，整理轨道不擅自改写渲染层级。 | **Partial** | main timeline core · #56 historical only | `ModernTimelinePane` + `core/domain/Timeline*`; dedicated Timeline Dock absent from registry | `TimelineViewportPolicyTest` / `AssTimelineSnapTest` / `AssTimelineRelationsTest`; no dock gate | Not 240-ID mapped | Not item-mapped |
 | 082 | 时间轴点击事件同步画面与工具，播放经过事件时不强制替换编辑对象。 | **Partial** | main timeline core · #56 historical only | `ModernTimelinePane` + `core/domain/Timeline*`; dedicated Timeline Dock absent from registry | `TimelineViewportPolicyTest` / `AssTimelineSnapTest` / `AssTimelineRelationsTest`; no dock gate | Not 240-ID mapped | Not item-mapped |
 | 083 | 提供循环播放当前事件、选择范围和手动区间，便于反复检查。 | **Partial** | main timeline core · #56 historical only | `ModernTimelinePane` + `core/domain/Timeline*`; dedicated Timeline Dock absent from registry | `TimelineViewportPolicyTest` / `AssTimelineSnapTest` / `AssTimelineRelationsTest`; no dock gate | Not 240-ID mapped | Not item-mapped |
-| 084 | 时间轴常驻区域可由用户调节高度，保留明确的召回和展开入口。 | **Planned** | main timeline core · #56 historical only | `ModernTimelinePane` + `core/domain/Timeline*`; dedicated Timeline Dock absent from registry | `TimelineViewportPolicyTest` / `AssTimelineSnapTest` / `AssTimelineRelationsTest`; no dock gate | Not 240-ID mapped | Not item-mapped；Historical #56 prototype only; dedicated adjustable dock is not in current main. |
+| 084 | 时间轴常驻区域可由用户调节高度，保留明确的召回和展开入口。 | **Implemented** | #98 Timeline Dock re-land candidate | `TimelineDockPolicy` bounded resize + snap；`timeline-dock-handle` vertical drag + `timeline-dock-toggle` explicit entry | `TimelineDockPolicyTest` + `UiVariantRegistryTest` + presentation invariant gate | Not 240-ID mapped | DEVICE 未验证；手势体验与触摸命中仍需真机。 |
 
 ### 八、时间轴的激进扩展
 
@@ -382,6 +382,6 @@
 
 ## 下一批工程切片
 
-当前顺序保持：Presentation invariant gate（#61 + #69，已合入）→ UI Contract Slice A（#62，已合入）→ Binding/current object Slice B（#72，已合入）→ Preview/Commit → fonts/container/diagnostics → Write Target/batch intent → Timeline Dock → 后续 240 实验。
+当前顺序保持：Presentation invariant gate（#61 + #69，已合入）→ UI Contract Slice A（#62，已合入）→ Binding/current object Slice B（#72，已合入）→ Preview/Commit → fonts/container/diagnostics → Write Target/batch intent → Timeline Dock（#98 current-main re-land）→ 后续 240 实验。
 
 因此，在 Preview/Commit 等 UI Contract 后续切片尚未稳定前，本账本继续作为追踪基线，不把 073+ 的新 presentation 大块并行塞进高冲突热点文件。
