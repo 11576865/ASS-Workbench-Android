@@ -59,6 +59,8 @@ import io.github.assworkbench.app.ContainerResourceKind
 import io.github.assworkbench.app.ContainerResourceUi
 import io.github.assworkbench.app.ContainerTrackImportSourceKind
 import io.github.assworkbench.app.EditorViewModel
+import io.github.assworkbench.app.MediaImportDisposition
+import io.github.assworkbench.app.MediaImportTrackKind
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -181,7 +183,106 @@ fun ContainerBridgePanel(
                         if (state.pendingAttachmentMetadataEdits.isNotEmpty()) {
                             append(" · 待改附件信息 ").append(state.pendingAttachmentMetadataEdits.size)
                         }
-                        if (state.pendingTrackAdditions.isNotEmpty()) {
+                        state.mediaImportAssessment?.let { assessment ->
+            HorizontalDivider()
+            Row(
+                Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        "媒体导入兼容性检测 · ${assessment.sourceName}",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    Text(
+                        "这里只判断 Track 级别的 Matroska 映射与转码边界，不会创建 Container Mutation。STREAM_COPY_COMPATIBLE 也不代表当前已经能执行导入。",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                TextButton(
+                    enabled = !state.trackImportLoading && !state.writeBackBusy,
+                    onClick = viewModel::clearContainerTrackImportCandidates,
+                ) { Text("关闭") }
+            }
+
+            assessment.tracks.forEach { result ->
+                val track = result.descriptor
+                Row(
+                    Modifier.fillMaxWidth().padding(vertical = 6.dp, horizontal = 4.dp),
+                    verticalAlignment = Alignment.Top,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Icon(
+                        imageVector = when (track.kind) {
+                            MediaImportTrackKind.VIDEO -> Icons.Filled.Movie
+                            MediaImportTrackKind.AUDIO -> Icons.Filled.Audiotrack
+                            MediaImportTrackKind.SUBTITLE -> Icons.Filled.Subtitles
+                            MediaImportTrackKind.OTHER -> Icons.Filled.HelpOutline
+                        },
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp),
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            buildString {
+                                append("Extractor Track #").append(track.extractorIndex)
+                                append(" · ").append(track.mime)
+                            },
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        Text(
+                            buildString {
+                                append(
+                                    when (result.disposition) {
+                                        MediaImportDisposition.STREAM_COPY_COMPATIBLE -> "Stream-copy compatible"
+                                        MediaImportDisposition.TRANSCODE_REQUIRED -> "需要显式 Transcode"
+                                        MediaImportDisposition.UNSUPPORTED -> "当前导入域不支持"
+                                        MediaImportDisposition.UNKNOWN -> "兼容性未决"
+                                    }
+                                )
+                                result.matroskaCodecId?.let {
+                                    append(" · ").append(it)
+                                }
+                                track.language?.takeIf(String::isNotBlank)?.let {
+                                    append(" · ").append(it)
+                                }
+                                if (track.kind == MediaImportTrackKind.VIDEO) {
+                                    if (track.width != null && track.height != null) {
+                                        append(" · ").append(track.width).append("×").append(track.height)
+                                    }
+                                }
+                                if (track.kind == MediaImportTrackKind.AUDIO) {
+                                    track.channelCount?.let { append(" · ").append(it).append("ch") }
+                                    track.sampleRate?.let { append(" · ").append(it).append("Hz") }
+                                }
+                                if (track.codecPrivateKeys.isNotEmpty()) {
+                                    append(" · codec config ").append(track.codecPrivateKeys.joinToString())
+                                }
+                                track.decoderAvailable?.let {
+                                    append(if (it) " · decoder available" else " · decoder unavailable")
+                                }
+                                if (!result.executionImplemented) {
+                                    append(" · execution not wired")
+                                }
+                            },
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Text(
+                            result.reason,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+        }
+
+        if (state.pendingTrackAdditions.isNotEmpty()) {
                             append(" · 待加轨 ").append(state.pendingTrackAdditions.size)
                         }
                         if (state.pendingTrackRemovals.isNotEmpty()) {
@@ -210,7 +311,7 @@ fun ContainerBridgePanel(
                 Icon(Icons.Filled.Refresh, contentDescription = "重新检测容器内容")
             }
             ContainerIconButton(
-                label = "从 Matroska / ASS / SRT 导入轨道",
+                label = "从 Matroska / ASS / SRT 导入；其他媒体先做兼容性检测",
                 enabled = !state.loading &&
                     !state.writeBackBusy &&
                     !state.attachmentExtractBusy &&
@@ -219,6 +320,8 @@ fun ContainerBridgePanel(
                 onClick = {
                     trackSourcePicker.launch(
                         arrayOf(
+                            "video/*",
+                            "audio/*",
                             "video/x-matroska",
                             "audio/x-matroska",
                             "application/x-matroska",
