@@ -57,7 +57,6 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
-import java.security.MessageDigest
 import java.util.concurrent.atomic.AtomicLong
 
 class EditorViewModel(application: Application) : AndroidViewModel(application) {
@@ -479,7 +478,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             ?.substringAfterLast('\\')
             ?.takeIf { it.isNotBlank() }
             ?: "外部轨道来源"
-        val standaloneAss = sourceName.substringAfterLast('.', "").equals("ass", ignoreCase = true)
+        val standaloneKind = detectStandaloneSubtitleTrackSourceKind(sourceName)
 
         trackImportJob?.cancel()
         _state.update {
@@ -488,8 +487,8 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                     trackImportLoading = true,
                     trackImportCandidates = emptyList(),
                 ),
-                status = if (standaloneAss) {
-                    "正在验证独立 ASS 并建立导入计划……"
+                status = if (standaloneKind != null) {
+                    "正在验证独立字幕并建立规范化导入计划……"
                 } else {
                     "正在扫描外部 Matroska 轨道……"
                 },
@@ -498,24 +497,23 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         trackImportJob = viewModelScope.launch {
             runCatching {
                 withContext(Dispatchers.IO) {
-                    if (standaloneAss) {
+                    if (standaloneKind != null) {
                         val raw = app.contentResolver.openInputStream(uri)?.use { it.readBytes() }
-                            ?: error("无法读取独立 ASS")
-                        require(raw.isNotEmpty()) { "独立 ASS 为空" }
-                        val decoded = AssTextDecoder.decode(raw).text
-                        val normalized = decoded.toByteArray(Charsets.UTF_8)
-                        val document = AssCodec.parse(decoded)
-                        require(document.events.isNotEmpty()) { "独立 ASS 没有可导入的 Events" }
+                            ?: error("无法读取独立字幕")
+                        val normalized = normalizeStandaloneSubtitleTrackSource(
+                            sourceKind = standaloneKind,
+                            raw = raw,
+                        )
                         listOf(
                             PendingContainerTrackAdditionUi(
-                                sourceKind = ContainerTrackImportSourceKind.STANDALONE_ASS,
+                                sourceKind = standaloneKind,
                                 sourceUri = uri.toString(),
                                 sourceName = sourceName,
-                                sourceSha256 = sha256Hex(normalized),
+                                sourceSha256 = normalized.normalizedSha256,
                                 kind = ContainerResourceKind.SUBTITLE,
                                 typeCode = 17L,
                                 codecId = "S_TEXT/ASS",
-                                name = sourceName.substringBeforeLast('.').ifBlank { "Imported ASS" },
+                                name = sourceName.substringBeforeLast('.').ifBlank { "Imported subtitle" },
                                 language = "und",
                                 sourceIsDefault = false,
                                 isDefault = false,
@@ -570,8 +568,10 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                         status = when {
                             candidates.isEmpty() ->
                                 "外部来源没有可导入的视频 / 音频 / 字幕轨道。"
-                            standaloneAss ->
-                                "独立 ASS 已验证；可作为新的 S_TEXT/ASS 字幕轨加入当前容器。"
+                            standaloneKind == ContainerTrackImportSourceKind.STANDALONE_ASS ->
+                                "独立 ASS 已验证并规范化；可作为新的 S_TEXT/ASS 字幕轨加入当前容器。"
+                            standaloneKind == ContainerTrackImportSourceKind.STANDALONE_SRT ->
+                                "独立 SRT 已解析并规范化为 ASS；可作为新的 S_TEXT/ASS 字幕轨加入当前容器。"
                             else ->
                                 "外部 Matroska 已检测 ${candidates.size} 条可导入轨道；请选择需要加入当前容器的轨道。"
                         },
@@ -614,8 +614,8 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 container = state.container.copy(
                     pendingTrackAdditions = state.container.pendingTrackAdditions + candidate,
                 ),
-                status = if (candidate.sourceKind == ContainerTrackImportSourceKind.STANDALONE_ASS) {
-                    "已计划把 ${candidate.sourceName} 作为新的 ASS 字幕轨加入；保存新 MKV 前不会修改源文件。"
+                status = if (candidate.sourceKind.isStandaloneSubtitleSource()) {
+                    "已计划把 ${candidate.sourceName} 规范化为新的 ASS 字幕轨加入；保存新 MKV 前不会修改源文件。"
                 } else {
                     "已计划添加 ${candidate.sourceName} · Track #${candidate.sourceTrackNumber}；保存新 MKV 前不会修改源文件。"
                 },
@@ -665,11 +665,6 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         sourceUri: String,
         sourceTrackNumber: Long?,
     ): String = sourceKind.name + "\u0000" + sourceUri + "\u0000" + (sourceTrackNumber ?: 0L)
-
-    private fun sha256Hex(bytes: ByteArray): String =
-        MessageDigest.getInstance("SHA-256")
-            .digest(bytes)
-            .joinToString("") { "%02x".format(it.toInt() and 0xff) }
 
     fun addContainerAttachments(uris: List<Uri>) {
         if (uris.isEmpty()) return
@@ -1324,21 +1319,26 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                                         }
                                         target
                                     }
-                                    ContainerTrackImportSourceKind.STANDALONE_ASS -> {
+                                    ContainerTrackImportSourceKind.STANDALONE_ASS,
+                                    ContainerTrackImportSourceKind.STANDALONE_SRT -> {
                                         val raw = app.contentResolver.openInputStream(Uri.parse(addition.sourceUri))
                                             ?.use { it.readBytes() }
-                                            ?: error("无法重新读取独立 ASS：" + addition.sourceName)
-                                        val normalized = AssTextDecoder.decode(raw).text.toByteArray(Charsets.UTF_8)
+                                            ?: error("无法重新读取独立字幕：" + addition.sourceName)
+                                        val normalized = normalizeStandaloneSubtitleTrackSource(
+                                            sourceKind = addition.sourceKind,
+                                            raw = raw,
+                                        )
                                         val expected = addition.sourceSha256
-                                            ?: error("独立 ASS 缺少来源 SHA-256 证据")
-                                        val actual = sha256Hex(normalized)
-                                        require(actual.equals(expected, ignoreCase = true)) {
-                                            "独立 ASS 来源已变化；请重新扫描后再保存：" + addition.sourceName
+                                            ?: error("独立字幕缺少规范化 SHA-256 证据")
+                                        require(
+                                            normalized.normalizedSha256.equals(expected, ignoreCase = true)
+                                        ) {
+                                            "独立字幕规范化结果已变化；请重新扫描后再保存：" + addition.sourceName
                                         }
                                         val target = File(work, "track-source-${trackSourceFiles.size}.ass")
-                                        target.writeBytes(normalized)
+                                        target.writeText(normalized.normalizedAssText, Charsets.UTF_8)
                                         require(target.length() > 0L) {
-                                            "独立 ASS 为空：" + addition.sourceName
+                                            "规范化 ASS 为空：" + addition.sourceName
                                         }
                                         target
                                     }
@@ -1426,7 +1426,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                             plannedTrackAdditions.zip(trackAdditionInputs).zip(actualAddedTracks)
                                 .forEach { (planAndInput, actualInfo) ->
                                     val (plannedAddition, stagedInput) = planAndInput
-                                    if (plannedAddition.sourceKind == ContainerTrackImportSourceKind.STANDALONE_ASS) {
+                                    if (plannedAddition.sourceKind.isStandaloneSubtitleSource()) {
                                         val sourceDocument = AssCodec.parse(
                                             stagedInput.source.readText(Charsets.UTF_8)
                                         )
