@@ -509,4 +509,95 @@ class ContainerEditPlanTest {
         assertEquals(ContainerCompatibilityStatus.WARNING, downstream.status)
         assertTrue(downstream.detail.contains("字体/其他 Attachment 不会自动随轨导入"))
     }
+
+    @Test
+    fun standaloneAssAdditionIsExplicitAndExecutable() {
+        val addition = PendingContainerTrackAdditionUi(
+            sourceKind = ContainerTrackImportSourceKind.STANDALONE_ASS,
+            sourceUri = "content://external/imported.ass",
+            sourceName = "imported.ass",
+            sourceSha256 = "a".repeat(64),
+            kind = ContainerResourceKind.SUBTITLE,
+            typeCode = 17L,
+            codecId = "S_TEXT/ASS",
+            name = "Imported ASS",
+            language = "eng",
+            isDefault = false,
+            isForced = false,
+        )
+        val state = EditorState(
+            container = ContainerBridgeState(
+                uri = "fixture-source",
+                writeBackAvailable = true,
+                resources = listOf(
+                    ContainerResourceUi(
+                        rowKey = "track:uid:101",
+                        kind = ContainerResourceKind.VIDEO,
+                        title = "Video",
+                        detail = "V_VP9 · Track #1",
+                        trackNumber = 1L,
+                        trackTarget = "uid:101",
+                    )
+                ),
+                pendingTrackAdditions = listOf(addition),
+            ),
+        )
+
+        val plan = buildContainerEditPlan(state)
+
+        assertTrue(plan.executable)
+        assertEquals(ContainerMutationKind.ADD_TRACK, plan.mutations.single().kind)
+        assertEquals(ContainerMutationSource.EXTERNAL_TRACK, plan.mutations.single().source)
+        assertTrue(plan.mutations.single().detail.contains("standalone ASS"))
+        assertEquals(
+            ContainerCompatibilityStatus.WARNING,
+            plan.checks.single { it.dimension == ContainerCompatibilityDimension.DOWNSTREAM }.status,
+        )
+        assertTrue(
+            plan.checks.single { it.dimension == ContainerCompatibilityDimension.DOWNSTREAM }
+                .detail.contains("SHA-256")
+        )
+    }
+
+    @Test
+    fun standaloneAssMissingShaBlocksPreflight() {
+        val addition = PendingContainerTrackAdditionUi(
+            sourceKind = ContainerTrackImportSourceKind.STANDALONE_ASS,
+            sourceUri = "content://external/imported.ass",
+            sourceName = "imported.ass",
+            sourceSha256 = null,
+            kind = ContainerResourceKind.SUBTITLE,
+            typeCode = 17L,
+            codecId = "S_TEXT/ASS",
+            name = "Imported ASS",
+            language = "und",
+            isDefault = false,
+            isForced = false,
+        )
+        val state = EditorState(
+            container = ContainerBridgeState(
+                uri = "fixture-source",
+                writeBackAvailable = true,
+                resources = listOf(
+                    ContainerResourceUi(
+                        rowKey = "track:uid:101",
+                        kind = ContainerResourceKind.VIDEO,
+                        title = "Video",
+                        detail = "V_VP9 · Track #1",
+                        trackNumber = 1L,
+                        trackTarget = "uid:101",
+                    )
+                ),
+                pendingTrackAdditions = listOf(addition),
+            ),
+        )
+
+        val plan = buildContainerEditPlan(state)
+
+        assertFalse(plan.executable)
+        assertEquals(
+            ContainerCompatibilityStatus.UNSUPPORTED,
+            plan.checks.single { it.dimension == ContainerCompatibilityDimension.CONTAINER_STRUCTURE }.status,
+        )
+    }
 }
