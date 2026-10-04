@@ -600,4 +600,94 @@ class ContainerEditPlanTest {
             plan.checks.single { it.dimension == ContainerCompatibilityDimension.CONTAINER_STRUCTURE }.status,
         )
     }
+
+    @Test
+    fun standaloneSrtAdditionIsExplicitAndExecutable() {
+        val addition = PendingContainerTrackAdditionUi(
+            sourceKind = ContainerTrackImportSourceKind.STANDALONE_SRT,
+            sourceUri = "content://external/imported.srt",
+            sourceName = "imported.srt",
+            sourceSha256 = "b".repeat(64),
+            kind = ContainerResourceKind.SUBTITLE,
+            typeCode = 17L,
+            codecId = "S_TEXT/ASS",
+            name = "Imported SRT",
+            language = "eng",
+            isDefault = false,
+            isForced = false,
+        )
+        val state = EditorState(
+            container = ContainerBridgeState(
+                uri = "fixture-source",
+                writeBackAvailable = true,
+                resources = listOf(
+                    ContainerResourceUi(
+                        rowKey = "track:uid:101",
+                        kind = ContainerResourceKind.VIDEO,
+                        title = "Video",
+                        detail = "V_VP9 · Track #1",
+                        trackNumber = 1L,
+                        trackTarget = "uid:101",
+                    )
+                ),
+                pendingTrackAdditions = listOf(addition),
+            ),
+        )
+
+        val plan = buildContainerEditPlan(state)
+
+        assertTrue(plan.executable)
+        assertEquals(ContainerMutationKind.ADD_TRACK, plan.mutations.single().kind)
+        assertTrue(plan.mutations.single().detail.contains("standalone SRT"))
+        val downstream = plan.checks.single {
+            it.dimension == ContainerCompatibilityDimension.DOWNSTREAM
+        }
+        assertEquals(ContainerCompatibilityStatus.WARNING, downstream.status)
+        assertTrue(downstream.detail.contains("ASS / SRT"))
+        assertTrue(downstream.detail.contains("SHA-256"))
+    }
+
+    @Test
+    fun standaloneSrtWithoutNormalizedHashBlocksPreflight() {
+        val addition = PendingContainerTrackAdditionUi(
+            sourceKind = ContainerTrackImportSourceKind.STANDALONE_SRT,
+            sourceUri = "content://external/imported.srt",
+            sourceName = "imported.srt",
+            sourceSha256 = null,
+            kind = ContainerResourceKind.SUBTITLE,
+            typeCode = 17L,
+            codecId = "S_TEXT/ASS",
+            name = "Imported SRT",
+            language = "und",
+            isDefault = false,
+            isForced = false,
+        )
+        val state = EditorState(
+            container = ContainerBridgeState(
+                uri = "fixture-source",
+                writeBackAvailable = true,
+                resources = listOf(
+                    ContainerResourceUi(
+                        rowKey = "track:uid:101",
+                        kind = ContainerResourceKind.VIDEO,
+                        title = "Video",
+                        detail = "V_VP9 · Track #1",
+                        trackNumber = 1L,
+                        trackTarget = "uid:101",
+                    )
+                ),
+                pendingTrackAdditions = listOf(addition),
+            ),
+        )
+
+        val plan = buildContainerEditPlan(state)
+
+        assertFalse(plan.executable)
+        assertEquals(
+            ContainerCompatibilityStatus.UNSUPPORTED,
+            plan.checks.single {
+                it.dimension == ContainerCompatibilityDimension.CONTAINER_STRUCTURE
+            }.status,
+        )
+    }
 }
