@@ -165,19 +165,19 @@ fun ContainerBridgePanel(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            if (state.loading) {
+            if (state.loading || state.attachmentExtractBusy) {
                 CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
             }
             ContainerIconButton(
                 label = "重新检测容器内容",
-                enabled = !state.loading && !state.writeBackBusy,
+                enabled = !state.loading && !state.writeBackBusy && !state.attachmentExtractBusy,
                 onClick = viewModel::rescanContainer,
             ) {
                 Icon(Icons.Filled.Refresh, contentDescription = "重新检测容器内容")
             }
             ContainerIconButton(
                 label = "添加附件",
-                enabled = !state.loading && !state.writeBackBusy,
+                enabled = !state.loading && !state.writeBackBusy && !state.attachmentExtractBusy,
                 onClick = { attachmentPicker.launch(arrayOf("*/*")) },
             ) {
                 Icon(Icons.Filled.AttachFile, contentDescription = "添加附件")
@@ -186,7 +186,8 @@ fun ContainerBridgePanel(
                 label = "保存为新 MKV；验证通过后写入，源文件不原地修改",
                 enabled = editPlan.executable &&
                     !state.loading &&
-                    !state.writeBackBusy,
+                    !state.writeBackBusy &&
+                    !state.attachmentExtractBusy,
                 onClick = onSaveMkv,
             ) {
                 Icon(Icons.Filled.Save, contentDescription = "保存为新 MKV")
