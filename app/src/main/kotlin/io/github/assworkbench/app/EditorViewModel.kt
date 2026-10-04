@@ -1382,6 +1382,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                             TrackImportInput(
                                 source = sourceFile,
                                 trackNumber = planned.sourceTrackNumber,
+                                sourceTrackUid = planned.sourceTrackUid,
                                 name = planned.name,
                                 language = planned.language,
                                 isDefault = planned.isDefault,
