@@ -186,6 +186,9 @@ internal fun WorkspaceParameterProjectionPane(
                         }
                     },
                     enabled = numberText.toDoubleOrNull()?.isFinite() == true,
+                    modifier = Modifier.testTag(
+                        "parameter-projection-apply-${projection.id.replace(':', '-')}"
+                    ),
                 ) {
                     Text("应用")
                 }
