@@ -1,0 +1,44 @@
+{
+  "packet_version": 1,
+  "packet_id": "ci-11576865-ASS-Workbench-Android-37185243204-1",
+  "status": "pending",
+  "record_type": "ci_failure",
+  "title": "Android Emulator Regression: failure",
+  "summary": "Tracked CI workflow did not complete successfully. Source adapter captured failed job/step evidence when available.",
+  "source_repository": "11576865/ASS-Workbench-Android",
+  "source_event": "workflow_run",
+  "source_ref": "feature/karaoke-batch-rules-v2",
+  "source_sha": "38224dd80b18d92f0faabb21f3347c689d107b91",
+  "source_url": "https://github.com/11576865/ASS-Workbench-Android/actions/runs/37185243204",
+  "created_at": "2026-10-04T07:24:23+00:00",
+  "dedupe_key": "workflow_run:11576865/ASS-Workbench-Android:37185243204:1",
+  "routing_hints": [
+    "interface-grammar",
+    "operations",
+    "red-reason",
+    "reliability"
+  ],
+  "evidence": {
+    "workflow": "Android Emulator Regression",
+    "run_id": "37185243204",
+    "run_attempt": "1",
+    "conclusion": "failure",
+    "trigger_event": "pull_request",
+    "failed_jobs": [
+      {
+        "id": 111385705190,
+        "name": "editor-regression",
+        "conclusion": "failure"
+      }
+    ],
+    "failed_steps": [
+      {
+        "job": "editor-regression",
+        "number": 12,
+        "name": "Run editor regression suite on Android Emulator",
+        "conclusion": "failure"
+      }
+    ],
+    "capture_error": ""
+  }
+}
