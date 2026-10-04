@@ -178,15 +178,29 @@ internal fun buildContainerEditPlan(state: EditorState): ContainerEditPlanUi {
 
     state.container.pendingTrackAdditions.forEach { addition ->
         mutations += ContainerMutationUi(
-            id = "add-track:${addition.sourceUri}:${addition.sourceTrackNumber}",
+            id = buildString {
+                append("add-track:").append(addition.sourceKind.name)
+                append(':').append(addition.sourceUri)
+                addition.sourceTrackNumber?.let { append(':').append(it) }
+            },
             kind = ContainerMutationKind.ADD_TRACK,
             source = ContainerMutationSource.EXTERNAL_TRACK,
             title = "添加轨道 " + addition.name.ifBlank {
-                "${addition.codecId} · Track #${addition.sourceTrackNumber}"
+                when (addition.sourceKind) {
+                    ContainerTrackImportSourceKind.MATROSKA_TRACK ->
+                        "${addition.codecId} · Track #${addition.sourceTrackNumber}"
+                    ContainerTrackImportSourceKind.STANDALONE_ASS ->
+                        addition.sourceName
+                }
             },
             detail = buildString {
                 append(addition.sourceName)
-                append(" · source Track #").append(addition.sourceTrackNumber)
+                when (addition.sourceKind) {
+                    ContainerTrackImportSourceKind.MATROSKA_TRACK ->
+                        append(" · source Track #").append(addition.sourceTrackNumber)
+                    ContainerTrackImportSourceKind.STANDALONE_ASS ->
+                        append(" · standalone ASS → S_TEXT/ASS · source SHA-256 pinned")
+                }
                 append(" · ").append(addition.codecId)
                 if (addition.language.isNotBlank()) append(" · ").append(addition.language)
                 if (addition.isDefault) append(" · Default")
@@ -235,11 +249,22 @@ internal fun buildContainerEditPlan(state: EditorState): ContainerEditPlanUi {
     val missingTrackTargets =
         (trackRemovalTargets + trackMetadataTargets).filterNot { it in currentTrackTargets }
     val trackAdditionKeys = state.container.pendingTrackAdditions.map {
-        it.sourceUri + "\u0000" + it.sourceTrackNumber
+        it.sourceKind.name + "\u0000" + it.sourceUri + "\u0000" + (it.sourceTrackNumber ?: 0L)
     }
     val duplicateTrackAdditions = trackAdditionKeys.groupingBy { it }.eachCount()
         .filterValues { it > 1 }
         .keys
+    val invalidTrackAdditions = state.container.pendingTrackAdditions.filter { addition ->
+        when (addition.sourceKind) {
+            ContainerTrackImportSourceKind.MATROSKA_TRACK ->
+                addition.sourceTrackNumber == null || addition.sourceTrackNumber <= 0L
+            ContainerTrackImportSourceKind.STANDALONE_ASS ->
+                addition.kind != ContainerResourceKind.SUBTITLE ||
+                    addition.typeCode != 17L ||
+                    addition.codecId != "S_TEXT/ASS" ||
+                    !addition.sourceSha256.orEmpty().matches(Regex("[0-9a-fA-F]{64}"))
+        }
+    }
     val remainingTrackCount =
         currentTrackTargets.size - trackRemovalTargets.size + state.container.pendingTrackAdditions.size
     val selectedTrackTarget = state.container.resources.firstOrNull {
@@ -256,6 +281,7 @@ internal fun buildContainerEditPlan(state: EditorState): ContainerEditPlanUi {
             conflictingTrackTargets.isNotEmpty() -> ContainerCompatibilityStatus.UNSUPPORTED
             missingTrackTargets.isNotEmpty() -> ContainerCompatibilityStatus.UNSUPPORTED
             duplicateTrackAdditions.isNotEmpty() -> ContainerCompatibilityStatus.UNSUPPORTED
+            invalidTrackAdditions.isNotEmpty() -> ContainerCompatibilityStatus.UNSUPPORTED
             trackRemovalTargets.isNotEmpty() && remainingTrackCount <= 0 -> ContainerCompatibilityStatus.UNSUPPORTED
             removesDirtySelectedAss -> ContainerCompatibilityStatus.UNSUPPORTED
             mutations.isEmpty() -> ContainerCompatibilityStatus.WARNING
@@ -273,6 +299,8 @@ internal fun buildContainerEditPlan(state: EditorState): ContainerEditPlanUi {
                 "轨道目标已不在当前检测 Inventory 中：" + missingTrackTargets.joinToString()
             duplicateTrackAdditions.isNotEmpty() ->
                 "同一外部源轨不能在一次计划中重复添加：" + duplicateTrackAdditions.joinToString()
+            invalidTrackAdditions.isNotEmpty() ->
+                "外部轨道导入证据不完整或来源类型与计划不一致；请重新扫描来源。"
             trackRemovalTargets.isNotEmpty() && remainingTrackCount <= 0 ->
                 "不能删除容器中的全部轨道。"
             removesDirtySelectedAss ->
@@ -316,6 +344,9 @@ internal fun buildContainerEditPlan(state: EditorState): ContainerEditPlanUi {
     val hasImportedSubtitleTrack = state.container.pendingTrackAdditions.any {
         it.kind == ContainerResourceKind.SUBTITLE
     }
+    val hasStandaloneAssImport = state.container.pendingTrackAdditions.any {
+        it.sourceKind == ContainerTrackImportSourceKind.STANDALONE_ASS
+    }
     val hasFontAttachment = mutations.any { it.source == ContainerMutationSource.FONT_PACKAGE }
     val hasAss = mutations.any { it.kind == ContainerMutationKind.REPLACE_ASS_TRACK }
 
@@ -327,7 +358,10 @@ internal fun buildContainerEditPlan(state: EditorState): ContainerEditPlanUi {
             detail = buildString {
                 append("Track 添加 / 删除、语言 / Default / Forced 等元数据会影响播放器的自动选轨；容器写入可验证，但不同播放器的选择策略不是 Matroska 结构保证。当前导入器把新轨计划为 non-Default，以避免无意抢占现有自动选轨。")
                 if (hasImportedSubtitleTrack) {
-                    append(" 外部字幕轨只导入所选 Track；源 MKV 的字体/其他 Attachment 不会自动随轨导入。")
+                    append(" 外部字幕轨不会自动携带字体/其他 Attachment。")
+                }
+                if (hasStandaloneAssImport) {
+                    append(" 独立 ASS 在保存前按 SHA-256 重新验证来源，再规范化为 UTF-8 并封装为 S_TEXT/ASS；这不是对原容器 Track 的字节复制。")
                 }
             },
         )
