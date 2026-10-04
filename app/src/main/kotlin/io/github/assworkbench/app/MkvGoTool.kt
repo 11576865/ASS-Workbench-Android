@@ -15,6 +15,14 @@ data class AttachmentMetadataEditInput(
     val description: String,
 )
 
+data class TrackMetadataEditInput(
+    val target: String,
+    val name: String,
+    val language: String,
+    val isDefault: Boolean,
+    val isForced: Boolean,
+)
+
 class MkvGoTool(private val context: Context) {
     private val executable: File
         get() = File(context.applicationInfo.nativeLibraryDir, "libmkvgo.so")
@@ -36,6 +44,8 @@ class MkvGoTool(private val context: Context) {
         removeAttachments: List<String> = emptyList(),
         replaceAttachments: List<AttachmentReplacementInput> = emptyList(),
         metadataEdits: List<AttachmentMetadataEditInput> = emptyList(),
+        removeTracks: List<String> = emptyList(),
+        trackMetadataEdits: List<TrackMetadataEditInput> = emptyList(),
     ) {
         require(isAvailable()) { "MKV 写回工具在此 ABI 上不可用" }
         output.parentFile?.mkdirs() ?: error("输出目录不可用")
@@ -88,6 +98,22 @@ class MkvGoTool(private val context: Context) {
                 args += metadata.name
                 args += metadata.description
             }
+        removeTracks.distinct().forEach { target ->
+            require(target.isNotBlank()) { "轨道删除目标不能为空" }
+            args += "--remove-track"
+            args += target
+        }
+        trackMetadataEdits
+            .distinctBy { it.target }
+            .forEach { metadata ->
+                require(metadata.target.isNotBlank()) { "轨道元数据目标不能为空" }
+                args += "--edit-track-meta"
+                args += metadata.target
+                args += metadata.name
+                args += metadata.language
+                args += if (metadata.isDefault) "1" else "0"
+                args += if (metadata.isForced) "1" else "0"
+            }
         args += editedAss.absolutePath
         run(*args.toTypedArray())
         require(output.isFile && output.length() > 0L) { "MKV 写回未生成输出文件" }
@@ -121,23 +147,30 @@ class MkvGoTool(private val context: Context) {
     }
 
 
-    fun editAttachments(
+    fun editContainer(
         source: File,
         output: File,
         additions: List<File> = emptyList(),
         removals: List<String> = emptyList(),
         replacements: List<AttachmentReplacementInput> = emptyList(),
         metadataEdits: List<AttachmentMetadataEditInput> = emptyList(),
+        removeTracks: List<String> = emptyList(),
+        trackMetadataEdits: List<TrackMetadataEditInput> = emptyList(),
     ) {
         require(isAvailable()) { "MKV 写回工具在此 ABI 上不可用" }
-        require(additions.isNotEmpty() || removals.isNotEmpty() || replacements.isNotEmpty() || metadataEdits.isNotEmpty()) {
-            "没有待执行的附件修改"
-        }
+        require(
+            additions.isNotEmpty() ||
+                removals.isNotEmpty() ||
+                replacements.isNotEmpty() ||
+                metadataEdits.isNotEmpty() ||
+                removeTracks.isNotEmpty() ||
+                trackMetadataEdits.isNotEmpty()
+        ) { "没有待执行的容器修改" }
         output.parentFile?.mkdirs() ?: error("输出目录不可用")
         output.delete()
 
         val args = mutableListOf(
-            "edit-attachments",
+            "edit-container",
             source.absolutePath,
             "-o", output.absolutePath,
         )
@@ -174,9 +207,41 @@ class MkvGoTool(private val context: Context) {
                 args += metadata.name
                 args += metadata.description
             }
+        removeTracks.distinct().forEach { target ->
+            require(target.isNotBlank()) { "轨道删除目标不能为空" }
+            args += "--remove-track"
+            args += target
+        }
+        trackMetadataEdits
+            .distinctBy { it.target }
+            .forEach { metadata ->
+                require(metadata.target.isNotBlank()) { "轨道元数据目标不能为空" }
+                args += "--edit-track-meta"
+                args += metadata.target
+                args += metadata.name
+                args += metadata.language
+                args += if (metadata.isDefault) "1" else "0"
+                args += if (metadata.isForced) "1" else "0"
+            }
         run(*args.toTypedArray())
         require(output.isFile && output.length() > 0L) { "MKV 写回未生成输出文件" }
     }
+
+    fun editAttachments(
+        source: File,
+        output: File,
+        additions: List<File> = emptyList(),
+        removals: List<String> = emptyList(),
+        replacements: List<AttachmentReplacementInput> = emptyList(),
+        metadataEdits: List<AttachmentMetadataEditInput> = emptyList(),
+    ) = editContainer(
+        source = source,
+        output = output,
+        additions = additions,
+        removals = removals,
+        replacements = replacements,
+        metadataEdits = metadataEdits,
+    )
 
     fun extractAttachment(
         source: File,
