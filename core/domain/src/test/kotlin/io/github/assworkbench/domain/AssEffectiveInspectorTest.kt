@@ -34,6 +34,29 @@ class AssEffectiveInspectorTest {
     }
 
     @Test
+    fun transformPayloadDoesNotReplaceInitialScalarValue() {
+        val document = AssDocument(
+            styles = listOf(AssStyle(name = "Default", fontSize = 48.0)),
+            events = listOf(
+                AssEvent(
+                    id = 6,
+                    start = SubTime(0),
+                    end = SubTime(1_000),
+                    style = "Default",
+                    text = "{\\fs50\\t(0,500,\\fs80)}A",
+                )
+            ),
+        )
+
+        val size = AssEffectiveInspector.inspect(document, document.events.single())
+            .first { it.name == "Size" }
+
+        assertEquals("50", size.effectiveValue)
+        assertEquals("50", size.overrideValue)
+        assertTrue(size.spanDependent)
+    }
+
+    @Test
     fun leadingStyleResetResolvesInitialSpanAgainstExactReferencedStyle() {
         val document = AssDocument(
             styles = listOf(
