@@ -33,6 +33,7 @@ data class ContainerResourceUi(
     val trackTarget: String? = null,
     val trackUid: Long? = null,
     val trackCodecId: String = "",
+    val trackName: String = "",
     val trackLanguage: String = "",
     val trackIsDefault: Boolean = false,
     val trackIsForced: Boolean = false,
