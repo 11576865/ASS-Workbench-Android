@@ -34,3 +34,24 @@ This is the contract-first slice for UI-240 items 109/110. It does **not** yet:
 
 Those steps must build on the descriptor/intent identity rather than coupling a
 new canvas control directly to an existing pane's local draft state.
+
+
+## Live projection slice
+
+The first consumer is Rotation Z:
+
+- the Position tool can create an independent canvas projection without changing
+  the descriptor or Event binding;
+- projections are persisted in WorkspaceState schema v4 and coexist with v1-v3
+  restoration;
+- one descriptor can have multiple independent projection instances;
+- live NUMBER and SLIDER presentations read the same effective Rotation Z;
+- preview ownership is extended with the projection id
+  (`geometry:<event>:<projection>`) so an extracted control is observable as an
+  external preview by the original Position pane instead of impersonating its local draft;
+- commit still uses EditorViewModel's canonical document mutation and therefore
+  creates normal ASS Undo history.
+
+The extraction affordance is currently explicit ("拆出旋转控件"), not drag-to-extract.
+Angle Dial remains declared by the descriptor but does not yet have a live renderer.
+Items 109/110 therefore remain Partial.
