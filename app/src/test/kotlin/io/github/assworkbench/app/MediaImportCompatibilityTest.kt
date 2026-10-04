@@ -71,6 +71,8 @@ class MediaImportCompatibilityTest {
 
         assertEquals(MediaImportDisposition.STREAM_COPY_COMPATIBLE, result.disposition)
         assertEquals("A_MPEG/L3", result.matroskaCodecId)
+        assertTrue(result.executionImplemented)
+        assertTrue(result.reason.contains("MediaExtractor"))
     }
 
     @Test
