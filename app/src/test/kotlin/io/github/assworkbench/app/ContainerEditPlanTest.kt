@@ -690,4 +690,38 @@ class ContainerEditPlanTest {
             }.status,
         )
     }
+
+    @Test
+    fun mediaCompatibilityAssessmentNeverCreatesMutation() {
+        val assessment = MediaImportSourceAssessment(
+            sourceName = "movie.mp4",
+            tracks = listOf(
+                MediaImportTrackAssessment(
+                    descriptor = MediaImportTrackDescriptor(
+                        extractorIndex = 0,
+                        kind = MediaImportTrackKind.VIDEO,
+                        mime = "video/avc",
+                        codecPrivateKeys = setOf("csd-0", "csd-1"),
+                        decoderAvailable = true,
+                    ),
+                    disposition = MediaImportDisposition.STREAM_COPY_COMPATIBLE,
+                    matroskaCodecId = "V_MPEG4/ISO/AVC",
+                    executionImplemented = false,
+                    reason = "compatibility-only fixture",
+                )
+            ),
+        )
+        val state = EditorState(
+            container = ContainerBridgeState(
+                uri = "fixture-source",
+                writeBackAvailable = true,
+                mediaImportAssessment = assessment,
+            ),
+        )
+
+        val plan = buildContainerEditPlan(state)
+
+        assertTrue(plan.mutations.isEmpty())
+        assertFalse(plan.executable)
+    }
 }
