@@ -688,7 +688,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             _state.update { it.copy(status = "当前 ABI 没有可用的 MKV 附件提取工具。") }
             return
         }
-        val extractEpoch = workspaceEpoch.get()
+        val extractSessionId = snapshot.workspaceSessionId
         val operationId = writeBackSerial.incrementAndGet()
         _state.update {
             it.copy(
@@ -728,7 +728,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 }
             }.onSuccess { bytes ->
                 if (
-                    workspaceEpoch.get() != extractEpoch ||
+                    _state.value.workspaceSessionId != extractSessionId ||
                     _state.value.container.uri != snapshot.container.uri
                 ) return@onSuccess
                 _state.update {
@@ -740,7 +740,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             }.onFailure { error ->
                 if (error is kotlinx.coroutines.CancellationException) return@onFailure
                 if (
-                    workspaceEpoch.get() != extractEpoch ||
+                    _state.value.workspaceSessionId != extractSessionId ||
                     _state.value.container.uri != snapshot.container.uri
                 ) return@onFailure
                 _state.update {
@@ -804,6 +804,10 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         val snapshot = _state.value
         if (snapshot.container.writeBackBusy) {
             _state.update { it.copy(status = "已有 MKV 写回任务正在进行。") }
+            return
+        }
+        if (snapshot.container.attachmentExtractBusy) {
+            _state.update { it.copy(status = "附件提取进行中；完成后再保存 MKV。") }
             return
         }
         val saveEpoch = workspaceEpoch.get()
