@@ -191,6 +191,10 @@ private fun MatroskaScanResult.inventoryItems(): List<InventoryItem> {
                 detail = detail,
                 attachmentTarget = info.uid?.toString()
                     ?: info.fileName.takeIf { attachmentNameCounts[it] == 1 },
+                attachmentMimeType = info.mimeType,
+                attachmentDescription = info.description,
+                attachmentSizeBytes = info.sizeBytes,
+                attachmentSha256 = info.sha256,
             ),
         )
     }
