@@ -7,6 +7,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import io.github.assworkbench.container.MatroskaReader
 import io.github.assworkbench.container.MatroskaTrackKind
 import java.io.File
+import java.security.MessageDigest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -350,6 +351,82 @@ class MkvBridgeInstrumentedTest {
         assertFalse(added.isForced)
 
         assertEquals(2, after.trackInfos.count { it.kind == MatroskaTrackKind.VIDEO })
+        assertEquals(before.chapterCount, after.chapterCount)
+        assertEquals(
+            before.attachmentInfos.map { listOf(it.uid, it.fileName, it.mimeType, it.sizeBytes) },
+            after.attachmentInfos.map { listOf(it.uid, it.fileName, it.mimeType, it.sizeBytes) },
+        )
+    }
+
+    @Test
+    fun nativeBridgeAddsStandaloneAssAsFreshSubtitleTrack() {
+        val source = File(workDir, "standalone-ass-base.mkv")
+        InstrumentationRegistry.getInstrumentation().context.assets
+            .open("mkv/source.mkv")
+            .use { input -> source.outputStream().use { output -> input.copyTo(output) } }
+
+        val before = source.inputStream().use { MatroskaReader().scan(it) }
+        val maxOriginalNumber = before.trackInfos.maxOf { it.number }
+        val originalUids = before.trackInfos.mapNotNull { it.uid }.toSet()
+
+        val importedAss = File(workDir, "imported.ass")
+        val assText = """
+            [Script Info]
+            ScriptType: v4.00+
+
+            [V4+ Styles]
+            Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+            Style: Default,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&H64000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+            [Events]
+            Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+            Dialogue: 0,0:00:00.25,0:00:02.25,Default,,0,0,0,,Standalone Android import
+        """.trimIndent()
+        importedAss.writeText(assText, Charsets.UTF_8)
+        val sha = MessageDigest.getInstance("SHA-256")
+            .digest(importedAss.readBytes())
+            .joinToString("") { "%02x".format(it.toInt() and 0xff) }
+
+        val output = File(workDir, "standalone-ass-updated.mkv")
+        val tool = MkvGoTool(application)
+        assertTrue("x86_64 emulator APK must package the mkvgo helper", tool.isAvailable())
+        tool.editContainer(
+            source = source,
+            output = output,
+            addTracks = listOf(
+                TrackAdditionInput(
+                    sourceKind = ContainerTrackImportSourceKind.STANDALONE_ASS,
+                    source = importedAss,
+                    sourceSha256 = sha,
+                    name = "Standalone ASS",
+                    language = "eng",
+                    isDefault = false,
+                    isForced = false,
+                )
+            ),
+        )
+
+        val after = output.inputStream().use { MatroskaReader().scan(it) }
+        assertEquals(before.trackInfos.size + 1, after.trackInfos.size)
+        assertEquals(
+            before.trackPreservationSignature(),
+            after.copy(trackInfos = after.trackInfos.take(before.trackInfos.size))
+                .trackPreservationSignature(),
+        )
+
+        val added = after.trackInfos.last()
+        assertEquals(MatroskaTrackKind.SUBTITLE, added.kind)
+        assertEquals("S_TEXT/ASS", added.codecId)
+        assertTrue(added.number > maxOriginalNumber)
+        val addedUid = added.uid
+        assertTrue(addedUid != null && addedUid !in originalUids)
+        assertEquals("Standalone ASS", added.name)
+        assertEquals("eng", added.language)
+        assertFalse(added.isDefault)
+        assertFalse(added.isForced)
+
+        val importedTrack = after.subtitleTracks.single { it.number == added.number }
+        assertTrue(importedTrack.toAss().contains("Standalone Android import"))
         assertEquals(before.chapterCount, after.chapterCount)
         assertEquals(
             before.attachmentInfos.map { listOf(it.uid, it.fileName, it.mimeType, it.sizeBytes) },
