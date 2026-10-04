@@ -321,13 +321,15 @@ fun ContainerBridgePanel(
                         viewModel.cancelExistingAttachmentMetadata(target)
                     }
                 },
-                onRemoveTrack = trackTarget?.let { target ->
-                    {
-                        viewModel.planExistingTrackRemoval(
-                            target = target,
-                            number = resource.trackNumber ?: return@let,
-                            name = resource.title,
-                        )
+                onRemoveTrack = resource.trackNumber?.let { number ->
+                    trackTarget?.let { target ->
+                        {
+                            viewModel.planExistingTrackRemoval(
+                                target = target,
+                                number = number,
+                                name = resource.title,
+                            )
+                        }
                     }
                 },
                 onEditTrackMetadata = trackTarget?.let {
