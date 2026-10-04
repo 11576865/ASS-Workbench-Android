@@ -62,7 +62,9 @@ internal object PreviewTargetResolver {
         point: AssPoint,
     ): PreviewTargetCandidate {
         val geometry = AssGeometrySemantic.inspect(event.text)
-        val resolved = when (geometry.positionMode) {
+        val resolved = if (hasLateAnchorTag(event.text)) {
+            null to PreviewTargetConfidence.UNRESOLVED
+        } else when (geometry.positionMode) {
             AssPositionMode.POSITION -> geometry.position
                 ?.takeIf(::isFinitePoint)
                 ?.let { it to PreviewTargetConfidence.EXACT_ANCHOR }
@@ -145,6 +147,20 @@ internal object PreviewTargetResolver {
             else -> document.playResY - marginV
         }
         return AssPoint(x, y).takeIf(::isFinitePoint)
+    }
+
+    private fun hasLateAnchorTag(text: String): Boolean {
+        val analysis = AssInlineSyntax.analyze(text)
+        if (analysis.hasErrors) return true
+        val leadingEnd = leadingOverridePrefixLength(text)
+        return analysis.tags.any { tag ->
+            tag.start >= leadingEnd &&
+                (
+                    tag.name.equals("an", ignoreCase = true) ||
+                        tag.name.equals("pos", ignoreCase = true) ||
+                        tag.name.equals("move", ignoreCase = true)
+                    )
+        }
     }
 
     private fun leadingOverridePrefixLength(text: String): Int {
