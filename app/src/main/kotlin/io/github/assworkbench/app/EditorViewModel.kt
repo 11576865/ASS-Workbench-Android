@@ -591,10 +591,20 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                                 val transcode = assessment.tracks.count {
                                     it.disposition == MediaImportDisposition.TRANSCODE_REQUIRED
                                 }
+                                val executable = assessment.tracks.count { it.executionImplemented }
                                 val unresolved = assessment.tracks.size - streamCopy - transcode
-                                "媒体兼容性检测完成：${assessment.tracks.size} 条 Track；" +
-                                    "stream-copy 候选 $streamCopy，需转码 $transcode，" +
-                                    "未决/不支持 $unresolved。当前仅检测，不会进入写入计划。"
+                                buildString {
+                                    append("媒体兼容性检测完成：").append(assessment.tracks.size).append(" 条 Track；")
+                                    append("stream-copy 候选 ").append(streamCopy)
+                                    append("，其中可执行 ").append(executable)
+                                    append("；需转码 ").append(transcode)
+                                    append("；未决/不支持 ").append(unresolved).append("。")
+                                    if (executable > 0) {
+                                        append(" 已实现的 adapter 可进入“准备加入”；其余结果仍仅用于检测。")
+                                    } else {
+                                        append(" 当前没有可执行 generic-media adapter，不会进入写入计划。")
+                                    }
+                                }
                             }
                             candidates.isEmpty() ->
                                 "外部来源没有可导入的视频 / 音频 / 字幕轨道。"
