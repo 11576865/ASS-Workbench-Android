@@ -638,6 +638,20 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             if (state.container.writeBackBusy) {
                 return@update state.copy(status = "MKV 写回进行中；完成后才能修改附件计划。")
             }
+            val current = state.container.resources.firstOrNull { it.attachmentTarget == target }
+            if (
+                current != null &&
+                cleanName == current.title &&
+                description == current.attachmentDescription
+            ) {
+                return@update state.copy(
+                    container = state.container.copy(
+                        pendingAttachmentMetadataEdits = state.container.pendingAttachmentMetadataEdits
+                            .filterNot { it.target == target },
+                    ),
+                    status = "附件信息未变化；没有加入写入计划。",
+                )
+            }
             val edit = PendingContainerAttachmentMetadataUi(
                 target = target,
                 originalName = originalName,
