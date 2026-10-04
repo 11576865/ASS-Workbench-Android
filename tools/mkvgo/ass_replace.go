@@ -55,7 +55,7 @@ func ReplaceASSWithFontsAndAttachments(
 ) error {
 	return ReplaceASSWithFontsAndAttachmentEdits(
 		ctx, srcPath, trackID, assPath, dstPath,
-		fontPaths, attachmentPaths, nil, nil, nil, nil, nil, opts...,
+		fontPaths, attachmentPaths, nil, nil, nil, nil, nil, nil, opts...,
 	)
 }
 
@@ -80,7 +80,7 @@ func ReplaceASSWithFontsAndAttachmentEdits(
 	return ReplaceASSWithAttachmentEdits(
 		ctx, srcPath, trackID, assPath, dstPath,
 		all, removeTargets, replacements, metadataEdits,
-		removeTrackTargets, trackMetadataEdits, opts...,
+		removeTrackTargets, trackMetadataEdits, nil, opts...,
 	)
 }
 
@@ -98,7 +98,7 @@ func ReplaceASSWithAttachments(
 ) error {
 	return ReplaceASSWithAttachmentEdits(
 		ctx, srcPath, trackID, assPath, dstPath,
-		attachmentPaths, nil, nil, nil, nil, nil, opts...,
+		attachmentPaths, nil, nil, nil, nil, nil, nil, opts...,
 	)
 }
 
@@ -325,6 +325,7 @@ func EditContainerResources(
 	metadataEdits []AttachmentMetadataEdit,
 	removeTrackTargets []string,
 	trackMetadataEdits []TrackMetadataEdit,
+	trackImports []TrackImport,
 	opts ...mkv.Options,
 ) (err error) {
 	if len(attachmentPaths) == 0 &&
