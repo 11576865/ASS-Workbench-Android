@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -54,7 +55,7 @@ func ReplaceASSWithFontsAndAttachments(
 ) error {
 	return ReplaceASSWithFontsAndAttachmentEdits(
 		ctx, srcPath, trackID, assPath, dstPath,
-		fontPaths, attachmentPaths, nil, nil, opts...,
+		fontPaths, attachmentPaths, nil, nil, nil, opts...,
 	)
 }
 
@@ -65,6 +66,7 @@ func ReplaceASSWithFontsAndAttachmentEdits(
 	assPath, dstPath string,
 	fontPaths, attachmentPaths, removeTargets []string,
 	replacements []AttachmentReplacement,
+	metadataEdits []AttachmentMetadataEdit,
 	opts ...mkv.Options,
 ) error {
 	for _, path := range fontPaths {
@@ -75,7 +77,7 @@ func ReplaceASSWithFontsAndAttachmentEdits(
 	all := append(append([]string(nil), fontPaths...), attachmentPaths...)
 	return ReplaceASSWithAttachmentEdits(
 		ctx, srcPath, trackID, assPath, dstPath,
-		all, removeTargets, replacements, opts...,
+		all, removeTargets, replacements, metadataEdits, opts...,
 	)
 }
 
@@ -93,13 +95,19 @@ func ReplaceASSWithAttachments(
 ) error {
 	return ReplaceASSWithAttachmentEdits(
 		ctx, srcPath, trackID, assPath, dstPath,
-		attachmentPaths, nil, nil, opts...,
+		attachmentPaths, nil, nil, nil, opts...,
 	)
 }
 
 type AttachmentReplacement struct {
 	Target string
 	Path   string
+}
+
+type AttachmentMetadataEdit struct {
+	Target      string
+	Name        string
+	Description string
 }
 
 func ReplaceASSWithAttachmentEdits(
@@ -109,6 +117,7 @@ func ReplaceASSWithAttachmentEdits(
 	assPath, dstPath string,
 	attachmentPaths, removeTargets []string,
 	replacements []AttachmentReplacement,
+	metadataEdits []AttachmentMetadataEdit,
 	opts ...mkv.Options,
 ) (err error) {
 	ass, err := subtitle.ParseASS(assPath)
@@ -129,6 +138,7 @@ func ReplaceASSWithAttachmentEdits(
 		attachmentPaths,
 		removeTargets,
 		replacements,
+		metadataEdits,
 	)
 	if err != nil {
 		return err
@@ -245,7 +255,7 @@ func AddAttachments(
 	attachmentPaths []string,
 	opts ...mkv.Options,
 ) error {
-	return EditAttachments(ctx, srcPath, dstPath, attachmentPaths, nil, nil, opts...)
+	return EditAttachments(ctx, srcPath, dstPath, attachmentPaths, nil, nil, nil, opts...)
 }
 
 func EditAttachments(
@@ -253,9 +263,10 @@ func EditAttachments(
 	srcPath, dstPath string,
 	attachmentPaths, removeTargets []string,
 	replacements []AttachmentReplacement,
+	metadataEdits []AttachmentMetadataEdit,
 	opts ...mkv.Options,
 ) error {
-	if len(attachmentPaths) == 0 && len(removeTargets) == 0 && len(replacements) == 0 {
+	if len(attachmentPaths) == 0 && len(removeTargets) == 0 && len(replacements) == 0 && len(metadataEdits) == 0 {
 		return fmt.Errorf("no attachment edits selected")
 	}
 	fs := mkv.FSFrom(opts)
@@ -268,6 +279,7 @@ func EditAttachments(
 		attachmentPaths,
 		removeTargets,
 		replacements,
+		metadataEdits,
 	)
 	if err != nil {
 		return err
@@ -281,9 +293,11 @@ func planAttachmentEdits(
 	existing []mkv.Attachment,
 	addPaths, removeTargets []string,
 	replacements []AttachmentReplacement,
+	metadataEdits []AttachmentMetadataEdit,
 ) ([]mkv.Attachment, error) {
 	removeIndexes := make(map[int]struct{}, len(removeTargets))
 	replaceByIndex := make(map[int]mkv.Attachment, len(replacements))
+	metadataByIndex := make(map[int]mkv.Attachment, len(metadataEdits))
 
 	for _, target := range removeTargets {
 		index, err := resolveAttachmentIndex(existing, target)
@@ -325,6 +339,33 @@ func planAttachmentEdits(
 		replaceByIndex[index] = att
 	}
 
+	for _, metadata := range metadataEdits {
+		index, err := resolveAttachmentIndex(existing, metadata.Target)
+		if err != nil {
+			return nil, err
+		}
+		if _, removing := removeIndexes[index]; removing {
+			return nil, fmt.Errorf("attachment %q cannot be removed and metadata-edited in the same edit", metadata.Target)
+		}
+		if _, replacing := replaceByIndex[index]; replacing {
+			return nil, fmt.Errorf("attachment %q cannot be replaced and metadata-edited in the same edit", metadata.Target)
+		}
+		if _, duplicate := metadataByIndex[index]; duplicate {
+			return nil, fmt.Errorf("attachment %q has more than one metadata edit", metadata.Target)
+		}
+		name := strings.TrimSpace(metadata.Name)
+		if name == "" {
+			return nil, fmt.Errorf("attachment %q metadata edit has empty name", metadata.Target)
+		}
+		if filepath.Base(name) != name || strings.ContainsAny(name, "/\\") {
+			return nil, fmt.Errorf("attachment name %q must be a file name, not a path", name)
+		}
+		att := existing[index]
+		att.Name = name
+		att.Description = metadata.Description
+		metadataByIndex[index] = att
+	}
+
 	updated := make([]mkv.Attachment, 0, len(existing)-len(removeIndexes)+len(addPaths))
 	for index, att := range existing {
 		if _, removing := removeIndexes[index]; removing {
@@ -332,9 +373,14 @@ func planAttachmentEdits(
 		}
 		if replacement, ok := replaceByIndex[index]; ok {
 			updated = append(updated, replacement)
+		} else if metadata, ok := metadataByIndex[index]; ok {
+			updated = append(updated, metadata)
 		} else {
 			updated = append(updated, att)
 		}
+	}
+	if err := validateUniqueAttachmentNames(updated); err != nil {
+		return nil, err
 	}
 
 	var nextIDFloor uint64 = 1
@@ -348,6 +394,52 @@ func planAttachmentEdits(
 		return nil, err
 	}
 	return append(updated, additions...), nil
+}
+
+func validateUniqueAttachmentNames(attachments []mkv.Attachment) error {
+	seen := make(map[string]string, len(attachments))
+	for _, att := range attachments {
+		key := strings.ToLower(att.Name)
+		if prior, exists := seen[key]; exists {
+			return fmt.Errorf("attachment name %q conflicts with %q", att.Name, prior)
+		}
+		seen[key] = att.Name
+	}
+	return nil
+}
+
+func ExtractAttachmentTarget(
+	ctx context.Context,
+	srcPath, target, outPath string,
+	opts ...mkv.Options,
+) (err error) {
+	fs := mkv.FSFrom(opts)
+	probe, err := reader.OpenWithFS(ctx, srcPath, fs, reader.WithoutAttachmentData())
+	if err != nil {
+		return err
+	}
+	index, err := resolveAttachmentIndex(probe.Attachments, target)
+	if err != nil {
+		return err
+	}
+	att := probe.Attachments[index]
+	src, err := attachmentSource(fs)(&att)
+	if err != nil {
+		return err
+	}
+	if closer, ok := src.(io.Closer); ok {
+		defer closer.Close()
+	}
+	out, err := fs.DoCreate(outPath)
+	if err != nil {
+		return err
+	}
+	defer closeWithErr(out, &err)
+	if att.Size <= 0 {
+		return nil
+	}
+	_, err = io.CopyN(out, src, att.Size)
+	return err
 }
 
 func resolveAttachmentIndex(existing []mkv.Attachment, target string) (int, error) {
