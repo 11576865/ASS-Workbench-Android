@@ -39,6 +39,17 @@ internal fun SemanticSearchReplacePane(state: EditorState, viewModel: EditorView
             runCatching { Regex(it, if (ignoreCase) setOf(RegexOption.IGNORE_CASE) else emptySet()) }.getOrNull()
         }
     }
+    val parsedRequiredTag = requiredTag.trim().removePrefix("\\").takeIf(String::isNotEmpty)
+    val parsedForbiddenTag = forbiddenTag.trim().removePrefix("\\").takeIf(String::isNotEmpty)
+    val tagNamePattern = remember { Regex("""[A-Za-z0-9_-]+""") }
+    val inputError = when {
+        patternText.isNotEmpty() && mainPattern == null -> "查找正则表达式无效。"
+        styleRegex.isNotBlank() && stylePattern == null -> "附加 Style regex 无效。"
+        actorRegex.isNotBlank() && actorPattern == null -> "附加 Actor regex 无效。"
+        parsedRequiredTag != null && !tagNamePattern.matches(parsedRequiredTag) -> "必须含 tag 的名称无效。"
+        parsedForbiddenTag != null && !tagNamePattern.matches(parsedForbiddenTag) -> "不得含 tag 的名称无效。"
+        else -> null
+    }
     val scope = AssReplaceScope.entries.firstOrNull { it.name == searchScope } ?: AssReplaceScope.VISIBLE_TEXT
     val query = remember(mainPattern, stylePattern, actorPattern, requiredTag, forbiddenTag, scope) {
         AssSearchQuery(
@@ -46,15 +57,25 @@ internal fun SemanticSearchReplacePane(state: EditorState, viewModel: EditorView
             rawPattern = mainPattern.takeIf { scope == AssReplaceScope.RAW_EVENT_TEXT },
             stylePattern = if (scope == AssReplaceScope.STYLE) mainPattern else stylePattern,
             actorPattern = if (scope == AssReplaceScope.ACTOR) mainPattern else actorPattern,
-            requiredTags = requiredTag.trim().removePrefix("\\").takeIf(String::isNotEmpty)?.let(::setOf).orEmpty(),
-            forbiddenTags = forbiddenTag.trim().removePrefix("\\").takeIf(String::isNotEmpty)?.let(::setOf).orEmpty(),
+            requiredTags = parsedRequiredTag?.let(::setOf).orEmpty(),
+            forbiddenTags = parsedForbiddenTag?.let(::setOf).orEmpty(),
         )
     }
-    val preview = remember(state.document, query, mainPattern, replacementText, scope) {
-        if (mainPattern == null) null else AssSearchReplace.preview(
-            state.document, query, AssSearchReplacement(scope, mainPattern, replacementText)
-        )
+    val previewResult = remember(state.document, query, mainPattern, replacementText, scope, inputError) {
+        if (mainPattern == null || inputError != null) {
+            null
+        } else {
+            runCatching {
+                AssSearchReplace.preview(
+                    state.document,
+                    query,
+                    AssSearchReplacement(scope, mainPattern, replacementText),
+                )
+            }
+        }
     }
+    val preview = previewResult?.getOrNull()
+    val previewError = inputError ?: previewResult?.exceptionOrNull()?.message
 
     Column(modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         HorizontalDivider()
@@ -87,8 +108,11 @@ internal fun SemanticSearchReplacePane(state: EditorState, viewModel: EditorView
             OutlinedTextField(styleRegex, { styleRegex = it }, label = { Text("附加 Style regex") }, modifier = Modifier.weight(1f))
             OutlinedTextField(actorRegex, { actorRegex = it }, label = { Text("附加 Actor regex") }, modifier = Modifier.weight(1f))
         }
-        if (patternText.isNotEmpty() && mainPattern == null) {
-            Text("正则表达式无效。", color = MaterialTheme.colorScheme.error)
+        if (previewError != null) {
+            Text(
+                previewError,
+                color = MaterialTheme.colorScheme.error,
+            )
         } else if (preview != null) {
             Text("命中 \${preview.hits.size} 条 · 将修改 \${preview.changedEventIds.size} 条")
             preview.hits.take(5).forEach {
@@ -100,7 +124,7 @@ internal fun SemanticSearchReplacePane(state: EditorState, viewModel: EditorView
                 val p = mainPattern ?: return@Button
                 viewModel.applySearchReplacement(query, AssSearchReplacement(scope, p, replacementText))
             },
-            enabled = mainPattern != null && preview?.changedEventIds?.isNotEmpty() == true,
+            enabled = previewError == null && mainPattern != null && preview?.changedEventIds?.isNotEmpty() == true,
             modifier = Modifier.fillMaxWidth(),
         ) { Text("替换全部 · 一个 Undo 事务") }
     }

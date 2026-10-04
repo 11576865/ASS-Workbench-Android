@@ -6,30 +6,113 @@ data class AssEffectiveValue(
     val eventValue: String? = null,
     val overrideValue: String? = null,
     val effectiveValue: String,
+    /**
+     * Style that provides the baseline for the first rendered span.
+     *
+     * This can differ from the Event Style after a leading \rStyle reset.
+     */
+    val effectiveStyle: String? = null,
+    /**
+     * True when later spans or a transform can change this property after the initial span.
+     *
+     * effectiveValue describes the initial rendered span instead of pretending that a
+     * mixed-format Event has one scalar value for its entire text.
+     */
+    val spanDependent: Boolean = false,
 )
 
 object AssEffectiveInspector {
-    fun inspect(document: AssDocument, event: AssEvent): List<AssEffectiveValue> {
-        val style = document.styles.firstOrNull { it.name == event.style } ?: AssStyle(name = event.style)
-        val analysis = AssInlineSyntax.analyze(event.text)
-        fun lastTag(vararg names: String): String? =
-            analysis.tags.lastOrNull { tag -> names.any { it.equals(tag.name, ignoreCase = true) } }?.value
+    private val animatedStyleProperties = setOf(
+        "Size", "Border", "Shadow", "Spacing", "Scale X", "Scale Y",
+        "Angle", "Shear X", "Shear Y", "Primary", "Outline Color",
+    )
 
-        val fs = lastTag("fs")?.toDoubleOrNull()
-        val fn = lastTag("fn")?.ifBlank { null }
-        val bord = lastTag("bord")?.toDoubleOrNull()
-        val shad = lastTag("shad")?.toDoubleOrNull()
-        val an = lastTag("an")?.toIntOrNull()
-        val bold = parseAssBool(lastTag("b"))
-        val italic = parseAssBool(lastTag("i"))
-        val underline = parseAssBool(lastTag("u"))
-        val strike = parseAssBool(lastTag("s"))
-        val spacing = lastTag("fsp")?.toDoubleOrNull()
+    fun inspect(document: AssDocument, event: AssEvent): List<AssEffectiveValue> {
+        val eventStyle = document.styles.firstOrNull { it.name == event.style }
+            ?: error("Event 引用不存在的 Style：${event.style}")
+        val analysis = AssInlineSyntax.analyze(event.text)
+        require(!analysis.hasErrors) { "Event 包含损坏的 ASS override block，无法可靠解析有效值。" }
+
+        val leadingEnd = AssTopLevelOverrideSyntax.leadingPrefixLength(event.text)
+        val topLevelTags = AssTopLevelOverrideSyntax.tags(event.text)
+        val leadingTags = topLevelTags.filter { it.start < leadingEnd }
+        val laterTags = topLevelTags.filter { it.start >= leadingEnd }
+
+        var activeStyle = eventStyle
+        val values = styleValues(activeStyle).toMutableMap()
+        val directOverrides = mutableMapOf<String, String>()
+
+        fun resetTo(style: AssStyle) {
+            activeStyle = style
+            values.clear()
+            values.putAll(styleValues(style))
+            directOverrides.clear()
+        }
+
+        leadingTags.forEach { tag ->
+            when (tag.name.lowercase()) {
+                "r" -> {
+                    val requested = tag.value.trim()
+                    val target = if (requested.isEmpty()) {
+                        eventStyle
+                    } else {
+                        document.styles.firstOrNull { it.name == requested }
+                            ?: error("前导 \\r 引用不存在的 Style：$requested")
+                    }
+                    resetTo(target)
+                }
+                "fn" -> {
+                    val value = tag.value.ifBlank { activeStyle.fontName }
+                    values["Font"] = value
+                    directOverrides["Font"] = value
+                }
+                "fs" -> setFiniteDouble(values, directOverrides, "Size", tag.value, "\\fs")
+                "bord" -> setFiniteDouble(values, directOverrides, "Border", tag.value, "\\bord")
+                "shad" -> setFiniteDouble(values, directOverrides, "Shadow", tag.value, "\\shad")
+                "b" -> setBoolean(values, directOverrides, "Bold", tag.value, "\\b")
+                "i" -> setBoolean(values, directOverrides, "Italic", tag.value, "\\i")
+                "u" -> setBoolean(values, directOverrides, "Underline", tag.value, "\\u")
+                "s" -> setBoolean(values, directOverrides, "Strike", tag.value, "\\s")
+                "fsp" -> setFiniteDouble(values, directOverrides, "Spacing", tag.value, "\\fsp")
+                "fscx" -> setFiniteDouble(values, directOverrides, "Scale X", tag.value, "\\fscx")
+                "fscy" -> setFiniteDouble(values, directOverrides, "Scale Y", tag.value, "\\fscy")
+                "fr", "frz" -> setFiniteDouble(values, directOverrides, "Angle", tag.value, "\\frz")
+                "fax" -> setFiniteDouble(values, directOverrides, "Shear X", tag.value, "\\fax")
+                "fay" -> setFiniteDouble(values, directOverrides, "Shear Y", tag.value, "\\fay")
+                "c", "1c" -> {
+                    require(tag.value.isNotBlank()) { "\\1c 颜色值不能为空。" }
+                    values["Primary"] = tag.value
+                    directOverrides["Primary"] = tag.value
+                }
+                "3c" -> {
+                    require(tag.value.isNotBlank()) { "\\3c 颜色值不能为空。" }
+                    values["Outline Color"] = tag.value
+                    directOverrides["Outline Color"] = tag.value
+                }
+            }
+        }
+
+        val laterReset = laterTags.any { it.name.equals("r", ignoreCase = true) }
+        val leadingTransform = leadingTags.any { it.name.equals("t", ignoreCase = true) }
+        val laterTransform = laterTags.any { it.name.equals("t", ignoreCase = true) }
+        fun changesLater(property: String, vararg tagNames: String): Boolean =
+            laterReset ||
+                laterTags.any { tag -> tagNames.any { it.equals(tag.name, ignoreCase = true) } } ||
+                ((leadingTransform || laterTransform) && property in animatedStyleProperties)
+
+        val leadingAlignmentTags = leadingTags.filter { it.name.equals("an", ignoreCase = true) }
+        val laterAlignment = laterTags.any { it.name.equals("an", ignoreCase = true) }
+        val alignmentOverride = leadingAlignmentTags.lastOrNull()?.value?.toIntOrNull()
+        if (leadingAlignmentTags.isNotEmpty()) {
+            require(alignmentOverride != null && alignmentOverride in 1..9) {
+                "\\an 必须在 1..9 之间。"
+            }
+        }
+
         val geometry = AssGeometrySemantic.inspect(event.text)
-        val scaleX = geometry.scaleX
-        val scaleY = geometry.scaleY
-        val shearX = geometry.shearX
-        val shearY = geometry.shearY
+        require(!geometry.malformedLeadingBlock) {
+            "Event 的前导 override block 不完整，无法可靠解析几何有效值。"
+        }
         val clipSummary = when {
             geometry.clipRect != null -> {
                 val rect = geometry.clipRect
@@ -39,131 +122,74 @@ object AssEffectiveInspector {
             geometry.clipNonRectangular -> if (geometry.clipInverted) "iclip vector/raw" else "clip vector/raw"
             else -> null
         }
-        val angle = geometry.rotationZ
-        val primaryColor = lastTag("1c", "c")
-        val outlineColor = lastTag("3c")
+
+        fun styleValue(
+            name: String,
+            base: String,
+            vararg tags: String,
+        ) = AssEffectiveValue(
+            name = name,
+            styleValue = base,
+            overrideValue = directOverrides[name],
+            effectiveValue = values.getValue(name),
+            effectiveStyle = activeStyle.name,
+            spanDependent = changesLater(name, *tags),
+        )
 
         return listOf(
-            AssEffectiveValue("Font", style.fontName, overrideValue = fn, effectiveValue = fn ?: style.fontName),
-            AssEffectiveValue(
-                "Size",
-                format(style.fontSize),
-                overrideValue = fs?.let(::format),
-                effectiveValue = format(fs ?: style.fontSize),
-            ),
+            styleValue("Font", eventStyle.fontName, "fn"),
+            styleValue("Size", format(eventStyle.fontSize), "fs"),
             AssEffectiveValue(
                 "Alignment",
-                style.alignment.toString(),
-                overrideValue = an?.toString(),
-                effectiveValue = (an ?: style.alignment).toString(),
+                eventStyle.alignment.toString(),
+                overrideValue = alignmentOverride?.toString(),
+                effectiveValue = (alignmentOverride ?: eventStyle.alignment).toString(),
+                effectiveStyle = eventStyle.name,
+                spanDependent = laterAlignment,
             ),
             AssEffectiveValue(
                 "Margin L",
-                style.marginL.toString(),
+                eventStyle.marginL.toString(),
                 eventValue = event.marginL.takeIf { it > 0 }?.toString(),
-                effectiveValue = (event.marginL.takeIf { it > 0 } ?: style.marginL).toString(),
+                effectiveValue = (event.marginL.takeIf { it > 0 } ?: eventStyle.marginL).toString(),
+                effectiveStyle = eventStyle.name,
             ),
             AssEffectiveValue(
                 "Margin R",
-                style.marginR.toString(),
+                eventStyle.marginR.toString(),
                 eventValue = event.marginR.takeIf { it > 0 }?.toString(),
-                effectiveValue = (event.marginR.takeIf { it > 0 } ?: style.marginR).toString(),
+                effectiveValue = (event.marginR.takeIf { it > 0 } ?: eventStyle.marginR).toString(),
+                effectiveStyle = eventStyle.name,
             ),
             AssEffectiveValue(
                 "Margin V",
-                style.marginV.toString(),
+                eventStyle.marginV.toString(),
                 eventValue = event.marginV.takeIf { it > 0 }?.toString(),
-                effectiveValue = (event.marginV.takeIf { it > 0 } ?: style.marginV).toString(),
+                effectiveValue = (event.marginV.takeIf { it > 0 } ?: eventStyle.marginV).toString(),
+                effectiveStyle = eventStyle.name,
             ),
-            AssEffectiveValue(
-                "Border",
-                format(style.outline),
-                overrideValue = bord?.let(::format),
-                effectiveValue = format(bord ?: style.outline),
-            ),
-            AssEffectiveValue(
-                "Shadow",
-                format(style.shadow),
-                overrideValue = shad?.let(::format),
-                effectiveValue = format(shad ?: style.shadow),
-            ),
-            AssEffectiveValue(
-                "Bold",
-                style.bold.toString(),
-                overrideValue = bold?.toString(),
-                effectiveValue = (bold ?: style.bold).toString(),
-            ),
-            AssEffectiveValue(
-                "Italic",
-                style.italic.toString(),
-                overrideValue = italic?.toString(),
-                effectiveValue = (italic ?: style.italic).toString(),
-            ),
-            AssEffectiveValue(
-                "Underline",
-                style.underline.toString(),
-                overrideValue = underline?.toString(),
-                effectiveValue = (underline ?: style.underline).toString(),
-            ),
-            AssEffectiveValue(
-                "Strike",
-                style.strikeOut.toString(),
-                overrideValue = strike?.toString(),
-                effectiveValue = (strike ?: style.strikeOut).toString(),
-            ),
-            AssEffectiveValue(
-                "Spacing",
-                format(style.spacing),
-                overrideValue = spacing?.let(::format),
-                effectiveValue = format(spacing ?: style.spacing),
-            ),
-            AssEffectiveValue(
-                "Scale X",
-                format(style.scaleX),
-                overrideValue = scaleX?.let(::format),
-                effectiveValue = format(scaleX ?: style.scaleX),
-            ),
-            AssEffectiveValue(
-                "Scale Y",
-                format(style.scaleY),
-                overrideValue = scaleY?.let(::format),
-                effectiveValue = format(scaleY ?: style.scaleY),
-            ),
-            AssEffectiveValue(
-                "Angle",
-                format(style.angle),
-                overrideValue = angle?.let(::format),
-                effectiveValue = format(angle ?: style.angle),
-            ),
-            AssEffectiveValue(
-                "Shear X",
-                "0",
-                overrideValue = shearX?.let(::format),
-                effectiveValue = format(shearX ?: 0.0),
-            ),
-            AssEffectiveValue(
-                "Shear Y",
-                "0",
-                overrideValue = shearY?.let(::format),
-                effectiveValue = format(shearY ?: 0.0),
-            ),
-            AssEffectiveValue(
-                "Primary",
-                style.primaryColor,
-                overrideValue = primaryColor,
-                effectiveValue = primaryColor ?: style.primaryColor,
-            ),
-            AssEffectiveValue(
-                "Outline Color",
-                style.outlineColor,
-                overrideValue = outlineColor,
-                effectiveValue = outlineColor ?: style.outlineColor,
-            ),
+            styleValue("Border", format(eventStyle.outline), "bord"),
+            styleValue("Shadow", format(eventStyle.shadow), "shad"),
+            styleValue("Bold", eventStyle.bold.toString(), "b"),
+            styleValue("Italic", eventStyle.italic.toString(), "i"),
+            styleValue("Underline", eventStyle.underline.toString(), "u"),
+            styleValue("Strike", eventStyle.strikeOut.toString(), "s"),
+            styleValue("Spacing", format(eventStyle.spacing), "fsp"),
+            styleValue("Scale X", format(eventStyle.scaleX), "fscx"),
+            styleValue("Scale Y", format(eventStyle.scaleY), "fscy"),
+            styleValue("Angle", format(eventStyle.angle), "fr", "frz"),
+            styleValue("Shear X", "0", "fax"),
+            styleValue("Shear Y", "0", "fay"),
+            styleValue("Primary", eventStyle.primaryColor, "c", "1c"),
+            styleValue("Outline Color", eventStyle.outlineColor, "3c"),
             AssEffectiveValue(
                 "Clip",
                 "none",
                 overrideValue = clipSummary,
                 effectiveValue = clipSummary ?: "none",
+                spanDependent = laterTags.any {
+                    it.name.equals("clip", true) || it.name.equals("iclip", true)
+                } || leadingTransform || laterTransform,
             ),
             AssEffectiveValue(
                 "Position",
@@ -184,17 +210,78 @@ object AssEffectiveInspector {
                     AssPositionMode.CONFLICT -> "conflict: pos + move"
                     AssPositionMode.INHERITED -> "alignment anchor"
                 },
+                spanDependent = laterTags.any {
+                    it.name.equals("pos", true) ||
+                        it.name.equals("move", true) ||
+                        it.name.equals("org", true)
+                },
             ),
         )
     }
 
-    private fun parseAssBool(value: String?): Boolean? {
-        val number = value?.toIntOrNull() ?: return null
-        return number != 0
+    private fun styleValues(style: AssStyle): Map<String, String> = linkedMapOf(
+        "Font" to style.fontName,
+        "Size" to format(style.fontSize),
+        "Border" to format(style.outline),
+        "Shadow" to format(style.shadow),
+        "Bold" to style.bold.toString(),
+        "Italic" to style.italic.toString(),
+        "Underline" to style.underline.toString(),
+        "Strike" to style.strikeOut.toString(),
+        "Spacing" to format(style.spacing),
+        "Scale X" to format(style.scaleX),
+        "Scale Y" to format(style.scaleY),
+        "Angle" to format(style.angle),
+        "Shear X" to "0",
+        "Shear Y" to "0",
+        "Primary" to style.primaryColor,
+        "Outline Color" to style.outlineColor,
+    )
+
+    private fun setFiniteDouble(
+        values: MutableMap<String, String>,
+        overrides: MutableMap<String, String>,
+        property: String,
+        raw: String,
+        tag: String,
+    ) {
+        val parsed = raw.toDoubleOrNull()
+        require(parsed?.isFinite() == true) { "$tag 必须是有限数字。" }
+        val formatted = format(parsed)
+        values[property] = formatted
+        overrides[property] = formatted
+    }
+
+    private fun setBoolean(
+        values: MutableMap<String, String>,
+        overrides: MutableMap<String, String>,
+        property: String,
+        raw: String,
+        tag: String,
+    ) {
+        val parsed = raw.toIntOrNull()
+        require(parsed != null) { "$tag 必须是整数。" }
+        val formatted = (parsed != 0).toString()
+        values[property] = formatted
+        overrides[property] = formatted
     }
 
     private fun format(value: Double): String {
-        val rounded = kotlin.math.round(value * 100.0) / 100.0
-        return if (rounded % 1.0 == 0.0) rounded.toInt().toString() else rounded.toString()
+        require(value.isFinite()) { "有效值必须是有限数字。" }
+        val roundTripSafeLimit = Double.MAX_VALUE / 100.0
+        val rounded = if (value in -roundTripSafeLimit..roundTripSafeLimit) {
+            kotlin.math.round(value * 100.0) / 100.0
+        } else {
+            value
+        }
+        return if (
+            rounded >= Long.MIN_VALUE.toDouble() &&
+            rounded <= Long.MAX_VALUE.toDouble() &&
+            rounded % 1.0 == 0.0
+        ) {
+            rounded.toLong().toString()
+        } else {
+            rounded.toString()
+        }
     }
 }
