@@ -39,7 +39,7 @@ import androidx.compose.ui.unit.dp
 import io.github.assworkbench.app.EditorState
 import io.github.assworkbench.app.EditorViewModel
 import io.github.assworkbench.app.EditorViewModelUiActions
-import io.github.assworkbench.domain.AssInlineSyntax
+import io.github.assworkbench.domain.AssStyleInheritance
 import io.github.assworkbench.domain.AssStyle
 import kotlinx.coroutines.delay
 
@@ -670,7 +670,7 @@ private fun formatAssColor(value: AssRgba): String =
     )
 
 private fun styleOverrideSources(event: io.github.assworkbench.domain.AssEvent): List<String> {
-    val names = AssInlineSyntax.analyze(event.text).tagNames
+    val names = AssStyleInheritance.directManagedTagNames(event.text)
     fun has(vararg tags: String) = tags.any { it.lowercase() in names }
 
     return buildList {
