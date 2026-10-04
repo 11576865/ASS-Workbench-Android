@@ -55,6 +55,146 @@ class AssFxCompositionTest {
     }
 
     @Test
+    fun generatedFxRejectsMissingOrCaseMismatchedSourceStyle() {
+        val missing = AssDocument(
+            styles = listOf(AssStyle(name = "Default")),
+            events = listOf(
+                AssEvent(
+                    id = 70,
+                    start = SubTime(0),
+                    end = SubTime(1000),
+                    style = "Missing",
+                    text = "Missing style",
+                )
+            )
+        )
+
+        val missingError = assertFailsWith<IllegalStateException> {
+            AssFxComposition.createReflection(missing, 70)
+        }
+        assertTrue(missingError.message.orEmpty().contains("Style"))
+        assertEquals(1, missing.events.size)
+
+        val caseMismatch = missing.copy(
+            events = listOf(
+                missing.events.single().copy(
+                    id = 71,
+                    style = "default",
+                    text = "Case mismatch",
+                )
+            )
+        )
+        assertFailsWith<IllegalStateException> {
+            AssFxComposition.createGlow(caseMismatch, 71)
+        }
+        assertEquals("default", caseMismatch.events.single().style)
+    }
+
+    @Test
+    fun generatedFxFailsClosedWhenEventIdSpaceIsExhausted() {
+        val document = AssDocument(
+            events = listOf(
+                AssEvent(
+                    id = Long.MAX_VALUE,
+                    start = SubTime(0),
+                    end = SubTime(1000),
+                    text = "No id left",
+                )
+            )
+        )
+
+        val error = assertFailsWith<IllegalArgumentException> {
+            AssFxComposition.createGlow(document, Long.MAX_VALUE)
+        }
+
+        assertTrue(error.message.orEmpty().contains("Event ID"))
+        assertEquals(listOf(Long.MAX_VALUE), document.events.map { it.id })
+    }
+
+    @Test
+    fun reflectionPreservesZeroScaleAndRejectsNonFiniteDerivedGeometry() {
+        val zeroScale = AssDocument(
+            events = listOf(
+                AssEvent(
+                    id = 60,
+                    start = SubTime(0),
+                    end = SubTime(1000),
+                    text = "{\\fscy0\\pos(100,200)}Zero scale",
+                )
+            )
+        )
+        val zeroResult = AssFxComposition.createReflection(zeroScale, 60)
+        val zeroReflection = zeroResult.document.events.first {
+            it.id == zeroResult.generatedEventId
+        }
+        assertTrue(zeroReflection.text.contains("\\fscy0"))
+
+        val coordinateOverflow = AssDocument(
+            events = listOf(
+                AssEvent(
+                    id = 61,
+                    start = SubTime(0),
+                    end = SubTime(1000),
+                    text = "{\\pos(100,1e308)}Huge coordinate",
+                )
+            )
+        )
+        val coordinateError = assertFailsWith<IllegalArgumentException> {
+            AssFxComposition.createReflection(
+                coordinateOverflow,
+                61,
+                AssReflectionFxSpec(offsetY = 1e308),
+            )
+        }
+        assertTrue(coordinateError.message.orEmpty().contains("平移结果溢出"))
+        assertEquals("{\\pos(100,1e308)}Huge coordinate", coordinateOverflow.events.single().text)
+
+        val scaleOverflow = AssDocument(
+            events = listOf(
+                AssEvent(
+                    id = 62,
+                    start = SubTime(0),
+                    end = SubTime(1000),
+                    text = "{\\fscy1e308}Huge scale",
+                )
+            )
+        )
+        val scaleError = assertFailsWith<IllegalArgumentException> {
+            AssFxComposition.createReflection(
+                scaleOverflow,
+                62,
+                AssReflectionFxSpec(verticalScalePercent = 1e308),
+            )
+        }
+        assertTrue(scaleError.message.orEmpty().contains("Scale Y 计算溢出"))
+        assertEquals("{\\fscy1e308}Huge scale", scaleOverflow.events.single().text)
+    }
+
+    @Test
+    fun flipEntranceComputesTwoThirdsWithoutLongOverflow() {
+        val document = AssDocument(
+            events = listOf(
+                AssEvent(
+                    id = 63,
+                    start = SubTime(0),
+                    end = SubTime(Long.MAX_VALUE),
+                    text = "Long event",
+                )
+            )
+        )
+
+        val result = AssFxComposition.applyFlipEntrance(
+            document = document,
+            eventId = 63,
+            spec = AssFlipEntranceSpec(durationMs = Long.MAX_VALUE),
+        )
+
+        val text = result.events.single().text
+        assertTrue(text.contains("\\t(0,6148914691236517204,"))
+        assertTrue(text.contains("\\t(6148914691236517204,9223372036854775807,"))
+    }
+
+    @Test
     fun reflectionOffsetsMoveAndTransformOriginWithoutDestroyingTiming() {
         val document = AssDocument(
             events = listOf(
@@ -98,6 +238,158 @@ class AssFxCompositionTest {
     }
 
     @Test
+    fun generatedFxRejectsStyleResetInsteadOfLosingOwnedPropertiesMidLine() {
+        val document = AssDocument(
+            styles = listOf(
+                AssStyle(),
+                AssStyle(name = "Alt", scaleY = 72.0),
+            ),
+            events = listOf(
+                AssEvent(
+                    id = 44,
+                    start = SubTime(0),
+                    end = SubTime(1200),
+                    text = "{\\rAlt}Reset style",
+                )
+            )
+        )
+
+        val reflectionError = assertFailsWith<IllegalArgumentException> {
+            AssFxComposition.createReflection(document, 44)
+        }
+        assertTrue(reflectionError.message.orEmpty().contains("Style reset"))
+
+        val glowError = assertFailsWith<IllegalArgumentException> {
+            AssFxComposition.createGlow(document, 44)
+        }
+        assertTrue(glowError.message.orEmpty().contains("Style reset"))
+
+        val entranceError = assertFailsWith<IllegalArgumentException> {
+            AssFxComposition.applyFlipEntrance(document, 44)
+        }
+        assertTrue(entranceError.message.orEmpty().contains("Style reset"))
+
+        assertEquals("{\\rAlt}Reset style", document.events.single().text)
+    }
+
+    @Test
+    fun generatedFxRejectsNonKaraokeSpanAndTemporalReownership() {
+        val inline = AssDocument(
+            events = listOf(
+                AssEvent(
+                    id = 45,
+                    start = SubTime(0),
+                    end = SubTime(1000),
+                    text = "A{\\blur4}B",
+                )
+            )
+        )
+        val inlineError = assertFailsWith<IllegalArgumentException> {
+            AssFxComposition.createGlow(inline, 45)
+        }
+        assertTrue(inlineError.message.orEmpty().contains("后续行内"))
+
+        val faded = AssDocument(
+            events = listOf(
+                AssEvent(
+                    id = 46,
+                    start = SubTime(0),
+                    end = SubTime(1000),
+                    text = "{\\fad(120,120)}Fade",
+                )
+            )
+        )
+        val fadeError = assertFailsWith<IllegalArgumentException> {
+            AssFxComposition.createReflection(faded, 46)
+        }
+        assertTrue(fadeError.message.orEmpty().contains("\\fad / \\fade"))
+
+        val malformedFade = AssDocument(
+            events = listOf(
+                AssEvent(
+                    id = 50,
+                    start = SubTime(0),
+                    end = SubTime(1000),
+                    text = "{\\fad(bad)}Malformed fade",
+                )
+            )
+        )
+        val malformedFadeError = assertFailsWith<IllegalArgumentException> {
+            AssFxComposition.createGlow(malformedFade, 50)
+        }
+        assertTrue(malformedFadeError.message.orEmpty().contains("\\fad / \\fade"))
+
+        val transformed = AssDocument(
+            events = listOf(
+                AssEvent(
+                    id = 47,
+                    start = SubTime(0),
+                    end = SubTime(1000),
+                    text = "{\\t(0,500,\\fscy120)}Scale",
+                )
+            )
+        )
+        val transformError = assertFailsWith<IllegalArgumentException> {
+            AssFxComposition.createReflection(transformed, 47)
+        }
+        assertTrue(transformError.message.orEmpty().contains("\\t Transform"))
+
+        assertEquals("A{\\blur4}B", inline.events.single().text)
+        assertEquals("{\\fad(120,120)}Fade", faded.events.single().text)
+        assertEquals("{\\t(0,500,\\fscy120)}Scale", transformed.events.single().text)
+    }
+
+    @Test
+    fun spatialFadeRejectsGeometryTransformsButAllowsColorOnlyTransform() {
+        val animatedGeometry = AssDocument(
+            scriptInfo = linkedMapOf("PlayResX" to "1920", "PlayResY" to "1080"),
+            events = listOf(
+                AssEvent(
+                    id = 48,
+                    start = SubTime(0),
+                    end = SubTime(1000),
+                    text = "{\\pos(400,300)\\t(0,500,\\frz45\\fscx130)}Animated",
+                )
+            )
+        )
+
+        val geometryError = assertFailsWith<IllegalArgumentException> {
+            AssFxComposition.createReflection(
+                document = animatedGeometry,
+                eventId = 48,
+                fade = AssReflectionFadeSpec(
+                    bands = 4,
+                    depthPx = 120.0,
+                    direction = AssReflectionFadeDirection.DOWN,
+                ),
+            )
+        }
+        assertTrue(geometryError.message.orEmpty().contains("固定屏幕 Clip"))
+        assertEquals(1, animatedGeometry.events.size)
+
+        val colorOnly = animatedGeometry.copy(
+            events = listOf(
+                AssEvent(
+                    id = 49,
+                    start = SubTime(0),
+                    end = SubTime(1000),
+                    text = "{\\pos(400,300)\\t(0,500,\\1c&HFF0000&)}Color",
+                )
+            )
+        )
+        val result = AssFxComposition.createReflection(
+            document = colorOnly,
+            eventId = 49,
+            fade = AssReflectionFadeSpec(
+                bands = 4,
+                depthPx = 120.0,
+                direction = AssReflectionFadeDirection.DOWN,
+            ),
+        )
+        assertEquals(4, result.generatedEventIds.size)
+    }
+
+    @Test
     fun reflectionRejectsKaraokeSpanThatReownsReflectionProperties() {
         val document = AssDocument(
             events = listOf(
@@ -110,7 +402,7 @@ class AssFxCompositionTest {
             )
         )
 
-        val error = assertFailsWith<IllegalStateException> {
+        val error = assertFailsWith<IllegalArgumentException> {
             AssFxComposition.createReflection(document, 1)
         }
         assertTrue(error.message.orEmpty().contains("属性所有权冲突"))
@@ -136,7 +428,7 @@ class AssFxCompositionTest {
                 allowed.events.single().copy(text = "{\\alpha&H40&}{\\k20\\1a&HFF&}A")
             )
         )
-        assertFailsWith<IllegalStateException> {
+        assertFailsWith<IllegalArgumentException> {
             AssFxComposition.createGlow(conflict, 1)
         }
     }
@@ -154,7 +446,7 @@ class AssFxCompositionTest {
             )
         )
 
-        assertFailsWith<IllegalStateException> {
+        assertFailsWith<IllegalArgumentException> {
             AssFxComposition.applyFlipEntrance(document, 1)
         }
     }
@@ -213,6 +505,396 @@ class AssFxCompositionTest {
         assertTrue(reflection.text.contains("\\pos(400,340)"))
         assertTrue(reflection.text.contains("\\frx180"))
         assertEquals("{\\pos(400,300)\\bord2}Stack", source.text)
+    }
+
+    @Test
+    fun spatialFadeSplitsReflectionIntoClippedOpacityBands() {
+        val document = AssDocument(
+            scriptInfo = linkedMapOf("PlayResX" to "1920", "PlayResY" to "1080"),
+            events = listOf(
+                AssEvent(
+                    id = 30,
+                    layer = 3,
+                    start = SubTime(0),
+                    end = SubTime(1500),
+                    text = "{\\pos(400,300)}Fade",
+                )
+            )
+        )
+
+        val result = AssFxComposition.composeMirrorStack(
+            document = document,
+            eventId = 30,
+            reflection = AssReflectionFxSpec(
+                offsetY = 40.0,
+                verticalScalePercent = 35.0,
+                opacityPercent = 40.0,
+                blur = 1.5,
+            ),
+            glow = null,
+            fade = AssReflectionFadeSpec(
+                bands = 4,
+                depthPx = 120.0,
+                farOpacityPercent = 0.0,
+                direction = AssReflectionFadeDirection.DOWN,
+            ),
+            entrance = null,
+        )
+
+        assertEquals(4, result.generatedEventIds.size)
+        val bands = result.generatedEventIds.map { id ->
+            result.document.events.first { it.id == id }
+        }
+        assertTrue(bands[0].text.contains("\\pos(400,340)"))
+        assertTrue(bands[0].text.contains("\\clip(0,340,1920,370)"))
+        assertTrue(bands[0].text.contains("\\alpha&HA6&"))
+        assertTrue(bands[3].text.contains("\\clip(0,430,1920,460)"))
+        assertTrue(bands[3].text.contains("\\alpha&HF2&"))
+    }
+
+    @Test
+    fun spatialFadeIntersectsShiftedSourceRectClipAndDropsEmptyBands() {
+        val document = AssDocument(
+            scriptInfo = linkedMapOf("PlayResX" to "1920", "PlayResY" to "1080"),
+            events = listOf(
+                AssEvent(
+                    id = 31,
+                    start = SubTime(0),
+                    end = SubTime(1500),
+                    text = "{\\pos(400,300)\\clip(0,300,600,380)}Clipped",
+                )
+            )
+        )
+
+        val result = AssFxComposition.createReflection(
+            document = document,
+            eventId = 31,
+            spec = AssReflectionFxSpec(offsetY = 40.0),
+            fade = AssReflectionFadeSpec(
+                bands = 4,
+                depthPx = 120.0,
+                direction = AssReflectionFadeDirection.DOWN,
+            ),
+        )
+
+        assertEquals(3, result.generatedEventIds.size)
+        val texts = result.generatedEventIds.map { id ->
+            result.document.events.first { it.id == id }.text
+        }
+        assertTrue(texts[0].contains("\\clip(0,340,600,370)"))
+        assertTrue(texts[1].contains("\\clip(0,370,600,400)"))
+        assertTrue(texts[2].contains("\\clip(0,400,600,420)"))
+    }
+
+    @Test
+    fun reflectionPreservesOffscreenGeometryInsteadOfViewportClamping() {
+        val positioned = AssDocument(
+            scriptInfo = linkedMapOf("PlayResX" to "1920", "PlayResY" to "1080"),
+            events = listOf(
+                AssEvent(
+                    id = 41,
+                    start = SubTime(0),
+                    end = SubTime(1000),
+                    text = "{\\pos(-120,1100)\\org(2040,1200)\\clip(-40,1000,2100,1200)}Offscreen",
+                )
+            )
+        )
+
+        val positionedResult = AssFxComposition.createReflection(
+            document = positioned,
+            eventId = 41,
+            spec = AssReflectionFxSpec(offsetY = 50.0),
+        )
+        val positionedReflection = positionedResult.document.events.first {
+            it.id == positionedResult.generatedEventId
+        }
+        assertTrue(positionedReflection.text.contains("\\pos(-120,1150)"))
+        assertTrue(positionedReflection.text.contains("\\org(2040,1250)"))
+        assertTrue(positionedReflection.text.contains("\\clip(-40,1050,2100,1250)"))
+
+        val moving = positioned.copy(
+            events = listOf(
+                AssEvent(
+                    id = 42,
+                    start = SubTime(0),
+                    end = SubTime(1000),
+                    text = "{\\move(-100,1120,2050,1320,20,900)}Move",
+                )
+            )
+        )
+        val movingResult = AssFxComposition.createReflection(
+            document = moving,
+            eventId = 42,
+            spec = AssReflectionFxSpec(offsetY = 50.0),
+        )
+        val movingReflection = movingResult.document.events.first {
+            it.id == movingResult.generatedEventId
+        }
+        assertTrue(movingReflection.text.contains("\\move(-100,1170,2050,1370,20,900)"))
+    }
+
+    @Test
+    fun spatialFadeRejectsOffscreenAnchorInsteadOfClampingItIntoView() {
+        val document = AssDocument(
+            scriptInfo = linkedMapOf("PlayResX" to "1920", "PlayResY" to "1080"),
+            events = listOf(
+                AssEvent(
+                    id = 43,
+                    start = SubTime(0),
+                    end = SubTime(1000),
+                    text = "{\\pos(400,-100)}Offscreen fade",
+                )
+            )
+        )
+
+        val error = assertFailsWith<IllegalArgumentException> {
+            AssFxComposition.createReflection(
+                document = document,
+                eventId = 43,
+                spec = AssReflectionFxSpec(offsetY = 0.0),
+                fade = AssReflectionFadeSpec(
+                    bands = 4,
+                    depthPx = 120.0,
+                    direction = AssReflectionFadeDirection.DOWN,
+                ),
+            )
+        }
+
+        assertTrue(error.message.orEmpty().contains("锚点必须位于画面内"))
+        assertEquals("{\\pos(400,-100)}Offscreen fade", document.events.single().text)
+    }
+
+    @Test
+    fun ordinaryReflectionShiftsRectClipWithItsGeometry() {
+        val document = AssDocument(
+            scriptInfo = linkedMapOf("PlayResX" to "1920", "PlayResY" to "1080"),
+            events = listOf(
+                AssEvent(
+                    id = 32,
+                    start = SubTime(0),
+                    end = SubTime(1000),
+                    text = "{\\pos(300,200)\\clip(10,100,500,400)}Clip",
+                )
+            )
+        )
+
+        val result = AssFxComposition.createReflection(
+            document = document,
+            eventId = 32,
+            spec = AssReflectionFxSpec(offsetY = 50.0),
+        )
+        val reflection = result.document.events.first { it.id == result.generatedEventId }
+        assertTrue(reflection.text.contains("\\clip(10,150,500,450)"))
+    }
+
+    @Test
+    fun spatialFadeRefusesMotionAndUnsupportedClipSemantics() {
+        val moving = AssDocument(
+            events = listOf(
+                AssEvent(
+                    id = 33,
+                    start = SubTime(0),
+                    end = SubTime(1000),
+                    text = "{\\move(100,100,200,200)}Move",
+                )
+            )
+        )
+        assertFailsWith<IllegalArgumentException> {
+            AssFxComposition.createReflection(
+                moving,
+                33,
+                fade = AssReflectionFadeSpec(),
+            )
+        }
+
+        val invertedClip = AssDocument(
+            events = listOf(
+                AssEvent(
+                    id = 34,
+                    start = SubTime(0),
+                    end = SubTime(1000),
+                    text = "{\\pos(200,200)\\iclip(0,0,100,100)}Clip",
+                )
+            )
+        )
+        assertFailsWith<IllegalArgumentException> {
+            AssFxComposition.createReflection(
+                invertedClip,
+                34,
+                fade = AssReflectionFadeSpec(),
+            )
+        }
+
+        val alphaControlled = AssDocument(
+            events = listOf(
+                AssEvent(
+                    id = 37,
+                    start = SubTime(0),
+                    end = SubTime(1000),
+                    text = "{\\pos(200,200)\\t(0,500,\\alpha&H80&)}Alpha",
+                )
+            )
+        )
+        assertFailsWith<IllegalArgumentException> {
+            AssFxComposition.createReflection(
+                alphaControlled,
+                37,
+                fade = AssReflectionFadeSpec(depthPx = 80.0),
+            )
+        }
+
+        val inlineClip = AssDocument(
+            events = listOf(
+                AssEvent(
+                    id = 38,
+                    start = SubTime(0),
+                    end = SubTime(1000),
+                    text = "{\\pos(200,200)}A{\\clip(0,0,100,100)}B",
+                )
+            )
+        )
+        assertFailsWith<IllegalArgumentException> {
+            AssFxComposition.createReflection(
+                inlineClip,
+                38,
+                fade = AssReflectionFadeSpec(depthPx = 80.0),
+            )
+        }
+    }
+
+    @Test
+    fun spatialFadeRejectsOpacityThatIncreasesAwayFromSource() {
+        val document = AssDocument(
+            scriptInfo = linkedMapOf("PlayResX" to "1920", "PlayResY" to "1080"),
+            events = listOf(
+                AssEvent(
+                    id = 35,
+                    start = SubTime(0),
+                    end = SubTime(1000),
+                    text = "{\\pos(400,300)}Fade",
+                )
+            )
+        )
+
+        assertFailsWith<IllegalArgumentException> {
+            AssFxComposition.createReflection(
+                document = document,
+                eventId = 35,
+                spec = AssReflectionFxSpec(opacityPercent = 30.0),
+                fade = AssReflectionFadeSpec(
+                    farOpacityPercent = 45.0,
+                    direction = AssReflectionFadeDirection.DOWN,
+                ),
+            )
+        }
+    }
+
+    @Test
+    fun spatialFadeRejectsDepthThatWouldBeSilentlyTruncated() {
+        val document = AssDocument(
+            scriptInfo = linkedMapOf("PlayResX" to "1920", "PlayResY" to "1080"),
+            events = listOf(
+                AssEvent(
+                    id = 36,
+                    start = SubTime(0),
+                    end = SubTime(1000),
+                    text = "{\\pos(400,300)}Fade",
+                )
+            )
+        )
+
+        assertFailsWith<IllegalArgumentException> {
+            AssFxComposition.createReflection(
+                document = document,
+                eventId = 36,
+                spec = AssReflectionFxSpec(offsetY = 40.0),
+                fade = AssReflectionFadeSpec(
+                    bands = 6,
+                    depthPx = 800.0,
+                    direction = AssReflectionFadeDirection.DOWN,
+                ),
+            )
+        }
+    }
+
+    @Test
+    fun spatialFadeDefersReflectionUntilFlipEntranceSettles() {
+        val document = AssDocument(
+            scriptInfo = linkedMapOf("PlayResX" to "1920", "PlayResY" to "1080"),
+            events = listOf(
+                AssEvent(
+                    id = 39,
+                    start = SubTime(0),
+                    end = SubTime(1000),
+                    text = "{\\pos(400,300)}Fade",
+                )
+            )
+        )
+
+        val result = AssFxComposition.composeMirrorStack(
+            document = document,
+            eventId = 39,
+            glow = null,
+            fade = AssReflectionFadeSpec(
+                bands = 2,
+                depthPx = 120.0,
+                direction = AssReflectionFadeDirection.DOWN,
+            ),
+            entrance = AssFlipEntranceSpec(
+                durationMs = 300,
+                startScalePercent = 10.0,
+                overshootScalePercent = 120.0,
+                startRotationXDegrees = 90.0,
+            ),
+        )
+
+        val source = result.document.events.first { it.id == 39L }
+        val bands = result.generatedEventIds.map { id ->
+            result.document.events.first { it.id == id }
+        }
+
+        assertTrue(source.text.contains("\\t(0,200,\\fscy120)"))
+        assertTrue(source.text.contains("\\t(0,300,\\frx0)"))
+        assertEquals(2, bands.size)
+        bands.forEach { band ->
+            assertTrue(band.text.contains("\\alpha&HFF&\\t(300,380,\\alpha&H"))
+            assertTrue(!band.text.contains("\\t(0,200,\\fscy"))
+            assertTrue(!band.text.contains("\\t(0,300,\\frx"))
+            assertEquals(SubTime(0), band.start)
+        }
+    }
+
+    @Test
+    fun spatialFadeWithEntranceRejectsEventThatEndsBeforeReflectionCanAppear() {
+        val document = AssDocument(
+            scriptInfo = linkedMapOf("PlayResX" to "1920", "PlayResY" to "1080"),
+            events = listOf(
+                AssEvent(
+                    id = 40,
+                    start = SubTime(100),
+                    end = SubTime(300),
+                    text = "{\\pos(400,300)}Short",
+                )
+            )
+        )
+
+        val error = assertFailsWith<IllegalArgumentException> {
+            AssFxComposition.composeMirrorStack(
+                document = document,
+                eventId = 40,
+                glow = null,
+                fade = AssReflectionFadeSpec(
+                    bands = 2,
+                    depthPx = 80.0,
+                    direction = AssReflectionFadeDirection.DOWN,
+                ),
+                entrance = AssFlipEntranceSpec(durationMs = 280),
+            )
+        }
+
+        assertTrue(error.message.orEmpty().contains("可见时段"))
+        assertEquals(1, document.events.size)
+        assertEquals("{\\pos(400,300)}Short", document.events.single().text)
     }
 
     @Test
