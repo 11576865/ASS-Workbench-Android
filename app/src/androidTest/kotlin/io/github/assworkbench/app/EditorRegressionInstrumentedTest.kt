@@ -164,6 +164,40 @@ class EditorRegressionInstrumentedTest {
         composeRule.onNodeWithTag("spatial-node-preview").assertIsDisplayed()
         composeRule.onNodeWithTag("spatial-node-subtitles").assertIsDisplayed()
         composeRule.onNodeWithTag("spatial-node-audio").assertIsDisplayed()
+
+        val previewBeforeRail = composeRule.onNodeWithTag("spatial-node-preview")
+            .fetchSemanticsNode().boundsInRoot
+        composeRule.onNodeWithTag("spatial-edge-handle-left")
+            .assertIsDisplayed()
+            .performClick()
+        composeRule.waitUntil(5_000) {
+            composeRule.onAllNodesWithTag("spatial-edge-rail-left", useUnmergedTree = true)
+                .fetchSemanticsNodes(atLeastOneRootRequired = false)
+                .isNotEmpty()
+        }
+        val previewAfterRail = composeRule.onNodeWithTag("spatial-node-preview")
+            .fetchSemanticsNode().boundsInRoot
+        assertEquals(previewBeforeRail, previewAfterRail)
+
+        composeRule.onNodeWithTag("spatial-edge-dismiss-left").performClick()
+        composeRule.waitUntil(5_000) {
+            composeRule.onAllNodesWithTag("spatial-edge-rail-left", useUnmergedTree = true)
+                .fetchSemanticsNodes(atLeastOneRootRequired = false)
+                .isEmpty()
+        }
+
+        composeRule.onNodeWithTag("spatial-edge-handle-left").performClick()
+        composeRule.waitUntil(5_000) {
+            composeRule.onAllNodesWithTag("spatial-edge-rail-left", useUnmergedTree = true)
+                .fetchSemanticsNodes(atLeastOneRootRequired = false)
+                .isNotEmpty()
+        }
+        composeRule.onNodeWithTag("spatial-edge-pin-left").performClick()
+        composeRule.onNodeWithTag("spatial-edge-entry-subtitles").performClick()
+        composeRule.onNodeWithTag("spatial-edge-rail-left").assertIsDisplayed()
+        composeRule.onNodeWithTag("spatial-node-subtitles").assertIsDisplayed()
+        composeRule.onNodeWithTag("spatial-edge-close-left").performClick()
+
         composeRule.onNodeWithText("召回").performClick()
         composeRule.onNodeWithTag("spatial-recall-subtitles").performClick()
         composeRule.onNodeWithTag("spatial-node-subtitles").assertIsDisplayed()
