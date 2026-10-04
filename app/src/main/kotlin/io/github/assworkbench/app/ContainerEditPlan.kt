@@ -200,9 +200,9 @@ internal fun buildContainerEditPlan(state: EditorState): ContainerEditPlanUi {
                     ContainerTrackImportSourceKind.MATROSKA_TRACK ->
                         append(" · source Track #").append(addition.sourceTrackNumber)
                     ContainerTrackImportSourceKind.STANDALONE_ASS ->
-                        append(" · standalone ASS → normalized ASS → S_TEXT/ASS · source SHA-256 pinned")
+                        append(" · standalone ASS → normalized ASS → S_TEXT/ASS · normalized SHA-256 pinned")
                     ContainerTrackImportSourceKind.STANDALONE_SRT ->
-                        append(" · standalone SRT → normalized ASS → S_TEXT/ASS · source SHA-256 pinned")
+                        append(" · standalone SRT → normalized ASS → S_TEXT/ASS · normalized SHA-256 pinned")
                 }
                 append(" · ").append(addition.codecId)
                 if (addition.language.isNotBlank()) append(" · ").append(addition.language)
