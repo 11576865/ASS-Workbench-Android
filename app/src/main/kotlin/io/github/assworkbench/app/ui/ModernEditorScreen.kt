@@ -6461,7 +6461,7 @@ private fun PositionPane(
         }
     }
     LazyColumn(
-        Modifier.weight(1f).padding(WorkbenchDimens.Small),
+        Modifier.weight(1f).padding(WorkbenchDimens.Small).testTag("position-parameter-list"),
         state = sectionScroll,
         verticalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small),
     ) {
