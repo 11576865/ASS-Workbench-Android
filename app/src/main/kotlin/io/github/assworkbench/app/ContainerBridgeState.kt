@@ -91,5 +91,6 @@ data class ContainerBridgeState(
     val skippedAttachmentCount: Int = 0,
     val writeBackAvailable: Boolean = false,
     val writeBackBusy: Boolean = false,
+    val attachmentExtractBusy: Boolean = false,
     val error: String? = null,
 )
