@@ -27,6 +27,7 @@ import io.github.assworkbench.domain.AssSubtitleSynchronizer
 import io.github.assworkbench.domain.AssSearchQuery
 import io.github.assworkbench.domain.AssSearchReplacement
 import io.github.assworkbench.domain.AssSearchReplace
+import io.github.assworkbench.domain.AssStyleInheritance
 import io.github.assworkbench.domain.AssAnimationKeyframe
 import io.github.assworkbench.domain.AssAnimationAuthoring
 import io.github.assworkbench.domain.AssTransformVisualProperty
@@ -3038,18 +3039,8 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             marginV = 0,
         )
 
-    private fun stripInlineStyleOverrides(text: String): String {
-        val overrideBlock = Regex("""\{[^}]*\}""")
-        val managedTag = Regex(
-            """\\(?:fn[^\\}]*|fs(?!c)[+-]?(?:\d+(?:\.\d+)?)?|b-?\d+|i-?\d+|u-?\d+|s-?\d+|fsp[+-]?(?:\d+(?:\.\d+)?)?|bord[+-]?(?:\d+(?:\.\d+)?)?|shad[+-]?(?:\d+(?:\.\d+)?)?|an[1-9]|a\d+|pos\([^)]*\)|move\([^)]*\)|org\([^)]*\)|r[^\\}]*|(?:c|1c|3c|4c)&H[0-9A-Fa-f]+&)""",
-            RegexOption.IGNORE_CASE,
-        )
-        return overrideBlock.replace(text) { block ->
-            val inner = block.value.substring(1, block.value.length - 1)
-            val stripped = managedTag.replace(inner, "")
-            if (stripped.isBlank()) "" else "{$stripped}"
-        }
-    }
+    private fun stripInlineStyleOverrides(text: String): String =
+        AssStyleInheritance.clearDirectManagedOverrides(text)
 
     private fun displayName(uri: Uri): String? {
         val projection = arrayOf(android.provider.OpenableColumns.DISPLAY_NAME)
