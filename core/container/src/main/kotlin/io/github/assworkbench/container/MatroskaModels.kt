@@ -1,5 +1,30 @@
 package io.github.assworkbench.container
 
+enum class MatroskaTrackKind {
+    VIDEO,
+    AUDIO,
+    SUBTITLE,
+    COMPLEX,
+    LOGO,
+    BUTTONS,
+    CONTROL,
+    METADATA,
+    OTHER,
+}
+
+data class MatroskaTrackInfo(
+    val number: Long,
+    val uid: Long?,
+    val typeCode: Long,
+    val kind: MatroskaTrackKind,
+    val name: String,
+    val language: String,
+    val codecId: String,
+    val isDefault: Boolean,
+    val isForced: Boolean,
+    val contentHash: String? = null,
+)
+
 data class MatroskaSubtitlePacket(
     val startMs: Long,
     val durationMs: Long?,
@@ -78,21 +103,39 @@ data class MatroskaAttachment(
     val data: ByteArray,
 ) {
     val isSupportedFont: Boolean
-        get() {
-            val ext = fileName.substringAfterLast('.', "").lowercase()
-            return ext in setOf("ttf", "otf", "ttc", "otc") ||
-                mimeType.equals("font/ttf", true) ||
-                mimeType.equals("font/otf", true) ||
-                mimeType.equals("font/sfnt", true) ||
-                mimeType.equals("application/x-truetype-font", true) ||
-                mimeType.equals("application/vnd.ms-opentype", true)
-        }
+        get() = isSupportedFont(fileName, mimeType)
+}
+
+data class MatroskaAttachmentInfo(
+    val uid: Long?,
+    val fileName: String,
+    val mimeType: String,
+    val description: String,
+    val sizeBytes: Long?,
+    val sha256: String?,
+    val dataAvailable: Boolean,
+) {
+    val isSupportedFont: Boolean
+        get() = isSupportedFont(fileName, mimeType)
+}
+
+private fun isSupportedFont(fileName: String, mimeType: String): Boolean {
+    val ext = fileName.substringAfterLast('.', "").lowercase()
+    return ext in setOf("ttf", "otf", "ttc", "otc") ||
+        mimeType.equals("font/ttf", true) ||
+        mimeType.equals("font/otf", true) ||
+        mimeType.equals("font/sfnt", true) ||
+        mimeType.equals("application/x-truetype-font", true) ||
+        mimeType.equals("application/vnd.ms-opentype", true)
 }
 
 data class MatroskaScanResult(
     val subtitleTracks: List<MatroskaSubtitleTrack>,
     val attachments: List<MatroskaAttachment>,
     val timecodeScaleNs: Long,
-    /** Attachments skipped by the bounded reader before they could be surfaced. */
+    val trackInfos: List<MatroskaTrackInfo> = emptyList(),
+    val attachmentInfos: List<MatroskaAttachmentInfo> = emptyList(),
+    val chapterCount: Int = 0,
+    /** Attachments skipped by the bounded reader before their payload could be retained. */
     val skippedAttachmentCount: Int = 0,
 )

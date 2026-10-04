@@ -4,6 +4,17 @@ import android.content.Context
 import java.io.File
 import kotlin.concurrent.thread
 
+data class AttachmentReplacementInput(
+    val target: String,
+    val file: File,
+)
+
+data class AttachmentMetadataEditInput(
+    val target: String,
+    val name: String,
+    val description: String,
+)
+
 class MkvGoTool(private val context: Context) {
     private val executable: File
         get() = File(context.applicationInfo.nativeLibraryDir, "libmkvgo.so")
@@ -21,6 +32,10 @@ class MkvGoTool(private val context: Context) {
         editedAss: File,
         output: File,
         fonts: List<File> = emptyList(),
+        attachments: List<File> = emptyList(),
+        removeAttachments: List<String> = emptyList(),
+        replaceAttachments: List<AttachmentReplacementInput> = emptyList(),
+        metadataEdits: List<AttachmentMetadataEditInput> = emptyList(),
     ) {
         require(isAvailable()) { "MKV 写回工具在此 ABI 上不可用" }
         output.parentFile?.mkdirs() ?: error("输出目录不可用")
@@ -39,9 +54,146 @@ class MkvGoTool(private val context: Context) {
                 args += "--font"
                 args += font.absolutePath
             }
+        attachments
+            .distinctBy { it.absolutePath }
+            .filterNot { candidate -> fonts.any { it.absolutePath == candidate.absolutePath } }
+            .forEach { attachment ->
+                require(attachment.isFile && attachment.length() > 0L) { "附件文件不可用：" + attachment.name }
+                args += "--attachment"
+                args += attachment.absolutePath
+            }
+        removeAttachments.distinct().forEach { target ->
+            require(target.isNotBlank()) { "附件删除目标不能为空" }
+            args += "--remove-attachment"
+            args += target
+        }
+        replaceAttachments
+            .distinctBy { it.target }
+            .forEach { replacement ->
+                require(replacement.target.isNotBlank()) { "附件替换目标不能为空" }
+                require(replacement.file.isFile && replacement.file.length() > 0L) {
+                    "附件替换文件不可用：" + replacement.file.name
+                }
+                args += "--replace-attachment"
+                args += replacement.target
+                args += replacement.file.absolutePath
+            }
+        metadataEdits
+            .distinctBy { it.target }
+            .forEach { metadata ->
+                require(metadata.target.isNotBlank()) { "附件元数据目标不能为空" }
+                require(metadata.name.isNotBlank()) { "附件名称不能为空" }
+                args += "--edit-attachment-meta"
+                args += metadata.target
+                args += metadata.name
+                args += metadata.description
+            }
         args += editedAss.absolutePath
         run(*args.toTypedArray())
         require(output.isFile && output.length() > 0L) { "MKV 写回未生成输出文件" }
+    }
+
+
+    fun addAttachments(
+        source: File,
+        output: File,
+        attachments: List<File>,
+    ) {
+        require(isAvailable()) { "MKV 写回工具在此 ABI 上不可用" }
+        require(attachments.isNotEmpty()) { "没有待封入附件" }
+        output.parentFile?.mkdirs() ?: error("输出目录不可用")
+        output.delete()
+
+        val args = mutableListOf(
+            "add-attachments",
+            source.absolutePath,
+            "-o", output.absolutePath,
+        )
+        attachments
+            .distinctBy { it.absolutePath }
+            .forEach { attachment ->
+                require(attachment.isFile && attachment.length() > 0L) { "附件文件不可用：" + attachment.name }
+                args += "--attachment"
+                args += attachment.absolutePath
+            }
+        run(*args.toTypedArray())
+        require(output.isFile && output.length() > 0L) { "MKV 写回未生成输出文件" }
+    }
+
+
+    fun editAttachments(
+        source: File,
+        output: File,
+        additions: List<File> = emptyList(),
+        removals: List<String> = emptyList(),
+        replacements: List<AttachmentReplacementInput> = emptyList(),
+        metadataEdits: List<AttachmentMetadataEditInput> = emptyList(),
+    ) {
+        require(isAvailable()) { "MKV 写回工具在此 ABI 上不可用" }
+        require(additions.isNotEmpty() || removals.isNotEmpty() || replacements.isNotEmpty() || metadataEdits.isNotEmpty()) {
+            "没有待执行的附件修改"
+        }
+        output.parentFile?.mkdirs() ?: error("输出目录不可用")
+        output.delete()
+
+        val args = mutableListOf(
+            "edit-attachments",
+            source.absolutePath,
+            "-o", output.absolutePath,
+        )
+        additions
+            .distinctBy { it.absolutePath }
+            .forEach { attachment ->
+                require(attachment.isFile && attachment.length() > 0L) { "附件文件不可用：" + attachment.name }
+                args += "--attachment"
+                args += attachment.absolutePath
+            }
+        removals.distinct().forEach { target ->
+            require(target.isNotBlank()) { "附件删除目标不能为空" }
+            args += "--remove-attachment"
+            args += target
+        }
+        replacements
+            .distinctBy { it.target }
+            .forEach { replacement ->
+                require(replacement.target.isNotBlank()) { "附件替换目标不能为空" }
+                require(replacement.file.isFile && replacement.file.length() > 0L) {
+                    "附件替换文件不可用：" + replacement.file.name
+                }
+                args += "--replace-attachment"
+                args += replacement.target
+                args += replacement.file.absolutePath
+            }
+        metadataEdits
+            .distinctBy { it.target }
+            .forEach { metadata ->
+                require(metadata.target.isNotBlank()) { "附件元数据目标不能为空" }
+                require(metadata.name.isNotBlank()) { "附件名称不能为空" }
+                args += "--edit-attachment-meta"
+                args += metadata.target
+                args += metadata.name
+                args += metadata.description
+            }
+        run(*args.toTypedArray())
+        require(output.isFile && output.length() > 0L) { "MKV 写回未生成输出文件" }
+    }
+
+    fun extractAttachment(
+        source: File,
+        target: String,
+        output: File,
+    ) {
+        require(isAvailable()) { "MKV 附件提取工具在此 ABI 上不可用" }
+        require(target.isNotBlank()) { "附件提取目标不能为空" }
+        output.parentFile?.mkdirs() ?: error("输出目录不可用")
+        output.delete()
+        run(
+            "extract-attachment",
+            source.absolutePath,
+            "-o", output.absolutePath,
+            "--target", target,
+        )
+        require(output.isFile) { "MKV 附件提取未生成输出文件" }
     }
 
     private fun run(vararg args: String): String {
