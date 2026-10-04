@@ -120,10 +120,16 @@ class MatroskaReader(
         var type: Long? = null
         var name = ""
         var language = ""
+        var languageBcp47 = ""
         var codecId = ""
         var codecPrivate = ""
         var isDefault = true
         var isForced = false
+        var hearingImpaired = false
+        var visualImpaired = false
+        var textDescriptions = false
+        var original = false
+        var commentary = false
         while (true) {
             val h = r.headerOrNull() ?: break
             when (h.id) {
@@ -132,10 +138,16 @@ class MatroskaReader(
                 ID_TRACK_TYPE -> type = r.readUnsigned(h.size)
                 ID_NAME -> name = r.readString(h.size)
                 ID_LANGUAGE -> language = r.readString(h.size)
+                ID_LANGUAGE_BCP47 -> languageBcp47 = r.readString(h.size)
                 ID_CODEC_ID -> codecId = r.readString(h.size)
                 ID_CODEC_PRIVATE -> codecPrivate = r.readString(h.size)
                 ID_FLAG_DEFAULT -> isDefault = r.readUnsigned(h.size) != 0L
                 ID_FLAG_FORCED -> isForced = r.readUnsigned(h.size) != 0L
+                ID_FLAG_HEARING_IMPAIRED -> hearingImpaired = r.readUnsigned(h.size) != 0L
+                ID_FLAG_VISUAL_IMPAIRED -> visualImpaired = r.readUnsigned(h.size) != 0L
+                ID_FLAG_TEXT_DESCRIPTIONS -> textDescriptions = r.readUnsigned(h.size) != 0L
+                ID_FLAG_ORIGINAL -> original = r.readUnsigned(h.size) != 0L
+                ID_FLAG_COMMENTARY -> commentary = r.readUnsigned(h.size) != 0L
                 else -> r.skipFully(h.size)
             }
         }
@@ -147,10 +159,16 @@ class MatroskaReader(
             typeCode = resolvedType,
             name = name,
             language = language,
+            languageBcp47 = languageBcp47,
             codecId = codecId,
             codecPrivate = codecPrivate,
             isDefault = isDefault,
             isForced = isForced,
+            hearingImpaired = hearingImpaired,
+            visualImpaired = visualImpaired,
+            textDescriptions = textDescriptions,
+            original = original,
+            commentary = commentary,
         )
     }
 
@@ -322,10 +340,16 @@ class MatroskaReader(
         val typeCode: Long,
         val name: String,
         val language: String,
+        val languageBcp47: String,
         val codecId: String,
         val codecPrivate: String,
         val isDefault: Boolean,
         val isForced: Boolean,
+        val hearingImpaired: Boolean,
+        val visualImpaired: Boolean,
+        val textDescriptions: Boolean,
+        val original: Boolean,
+        val commentary: Boolean,
         val packets: MutableList<MatroskaSubtitlePacket> = mutableListOf(),
     ) {
         fun build() = MatroskaSubtitleTrack(number, uid, name, language, codecId, codecPrivate, packets.toList())
@@ -337,9 +361,15 @@ class MatroskaReader(
             kind = trackKind(typeCode),
             name = name,
             language = language,
+            languageBcp47 = languageBcp47,
             codecId = codecId,
             isDefault = isDefault,
             isForced = isForced,
+            hearingImpaired = hearingImpaired,
+            visualImpaired = visualImpaired,
+            textDescriptions = textDescriptions,
+            original = original,
+            commentary = commentary,
             contentHash = if (codecId == "S_TEXT/ASS") {
                 val bytes = buildString {
                     append(codecPrivate)
@@ -492,10 +522,16 @@ class MatroskaReader(
         private const val ID_TRACK_TYPE = 0x83L
         private const val ID_NAME = 0x536EL
         private const val ID_LANGUAGE = 0x22B59CL
+        private const val ID_LANGUAGE_BCP47 = 0x22B59DL
         private const val ID_CODEC_ID = 0x86L
         private const val ID_CODEC_PRIVATE = 0x63A2L
         private const val ID_FLAG_DEFAULT = 0x88L
         private const val ID_FLAG_FORCED = 0x55AAL
+        private const val ID_FLAG_HEARING_IMPAIRED = 0x55ABL
+        private const val ID_FLAG_VISUAL_IMPAIRED = 0x55ACL
+        private const val ID_FLAG_TEXT_DESCRIPTIONS = 0x55ADL
+        private const val ID_FLAG_ORIGINAL = 0x55AEL
+        private const val ID_FLAG_COMMENTARY = 0x55AFL
         private const val ID_ATTACHMENTS = 0x1941A469L
         private const val ID_ATTACHED_FILE = 0x61A7L
         private const val ID_FILE_DESCRIPTION = 0x467EL
