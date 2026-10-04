@@ -2,7 +2,6 @@ package io.github.assworkbench.app
 
 import android.app.Application
 import android.graphics.Bitmap
-import android.graphics.Color
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -58,17 +57,7 @@ class UigsRendererVisualCaptureInstrumentedTest {
     @Before
     fun setUp() {
         application = ApplicationProvider.getApplicationContext()
-        media = File(application.filesDir, "uigs-runtime-fixture.png")
-        val bitmap = Bitmap.createBitmap(1280, 720, Bitmap.Config.ARGB_8888)
-        bitmap.eraseColor(Color.rgb(24, 32, 48))
-        FileOutputStream(media).use { stream ->
-            assertTrue(
-                "Deterministic renderer fixture must encode as PNG",
-                bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream),
-            )
-        }
-        bitmap.recycle()
-        assertTrue(media.isFile && media.length() > 0L)
+        media = NativePreviewFixture.create(application.filesDir, "uigs-runtime-fixture.png")
         configDir = File(application.filesDir, "uigs-runtime-renderer/config").apply {
             deleteRecursively()
             mkdirs()
