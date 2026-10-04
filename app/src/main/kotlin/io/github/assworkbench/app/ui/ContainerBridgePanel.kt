@@ -173,12 +173,18 @@ fun ContainerBridgePanel(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Text(
-                    "外部 Matroska 可导入轨道 · ${state.trackImportCandidates.size}",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.weight(1f),
-                )
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        "外部 Matroska 可导入轨道 · ${state.trackImportCandidates.size}",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    Text(
+                        "只导入所选 Track；源容器的 Chapters / Attachments / 全局 Tags 不会自动带入。新轨默认 non-Default，避免改变既有自动选轨。",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 TextButton(
                     enabled = !state.trackImportLoading && !state.writeBackBusy,
                     onClick = viewModel::clearContainerTrackImportCandidates,
@@ -218,7 +224,8 @@ fun ContainerBridgePanel(
                                 append(" · Track #").append(candidate.sourceTrackNumber)
                                 if (candidate.codecId.isNotBlank()) append(" · ").append(candidate.codecId)
                                 if (candidate.language.isNotBlank()) append(" · ").append(candidate.language)
-                                if (candidate.isDefault) append(" · Default")
+                                if (candidate.sourceIsDefault) append(" · 源 Default")
+                                append(" · 导入后 non-Default")
                                 if (candidate.isForced) append(" · Forced")
                                 if (candidate.kind == ContainerResourceKind.SUBTITLE) {
                                     append(" · 源附件/字体不自动导入")
