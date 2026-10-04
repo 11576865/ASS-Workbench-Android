@@ -137,6 +137,24 @@ func runReplaceASS(args []string) {
 				IsForced: parseBoolFlag(args[i+7], "--add-track forced"),
 			})
 			i += 7
+		case "--add-ass-track":
+			if i+6 >= len(args) {
+				fatal("--add-ass-track needs <source.ass> <sha256-or-> <name> <language> <default> <forced>")
+			}
+			sourceSHA256 := args[i+2]
+			if sourceSHA256 == "-" {
+				sourceSHA256 = ""
+			}
+			trackAdditions = append(trackAdditions, ops.TrackAddition{
+				SourceKind: "ass",
+				SourcePath: args[i+1],
+				SourceSHA256: sourceSHA256,
+				Name: args[i+3],
+				Language: args[i+4],
+				IsDefault: parseBoolFlag(args[i+5], "--add-ass-track default"),
+				IsForced: parseBoolFlag(args[i+6], "--add-ass-track forced"),
+			})
+			i += 6
 		default:
 			if len(args[i]) > 0 && args[i][0] == '-' {
 				fatal("unknown flag: " + args[i])
@@ -362,6 +380,24 @@ func runEditContainer(args []string) {
 				IsForced: parseBoolFlag(args[i+7], "--add-track forced"),
 			})
 			i += 7
+		case "--add-ass-track":
+			if i+6 >= len(args) {
+				fatal("--add-ass-track needs <source.ass> <sha256-or-> <name> <language> <default> <forced>")
+			}
+			sourceSHA256 := args[i+2]
+			if sourceSHA256 == "-" {
+				sourceSHA256 = ""
+			}
+			trackAdditions = append(trackAdditions, ops.TrackAddition{
+				SourceKind: "ass",
+				SourcePath: args[i+1],
+				SourceSHA256: sourceSHA256,
+				Name: args[i+3],
+				Language: args[i+4],
+				IsDefault: parseBoolFlag(args[i+5], "--add-ass-track default"),
+				IsForced: parseBoolFlag(args[i+6], "--add-ass-track forced"),
+			})
+			i += 6
 		default:
 			fatal("unknown argument: " + args[i])
 		}
@@ -451,10 +487,10 @@ func ensureOutputAbsent(path string) {
 
 func usage() string {
 	return "usage:\n" +
-		"  asswb-mkvgo replace-ass <file.mkv> -o <out.mkv> -t <trackID> [--font <font.ttf>]... [--attachment <file>]... [--remove-attachment <uid-or-name>]... [--replace-attachment <uid-or-name> <file>]... [--edit-attachment-meta <uid-or-name> <name> <description>]... [--remove-track <uid:id|number:id>]... [--edit-track-meta <uid:id|number:id> <name> <language> <default> <forced>]... [--add-track <source.mkv> <trackID> <trackUID-or-0> <name> <language> <default> <forced>]... <edited.ass>\n" +
+		"  asswb-mkvgo replace-ass <file.mkv> -o <out.mkv> -t <trackID> [--font <font.ttf>]... [--attachment <file>]... [--remove-attachment <uid-or-name>]... [--replace-attachment <uid-or-name> <file>]... [--edit-attachment-meta <uid-or-name> <name> <description>]... [--remove-track <uid:id|number:id>]... [--edit-track-meta <uid:id|number:id> <name> <language> <default> <forced>]... [--add-track <source.mkv> <trackID> <trackUID-or-0> <name> <language> <default> <forced>]... [--add-ass-track <source.ass> <sha256-or-> <name> <language> <default> <forced>]... <edited.ass>\n" +
 		"  asswb-mkvgo add-attachments <file.mkv> -o <out.mkv> --attachment <file> [--attachment <file>]...\n" +
 		"  asswb-mkvgo edit-attachments <file.mkv> -o <out.mkv> [--attachment <file>]... [--remove-attachment <uid-or-name>]... [--replace-attachment <uid-or-name> <file>]... [--edit-attachment-meta <uid-or-name> <name> <description>]...\n" +
-		"  asswb-mkvgo edit-container <file.mkv> -o <out.mkv> [attachment edits] [--remove-track <uid:id|number:id>]... [--edit-track-meta <uid:id|number:id> <name> <language> <default> <forced>]... [--add-track <source.mkv> <trackID> <trackUID-or-0> <name> <language> <default> <forced>]...\n" +
+		"  asswb-mkvgo edit-container <file.mkv> -o <out.mkv> [attachment edits] [--remove-track <uid:id|number:id>]... [--edit-track-meta <uid:id|number:id> <name> <language> <default> <forced>]... [--add-track <source.mkv> <trackID> <trackUID-or-0> <name> <language> <default> <forced>]... [--add-ass-track <source.ass> <sha256-or-> <name> <language> <default> <forced>]...\n" +
 		"  asswb-mkvgo extract-attachment <file.mkv> -o <file> --target <uid-or-name>"
 }
 
