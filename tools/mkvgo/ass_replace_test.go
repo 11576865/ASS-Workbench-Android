@@ -1105,7 +1105,7 @@ func TestPlanTrackAdditionsRejectsDuplicateSourceTrack(t *testing.T) {
 	}
 
 	addition := TrackAddition{SourcePath: source, SourceTrackID: 1}
-	_, _, _, _, _, err = planTrackAdditions(
+	_, _, _, _, _, _, err = planTrackAdditions(
 		context.Background(),
 		nil,
 		[]TrackAddition{addition, addition},
@@ -1265,7 +1265,7 @@ func TestPlanTrackAdditionsRejectsSourceUIDDrift(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, _, _, _, _, err = planTrackAdditions(
+	_, _, _, _, _, _, err = planTrackAdditions(
 		context.Background(),
 		nil,
 		[]TrackAddition{{
