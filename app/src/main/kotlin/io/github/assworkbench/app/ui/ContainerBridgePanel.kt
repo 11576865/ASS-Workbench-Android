@@ -622,7 +622,11 @@ fun ContainerBridgePanel(
                                             trackImportCandidate = candidate
                                             trackImportName = candidate.name
                                             trackImportLanguage = candidate.language
-                                            trackImportDefault = candidate.isDefault
+                                            // A foreign source's Default flag is a source
+                                            // selection preference, not a destination intent.
+                                            // Start disabled so import cannot silently change
+                                            // the destination player's automatic track choice.
+                                            trackImportDefault = false
                                             trackImportForced = candidate.isForced
                                         },
                                     ) {
@@ -690,7 +694,7 @@ fun ContainerBridgePanel(
                             Text("Forced")
                         }
                         Text(
-                            "保存时将分配新的 TrackNumber / TrackUID。来源附件不会自动复制；字幕依赖字体时请另外加入附件计划。",
+                            "保存时将分配新的 TrackNumber / TrackUID。Default 对新导入轨默认关闭；来源附件不会自动复制，字幕依赖字体时请另外加入附件计划。",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
