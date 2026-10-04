@@ -771,6 +771,10 @@ func TestEditContainerResourcesImportsExternalTrackWithFreshIdentity(t *testing.
 			Data: externalAttachment,
 			Size: int64(len(externalAttachment)),
 		}},
+		Tags: []mkv.Tag{
+			{TargetType: "MOVIE", SimpleTags: []mkv.SimpleTag{{Name: "SOURCE_GLOBAL", Value: "do-not-copy"}}},
+			{TargetID: 101, SimpleTags: []mkv.SimpleTag{{Name: "TRACK_NOTE", Value: "carry-me"}}},
+		},
 	}
 	// The source UID intentionally collides with the target video. Import must
 	// allocate destination identity rather than carrying source identity across.
@@ -855,6 +859,26 @@ func TestEditContainerResourcesImportsExternalTrackWithFreshIdentity(t *testing.
 	}
 	if len(got.Chapters) != 1 || got.Chapters[0].ID != 9 {
 		t.Fatalf("target chapters changed: %+v", got.Chapters)
+	}
+
+	var importedTagFound, sourceGlobalLeaked bool
+	for _, tag := range got.Tags {
+		for _, st := range tag.SimpleTags {
+			if tag.TargetID == imported.UID && st.Name == "TRACK_NOTE" && st.Value == "carry-me" {
+				importedTagFound = true
+			}
+			if st.Name == "SOURCE_GLOBAL" {
+				sourceGlobalLeaked = true
+			}
+		}
+	}
+	if !importedTagFound || sourceGlobalLeaked {
+		t.Fatalf(
+			"imported track tags wrong: carried=%v sourceGlobalLeaked=%v tags=%+v",
+			importedTagFound,
+			sourceGlobalLeaked,
+			got.Tags,
+		)
 	}
 	if got.DurationMs < 2000 {
 		t.Fatalf("output duration = %dms, want imported longer timeline reflected", got.DurationMs)
