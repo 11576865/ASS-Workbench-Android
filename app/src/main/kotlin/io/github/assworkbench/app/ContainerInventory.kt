@@ -90,6 +90,68 @@ internal fun MatroskaScanResult.trackPreservationSignature(): List<String> =
         ).joinToString("\u001f")
     }
 
+internal fun verifyContainerTrackMutations(
+    source: MatroskaScanResult,
+    output: MatroskaScanResult,
+    removals: List<PendingContainerTrackRemovalUi>,
+    metadataEdits: List<PendingContainerTrackMetadataUi>,
+) {
+    val removalTargets = removals.mapTo(hashSetOf()) { it.target }
+    val metadataByTarget = metadataEdits.associateBy { it.target }
+    val expected = source.trackInfos.filterNot { it.containerTrackTarget() in removalTargets }
+
+    require(output.trackInfos.size == expected.size) {
+        "写回验证失败：预期轨道数 ${expected.size}，实际 ${output.trackInfos.size}"
+    }
+
+    expected.zip(output.trackInfos).forEachIndexed { index, (before, after) ->
+        val target = before.containerTrackTarget()
+        require(after.number == before.number) {
+            "写回验证失败：第 ${index + 1} 个未删除轨道的 TrackNumber 改变"
+        }
+        require(after.uid == before.uid) {
+            "写回验证失败：Track #${before.number} 的 TrackUID 改变"
+        }
+        require(after.typeCode == before.typeCode && after.codecId == before.codecId) {
+            "写回验证失败：Track #${before.number} 的类型或 codec 改变"
+        }
+
+        val edit = metadataByTarget[target]
+        if (edit == null) {
+            require(
+                after.name == before.name &&
+                    after.language == before.language &&
+                    after.isDefault == before.isDefault &&
+                    after.isForced == before.isForced
+            ) {
+                "写回验证失败：未计划修改的 Track #${before.number} 元数据发生变化"
+            }
+        } else {
+            require(after.name == edit.name) {
+                "写回验证失败：Track #${before.number} 名称修改未生效"
+            }
+            require(after.language == edit.language) {
+                "写回验证失败：Track #${before.number} 语言修改未生效"
+            }
+            require(after.isDefault == edit.isDefault) {
+                "写回验证失败：Track #${before.number} Default 标志修改未生效"
+            }
+            require(after.isForced == edit.isForced) {
+                "写回验证失败：Track #${before.number} Forced 标志修改未生效"
+            }
+        }
+    }
+
+    removals.forEach { removal ->
+        require(output.trackInfos.none { it.containerTrackTarget() == removal.target }) {
+            "写回验证失败：计划删除的轨道仍存在：${removal.name}"
+        }
+    }
+}
+
+private fun io.github.assworkbench.container.MatroskaTrackInfo.containerTrackTarget(): String =
+    uid?.let { "uid:$it" } ?: "number:$number"
+
 internal fun MatroskaScanResult.attachmentPreservationKeys(): List<String> =
     attachmentInfos.map { info ->
         info.uid?.let { "uid:$it" }
