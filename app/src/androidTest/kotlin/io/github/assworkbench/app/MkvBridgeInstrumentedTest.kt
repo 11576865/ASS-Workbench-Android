@@ -240,4 +240,119 @@ class MkvBridgeInstrumentedTest {
             assertEquals(original.uid, renamed.uid)
         }
     }
+
+    @Test
+    fun nativeBridgeEditsTrackMetadataAndRemovesTrackWithoutRenumbering() {
+        val source = File(workDir, "track-mutation-source.mkv")
+        InstrumentationRegistry.getInstrumentation().context.assets
+            .open("mkv/source.mkv")
+            .use { input -> source.outputStream().use { output -> input.copyTo(output) } }
+
+        val before = source.inputStream().use { MatroskaReader().scan(it) }
+        assertEquals(2, before.trackInfos.size)
+        val video = before.trackInfos.single { it.kind == MatroskaTrackKind.VIDEO }
+        val subtitle = before.trackInfos.single { it.kind == MatroskaTrackKind.SUBTITLE }
+        val videoTarget = video.uid?.let { "uid:$it" } ?: "number:${video.number}"
+        val subtitleTarget = subtitle.uid?.let { "uid:$it" } ?: "number:${subtitle.number}"
+
+        val output = File(workDir, "track-mutation-updated.mkv")
+        val tool = MkvGoTool(application)
+        assertTrue("x86_64 emulator APK must package the mkvgo helper", tool.isAvailable())
+        tool.editContainer(
+            source = source,
+            output = output,
+            removeTracks = listOf(subtitleTarget),
+            trackMetadataEdits = listOf(
+                TrackMetadataEditInput(
+                    target = videoTarget,
+                    name = "Main picture",
+                    language = "und",
+                    isDefault = false,
+                    isForced = true,
+                )
+            ),
+        )
+
+        val after = output.inputStream().use { MatroskaReader().scan(it) }
+        assertEquals(1, after.trackInfos.size)
+        val remaining = after.trackInfos.single()
+        assertEquals(video.number, remaining.number)
+        assertEquals(video.uid, remaining.uid)
+        assertEquals(video.kind, remaining.kind)
+        assertEquals(video.codecId, remaining.codecId)
+        assertEquals("Main picture", remaining.name)
+        assertEquals("und", remaining.language)
+        assertFalse(remaining.isDefault)
+        assertTrue(remaining.isForced)
+        assertTrue(after.trackInfos.none { it.number == subtitle.number })
+        assertTrue(after.subtitleTracks.isEmpty())
+
+        assertEquals(before.chapterCount, after.chapterCount)
+        assertEquals(
+            before.attachmentInfos.map { listOf(it.uid, it.fileName, it.mimeType, it.sizeBytes) },
+            after.attachmentInfos.map { listOf(it.uid, it.fileName, it.mimeType, it.sizeBytes) },
+        )
+    }
+
+    @Test
+    fun nativeBridgeImportsExternalTrackWithFreshDestinationIdentity() {
+        val source = File(workDir, "track-import-target.mkv")
+        val external = File(workDir, "track-import-external.mkv")
+        InstrumentationRegistry.getInstrumentation().context.assets
+            .open("mkv/source.mkv")
+            .use { input -> source.outputStream().use { output -> input.copyTo(output) } }
+        // Reuse the same valid Matroska fixture as an external source. The
+        // destination must assign fresh identity even when source IDs collide.
+        source.inputStream().use { input ->
+            external.outputStream().use { output -> input.copyTo(output) }
+        }
+
+        val before = source.inputStream().use { MatroskaReader().scan(it) }
+        val externalScan = external.inputStream().use { MatroskaReader().scan(it) }
+        val sourceVideo = externalScan.trackInfos.single { it.kind == MatroskaTrackKind.VIDEO }
+        val originalNumbers = before.trackInfos.mapTo(hashSetOf()) { it.number }
+        val originalUids = before.trackInfos.mapNotNullTo(hashSetOf()) { it.uid }
+
+        val output = File(workDir, "track-import-updated.mkv")
+        val tool = MkvGoTool(application)
+        assertTrue("x86_64 emulator APK must package the mkvgo helper", tool.isAvailable())
+        tool.editContainer(
+            source = source,
+            output = output,
+            trackImports = listOf(
+                TrackImportInput(
+                    source = external,
+                    trackNumber = sourceVideo.number,
+                    name = "Second video",
+                    language = "und",
+                    isDefault = false,
+                    isForced = false,
+                )
+            ),
+        )
+
+        val after = output.inputStream().use { MatroskaReader().scan(it) }
+        assertEquals(before.trackInfos.size + 1, after.trackInfos.size)
+        assertEquals(
+            before.trackPreservationSignature(),
+            after.copy(trackInfos = after.trackInfos.take(before.trackInfos.size)).trackPreservationSignature(),
+        )
+
+        val imported = after.trackInfos.last()
+        assertTrue(imported.number !in originalNumbers)
+        imported.uid?.let { assertTrue(it !in originalUids) }
+            ?: throw AssertionError("imported track must receive TrackUID")
+        assertEquals(MatroskaTrackKind.VIDEO, imported.kind)
+        assertEquals(sourceVideo.codecId, imported.codecId)
+        assertEquals("Second video", imported.name)
+        assertEquals("und", imported.language)
+        assertFalse(imported.isDefault)
+        assertFalse(imported.isForced)
+
+        assertEquals(before.chapterCount, after.chapterCount)
+        assertEquals(
+            before.attachmentInfos.map { listOf(it.uid, it.fileName, it.mimeType, it.sizeBytes) },
+            after.attachmentInfos.map { listOf(it.uid, it.fileName, it.mimeType, it.sizeBytes) },
+        )
+    }
 }
