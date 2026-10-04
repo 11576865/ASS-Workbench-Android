@@ -7,6 +7,7 @@ enum class ContainerMutationKind {
     ADD_ATTACHMENT,
     REMOVE_ATTACHMENT,
     REPLACE_ATTACHMENT,
+    EDIT_ATTACHMENT_METADATA,
 }
 
 enum class ContainerMutationSource {
@@ -129,6 +130,21 @@ internal fun buildContainerEditPlan(state: EditorState): ContainerEditPlanUi {
         )
     }
 
+    state.container.pendingAttachmentMetadataEdits.forEach { metadata ->
+        mutations += ContainerMutationUi(
+            id = "edit-attachment-meta:${metadata.target}",
+            kind = ContainerMutationKind.EDIT_ATTACHMENT_METADATA,
+            source = ContainerMutationSource.EXISTING_ATTACHMENT,
+            title = "修改附件信息 ${metadata.originalName} → ${metadata.name}",
+            detail = buildString {
+                append("保留 payload 与 Attachment UID/目标身份")
+                if (metadata.description.isNotBlank()) {
+                    append(" · ").append(metadata.description)
+                }
+            },
+        )
+    }
+
     val checks = mutableListOf<ContainerCompatibilityCheckUi>()
 
     checks += if (state.container.skippedAttachmentCount > 0) {
@@ -153,9 +169,14 @@ internal fun buildContainerEditPlan(state: EditorState): ContainerEditPlanUi {
 
     val removalTargets = state.container.pendingAttachmentRemovals.mapTo(hashSetOf()) { it.target }
     val replacementTargets = state.container.pendingAttachmentReplacements.mapTo(hashSetOf()) { it.target }
-    val conflictingAttachmentTargets = removalTargets.intersect(replacementTargets)
+    val metadataTargets = state.container.pendingAttachmentMetadataEdits.mapTo(hashSetOf()) { it.target }
+    val conflictingAttachmentTargets =
+        removalTargets.intersect(replacementTargets) +
+            removalTargets.intersect(metadataTargets) +
+            replacementTargets.intersect(metadataTargets)
     val currentAttachmentTargets = state.container.resources.mapNotNullTo(hashSetOf()) { it.attachmentTarget }
-    val missingAttachmentTargets = (removalTargets + replacementTargets).filterNot { it in currentAttachmentTargets }
+    val missingAttachmentTargets =
+        (removalTargets + replacementTargets + metadataTargets).filterNot { it in currentAttachmentTargets }
 
     checks += ContainerCompatibilityCheckUi(
         dimension = ContainerCompatibilityDimension.CONTAINER_STRUCTURE,
@@ -168,12 +189,12 @@ internal fun buildContainerEditPlan(state: EditorState): ContainerEditPlanUi {
         title = "Matroska 结构",
         detail = when {
             conflictingAttachmentTargets.isNotEmpty() ->
-                "同一附件不能在一次计划中同时删除和替换：" + conflictingAttachmentTargets.joinToString()
+                "同一附件不能在一次计划中安排互斥的删除 / 替换 / 元数据修改：" + conflictingAttachmentTargets.joinToString()
             missingAttachmentTargets.isNotEmpty() ->
                 "附件目标已不在当前检测 Inventory 中：" + missingAttachmentTargets.joinToString()
             mutations.isEmpty() -> "尚无待执行的容器修改。"
             else ->
-                "当前计划中的 ASS 同槽位替换与 Attachment 添加 / 删除 / 替换，均映射到已实现的 Matroska 写入路径。"
+                "当前计划中的 ASS 同槽位替换与 Attachment 添加 / 删除 / 替换 / 元数据修改，均映射到已实现的 Matroska 写入路径。"
         },
     )
 
@@ -196,7 +217,7 @@ internal fun buildContainerEditPlan(state: EditorState): ContainerEditPlanUi {
         dimension = ContainerCompatibilityDimension.OUTPUT_VERIFICATION,
         status = ContainerCompatibilityStatus.SUPPORTED,
         title = "输出验证",
-        detail = "写回后重新扫描实际 MKV，并验证轨道、章节、未改附件，以及计划添加 / 删除 / 替换的实际结果。",
+        detail = "写回后重新扫描实际 MKV，并验证轨道、章节、未改附件，以及计划添加 / 删除 / 替换 / 元数据修改的实际结果。",
     )
 
     val hasGenericAttachment = mutations.any {
