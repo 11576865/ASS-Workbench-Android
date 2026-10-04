@@ -3741,6 +3741,8 @@ private fun FloatingToolContent(
                 modifier = paneModifier,
                 targetEventId = boundEventId,
                 unresolvedPinnedEventId = unresolvedPinnedEventId,
+                parameterBinding = instance.binding,
+                onExtractParameter = onExtractParameter,
             )
         }
         WorkbenchTool.FONTS -> FontManagerPane(state, viewModel, onImportFont, Modifier.fillMaxSize())
