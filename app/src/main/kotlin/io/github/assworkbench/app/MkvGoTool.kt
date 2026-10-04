@@ -24,9 +24,11 @@ data class TrackMetadataEditInput(
 )
 
 data class TrackAdditionInput(
+    val sourceKind: ContainerTrackImportSourceKind = ContainerTrackImportSourceKind.MATROSKA_TRACK,
     val source: File,
-    val sourceTrackNumber: Long,
-    val sourceTrackUid: Long?,
+    val sourceTrackNumber: Long? = null,
+    val sourceTrackUid: Long? = null,
+    val sourceSha256: String? = null,
     val name: String,
     val language: String,
     val isDefault: Boolean,
@@ -125,22 +127,7 @@ class MkvGoTool(private val context: Context) {
                 args += if (metadata.isDefault) "1" else "0"
                 args += if (metadata.isForced) "1" else "0"
             }
-        addTracks
-            .distinctBy { it.source.absolutePath + "\u0000" + it.sourceTrackNumber }
-            .forEach { addition ->
-                require(addition.source.isFile && addition.source.length() > 0L) {
-                    "轨道来源文件不可用：" + addition.source.name
-                }
-                require(addition.sourceTrackNumber > 0L) { "轨道来源 TrackNumber 无效" }
-                args += "--add-track"
-                args += addition.source.absolutePath
-                args += addition.sourceTrackNumber.toString()
-                args += (addition.sourceTrackUid ?: 0L).toString()
-                args += addition.name
-                args += addition.language
-                args += if (addition.isDefault) "1" else "0"
-                args += if (addition.isForced) "1" else "0"
-            }
+        appendTrackAdditions(args, addTracks)
         args += editedAss.absolutePath
         run(*args.toTypedArray())
         require(output.isFile && output.length() > 0L) { "MKV 写回未生成输出文件" }
@@ -252,22 +239,7 @@ class MkvGoTool(private val context: Context) {
                 args += if (metadata.isDefault) "1" else "0"
                 args += if (metadata.isForced) "1" else "0"
             }
-        addTracks
-            .distinctBy { it.source.absolutePath + "\u0000" + it.sourceTrackNumber }
-            .forEach { addition ->
-                require(addition.source.isFile && addition.source.length() > 0L) {
-                    "轨道来源文件不可用：" + addition.source.name
-                }
-                require(addition.sourceTrackNumber > 0L) { "轨道来源 TrackNumber 无效" }
-                args += "--add-track"
-                args += addition.source.absolutePath
-                args += addition.sourceTrackNumber.toString()
-                args += (addition.sourceTrackUid ?: 0L).toString()
-                args += addition.name
-                args += addition.language
-                args += if (addition.isDefault) "1" else "0"
-                args += if (addition.isForced) "1" else "0"
-            }
+        appendTrackAdditions(args, addTracks)
         run(*args.toTypedArray())
         require(output.isFile && output.length() > 0L) { "MKV 写回未生成输出文件" }
     }
@@ -304,6 +276,54 @@ class MkvGoTool(private val context: Context) {
             "--target", target,
         )
         require(output.isFile) { "MKV 附件提取未生成输出文件" }
+    }
+
+    private fun appendTrackAdditions(
+        args: MutableList<String>,
+        addTracks: List<TrackAdditionInput>,
+    ) {
+        addTracks
+            .distinctBy {
+                buildString {
+                    append(it.sourceKind.name)
+                    append('\u0000').append(it.source.absolutePath)
+                    append('\u0000').append(it.sourceTrackNumber ?: 0L)
+                }
+            }
+            .forEach { addition ->
+                require(addition.source.isFile && addition.source.length() > 0L) {
+                    "轨道来源文件不可用：" + addition.source.name
+                }
+                when (addition.sourceKind) {
+                    ContainerTrackImportSourceKind.MATROSKA_TRACK -> {
+                        val trackNumber = requireNotNull(addition.sourceTrackNumber) {
+                            "Matroska 轨道来源缺少 TrackNumber"
+                        }
+                        require(trackNumber > 0L) { "轨道来源 TrackNumber 无效" }
+                        args += "--add-track"
+                        args += addition.source.absolutePath
+                        args += trackNumber.toString()
+                        args += (addition.sourceTrackUid ?: 0L).toString()
+                        args += addition.name
+                        args += addition.language
+                        args += if (addition.isDefault) "1" else "0"
+                        args += if (addition.isForced) "1" else "0"
+                    }
+                    ContainerTrackImportSourceKind.STANDALONE_ASS -> {
+                        val sha256 = addition.sourceSha256.orEmpty()
+                        require(sha256.matches(Regex("[0-9a-fA-F]{64}"))) {
+                            "独立 ASS 来源缺少有效 SHA-256 证据"
+                        }
+                        args += "--add-ass-track"
+                        args += addition.source.absolutePath
+                        args += sha256.lowercase()
+                        args += addition.name
+                        args += addition.language
+                        args += if (addition.isDefault) "1" else "0"
+                        args += if (addition.isForced) "1" else "0"
+                    }
+                }
+            }
     }
 
     private fun run(vararg args: String): String {
