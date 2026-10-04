@@ -365,6 +365,7 @@ func EditContainerResources(
 		ctx,
 		fs,
 		updatedTracks,
+		probe.Tracks,
 		trackImports,
 	)
 	if err != nil {
@@ -657,17 +658,21 @@ func planTrackImports(
 	ctx context.Context,
 	fs *mkv.FS,
 	existing []mkv.Track,
+	reserved []mkv.Track,
 	imports []TrackImport,
 ) ([]mkv.Track, []mergeSource, int64, error) {
 	if len(imports) == 0 {
 		return existing, nil, 0, nil
 	}
 
-	usedIDs := make(map[uint64]struct{}, len(existing)+len(imports))
-	usedUIDs := make(map[uint64]struct{}, len(existing)+len(imports))
+	// Reserve identities from every source track, including tracks removed in
+	// this same transaction. A newly imported track must not silently inherit
+	// the TrackNumber / TrackUID of a resource the user just deleted.
+	usedIDs := make(map[uint64]struct{}, len(reserved)+len(imports))
+	usedUIDs := make(map[uint64]struct{}, len(reserved)+len(imports))
 	var nextID uint64 = 1
 	var nextUID uint64 = 1
-	for _, track := range existing {
+	for _, track := range reserved {
 		usedIDs[track.ID] = struct{}{}
 		if track.ID >= nextID {
 			if track.ID == ^uint64(0) {
