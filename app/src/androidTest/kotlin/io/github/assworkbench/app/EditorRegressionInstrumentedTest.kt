@@ -204,6 +204,48 @@ class EditorRegressionInstrumentedTest {
     }
 
     @Test
+    fun spatialWorkspaceLongPressDragExtractsRotationWithoutEditingAss() {
+        restoreRecovery()
+
+        composeRule.onNodeWithContentDescription("工具和更多操作").performClick()
+        composeRule.onNodeWithTag("workspace-mode-toggle").performClick()
+        selectUiVariant("ui-variant-use-SPATIAL_EXPERIMENTAL")
+        openTool("POSITION")
+
+        composeRule.onNodeWithTag("position-section-TRANSFORM")
+            .performScrollTo()
+            .performClick()
+
+        val before = viewModel.state.value.document
+        assertFalse(viewModel.state.value.canUndo)
+
+        composeRule.onNodeWithTag("extract-rotation-z-1")
+            .performScrollTo()
+            .assertIsDisplayed()
+            .performTouchInput {
+                down(center)
+                advanceEventTime(800)
+                moveBy(Offset(72f, 24f))
+                up()
+            }
+
+        composeRule.waitUntil(5_000) {
+            composeRule.onAllNodesWithTag(
+                "spatial-node-parameter-event.rotation.z-1",
+                useUnmergedTree = true,
+            ).fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()
+        }
+        composeRule.onNodeWithTag("spatial-node-parameter-event.rotation.z-1")
+            .assertIsDisplayed()
+        composeRule.onNodeWithTag(
+            "parameter-projection-slider-parameter-event.rotation.z-1"
+        ).assertIsDisplayed()
+
+        assertEquals(before, viewModel.state.value.document)
+        assertFalse("Extracting a workspace projection must not enter ASS Undo", viewModel.state.value.canUndo)
+    }
+
+    @Test
     fun toolInstanceWorkspaceSupportsHideAndRestore() {
         restoreRecovery()
 
