@@ -433,4 +433,77 @@ class MkvBridgeInstrumentedTest {
             after.attachmentInfos.map { listOf(it.uid, it.fileName, it.mimeType, it.sizeBytes) },
         )
     }
+
+    @Test
+    fun nativeBridgeAddsNormalizedSrtAsFreshSubtitleTrack() {
+        val source = File(workDir, "standalone-srt-base.mkv")
+        InstrumentationRegistry.getInstrumentation().context.assets
+            .open("mkv/source.mkv")
+            .use { input -> source.outputStream().use { output -> input.copyTo(output) } }
+
+        val before = source.inputStream().use { MatroskaReader().scan(it) }
+        val maxOriginalNumber = before.trackInfos.maxOf { it.number }
+        val originalUids = before.trackInfos.mapNotNull { it.uid }.toSet()
+
+        val srt = """
+            1
+            00:00:00,250 --> 00:00:02,250
+            <i>SRT Android import</i>
+        """.trimIndent()
+        val normalized = normalizeStandaloneSubtitleTrackSource(
+            sourceKind = ContainerTrackImportSourceKind.STANDALONE_SRT,
+            raw = srt.toByteArray(Charsets.UTF_8),
+        )
+        val stagedAss = File(workDir, "normalized-from-srt.ass").apply {
+            writeText(normalized.normalizedAssText, Charsets.UTF_8)
+        }
+
+        val output = File(workDir, "standalone-srt-updated.mkv")
+        val tool = MkvGoTool(application)
+        assertTrue("x86_64 emulator APK must package the mkvgo helper", tool.isAvailable())
+        tool.editContainer(
+            source = source,
+            output = output,
+            addTracks = listOf(
+                TrackAdditionInput(
+                    sourceKind = ContainerTrackImportSourceKind.STANDALONE_SRT,
+                    source = stagedAss,
+                    sourceSha256 = normalized.normalizedSha256,
+                    name = "Imported SRT",
+                    language = "eng",
+                    isDefault = false,
+                    isForced = false,
+                )
+            ),
+        )
+
+        val after = output.inputStream().use { MatroskaReader().scan(it) }
+        assertEquals(before.trackInfos.size + 1, after.trackInfos.size)
+        assertEquals(
+            before.trackPreservationSignature(),
+            after.copy(trackInfos = after.trackInfos.take(before.trackInfos.size))
+                .trackPreservationSignature(),
+        )
+
+        val added = after.trackInfos.last()
+        assertEquals(MatroskaTrackKind.SUBTITLE, added.kind)
+        assertEquals("S_TEXT/ASS", added.codecId)
+        assertTrue(added.number > maxOriginalNumber)
+        val addedUid = added.uid
+        assertTrue(addedUid != null && addedUid !in originalUids)
+        assertEquals("Imported SRT", added.name)
+        assertEquals("eng", added.language)
+        assertFalse(added.isDefault)
+        assertFalse(added.isForced)
+
+        val importedTrack = after.subtitleTracks.single { it.number == added.number }
+        val importedAss = importedTrack.toAss()
+        assertTrue(importedAss.contains("SRT Android import"))
+        assertTrue(importedAss.contains("{\\i1}SRT Android import{\\i0}"))
+        assertEquals(before.chapterCount, after.chapterCount)
+        assertEquals(
+            before.attachmentInfos.map { listOf(it.uid, it.fileName, it.mimeType, it.sizeBytes) },
+            after.attachmentInfos.map { listOf(it.uid, it.fileName, it.mimeType, it.sizeBytes) },
+        )
+    }
 }
