@@ -6,6 +6,7 @@ import io.github.assworkbench.domain.AssGeometrySemantic
 import io.github.assworkbench.domain.AssInlineSyntax
 import io.github.assworkbench.domain.AssPoint
 import io.github.assworkbench.domain.AssPositionMode
+import io.github.assworkbench.domain.AssTopLevelOverrideSyntax
 import io.github.assworkbench.domain.SubTime
 import kotlin.math.hypot
 
@@ -123,8 +124,9 @@ internal object PreviewTargetResolver {
         val analysis = AssInlineSyntax.analyze(event.text)
         if (analysis.hasErrors) return null
 
-        val leadingEnd = leadingOverridePrefixLength(event.text)
-        val alignmentTags = analysis.tags.filter { it.name.equals("an", ignoreCase = true) }
+        val leadingEnd = AssTopLevelOverrideSyntax.leadingPrefixLength(event.text)
+        val alignmentTags = AssTopLevelOverrideSyntax.tags(event.text)
+            .filter { it.name.equals("an", ignoreCase = true) }
         if (alignmentTags.any { it.start >= leadingEnd }) return null
 
         val alignment = alignmentTags.lastOrNull()?.value?.toIntOrNull() ?: style.alignment
@@ -152,8 +154,8 @@ internal object PreviewTargetResolver {
     private fun hasLateAnchorTag(text: String): Boolean {
         val analysis = AssInlineSyntax.analyze(text)
         if (analysis.hasErrors) return true
-        val leadingEnd = leadingOverridePrefixLength(text)
-        return analysis.tags.any { tag ->
+        val leadingEnd = AssTopLevelOverrideSyntax.leadingPrefixLength(text)
+        return AssTopLevelOverrideSyntax.tags(text).any { tag ->
             tag.start >= leadingEnd &&
                 (
                     tag.name.equals("an", ignoreCase = true) ||
@@ -161,16 +163,6 @@ internal object PreviewTargetResolver {
                         tag.name.equals("move", ignoreCase = true)
                     )
         }
-    }
-
-    private fun leadingOverridePrefixLength(text: String): Int {
-        var cursor = 0
-        while (cursor < text.length && text[cursor] == '{') {
-            val close = text.indexOf('}', cursor + 1)
-            if (close < 0) return cursor
-            cursor = close + 1
-        }
-        return cursor
     }
 
     private fun isFinitePoint(point: AssPoint): Boolean =
