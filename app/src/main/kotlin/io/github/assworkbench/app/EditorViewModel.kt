@@ -57,6 +57,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.security.MessageDigest
 import java.util.concurrent.atomic.AtomicLong
 
 class EditorViewModel(application: Application) : AndroidViewModel(application) {
@@ -477,7 +478,9 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             ?.substringAfterLast('/')
             ?.substringAfterLast('\\')
             ?.takeIf { it.isNotBlank() }
-            ?: "外部 Matroska"
+            ?: "外部轨道来源"
+        val standaloneAss = sourceName.substringAfterLast('.', "").equals("ass", ignoreCase = true)
+
         trackImportJob?.cancel()
         _state.update {
             it.copy(
@@ -485,58 +488,92 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                     trackImportLoading = true,
                     trackImportCandidates = emptyList(),
                 ),
-                status = "正在扫描外部 Matroska 轨道……",
+                status = if (standaloneAss) {
+                    "正在验证独立 ASS 并建立导入计划……"
+                } else {
+                    "正在扫描外部 Matroska 轨道……"
+                },
             )
         }
         trackImportJob = viewModelScope.launch {
             runCatching {
                 withContext(Dispatchers.IO) {
-                    val stream = app.contentResolver.openInputStream(uri)
-                        ?: error("无法读取外部 Matroska")
-                    stream.use {
-                        MatroskaReader().scan(
-                            input = it,
-                            retainAttachments = false,
+                    if (standaloneAss) {
+                        val raw = app.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                            ?: error("无法读取独立 ASS")
+                        require(raw.isNotEmpty()) { "独立 ASS 为空" }
+                        val decoded = AssTextDecoder.decode(raw).text
+                        val normalized = decoded.toByteArray(Charsets.UTF_8)
+                        val document = AssCodec.parse(decoded)
+                        require(document.events.isNotEmpty()) { "独立 ASS 没有可导入的 Events" }
+                        listOf(
+                            PendingContainerTrackAdditionUi(
+                                sourceKind = ContainerTrackImportSourceKind.STANDALONE_ASS,
+                                sourceUri = uri.toString(),
+                                sourceName = sourceName,
+                                sourceSha256 = sha256Hex(normalized),
+                                kind = ContainerResourceKind.SUBTITLE,
+                                typeCode = 17L,
+                                codecId = "S_TEXT/ASS",
+                                name = sourceName.substringBeforeLast('.').ifBlank { "Imported ASS" },
+                                language = "und",
+                                sourceIsDefault = false,
+                                isDefault = false,
+                                isForced = false,
+                            )
                         )
+                    } else {
+                        val stream = app.contentResolver.openInputStream(uri)
+                            ?: error("无法读取外部 Matroska")
+                        val scan = stream.use {
+                            MatroskaReader().scan(
+                                input = it,
+                                retainAttachments = false,
+                            )
+                        }
+                        scan.trackInfos.mapNotNull { info ->
+                            val kind = info.kind.toContainerResourceKind()
+                            if (
+                                kind != ContainerResourceKind.VIDEO &&
+                                kind != ContainerResourceKind.AUDIO &&
+                                kind != ContainerResourceKind.SUBTITLE
+                            ) return@mapNotNull null
+                            PendingContainerTrackAdditionUi(
+                                sourceKind = ContainerTrackImportSourceKind.MATROSKA_TRACK,
+                                sourceUri = uri.toString(),
+                                sourceName = sourceName,
+                                sourceTrackNumber = info.number,
+                                sourceTrackUid = info.uid,
+                                kind = kind,
+                                typeCode = info.typeCode,
+                                codecId = info.codecId,
+                                name = info.name,
+                                language = info.language,
+                                sourceIsDefault = info.isDefault,
+                                isDefault = false,
+                                isForced = info.isForced,
+                            )
+                        }
                     }
                 }
-            }.onSuccess { scan ->
+            }.onSuccess { candidates ->
                 if (
                     _state.value.workspaceSessionId != sessionId ||
                     _state.value.container.uri != containerUri
                 ) return@onSuccess
-                val candidates = scan.trackInfos.mapNotNull { info ->
-                    val kind = info.kind.toContainerResourceKind()
-                    if (
-                        kind != ContainerResourceKind.VIDEO &&
-                        kind != ContainerResourceKind.AUDIO &&
-                        kind != ContainerResourceKind.SUBTITLE
-                    ) return@mapNotNull null
-                    PendingContainerTrackAdditionUi(
-                        sourceUri = uri.toString(),
-                        sourceName = sourceName,
-                        sourceTrackNumber = info.number,
-                        sourceTrackUid = info.uid,
-                        kind = kind,
-                        typeCode = info.typeCode,
-                        codecId = info.codecId,
-                        name = info.name,
-                        language = info.language,
-                        sourceIsDefault = info.isDefault,
-                        isDefault = false,
-                        isForced = info.isForced,
-                    )
-                }
                 _state.update {
                     it.copy(
                         container = it.container.copy(
                             trackImportLoading = false,
                             trackImportCandidates = candidates,
                         ),
-                        status = if (candidates.isEmpty()) {
-                            "外部 Matroska 没有可导入的视频 / 音频 / 字幕轨道。"
-                        } else {
-                            "外部 Matroska 已检测 ${candidates.size} 条可导入轨道；请选择需要加入当前容器的轨道。"
+                        status = when {
+                            candidates.isEmpty() ->
+                                "外部来源没有可导入的视频 / 音频 / 字幕轨道。"
+                            standaloneAss ->
+                                "独立 ASS 已验证；可作为新的 S_TEXT/ASS 字幕轨加入当前容器。"
+                            else ->
+                                "外部 Matroska 已检测 ${candidates.size} 条可导入轨道；请选择需要加入当前容器的轨道。"
                         },
                     )
                 }
