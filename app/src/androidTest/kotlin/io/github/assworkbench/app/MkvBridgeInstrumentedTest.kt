@@ -335,6 +335,7 @@ class MkvBridgeInstrumentedTest {
                 TrackImportInput(
                     source = external,
                     trackNumber = sourceVideo.number,
+                    sourceTrackUid = sourceVideo.uid,
                     name = "Second video",
                     language = "und",
                     isDefault = false,

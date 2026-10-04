@@ -130,6 +130,7 @@ type TrackMetadataEdit struct {
 type TrackImport struct {
 	SourcePath       string
 	TrackID          uint64
+	SourceTrackUID   uint64
 	Name             string
 	Language         string
 	LanguageBCP47    string
@@ -388,10 +389,11 @@ func EditContainerResourcesWithTrackImports(
 	if err != nil {
 		return err
 	}
-	updatedTracks, removedTrackIDs, removedTrackUIDs, err := planTrackEdits(
+	updatedTracks, removedTrackIDs, removedTrackUIDs, err := planTrackEditsInternal(
 		probe.Tracks,
 		removeTrackTargets,
 		trackMetadataEdits,
+		len(trackImports) > 0,
 	)
 	if err != nil {
 		return err
@@ -637,6 +639,15 @@ func planTrackEdits(
 	removeTargets []string,
 	metadataEdits []TrackMetadataEdit,
 ) ([]mkv.Track, map[uint64]struct{}, map[uint64]struct{}, error) {
+	return planTrackEditsInternal(existing, removeTargets, metadataEdits, false)
+}
+
+func planTrackEditsInternal(
+	existing []mkv.Track,
+	removeTargets []string,
+	metadataEdits []TrackMetadataEdit,
+	allowEmpty bool,
+) ([]mkv.Track, map[uint64]struct{}, map[uint64]struct{}, error) {
 	removeIndexes := make(map[int]struct{}, len(removeTargets))
 	metadataByIndex := make(map[int]mkv.Track, len(metadataEdits))
 
@@ -647,7 +658,7 @@ func planTrackEdits(
 		}
 		removeIndexes[index] = struct{}{}
 	}
-	if len(removeIndexes) >= len(existing) {
+	if len(removeIndexes) >= len(existing) && !allowEmpty {
 		return nil, nil, nil, fmt.Errorf("cannot remove all tracks")
 	}
 
@@ -746,7 +757,7 @@ func planTrackImports(
 	seen := make(map[string]struct{}, len(imports))
 	var maxDuration int64
 
-	for _, input := range imports {
+	for importIndex, input := range imports {
 		if err := ctx.Err(); err != nil {
 			return nil, nil, nil, 0, err
 		}
@@ -779,6 +790,15 @@ func planTrackImports(
 				"track %d not found in %s",
 				input.TrackID,
 				input.SourcePath,
+			)
+		}
+		if input.SourceTrackUID != 0 && sourceTrack.UID != input.SourceTrackUID {
+			return nil, nil, nil, 0, fmt.Errorf(
+				"track %d in %s changed identity: expected TrackUID %d, got %d",
+				input.TrackID,
+				filepath.Base(input.SourcePath),
+				input.SourceTrackUID,
+				sourceTrack.UID,
 			)
 		}
 
@@ -840,8 +860,13 @@ func planTrackImports(
 
 		usedIDs[nextID] = struct{}{}
 		usedUIDs[nextUID] = struct{}{}
-		nextID++
-		nextUID++
+		if importIndex+1 < len(imports) {
+			if nextID == ^uint64(0) || nextUID == ^uint64(0) {
+				return nil, nil, nil, 0, fmt.Errorf("cannot allocate another track identity")
+			}
+			nextID++
+			nextUID++
+		}
 		if source.DurationMs > maxDuration {
 			maxDuration = source.DurationMs
 		}
