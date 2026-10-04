@@ -86,13 +86,25 @@ fun ContainerBridgePanel(
     var trackMetadataTarget by remember { mutableStateOf<ContainerResourceUi?>(null) }
     var trackMetadataName by remember { mutableStateOf("") }
     var trackMetadataLanguage by remember { mutableStateOf("") }
+    var trackMetadataLanguageBcp47 by remember { mutableStateOf("") }
     var trackMetadataDefault by remember { mutableStateOf(false) }
     var trackMetadataForced by remember { mutableStateOf(false) }
+    var trackMetadataHearingImpaired by remember { mutableStateOf(false) }
+    var trackMetadataVisualImpaired by remember { mutableStateOf(false) }
+    var trackMetadataTextDescriptions by remember { mutableStateOf(false) }
+    var trackMetadataOriginal by remember { mutableStateOf(false) }
+    var trackMetadataCommentary by remember { mutableStateOf(false) }
     var trackImportCandidate by remember { mutableStateOf<ContainerTrackImportCandidateUi?>(null) }
     var trackImportName by remember { mutableStateOf("") }
     var trackImportLanguage by remember { mutableStateOf("") }
+    var trackImportLanguageBcp47 by remember { mutableStateOf("") }
     var trackImportDefault by remember { mutableStateOf(false) }
     var trackImportForced by remember { mutableStateOf(false) }
+    var trackImportHearingImpaired by remember { mutableStateOf(false) }
+    var trackImportVisualImpaired by remember { mutableStateOf(false) }
+    var trackImportTextDescriptions by remember { mutableStateOf(false) }
+    var trackImportOriginal by remember { mutableStateOf(false) }
+    var trackImportCommentary by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val attachmentPicker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenMultipleDocuments()
@@ -402,8 +414,17 @@ fun ContainerBridgePanel(
                         trackMetadataTarget = resource
                         trackMetadataName = pendingTrackMetadata?.name ?: resource.trackName
                         trackMetadataLanguage = pendingTrackMetadata?.language ?: resource.trackLanguage
+                        trackMetadataLanguageBcp47 = pendingTrackMetadata?.languageBcp47 ?: resource.trackLanguageBcp47
                         trackMetadataDefault = pendingTrackMetadata?.isDefault ?: resource.trackIsDefault
                         trackMetadataForced = pendingTrackMetadata?.isForced ?: resource.trackIsForced
+                        trackMetadataHearingImpaired =
+                            pendingTrackMetadata?.hearingImpaired ?: resource.trackHearingImpaired
+                        trackMetadataVisualImpaired =
+                            pendingTrackMetadata?.visualImpaired ?: resource.trackVisualImpaired
+                        trackMetadataTextDescriptions =
+                            pendingTrackMetadata?.textDescriptions ?: resource.trackTextDescriptions
+                        trackMetadataOriginal = pendingTrackMetadata?.original ?: resource.trackOriginal
+                        trackMetadataCommentary = pendingTrackMetadata?.commentary ?: resource.trackCommentary
                     }
                 },
                 onCancelTrackEdit = trackTarget?.let { target ->
@@ -452,9 +473,15 @@ fun ContainerBridgePanel(
                                 append(track.sourceName)
                                 append(" · Track #").append(track.sourceTrackNumber)
                                 if (track.codecId.isNotBlank()) append(" · ").append(track.codecId)
-                                if (track.language.isNotBlank()) append(" · ").append(track.language)
+                                if (track.languageBcp47.isNotBlank()) append(" · ").append(track.languageBcp47)
+                                else if (track.language.isNotBlank()) append(" · ").append(track.language)
                                 if (track.isDefault) append(" · Default")
                                 if (track.isForced) append(" · Forced")
+                                if (track.hearingImpaired) append(" · Hearing impaired")
+                                if (track.visualImpaired) append(" · Visual impaired")
+                                if (track.textDescriptions) append(" · Text descriptions")
+                                if (track.original) append(" · Original")
+                                if (track.commentary) append(" · Commentary")
                             },
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -622,12 +649,17 @@ fun ContainerBridgePanel(
                                             trackImportCandidate = candidate
                                             trackImportName = candidate.name
                                             trackImportLanguage = candidate.language
-                                            // A foreign source's Default flag is a source
-                                            // selection preference, not a destination intent.
-                                            // Start disabled so import cannot silently change
-                                            // the destination player's automatic track choice.
+                                            trackImportLanguageBcp47 = candidate.languageBcp47
+                                            // Default is destination policy rather than intrinsic
+                                            // source semantics, so it starts disabled. Semantic
+                                            // dispositions remain inherited and can be changed.
                                             trackImportDefault = false
                                             trackImportForced = candidate.isForced
+                                            trackImportHearingImpaired = candidate.hearingImpaired
+                                            trackImportVisualImpaired = candidate.visualImpaired
+                                            trackImportTextDescriptions = candidate.textDescriptions
+                                            trackImportOriginal = candidate.original
+                                            trackImportCommentary = candidate.commentary
                                         },
                                     ) {
                                         Text(if (alreadyPlanned) "已加入" else "设置")
@@ -655,7 +687,12 @@ fun ContainerBridgePanel(
                 onDismissRequest = { trackImportCandidate = null },
                 title = { Text("导入 Track #${candidate.sourceTrackNumber}") },
                 text = {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Column(
+                        Modifier
+                            .heightIn(max = 520.dp)
+                            .verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
                         Text(
                             buildString {
                                 append(candidate.sourceName)
@@ -674,27 +711,35 @@ fun ContainerBridgePanel(
                         OutlinedTextField(
                             value = trackImportLanguage,
                             onValueChange = { trackImportLanguage = it },
-                            label = { Text("Language（ISO 639-2）") },
-                            supportingText = { Text("3 字母 legacy language，例如 jpn / eng / und；可留空") },
+                            label = { Text("Legacy Language（ISO 639-2）") },
+                            supportingText = { Text("3 字母代码，例如 jpn / eng / und；可留空") },
                             singleLine = true,
                         )
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        ) {
-                            Checkbox(
-                                checked = trackImportDefault,
-                                onCheckedChange = { trackImportDefault = it },
-                            )
-                            Text("Default")
-                            Checkbox(
-                                checked = trackImportForced,
-                                onCheckedChange = { trackImportForced = it },
-                            )
-                            Text("Forced")
-                        }
+                        OutlinedTextField(
+                            value = trackImportLanguageBcp47,
+                            onValueChange = { trackImportLanguageBcp47 = it },
+                            label = { Text("Language IETF（BCP 47）") },
+                            supportingText = { Text("例如 ja-JP / en / zh-Hant；可留空") },
+                            singleLine = true,
+                        )
+                        TrackDispositionCheckboxes(
+                            isDefault = trackImportDefault,
+                            onDefaultChange = { trackImportDefault = it },
+                            isForced = trackImportForced,
+                            onForcedChange = { trackImportForced = it },
+                            hearingImpaired = trackImportHearingImpaired,
+                            onHearingImpairedChange = { trackImportHearingImpaired = it },
+                            visualImpaired = trackImportVisualImpaired,
+                            onVisualImpairedChange = { trackImportVisualImpaired = it },
+                            textDescriptions = trackImportTextDescriptions,
+                            onTextDescriptionsChange = { trackImportTextDescriptions = it },
+                            original = trackImportOriginal,
+                            onOriginalChange = { trackImportOriginal = it },
+                            commentary = trackImportCommentary,
+                            onCommentaryChange = { trackImportCommentary = it },
+                        )
                         Text(
-                            "保存时将分配新的 TrackNumber / TrackUID。Default 对新导入轨默认关闭；来源附件不会自动复制，字幕依赖字体时请另外加入附件计划。",
+                            "保存时分配新的 TrackNumber / TrackUID。Default 作为目标容器的选择策略默认关闭；Forced、无障碍和语义 disposition 从来源继承。来源附件不会自动复制，字幕依赖字体时请另外加入附件计划。",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -707,8 +752,14 @@ fun ContainerBridgePanel(
                                 candidate = candidate,
                                 name = trackImportName,
                                 language = trackImportLanguage,
+                                languageBcp47 = trackImportLanguageBcp47,
                                 isDefault = trackImportDefault,
                                 isForced = trackImportForced,
+                                hearingImpaired = trackImportHearingImpaired,
+                                visualImpaired = trackImportVisualImpaired,
+                                textDescriptions = trackImportTextDescriptions,
+                                original = trackImportOriginal,
+                                commentary = trackImportCommentary,
                             )
                             trackImportCandidate = null
                         },
@@ -773,7 +824,12 @@ fun ContainerBridgePanel(
                 onDismissRequest = { trackMetadataTarget = null },
                 title = { Text("Track #${resource.trackNumber} 信息") },
                 text = {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Column(
+                        Modifier
+                            .heightIn(max = 520.dp)
+                            .verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
                         OutlinedTextField(
                             value = trackMetadataName,
                             onValueChange = { trackMetadataName = it },
@@ -783,27 +839,35 @@ fun ContainerBridgePanel(
                         OutlinedTextField(
                             value = trackMetadataLanguage,
                             onValueChange = { trackMetadataLanguage = it },
-                            label = { Text("Language（ISO 639-2）") },
-                            supportingText = { Text("3 字母 legacy language，例如 jpn / eng / und；BCP 47 另行建模") },
+                            label = { Text("Legacy Language（ISO 639-2）") },
+                            supportingText = { Text("3 字母代码，例如 jpn / eng / und；可留空") },
                             singleLine = true,
                         )
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        ) {
-                            Checkbox(
-                                checked = trackMetadataDefault,
-                                onCheckedChange = { trackMetadataDefault = it },
-                            )
-                            Text("Default")
-                            Checkbox(
-                                checked = trackMetadataForced,
-                                onCheckedChange = { trackMetadataForced = it },
-                            )
-                            Text("Forced")
-                        }
+                        OutlinedTextField(
+                            value = trackMetadataLanguageBcp47,
+                            onValueChange = { trackMetadataLanguageBcp47 = it },
+                            label = { Text("Language IETF（BCP 47）") },
+                            supportingText = { Text("例如 ja-JP / en / zh-Hant；可留空") },
+                            singleLine = true,
+                        )
+                        TrackDispositionCheckboxes(
+                            isDefault = trackMetadataDefault,
+                            onDefaultChange = { trackMetadataDefault = it },
+                            isForced = trackMetadataForced,
+                            onForcedChange = { trackMetadataForced = it },
+                            hearingImpaired = trackMetadataHearingImpaired,
+                            onHearingImpairedChange = { trackMetadataHearingImpaired = it },
+                            visualImpaired = trackMetadataVisualImpaired,
+                            onVisualImpairedChange = { trackMetadataVisualImpaired = it },
+                            textDescriptions = trackMetadataTextDescriptions,
+                            onTextDescriptionsChange = { trackMetadataTextDescriptions = it },
+                            original = trackMetadataOriginal,
+                            onOriginalChange = { trackMetadataOriginal = it },
+                            commentary = trackMetadataCommentary,
+                            onCommentaryChange = { trackMetadataCommentary = it },
+                        )
                         Text(
-                            "只修改轨道元数据；TrackNumber、TrackUID、codec 与 payload 保持。",
+                            "这里只修改 TrackEntry 元数据；TrackNumber、TrackUID、codec 与 payload 保持。Legacy Language 与 BCP 47 分开保存。",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -821,8 +885,14 @@ fun ContainerBridgePanel(
                                 originalName = resource.trackName,
                                 name = trackMetadataName,
                                 language = trackMetadataLanguage,
+                                languageBcp47 = trackMetadataLanguageBcp47,
                                 isDefault = trackMetadataDefault,
                                 isForced = trackMetadataForced,
+                                hearingImpaired = trackMetadataHearingImpaired,
+                                visualImpaired = trackMetadataVisualImpaired,
+                                textDescriptions = trackMetadataTextDescriptions,
+                                original = trackMetadataOriginal,
+                                commentary = trackMetadataCommentary,
                             )
                             trackMetadataTarget = null
                         },
@@ -836,6 +906,72 @@ fun ContainerBridgePanel(
     }
 }
 
+
+@Composable
+private fun TrackDispositionCheckboxes(
+    isDefault: Boolean,
+    onDefaultChange: (Boolean) -> Unit,
+    isForced: Boolean,
+    onForcedChange: (Boolean) -> Unit,
+    hearingImpaired: Boolean,
+    onHearingImpairedChange: (Boolean) -> Unit,
+    visualImpaired: Boolean,
+    onVisualImpairedChange: (Boolean) -> Unit,
+    textDescriptions: Boolean,
+    onTextDescriptionsChange: (Boolean) -> Unit,
+    original: Boolean,
+    onOriginalChange: (Boolean) -> Unit,
+    commentary: Boolean,
+    onCommentaryChange: (Boolean) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        TrackDispositionRow("Default", isDefault, onDefaultChange, "Forced", isForced, onForcedChange)
+        TrackDispositionRow(
+            "Hearing impaired",
+            hearingImpaired,
+            onHearingImpairedChange,
+            "Visual impaired",
+            visualImpaired,
+            onVisualImpairedChange,
+        )
+        TrackDispositionRow(
+            "Text descriptions",
+            textDescriptions,
+            onTextDescriptionsChange,
+            "Original",
+            original,
+            onOriginalChange,
+        )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Checkbox(checked = commentary, onCheckedChange = onCommentaryChange)
+            Text("Commentary")
+        }
+    }
+}
+
+@Composable
+private fun TrackDispositionRow(
+    firstLabel: String,
+    firstValue: Boolean,
+    onFirstChange: (Boolean) -> Unit,
+    secondLabel: String,
+    secondValue: Boolean,
+    onSecondChange: (Boolean) -> Unit,
+) {
+    Row(
+        Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Checkbox(checked = firstValue, onCheckedChange = onFirstChange)
+        Text(firstLabel, modifier = Modifier.weight(1f))
+        Checkbox(checked = secondValue, onCheckedChange = onSecondChange)
+        Text(secondLabel, modifier = Modifier.weight(1f))
+    }
+}
 
 @Composable
 internal fun ContainerPreflightSummary(
