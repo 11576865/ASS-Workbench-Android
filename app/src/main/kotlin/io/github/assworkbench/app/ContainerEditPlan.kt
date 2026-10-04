@@ -325,7 +325,7 @@ internal fun buildContainerEditPlan(state: EditorState): ContainerEditPlanUi {
             status = ContainerCompatibilityStatus.WARNING,
             title = "播放器轨道选择行为需验证",
             detail = buildString {
-                append("Track 添加 / 删除、语言 / Default / Forced 等元数据会影响播放器的自动选轨；容器写入可验证，但不同播放器的选择策略不是 Matroska 结构保证。")
+                append("Track 添加 / 删除、语言 / Default / Forced 等元数据会影响播放器的自动选轨；容器写入可验证，但不同播放器的选择策略不是 Matroska 结构保证。当前导入器把新轨计划为 non-Default，以避免无意抢占现有自动选轨。")
                 if (hasImportedSubtitleTrack) {
                     append(" 外部字幕轨只导入所选 Track；源 MKV 的字体/其他 Attachment 不会自动随轨导入。")
                 }
