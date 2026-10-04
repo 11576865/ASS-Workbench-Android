@@ -137,6 +137,7 @@ data class ContainerBridgeState(
     val pendingTrackMetadataEdits: List<PendingContainerTrackMetadataUi> = emptyList(),
     val pendingTrackAdditions: List<PendingContainerTrackAdditionUi> = emptyList(),
     val trackImportCandidates: List<PendingContainerTrackAdditionUi> = emptyList(),
+    val mediaImportAssessment: MediaImportSourceAssessment? = null,
     val trackImportLoading: Boolean = false,
     val extractedFontCount: Int = 0,
     val skippedAttachmentCount: Int = 0,
