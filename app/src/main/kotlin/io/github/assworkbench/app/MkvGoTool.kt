@@ -181,6 +181,7 @@ class MkvGoTool(private val context: Context) {
         metadataEdits: List<AttachmentMetadataEditInput> = emptyList(),
         removeTracks: List<String> = emptyList(),
         trackMetadataEdits: List<TrackMetadataEditInput> = emptyList(),
+        addTracks: List<TrackAdditionInput> = emptyList(),
     ) {
         require(isAvailable()) { "MKV 写回工具在此 ABI 上不可用" }
         require(
