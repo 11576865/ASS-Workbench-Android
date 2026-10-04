@@ -1,12 +1,20 @@
 package io.github.assworkbench.app.ui.workspace
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -82,6 +90,8 @@ internal fun InfiniteCanvasHost(
     SideEffect { onSaveScene(InfiniteCanvasPersistence.encode(scene.first, scene.second)) }
     var detailedId by rememberSaveable { mutableStateOf<String?>(null) }
     var recall by remember { mutableStateOf(false) }
+    var edgeRailOpen by rememberSaveable(sessionId) { mutableStateOf(false) }
+    var edgeRailResident by rememberSaveable(sessionId) { mutableStateOf(false) }
     val camera = scene.first
     val nodes = scene.second
     val density = LocalDensity.current.density
@@ -234,6 +244,165 @@ internal fun InfiniteCanvasHost(
                 }
             }
         }
+        if (edgeRailOpen && !edgeRailResident) {
+            Box(
+                Modifier.fillMaxSize()
+                    .zIndex(1_000_004f)
+                    .testTag("spatial-edge-dismiss-left")
+                    .pointerInput(sessionId) {
+                        detectTapGestures { edgeRailOpen = false }
+                    },
+            )
+        }
+
+        AnimatedVisibility(
+            visible = !edgeRailOpen,
+            modifier = Modifier.align(Alignment.CenterStart).zIndex(1_000_012f),
+            enter = fadeIn(),
+            exit = fadeOut(),
+        ) {
+            Surface(
+                modifier = Modifier
+                    .padding(start = 2.dp)
+                    .width(32.dp)
+                    .height(88.dp)
+                    .testTag("spatial-edge-handle-left")
+                    .pointerInput(sessionId) {
+                        var accumulated = 0f
+                        detectHorizontalDragGestures(
+                            onDragStart = { accumulated = 0f },
+                            onHorizontalDrag = { change, amount ->
+                                change.consume()
+                                accumulated += amount
+                            },
+                            onDragEnd = {
+                                if (accumulated > 24f * density) edgeRailOpen = true
+                            },
+                            onDragCancel = { accumulated = 0f },
+                        )
+                    },
+                shape = MaterialTheme.shapes.large,
+                color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.82f),
+                shadowElevation = 3.dp,
+            ) {
+                IconButton(
+                    onClick = { edgeRailOpen = true },
+                    modifier = Modifier.fillMaxSize(),
+                ) {
+                    Icon(
+                        Icons.Filled.ChevronRight,
+                        contentDescription = "展开工具侧栏",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+
+        AnimatedVisibility(
+            visible = edgeRailOpen,
+            modifier = Modifier.align(Alignment.CenterStart).zIndex(1_000_020f),
+            enter = slideInHorizontally(initialOffsetX = { -it }) + fadeIn(),
+            exit = slideOutHorizontally(targetOffsetX = { -it }) + fadeOut(),
+        ) {
+            Surface(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .width(84.dp)
+                    .testTag("spatial-edge-rail-left"),
+                shape = MaterialTheme.shapes.large,
+                color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.98f),
+                tonalElevation = 6.dp,
+                shadowElevation = 8.dp,
+            ) {
+                Column(
+                    Modifier.fillMaxSize().padding(vertical = 8.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    IconButton(
+                        onClick = {
+                            edgeRailResident = !edgeRailResident
+                            edgeRailOpen = true
+                        },
+                        modifier = Modifier.testTag("spatial-edge-pin-left"),
+                    ) {
+                        Icon(
+                            Icons.Filled.PushPin,
+                            contentDescription = if (edgeRailResident) "取消驻留工具侧栏" else "驻留工具侧栏",
+                            tint = if (edgeRailResident) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    HorizontalDivider(Modifier.padding(horizontal = 12.dp))
+                    Box(Modifier.weight(1f).fillMaxWidth()) {
+                        Column(
+                            Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            Spacer(Modifier.height(4.dp))
+                            entries.forEach { entry ->
+                                val node = scene.second.firstOrNull { it.id == entry.id }
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    modifier = Modifier.width(76.dp),
+                                ) {
+                                    FilledTonalIconButton(
+                                        enabled = node != null && !gestureOwned,
+                                        onClick = {
+                                            node?.let(::focus)
+                                            if (!edgeRailResident) edgeRailOpen = false
+                                        },
+                                        modifier = Modifier
+                                            .size(48.dp)
+                                            .testTag("spatial-edge-entry-" + entry.id.replace(':', '-')),
+                                    ) {
+                                        Icon(
+                                            imageVector = when (entry.id) {
+                                                "preview" -> Icons.Filled.Movie
+                                                "subtitles" -> Icons.Filled.Subtitles
+                                                "audio" -> Icons.Filled.GraphicEq
+                                                "CAPABILITIES:primary" -> Icons.Filled.Apps
+                                                else -> Icons.Filled.Tune
+                                            },
+                                            contentDescription = "召回 " + entry.title,
+                                        )
+                                    }
+                                    Text(
+                                        entry.title,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        maxLines = 1,
+                                    )
+                                }
+                            }
+                            Spacer(Modifier.height(8.dp))
+                        }
+                    }
+                    HorizontalDivider(Modifier.padding(horizontal = 12.dp))
+                    IconButton(
+                        onClick = {
+                            scene = scene.first to scene.second.map {
+                                if (it.id == "CAPABILITIES:primary") it.copy(hidden = false) else it
+                            }
+                            onAddTool()
+                            if (!edgeRailResident) edgeRailOpen = false
+                        },
+                        modifier = Modifier.testTag("spatial-edge-add-tool"),
+                    ) {
+                        Icon(Icons.Filled.Add, contentDescription = "添加工具")
+                    }
+                    IconButton(
+                        onClick = {
+                            edgeRailResident = false
+                            edgeRailOpen = false
+                        },
+                        modifier = Modifier.testTag("spatial-edge-close-left"),
+                    ) {
+                        Icon(Icons.Filled.ChevronLeft, contentDescription = "收起工具侧栏")
+                    }
+                }
+            }
+        }
+
         Surface(Modifier.align(Alignment.TopCenter).padding(8.dp).zIndex(1_000_010f),
             shape = MaterialTheme.shapes.large, shadowElevation = 2.dp) {
             Row(Modifier.horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically) {
