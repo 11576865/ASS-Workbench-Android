@@ -8,6 +8,8 @@ enum class ContainerMutationKind {
     REMOVE_ATTACHMENT,
     REPLACE_ATTACHMENT,
     EDIT_ATTACHMENT_METADATA,
+    REMOVE_TRACK,
+    EDIT_TRACK_METADATA,
 }
 
 enum class ContainerMutationSource {
@@ -15,6 +17,7 @@ enum class ContainerMutationSource {
     FONT_PACKAGE,
     GENERIC_ATTACHMENT,
     EXISTING_ATTACHMENT,
+    EXISTING_TRACK,
 }
 
 data class ContainerMutationUi(
@@ -145,6 +148,32 @@ internal fun buildContainerEditPlan(state: EditorState): ContainerEditPlanUi {
         )
     }
 
+    state.container.pendingTrackRemovals.forEach { removal ->
+        mutations += ContainerMutationUi(
+            id = "remove-track:${removal.target}",
+            kind = ContainerMutationKind.REMOVE_TRACK,
+            source = ContainerMutationSource.EXISTING_TRACK,
+            title = "删除轨道 ${removal.name}",
+            detail = "Track #${removal.number} · 保持其他轨道的 TrackNumber / TrackUID 与顺序",
+        )
+    }
+
+    state.container.pendingTrackMetadataEdits.forEach { metadata ->
+        mutations += ContainerMutationUi(
+            id = "edit-track-meta:${metadata.target}",
+            kind = ContainerMutationKind.EDIT_TRACK_METADATA,
+            source = ContainerMutationSource.EXISTING_TRACK,
+            title = "修改轨道信息 Track #${metadata.number}",
+            detail = buildString {
+                append(metadata.name.ifBlank { "未命名" })
+                append(" · ").append(metadata.language.ifBlank { "语言未声明" })
+                if (metadata.isDefault) append(" · Default")
+                if (metadata.isForced) append(" · Forced")
+                append(" · 保留 TrackNumber / TrackUID / codec / payload")
+            },
+        )
+    }
+
     val checks = mutableListOf<ContainerCompatibilityCheckUi>()
 
     checks += if (state.container.skippedAttachmentCount > 0) {
@@ -177,12 +206,28 @@ internal fun buildContainerEditPlan(state: EditorState): ContainerEditPlanUi {
     val currentAttachmentTargets = state.container.resources.mapNotNullTo(hashSetOf()) { it.attachmentTarget }
     val missingAttachmentTargets =
         (removalTargets + replacementTargets + metadataTargets).filterNot { it in currentAttachmentTargets }
+    val trackRemovalTargets = state.container.pendingTrackRemovals.mapTo(hashSetOf()) { it.target }
+    val trackMetadataTargets = state.container.pendingTrackMetadataEdits.mapTo(hashSetOf()) { it.target }
+    val conflictingTrackTargets = trackRemovalTargets.intersect(trackMetadataTargets)
+    val currentTrackTargets = state.container.resources.mapNotNullTo(hashSetOf()) { it.trackTarget }
+    val missingTrackTargets =
+        (trackRemovalTargets + trackMetadataTargets).filterNot { it in currentTrackTargets }
+    val remainingTrackCount = currentTrackTargets.size - trackRemovalTargets.size
+    val selectedTrackTarget = state.container.resources.firstOrNull {
+        it.trackNumber == state.container.selectedTrackNumber
+    }?.trackTarget
+    val removesDirtySelectedAss =
+        state.dirty && selectedTrackTarget != null && selectedTrackTarget in trackRemovalTargets
 
     checks += ContainerCompatibilityCheckUi(
         dimension = ContainerCompatibilityDimension.CONTAINER_STRUCTURE,
         status = when {
             conflictingAttachmentTargets.isNotEmpty() -> ContainerCompatibilityStatus.UNSUPPORTED
             missingAttachmentTargets.isNotEmpty() -> ContainerCompatibilityStatus.UNSUPPORTED
+            conflictingTrackTargets.isNotEmpty() -> ContainerCompatibilityStatus.UNSUPPORTED
+            missingTrackTargets.isNotEmpty() -> ContainerCompatibilityStatus.UNSUPPORTED
+            trackRemovalTargets.isNotEmpty() && remainingTrackCount <= 0 -> ContainerCompatibilityStatus.UNSUPPORTED
+            removesDirtySelectedAss -> ContainerCompatibilityStatus.UNSUPPORTED
             mutations.isEmpty() -> ContainerCompatibilityStatus.WARNING
             else -> ContainerCompatibilityStatus.SUPPORTED
         },
@@ -192,9 +237,17 @@ internal fun buildContainerEditPlan(state: EditorState): ContainerEditPlanUi {
                 "同一附件不能在一次计划中安排互斥的删除 / 替换 / 元数据修改：" + conflictingAttachmentTargets.joinToString()
             missingAttachmentTargets.isNotEmpty() ->
                 "附件目标已不在当前检测 Inventory 中：" + missingAttachmentTargets.joinToString()
+            conflictingTrackTargets.isNotEmpty() ->
+                "同一轨道不能在一次计划中同时删除和修改元数据：" + conflictingTrackTargets.joinToString()
+            missingTrackTargets.isNotEmpty() ->
+                "轨道目标已不在当前检测 Inventory 中：" + missingTrackTargets.joinToString()
+            trackRemovalTargets.isNotEmpty() && remainingTrackCount <= 0 ->
+                "不能删除容器中的全部轨道。"
+            removesDirtySelectedAss ->
+                "当前正在编辑且未保存的 ASS 轨被计划删除；请先保存、放弃修改或取消删除。"
             mutations.isEmpty() -> "尚无待执行的容器修改。"
             else ->
-                "当前计划中的 ASS 同槽位替换与 Attachment 添加 / 删除 / 替换 / 元数据修改，均映射到已实现的 Matroska 写入路径。"
+                "当前计划中的 ASS 同槽位替换、Track 删除 / 元数据修改与 Attachment 修改，均映射到已实现的 Matroska 写入路径。"
         },
     )
 
@@ -217,17 +270,24 @@ internal fun buildContainerEditPlan(state: EditorState): ContainerEditPlanUi {
         dimension = ContainerCompatibilityDimension.OUTPUT_VERIFICATION,
         status = ContainerCompatibilityStatus.SUPPORTED,
         title = "输出验证",
-        detail = "写回后重新扫描实际 MKV，并验证轨道、章节、未改附件，以及计划添加 / 删除 / 替换 / 元数据修改的实际结果。",
+        detail = "写回后重新扫描实际 MKV，并验证 TrackNumber / TrackUID / codec / 顺序、章节、未改附件，以及计划中的 Track 与 Attachment 修改。",
     )
 
     val hasGenericAttachment = mutations.any {
         it.source == ContainerMutationSource.GENERIC_ATTACHMENT ||
             it.source == ContainerMutationSource.EXISTING_ATTACHMENT
     }
+    val hasTrackMutation = mutations.any { it.source == ContainerMutationSource.EXISTING_TRACK }
     val hasFontAttachment = mutations.any { it.source == ContainerMutationSource.FONT_PACKAGE }
     val hasAss = mutations.any { it.kind == ContainerMutationKind.REPLACE_ASS_TRACK }
 
     checks += when {
+        hasTrackMutation -> ContainerCompatibilityCheckUi(
+            dimension = ContainerCompatibilityDimension.DOWNSTREAM,
+            status = ContainerCompatibilityStatus.WARNING,
+            title = "播放器轨道选择行为需验证",
+            detail = "Track 删除、语言 / Default / Forced 等元数据会影响播放器的自动选轨；容器写入可验证，但不同播放器的选择策略不是 Matroska 结构保证。",
+        )
         hasGenericAttachment -> ContainerCompatibilityCheckUi(
             dimension = ContainerCompatibilityDimension.DOWNSTREAM,
             status = ContainerCompatibilityStatus.UNKNOWN,
