@@ -370,6 +370,7 @@ func TestEditAttachmentsRemovesAndReplacesInOneRemux(t *testing.T) {
 		[]string{addPath},
 		[]string{"8"},
 		[]AttachmentReplacement{{Target: "9", Path: replacePath}},
+		nil,
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -410,5 +411,117 @@ func TestEditAttachmentsRemovesAndReplacesInOneRemux(t *testing.T) {
 	}
 	if added.ID == 7 || added.ID == 9 {
 		t.Fatalf("added attachment reused surviving UID: %+v", added)
+	}
+}
+
+
+func TestAttachmentMetadataEditAndExtractPreservePayloadIdentity(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "source.mkv")
+	dst := filepath.Join(dir, "renamed.mkv")
+	extracted := filepath.Join(dir, "extracted.bin")
+
+	payload := []byte("attachment payload must survive metadata-only edits")
+	container := &mkv.Container{
+		Info: mkv.SegmentInfo{TimecodeScale: 1_000_000},
+		Attachments: []mkv.Attachment{{
+			ID: 12,
+			Name: "notes.txt",
+			MIMEType: "text/plain",
+			Description: "old description",
+			Data: payload,
+			Size: int64(len(payload)),
+		}},
+	}
+	video := mkv.Track{ID: 1, UID: 101, Type: mkv.VideoTrack, Codec: "vp9"}
+
+	out, err := os.Create(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mw := writer.NewMKVWriter(out)
+	if err := mw.WriteStart(); err != nil {
+		t.Fatal(err)
+	}
+	if err := mw.WriteMetadata(container, []mkv.Track{video}, 1000); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.WriteCluster(out, 0, 1_000_000, []mkv.Block{
+		{TrackNumber: 1, Timecode: 0, Keyframe: true, Data: []byte{0x01}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := mw.Finalize(); err != nil {
+		t.Fatal(err)
+	}
+	if err := out.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := ExtractAttachmentTarget(context.Background(), src, "12", extracted); err != nil {
+		t.Fatal(err)
+	}
+	gotExtracted, err := os.ReadFile(extracted)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(gotExtracted, payload) {
+		t.Fatalf("extracted payload changed: %q", string(gotExtracted))
+	}
+
+	if err := EditAttachments(
+		context.Background(),
+		src,
+		dst,
+		nil,
+		nil,
+		nil,
+		[]AttachmentMetadataEdit{{
+			Target: "12",
+			Name: "translator-notes.txt",
+			Description: "translation notes",
+		}},
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := reader.Open(context.Background(), dst)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Attachments) != 1 {
+		t.Fatalf("attachment count = %d, want 1", len(got.Attachments))
+	}
+	att := got.Attachments[0]
+	if att.ID != 12 || att.Name != "translator-notes.txt" ||
+		att.Description != "translation notes" || att.MIMEType != "text/plain" {
+		t.Fatalf("metadata edit changed identity or unexpected fields: %+v", att)
+	}
+	if !bytes.Equal(att.Data, payload) {
+		t.Fatalf("metadata edit changed payload: %q", string(att.Data))
+	}
+	if len(got.Tracks) != 1 || got.Tracks[0].UID != 101 {
+		t.Fatalf("track identity changed: %+v", got.Tracks)
+	}
+}
+
+func TestAttachmentMetadataEditRejectsNameCollision(t *testing.T) {
+	existing := []mkv.Attachment{
+		{ID: 1, Name: "a.txt", MIMEType: "text/plain"},
+		{ID: 2, Name: "b.txt", MIMEType: "text/plain"},
+	}
+	_, err := planAttachmentEdits(
+		existing,
+		nil,
+		nil,
+		nil,
+		[]AttachmentMetadataEdit{{
+			Target: "2",
+			Name: "a.txt",
+			Description: "",
+		}},
+	)
+	if err == nil || !strings.Contains(err.Error(), "conflicts") {
+		t.Fatalf("expected name collision error, got %v", err)
 	}
 }
