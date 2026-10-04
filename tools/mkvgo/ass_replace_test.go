@@ -1420,7 +1420,7 @@ func TestPlanTrackAdditionsRejectsStandaloneASSHashDrift(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, _, _, _, _, err := planTrackAdditions(
+	_, _, _, _, _, _, err := planTrackAdditions(
 		context.Background(),
 		nil,
 		[]TrackAddition{{
