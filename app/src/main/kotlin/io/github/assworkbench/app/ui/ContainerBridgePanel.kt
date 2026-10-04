@@ -31,6 +31,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -70,6 +71,10 @@ fun ContainerBridgePanel(
     if (state.uri == null) return
     var pendingTrackNumber by remember { mutableStateOf<Long?>(null) }
     var replacementTarget by remember { mutableStateOf<ContainerResourceUi?>(null) }
+    var metadataTarget by remember { mutableStateOf<ContainerResourceUi?>(null) }
+    var metadataName by remember { mutableStateOf("") }
+    var metadataDescription by remember { mutableStateOf("") }
+    var extractTarget by remember { mutableStateOf<ContainerResourceUi?>(null) }
     val context = LocalContext.current
     val attachmentPicker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenMultipleDocuments()
@@ -102,6 +107,19 @@ fun ContainerBridgePanel(
             target = attachmentTarget,
             originalName = target.title,
             uri = uri,
+        )
+    }
+    val extractPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("*/*")
+    ) { uri ->
+        val target = extractTarget
+        extractTarget = null
+        if (uri == null || target == null) return@rememberLauncherForActivityResult
+        val attachmentTarget = target.attachmentTarget ?: return@rememberLauncherForActivityResult
+        viewModel.extractContainerAttachment(
+            target = attachmentTarget,
+            name = target.title,
+            outputUri = uri,
         )
     }
 
@@ -138,6 +156,9 @@ fun ContainerBridgePanel(
                         }
                         if (state.pendingAttachmentReplacements.isNotEmpty()) {
                             append(" · 待替换 ").append(state.pendingAttachmentReplacements.size)
+                        }
+                        if (state.pendingAttachmentMetadataEdits.isNotEmpty()) {
+                            append(" · 待改信息 ").append(state.pendingAttachmentMetadataEdits.size)
                         }
                     },
                     style = MaterialTheme.typography.labelSmall,
@@ -211,6 +232,9 @@ fun ContainerBridgePanel(
             val pendingReplacement = attachmentTarget?.let { target ->
                 state.pendingAttachmentReplacements.firstOrNull { it.target == target }
             }
+            val pendingMetadata = attachmentTarget?.let { target ->
+                state.pendingAttachmentMetadataEdits.firstOrNull { it.target == target }
+            }
             ContainerResourceRow(
                 resource = resource,
                 selected = resource.editableAss && resource.trackNumber == state.selectedTrackNumber,
@@ -220,9 +244,11 @@ fun ContainerBridgePanel(
                 attachmentActionsEnabled = attachmentTarget != null &&
                     resource.change != ContainerResourceChange.REMOVED &&
                     !state.writeBackBusy &&
+                    !state.attachmentExtractBusy &&
                     state.inventoryEvidence != ContainerInventoryEvidence.VERIFIED_OUTPUT,
                 pendingRemoval = pendingRemoval,
                 pendingReplacementName = pendingReplacement?.name,
+                pendingMetadataName = pendingMetadata?.name,
                 onClick = {
                     val trackNumber = resource.trackNumber ?: return@ContainerResourceRow
                     if (trackNumber == state.selectedTrackNumber) return@ContainerResourceRow
@@ -246,10 +272,24 @@ fun ContainerBridgePanel(
                         replacementPicker.launch(arrayOf("*/*"))
                     }
                 },
+                onEditAttachmentMetadata = attachmentTarget?.let {
+                    {
+                        metadataTarget = resource
+                        metadataName = pendingMetadata?.name ?: resource.title
+                        metadataDescription = pendingMetadata?.description ?: resource.attachmentDescription
+                    }
+                },
+                onExtractAttachment = attachmentTarget?.let {
+                    {
+                        extractTarget = resource
+                        extractPicker.launch(resource.title)
+                    }
+                },
                 onCancelAttachmentEdit = attachmentTarget?.let { target ->
                     {
                         viewModel.cancelExistingAttachmentRemoval(target)
                         viewModel.cancelExistingAttachmentReplacement(target)
+                        viewModel.cancelExistingAttachmentMetadata(target)
                     }
                 },
             )
@@ -335,6 +375,53 @@ fun ContainerBridgePanel(
                 },
                 dismissButton = {
                     TextButton(onClick = { pendingTrackNumber = null }) { Text("取消") }
+                },
+            )
+        }
+
+        metadataTarget?.let { resource ->
+            val target = resource.attachmentTarget
+            AlertDialog(
+                onDismissRequest = { metadataTarget = null },
+                title = { Text("附件信息") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value = metadataName,
+                            onValueChange = { metadataName = it },
+                            label = { Text("文件名") },
+                            singleLine = true,
+                        )
+                        OutlinedTextField(
+                            value = metadataDescription,
+                            onValueChange = { metadataDescription = it },
+                            label = { Text("描述") },
+                            minLines = 2,
+                        )
+                        Text(
+                            "修改只进入写入计划；源 MKV 不会原地改变。",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                },
+                confirmButton = {
+                    TextButton(
+                        enabled = target != null && metadataName.isNotBlank(),
+                        onClick = {
+                            val resolved = target ?: return@TextButton
+                            viewModel.planExistingAttachmentMetadata(
+                                target = resolved,
+                                originalName = resource.title,
+                                name = metadataName,
+                                description = metadataDescription,
+                            )
+                            metadataTarget = null
+                        },
+                    ) { Text("加入计划") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { metadataTarget = null }) { Text("取消") }
                 },
             )
         }
@@ -435,9 +522,12 @@ private fun ContainerResourceRow(
     attachmentActionsEnabled: Boolean,
     pendingRemoval: Boolean,
     pendingReplacementName: String?,
+    pendingMetadataName: String?,
     onClick: () -> Unit,
     onRemoveAttachment: (() -> Unit)?,
     onReplaceAttachment: (() -> Unit)?,
+    onEditAttachmentMetadata: (() -> Unit)?,
+    onExtractAttachment: (() -> Unit)?,
     onCancelAttachmentEdit: (() -> Unit)?,
 ) {
     val background = if (selected) {
@@ -502,7 +592,23 @@ private fun ContainerResourceRow(
                     )
                     TextButton(onClick = { onCancelAttachmentEdit?.invoke() }) { Text("取消") }
                 }
+                pendingMetadataName != null -> {
+                    Text(
+                        "信息 → $pendingMetadataName",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    TextButton(onClick = { onCancelAttachmentEdit?.invoke() }) { Text("取消") }
+                }
                 attachmentActionsEnabled -> {
+                    TextButton(
+                        onClick = { onExtractAttachment?.invoke() },
+                        enabled = onExtractAttachment != null,
+                    ) { Text("提取") }
+                    TextButton(
+                        onClick = { onEditAttachmentMetadata?.invoke() },
+                        enabled = onEditAttachmentMetadata != null,
+                    ) { Text("信息") }
                     IconButton(
                         onClick = { onReplaceAttachment?.invoke() },
                         enabled = onReplaceAttachment != null,
