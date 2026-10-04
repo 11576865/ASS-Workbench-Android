@@ -1415,6 +1415,36 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                                 metadataEdits = plannedTrackMetadataEdits,
                                 additions = plannedTrackAdditions,
                             )
+                            val survivingTrackCount = sourceScan.trackInfos.count { info ->
+                                val target = info.uid?.let { "uid:$it" } ?: "number:${info.number}"
+                                plannedTrackRemovals.none { it.target == target }
+                            }
+                            val actualAddedTracks = verifiedScan.trackInfos.drop(survivingTrackCount)
+                            require(actualAddedTracks.size == plannedTrackAdditions.size) {
+                                "写回验证失败：新增轨道映射数量不一致"
+                            }
+                            plannedTrackAdditions.zip(trackAdditionInputs).zip(actualAddedTracks)
+                                .forEach { (planAndInput, actualInfo) ->
+                                    val (plannedAddition, stagedInput) = planAndInput
+                                    if (plannedAddition.sourceKind == ContainerTrackImportSourceKind.STANDALONE_ASS) {
+                                        val sourceDocument = AssCodec.parse(
+                                            stagedInput.source.readText(Charsets.UTF_8)
+                                        )
+                                        val outputTrack = verifiedScan.subtitleTracks
+                                            .firstOrNull { it.number == actualInfo.number }
+                                            ?: error(
+                                                "写回验证失败：独立 ASS 导入轨道 #${actualInfo.number} 未出现在字幕 Inventory"
+                                            )
+                                        val outputDocument = AssCodec.parse(outputTrack.toAss())
+                                        val importedRoundTrip = AssRoundTripVerifier.compare(
+                                            AssRoundTripVerifier.snapshot(sourceDocument),
+                                            AssRoundTripVerifier.snapshot(outputDocument),
+                                        )
+                                        require(importedRoundTrip.equivalent) {
+                                            "写回验证失败：独立 ASS 导入不等价：" + importedRoundTrip.summary
+                                        }
+                                    }
+                                }
                             require(verifiedScan.chapterCount == sourceScan.chapterCount) {
                                 "写回验证失败：章节数量发生意外变化"
                             }
