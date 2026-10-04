@@ -683,6 +683,115 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    fun planExistingTrackRemoval(
+        target: String,
+        number: Long,
+        name: String,
+    ) {
+        if (target.isBlank()) return
+        _state.update { state ->
+            if (state.container.writeBackBusy) {
+                return@update state.copy(status = "MKV 写回进行中；完成后才能修改轨道计划。")
+            }
+            if (state.container.inventoryEvidence == ContainerInventoryEvidence.VERIFIED_OUTPUT) {
+                return@update state.copy(status = "当前显示的是已验证输出快照；请先重新打开该 MKV，再修改其中轨道。")
+            }
+            val next = if (state.container.pendingTrackRemovals.any { it.target == target }) {
+                state.container.pendingTrackRemovals
+            } else {
+                state.container.pendingTrackRemovals + PendingContainerTrackRemovalUi(
+                    target = target,
+                    number = number,
+                    name = name,
+                )
+            }
+            state.copy(
+                container = state.container.copy(
+                    pendingTrackRemovals = next,
+                    pendingTrackMetadataEdits = state.container.pendingTrackMetadataEdits
+                        .filterNot { it.target == target },
+                ),
+                status = "已计划删除 Track #$number（$name）；保存新 MKV 前不会修改源文件。",
+            )
+        }
+    }
+
+    fun cancelExistingTrackRemoval(target: String) {
+        _state.update { state ->
+            val next = state.container.pendingTrackRemovals.filterNot { it.target == target }
+            if (next.size == state.container.pendingTrackRemovals.size) state
+            else state.copy(
+                container = state.container.copy(pendingTrackRemovals = next),
+                status = "已取消轨道删除计划。",
+            )
+        }
+    }
+
+    fun planExistingTrackMetadata(
+        target: String,
+        number: Long,
+        originalName: String,
+        name: String,
+        language: String,
+        isDefault: Boolean,
+        isForced: Boolean,
+    ) {
+        if (target.isBlank()) return
+        _state.update { state ->
+            if (state.container.writeBackBusy) {
+                return@update state.copy(status = "MKV 写回进行中；完成后才能修改轨道计划。")
+            }
+            if (state.container.inventoryEvidence == ContainerInventoryEvidence.VERIFIED_OUTPUT) {
+                return@update state.copy(status = "当前显示的是已验证输出快照；请先重新打开该 MKV，再修改其中轨道。")
+            }
+            val current = state.container.resources.firstOrNull { it.trackTarget == target }
+            if (
+                current != null &&
+                name == current.title &&
+                language == current.trackLanguage &&
+                isDefault == current.trackIsDefault &&
+                isForced == current.trackIsForced
+            ) {
+                return@update state.copy(
+                    container = state.container.copy(
+                        pendingTrackMetadataEdits = state.container.pendingTrackMetadataEdits
+                            .filterNot { it.target == target },
+                    ),
+                    status = "轨道信息未变化；没有加入写入计划。",
+                )
+            }
+            val edit = PendingContainerTrackMetadataUi(
+                target = target,
+                number = number,
+                originalName = originalName,
+                name = name,
+                language = language,
+                isDefault = isDefault,
+                isForced = isForced,
+            )
+            state.copy(
+                container = state.container.copy(
+                    pendingTrackRemovals = state.container.pendingTrackRemovals
+                        .filterNot { it.target == target },
+                    pendingTrackMetadataEdits = state.container.pendingTrackMetadataEdits
+                        .filterNot { it.target == target } + edit,
+                ),
+                status = "已计划修改 Track #$number 信息；保存新 MKV 前不会修改源文件。",
+            )
+        }
+    }
+
+    fun cancelExistingTrackMetadata(target: String) {
+        _state.update { state ->
+            val next = state.container.pendingTrackMetadataEdits.filterNot { it.target == target }
+            if (next.size == state.container.pendingTrackMetadataEdits.size) state
+            else state.copy(
+                container = state.container.copy(pendingTrackMetadataEdits = next),
+                status = "已取消轨道信息修改计划。",
+            )
+        }
+    }
+
     fun extractContainerAttachment(
         target: String,
         name: String,
@@ -872,6 +981,8 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         val plannedRemovals = snapshot.container.pendingAttachmentRemovals
         val plannedReplacements = snapshot.container.pendingAttachmentReplacements
         val plannedMetadataEdits = snapshot.container.pendingAttachmentMetadataEdits
+        val plannedTrackRemovals = snapshot.container.pendingTrackRemovals
+        val plannedTrackMetadataEdits = snapshot.container.pendingTrackMetadataEdits
 
         val plannedAttachmentCount = editPlan.mutations.count {
             it.kind == ContainerMutationKind.ADD_ATTACHMENT
@@ -889,7 +1000,9 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                     if (plannedAttachments.isNotEmpty()) append(" · 新附件 ").append(plannedAttachments.size)
                     if (plannedRemovals.isNotEmpty()) append(" · 删除 ").append(plannedRemovals.size)
                     if (plannedReplacements.isNotEmpty()) append(" · 替换 ").append(plannedReplacements.size)
-                    if (plannedMetadataEdits.isNotEmpty()) append(" · 信息修改 ").append(plannedMetadataEdits.size)
+                    if (plannedMetadataEdits.isNotEmpty()) append(" · 附件信息 ").append(plannedMetadataEdits.size)
+                    if (plannedTrackRemovals.isNotEmpty()) append(" · 删轨 ").append(plannedTrackRemovals.size)
+                    if (plannedTrackMetadataEdits.isNotEmpty()) append(" · 轨道信息 ").append(plannedTrackMetadataEdits.size)
                     append("；大文件可能需要一些时间……")
                 },
             )
@@ -955,6 +1068,15 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                                 description = metadata.description,
                             )
                         }
+                        val trackMetadataInputs = plannedTrackMetadataEdits.map { metadata ->
+                            TrackMetadataEditInput(
+                                target = metadata.target,
+                                name = metadata.name,
+                                language = metadata.language,
+                                isDefault = metadata.isDefault,
+                                isForced = metadata.isForced,
+                            )
+                        }
 
                         if (replaceAss) {
                             val editedAss = File(work, "edited.ass")
@@ -969,15 +1091,19 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                                 removeAttachments = plannedRemovals.map { it.target },
                                 replaceAttachments = replacementInputs,
                                 metadataEdits = metadataInputs,
+                                removeTracks = plannedTrackRemovals.map { it.target },
+                                trackMetadataEdits = trackMetadataInputs,
                             )
                         } else {
-                            mkvGoTool.editAttachments(
+                            mkvGoTool.editContainer(
                                 source = source,
                                 output = result,
                                 additions = packageFiles + attachmentFiles,
                                 removals = plannedRemovals.map { it.target },
                                 replacements = replacementInputs,
                                 metadataEdits = metadataInputs,
+                                removeTracks = plannedTrackRemovals.map { it.target },
+                                trackMetadataEdits = trackMetadataInputs,
                             )
                         }
 
@@ -1001,9 +1127,12 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                             }
                         }
                         sourceScanSnapshot?.let { sourceScan ->
-                            require(verifiedScan.trackPreservationSignature() == sourceScan.trackPreservationSignature()) {
-                                "写回验证失败：容器轨道身份、顺序或元数据发生意外变化"
-                            }
+                            verifyContainerTrackMutations(
+                                source = sourceScan,
+                                output = verifiedScan,
+                                removals = plannedTrackRemovals,
+                                metadataEdits = plannedTrackMetadataEdits,
+                            )
                             require(verifiedScan.chapterCount == sourceScan.chapterCount) {
                                 "写回验证失败：章节数量发生意外变化"
                             }
@@ -1111,6 +1240,8 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 val savedRemovalTargets = plannedRemovals.mapTo(hashSetOf()) { it.target }
                 val savedReplacementTargets = plannedReplacements.mapTo(hashSetOf()) { it.target }
                 val savedMetadataTargets = plannedMetadataEdits.mapTo(hashSetOf()) { it.target }
+                val savedTrackRemovalTargets = plannedTrackRemovals.mapTo(hashSetOf()) { it.target }
+                val savedTrackMetadataTargets = plannedTrackMetadataEdits.mapTo(hashSetOf()) { it.target }
                 _state.update { state ->
                     state.copy(
                         dirty = if (documentSaved) false else state.dirty,
@@ -1124,6 +1255,10 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                                 .filterNot { it.target in savedReplacementTargets },
                             pendingAttachmentMetadataEdits = state.container.pendingAttachmentMetadataEdits
                                 .filterNot { it.target in savedMetadataTargets },
+                            pendingTrackRemovals = state.container.pendingTrackRemovals
+                                .filterNot { it.target in savedTrackRemovalTargets },
+                            pendingTrackMetadataEdits = state.container.pendingTrackMetadataEdits
+                                .filterNot { it.target in savedTrackMetadataTargets },
                             resources = baselineScanSnapshot?.let { baseline ->
                                 diffContainerResources(baseline, verifiedScan)
                             } ?: baselineContainerResources(verifiedScan),
@@ -1132,13 +1267,15 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                         recoveryAvailable = if (documentSaved) false else state.recoveryAvailable,
                         recoveryLabel = if (documentSaved) "" else state.recoveryLabel,
                         status = buildString {
-                            append("新 MKV 已保存并重新扫描；轨道身份/顺序/元数据、章节与未修改附件保持。输出 ")
+                            append("新 MKV 已保存并重新扫描；未删除轨道的身份/顺序、章节与未修改附件已验证。输出 ")
                             append(bytes / (1024 * 1024)).append(" MiB。")
                             if (packageAssets.isNotEmpty()) append(" 新封入字体 ").append(packageAssets.size).append(" 个。")
                             if (plannedAttachments.isNotEmpty()) append(" 新封入附件 ").append(plannedAttachments.size).append(" 个。")
                             if (plannedRemovals.isNotEmpty()) append(" 删除附件 ").append(plannedRemovals.size).append(" 个。")
                             if (plannedReplacements.isNotEmpty()) append(" 替换附件 ").append(plannedReplacements.size).append(" 个。")
                             if (plannedMetadataEdits.isNotEmpty()) append(" 修改附件信息 ").append(plannedMetadataEdits.size).append(" 个。")
+                            if (plannedTrackRemovals.isNotEmpty()) append(" 删除轨道 ").append(plannedTrackRemovals.size).append(" 个。")
+                            if (plannedTrackMetadataEdits.isNotEmpty()) append(" 修改轨道信息 ").append(plannedTrackMetadataEdits.size).append(" 个。")
                             if (replaceAss && !documentSaved) append(" · 保存期间出现新字幕编辑，当前工程仍未保存。")
                         },
                     )
