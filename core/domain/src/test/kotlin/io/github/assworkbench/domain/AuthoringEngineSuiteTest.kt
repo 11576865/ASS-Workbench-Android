@@ -89,6 +89,42 @@ class AuthoringEngineSuiteTest {
     }
 
     @Test
+    fun visibleReplacementPreservesEscapesAndFailsClosedOnMalformedSyntax() {
+        val source = "A\\NB\\hC{\\bord2}D"
+
+        val unchangedEscapes = AssSearchReplace.replaceVisibleSegments(
+            source,
+            Regex("[Nh]"),
+            "X",
+        )
+        assertEquals(source, unchangedEscapes)
+
+        val changed = AssSearchReplace.replaceVisibleSegments(
+            source,
+            Regex("[BCD]"),
+            "Z",
+        )
+        assertEquals("A\\NZ\\hZ{\\bord2}Z", changed)
+
+        val malformed = "{\\bord2 broken"
+        val error = assertFailsWith<IllegalArgumentException> {
+            AssSearchReplace.replaceVisibleSegments(malformed, Regex("broken"), "changed")
+        }
+        assertTrue(error.message.orEmpty().contains("损坏"))
+        assertEquals("{\\bord2 broken", malformed)
+    }
+
+    @Test
+    fun semanticSearchRangeValidationFailsClosed() {
+        assertFailsWith<IllegalArgumentException> {
+            AssSearchQuery(durationRangeMs = 500L..100L)
+        }
+        assertFailsWith<IllegalArgumentException> {
+            AssSearchQuery(timeRangeMs = -1L..100L)
+        }
+    }
+
+    @Test
     fun keyframesCompileIntoChainedTransforms() {
         val plan = AssAnimationAuthoring.planNumericTrack(
             AssTransformVisualProperty.SCALE_X,
