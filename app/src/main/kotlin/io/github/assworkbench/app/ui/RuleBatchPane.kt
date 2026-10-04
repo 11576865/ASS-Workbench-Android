@@ -242,10 +242,11 @@ internal fun RuleBatchPane(
                     )
                 )
             }
+            val parsedOverrideMinimum = parsedOverrideProperty?.minimum
             if (
                 parsedOverrideProperty != null &&
                 parsedOverrideValue?.isFinite() == true &&
-                (parsedOverrideProperty.minimum == null || parsedOverrideValue >= parsedOverrideProperty.minimum)
+                (parsedOverrideMinimum == null || parsedOverrideValue >= parsedOverrideMinimum)
             ) {
                 add(AssBatchAction.SetNumericOverride(parsedOverrideProperty, parsedOverrideValue))
             }
