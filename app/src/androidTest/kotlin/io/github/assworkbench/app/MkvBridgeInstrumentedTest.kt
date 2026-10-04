@@ -321,6 +321,7 @@ class MkvBridgeInstrumentedTest {
                 TrackAdditionInput(
                     source = external,
                     sourceTrackNumber = sourceVideo.number,
+                    sourceTrackUid = sourceVideo.uid,
                     name = "Alternate video",
                     language = "und",
                     isDefault = false,
@@ -341,7 +342,8 @@ class MkvBridgeInstrumentedTest {
         assertEquals(MatroskaTrackKind.VIDEO, added.kind)
         assertEquals(sourceVideo.codecId, added.codecId)
         assertTrue(added.number > maxOriginalNumber)
-        assertTrue(added.uid != null && added.uid !in originalUids)
+        val addedUid = added.uid
+        assertTrue(addedUid != null && addedUid !in originalUids)
         assertEquals("Alternate video", added.name)
         assertEquals("und", added.language)
         assertFalse(added.isDefault)
