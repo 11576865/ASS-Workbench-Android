@@ -1103,7 +1103,7 @@ func TestPlanTrackAdditionsRejectsDuplicateSourceTrack(t *testing.T) {
 	}
 
 	addition := TrackAddition{SourcePath: source, SourceTrackID: 1}
-	_, _, _, _, err = planTrackAdditions(
+	_, _, _, _, _, err = planTrackAdditions(
 		context.Background(),
 		nil,
 		[]TrackAddition{addition, addition},
@@ -1263,7 +1263,7 @@ func TestPlanTrackAdditionsRejectsSourceUIDDrift(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, _, _, _, err = planTrackAdditions(
+	_, _, _, _, _, err = planTrackAdditions(
 		context.Background(),
 		nil,
 		[]TrackAddition{{
@@ -1275,5 +1275,275 @@ func TestPlanTrackAdditionsRejectsSourceUIDDrift(t *testing.T) {
 	)
 	if err == nil || !strings.Contains(err.Error(), "changed identity") {
 		t.Fatalf("expected source TrackUID drift rejection, got %v", err)
+	}
+}
+
+
+func TestEditContainerResourcesAddsStandaloneASSWithFreshIdentity(t *testing.T) {
+	dir := t.TempDir()
+	base := filepath.Join(dir, "base.mkv")
+	assPath := filepath.Join(dir, "imported.ass")
+	dst := filepath.Join(dir, "with-standalone-ass.mkv")
+
+	container := &mkv.Container{
+		Info: mkv.SegmentInfo{TimecodeScale: 1_000_000, Title: "Base"},
+		Chapters: []mkv.Chapter{{ID: 7, Title: "Keep", StartMs: 0, EndMs: 1000}},
+		Attachments: []mkv.Attachment{{
+			ID: 9, Name: "keep.txt", MIMEType: "text/plain",
+			Data: []byte("keep"), Size: 4,
+		}},
+	}
+	video := mkv.Track{ID: 4, UID: 404, Type: mkv.VideoTrack, Codec: "vp9", Name: "Base video"}
+
+	out, err := os.Create(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mw := writer.NewMKVWriter(out)
+	if err := mw.WriteStart(); err != nil {
+		t.Fatal(err)
+	}
+	if err := mw.WriteMetadata(container, []mkv.Track{video}, 1000); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.WriteCluster(out, 0, 1_000_000, []mkv.Block{
+		{TrackNumber: 4, Timecode: 0, Keyframe: true, Data: []byte("video")},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := mw.Finalize(); err != nil {
+		t.Fatal(err)
+	}
+	if err := out.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	header := "[Script Info]\nScriptType: v4.00+\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Default,Arial,48,&H00FFFFFF,&H000000FF,&H00000000,&H64000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text"
+	assBytes := []byte(header + "\nDialogue: 0,0:00:00.25,0:00:02.25,Default,,0,0,0,,Standalone import")
+	if err := os.WriteFile(assPath, assBytes, 0644); err != nil {
+		t.Fatal(err)
+	}
+	sum := sha256.Sum256(assBytes)
+
+	if err := EditContainerResources(
+		context.Background(),
+		base,
+		dst,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		[]TrackAddition{{
+			SourceKind: trackAdditionSourceASS,
+			SourcePath: assPath,
+			SourceSHA256: hex.EncodeToString(sum[:]),
+			Name: "Standalone ASS",
+			Language: "eng",
+			IsDefault: false,
+			IsForced: false,
+		}},
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := reader.Open(context.Background(), dst)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Tracks) != 2 {
+		t.Fatalf("track count = %d, want 2: %+v", len(got.Tracks), got.Tracks)
+	}
+	if got.Tracks[0].ID != 4 || got.Tracks[0].UID != 404 {
+		t.Fatalf("surviving destination identity changed: %+v", got.Tracks[0])
+	}
+	added := got.Tracks[1]
+	if added.ID != 5 || added.UID <= 404 {
+		t.Fatalf("standalone ASS did not get fresh destination identity: %+v", added)
+	}
+	if added.Type != mkv.SubtitleTrack || added.Codec != "ass" ||
+		added.Name != "Standalone ASS" || added.Language != "eng" ||
+		added.IsDefault || added.IsForced {
+		t.Fatalf("standalone ASS track metadata wrong: %+v", added)
+	}
+	if got.DurationMs < 2250 {
+		t.Fatalf("duration = %dms, want >= 2250ms", got.DurationMs)
+	}
+	if len(got.Chapters) != 1 || got.Chapters[0].ID != 7 {
+		t.Fatalf("chapters changed: %+v", got.Chapters)
+	}
+	if len(got.Attachments) != 1 || got.Attachments[0].ID != 9 ||
+		!bytes.Equal(got.Attachments[0].Data, []byte("keep")) {
+		t.Fatalf("untouched attachment changed: %+v", got.Attachments)
+	}
+
+	blockFile, err := os.Open(dst)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer blockFile.Close()
+	br, err := reader.NewBlockReader(blockFile, got.Info.TimecodeScale)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var subtitleSeen bool
+	for {
+		block, err := br.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		if block.TrackNumber == 5 && bytes.Contains(block.Data, []byte("Standalone import")) {
+			subtitleSeen = true
+		}
+	}
+	if !subtitleSeen {
+		t.Fatal("standalone ASS payload missing from imported track")
+	}
+}
+
+func TestPlanTrackAdditionsRejectsStandaloneASSHashDrift(t *testing.T) {
+	dir := t.TempDir()
+	assPath := filepath.Join(dir, "drift.ass")
+	header := "[Script Info]\nScriptType: v4.00+\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text"
+	if err := os.WriteFile(
+		assPath,
+		[]byte(header+"\nDialogue: 0,0:00:00.00,0:00:01.00,Default,,0,0,0,,Changed"),
+		0644,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	_, _, _, _, _, err := planTrackAdditions(
+		context.Background(),
+		nil,
+		[]TrackAddition{{
+			SourceKind: trackAdditionSourceASS,
+			SourcePath: assPath,
+			SourceSHA256: strings.Repeat("0", 64),
+			Name: "Drift",
+			Language: "und",
+		}},
+		mkv.FSFrom(nil),
+	)
+	if err == nil || !strings.Contains(err.Error(), "changed identity") {
+		t.Fatalf("expected standalone ASS hash drift rejection, got %v", err)
+	}
+}
+
+func TestReplaceASSCanAddStandaloneASSInSameRemux(t *testing.T) {
+	dir := t.TempDir()
+	base := filepath.Join(dir, "base.mkv")
+	editedPath := filepath.Join(dir, "edited.ass")
+	importPath := filepath.Join(dir, "import.ass")
+	dst := filepath.Join(dir, "combined.mkv")
+
+	header := "[Script Info]\nScriptType: v4.00+\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text"
+	video := mkv.Track{ID: 1, UID: 101, Type: mkv.VideoTrack, Codec: "vp9"}
+	sub := mkv.Track{ID: 2, UID: 202, Type: mkv.SubtitleTrack, Codec: "ass", CodecPrivate: []byte(header)}
+
+	out, err := os.Create(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mw := writer.NewMKVWriter(out)
+	if err := mw.WriteStart(); err != nil {
+		t.Fatal(err)
+	}
+	if err := mw.WriteMetadata(
+		&mkv.Container{Info: mkv.SegmentInfo{TimecodeScale: 1_000_000}},
+		[]mkv.Track{video, sub},
+		1500,
+	); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.WriteCluster(out, 0, 1_000_000, []mkv.Block{
+		{TrackNumber: 1, Timecode: 0, Keyframe: true, Data: []byte("video")},
+		{TrackNumber: 2, Timecode: 0, Duration: 700, Data: []byte("0,0,Default,,0,0,0,,Old")},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := mw.Finalize(); err != nil {
+		t.Fatal(err)
+	}
+	if err := out.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(
+		editedPath,
+		[]byte(header+"\nDialogue: 0,0:00:00.10,0:00:01.00,Default,,0,0,0,,Edited existing"),
+		0644,
+	); err != nil {
+		t.Fatal(err)
+	}
+	importBytes := []byte(header+"\nDialogue: 0,0:00:00.20,0:00:01.20,Default,,0,0,0,,Imported standalone")
+	if err := os.WriteFile(importPath, importBytes, 0644); err != nil {
+		t.Fatal(err)
+	}
+	importSum := sha256.Sum256(importBytes)
+
+	if err := ReplaceASSWithAttachmentEdits(
+		context.Background(),
+		base,
+		2,
+		editedPath,
+		dst,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		[]TrackAddition{{
+			SourceKind: trackAdditionSourceASS,
+			SourcePath: importPath,
+			SourceSHA256: hex.EncodeToString(importSum[:]),
+			Name: "Imported",
+			Language: "eng",
+		}},
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := reader.Open(context.Background(), dst)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Tracks) != 3 || got.Tracks[2].ID != 3 || got.Tracks[2].UID <= 202 {
+		t.Fatalf("combined track identities wrong: %+v", got.Tracks)
+	}
+
+	blockFile, err := os.Open(dst)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer blockFile.Close()
+	br, err := reader.NewBlockReader(blockFile, got.Info.TimecodeScale)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var editedSeen, importedSeen, oldSeen bool
+	for {
+		block, err := br.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		switch block.TrackNumber {
+		case 2:
+			editedSeen = editedSeen || bytes.Contains(block.Data, []byte("Edited existing"))
+			oldSeen = oldSeen || bytes.Contains(block.Data, []byte("Old"))
+		case 3:
+			importedSeen = importedSeen || bytes.Contains(block.Data, []byte("Imported standalone"))
+		}
+	}
+	if !editedSeen || !importedSeen || oldSeen {
+		t.Fatalf("combined synthetic remux wrong: edited=%v imported=%v old=%v", editedSeen, importedSeen, oldSeen)
 	}
 }
