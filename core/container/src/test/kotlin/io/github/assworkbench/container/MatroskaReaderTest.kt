@@ -38,7 +38,10 @@ class MatroskaReaderTest {
 
         val result = MatroskaReader().scan(ByteArrayInputStream(segment))
         assertEquals(1, result.subtitleTracks.size)
+        assertEquals(1, result.trackInfos.size)
+        assertEquals(MatroskaTrackKind.SUBTITLE, result.trackInfos.single().kind)
         assertEquals(1, result.attachments.size)
+        assertEquals(1, result.attachmentInfos.size)
         assertTrue(result.attachments.single().isSupportedFont)
         val ass = result.subtitleTracks.single().toAss()
         assertTrue(ass.contains("Dialogue: 0,0:00:01.00,0:00:02.50,Default"))
@@ -70,6 +73,8 @@ class MatroskaReaderTest {
         )
 
         assertEquals(0, result.attachments.size)
+        assertEquals(1, result.attachmentInfos.size)
+        assertEquals("TestFont.ttf", result.attachmentInfos.single().fileName)
         assertEquals(1, seen.size)
         assertEquals("TestFont.ttf", seen.single().fileName)
         assertTrue(seen.single().data.contentEquals(byteArrayOf(9,8,7,6)))
@@ -95,7 +100,51 @@ class MatroskaReaderTest {
 
         assertEquals(1, result.skippedAttachmentCount)
         assertEquals(1, result.attachments.size)
+        assertEquals(2, result.attachmentInfos.size)
+        assertTrue(result.attachmentInfos.any { it.fileName == "Huge.ttf" && !it.dataAvailable })
         assertTrue(result.attachments.single().isSupportedFont)
+    }
+
+    @Test
+    fun listsAllTrackKindsAndChapterCount() {
+        val video = master(
+            0xAE,
+            uint(0xD7, 1) +
+                uint(0x73C5, 101) +
+                uint(0x83, 0x01) +
+                text(0x536E, "Main video") +
+                text(0x86, "V_MPEG4/ISO/AVC"),
+        )
+        val audio = master(
+            0xAE,
+            uint(0xD7, 2) +
+                uint(0x73C5, 202) +
+                uint(0x83, 0x02) +
+                text(0x22B59C, "jpn") +
+                text(0x86, "A_AAC"),
+        )
+        val subtitle = master(
+            0xAE,
+            uint(0xD7, 3) +
+                uint(0x73C5, 303) +
+                uint(0x83, 0x11) +
+                text(0x22B59C, "eng") +
+                text(0x86, "S_TEXT/UTF8"),
+        )
+        val tracks = master(0x1654AE6B, video + audio + subtitle)
+        val chapterAtom = master(0xB6, uint(0x73C4, 1))
+        val chapters = master(0x1043A770, master(0x45B9, chapterAtom))
+        val segment = master(0x18538067, tracks + chapters)
+
+        val result = MatroskaReader().scan(ByteArrayInputStream(segment))
+
+        assertEquals(
+            listOf(MatroskaTrackKind.VIDEO, MatroskaTrackKind.AUDIO, MatroskaTrackKind.SUBTITLE),
+            result.trackInfos.map { it.kind },
+        )
+        assertEquals(listOf("V_MPEG4/ISO/AVC", "A_AAC", "S_TEXT/UTF8"), result.trackInfos.map { it.codecId })
+        assertEquals(1, result.chapterCount)
+        assertEquals(0, result.subtitleTracks.size)
     }
 
     @Test
