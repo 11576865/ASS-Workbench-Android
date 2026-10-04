@@ -657,6 +657,20 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    private fun trackImportSourceKey(addition: PendingContainerTrackAdditionUi): String =
+        trackImportSourceKey(addition.sourceKind, addition.sourceUri, addition.sourceTrackNumber)
+
+    private fun trackImportSourceKey(
+        sourceKind: ContainerTrackImportSourceKind,
+        sourceUri: String,
+        sourceTrackNumber: Long?,
+    ): String = sourceKind.name + "\u0000" + sourceUri + "\u0000" + (sourceTrackNumber ?: 0L)
+
+    private fun sha256Hex(bytes: ByteArray): String =
+        MessageDigest.getInstance("SHA-256")
+            .digest(bytes)
+            .joinToString("") { "%02x".format(it.toInt() and 0xff) }
+
     fun addContainerAttachments(uris: List<Uri>) {
         if (uris.isEmpty()) return
         val snapshot = _state.value
