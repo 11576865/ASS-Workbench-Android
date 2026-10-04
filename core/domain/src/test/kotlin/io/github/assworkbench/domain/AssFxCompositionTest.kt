@@ -402,7 +402,7 @@ class AssFxCompositionTest {
             )
         )
 
-        val error = assertFailsWith<IllegalStateException> {
+        val error = assertFailsWith<IllegalArgumentException> {
             AssFxComposition.createReflection(document, 1)
         }
         assertTrue(error.message.orEmpty().contains("属性所有权冲突"))
@@ -428,7 +428,7 @@ class AssFxCompositionTest {
                 allowed.events.single().copy(text = "{\\alpha&H40&}{\\k20\\1a&HFF&}A")
             )
         )
-        assertFailsWith<IllegalStateException> {
+        assertFailsWith<IllegalArgumentException> {
             AssFxComposition.createGlow(conflict, 1)
         }
     }
@@ -446,7 +446,7 @@ class AssFxCompositionTest {
             )
         )
 
-        assertFailsWith<IllegalStateException> {
+        assertFailsWith<IllegalArgumentException> {
             AssFxComposition.applyFlipEntrance(document, 1)
         }
     }
