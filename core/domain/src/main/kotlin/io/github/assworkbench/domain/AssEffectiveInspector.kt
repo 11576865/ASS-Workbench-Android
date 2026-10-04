@@ -103,7 +103,9 @@ object AssEffectiveInspector {
         val laterAlignment = laterTags.any { it.name.equals("an", ignoreCase = true) }
         val alignmentOverride = leadingAlignmentTags.lastOrNull()?.value?.toIntOrNull()
         if (leadingAlignmentTags.isNotEmpty()) {
-            require(alignmentOverride in 1..9) { "\\an 必须在 1..9 之间。" }
+            require(alignmentOverride != null && alignmentOverride in 1..9) {
+                "\\an 必须在 1..9 之间。"
+            }
         }
 
         val geometry = AssGeometrySemantic.inspect(event.text)
@@ -186,7 +188,7 @@ object AssEffectiveInspector {
                 effectiveValue = clipSummary ?: "none",
                 spanDependent = laterTags.any {
                     it.name.equals("clip", true) || it.name.equals("iclip", true)
-                } || leadingTransform,
+                } || leadingTransform || laterTransform,
             ),
             AssEffectiveValue(
                 "Position",
@@ -211,7 +213,7 @@ object AssEffectiveInspector {
                     it.name.equals("pos", true) ||
                         it.name.equals("move", true) ||
                         it.name.equals("org", true)
-                } || leadingTransform,
+                },
             ),
         )
     }
@@ -275,7 +277,12 @@ object AssEffectiveInspector {
 
     private fun format(value: Double): String {
         require(value.isFinite()) { "有效值必须是有限数字。" }
-        val rounded = kotlin.math.round(value * 100.0) / 100.0
+        val roundTripSafeLimit = Double.MAX_VALUE / 100.0
+        val rounded = if (value in -roundTripSafeLimit..roundTripSafeLimit) {
+            kotlin.math.round(value * 100.0) / 100.0
+        } else {
+            value
+        }
         return if (
             rounded >= Long.MIN_VALUE.toDouble() &&
             rounded <= Long.MAX_VALUE.toDouble() &&
