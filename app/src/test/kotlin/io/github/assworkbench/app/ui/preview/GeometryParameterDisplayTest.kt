@@ -13,6 +13,16 @@ class GeometryParameterDisplayTest {
     private val changed = a.copy(text = "{\\pos(125,240)}A")
     private val preview = document.copy(events = listOf(changed, b))
 
+    @Test fun extractedParameterOwnerProjectsSameEventPreview() {
+        val projected = GeometryParameterDisplay.event(
+            document,
+            preview,
+            "geometry:1:parameter:event.rotation.z:1",
+            1L,
+        )
+        assertEquals(preview.events.first(), projected)
+    }
+
     @Test fun externalWriterProjectsReadOnlyEvenWhenItsDocumentHasEqualValues() {
         assertTrue(GeometryParameterDisplay.externalPreview(document, preview, "geometry:1", 1L, 2L, 1L))
         assertFalse(GeometryParameterDisplay.externalPreview(document, preview, "geometry:1", 1L, 2L, 2L))

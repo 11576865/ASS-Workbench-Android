@@ -91,6 +91,10 @@ import io.github.assworkbench.app.ui.workspace.WorkspaceEditScopeResolver
 import io.github.assworkbench.app.ui.workspace.WorkspaceEditScopeSummary
 import io.github.assworkbench.app.ui.workspace.WorkspaceState
 import io.github.assworkbench.app.ui.workspace.WorkspaceToolInstance
+import io.github.assworkbench.app.ui.workspace.WorkspaceParameterCatalog
+import io.github.assworkbench.app.ui.workspace.WorkspaceParameterDescriptor
+import io.github.assworkbench.app.ui.workspace.WorkspaceParameterPresentation
+import io.github.assworkbench.app.ui.workspace.WorkspaceParameterProjectionPane
 import io.github.assworkbench.app.ui.workspace.resolveUiBinding
 import io.github.assworkbench.domain.*
 import io.github.assworkbench.fonts.FontDiagnostics
@@ -562,6 +566,7 @@ fun ModernEditorScreen(
                 SpatialWorkspace(
                     surfaceController = surfaceController,
                     workspaceState = workspaceState,
+                    onWorkspaceStateChange = { workspaceState = it },
                     interactionRegistry = interactionRegistry,
                     positionEditEventId = positionEditEventId,
                     onActivateInstance = { id ->
@@ -2930,6 +2935,7 @@ private fun ObjectRelationPanel(
 private fun SpatialWorkspace(
     surfaceController: WorkbenchSurfaceController,
     workspaceState: WorkspaceState,
+    onWorkspaceStateChange: (WorkspaceState) -> Unit,
     interactionRegistry: InteractionOverlayRegistry,
     positionEditEventId: Long?,
     onActivateInstance: (String) -> Unit,
@@ -2953,6 +2959,19 @@ private fun SpatialWorkspace(
     modifier: Modifier = Modifier,
 ) {
     val visibleTools = workspaceState.tools.filter { it.presence != WorkspaceToolPresence.HIDDEN }
+    val parameterEntries = workspaceState.parameterProjections.mapNotNull { projection ->
+        WorkspaceParameterCatalog.find(projection.descriptorKey)?.let { descriptor ->
+            InfiniteCanvasEntry(
+                projection.id,
+                descriptor.title,
+                when (projection.binding) {
+                    WorkspaceBinding.FollowFocus -> "参数投影 · 跟随焦点"
+                    WorkspaceBinding.FollowSelection -> "参数投影 · 选择集"
+                    is WorkspaceBinding.PinnedEvent -> "参数投影 · 固定 #${projection.binding.eventId}"
+                },
+            )
+        }
+    }
     val entries = listOf(
         InfiniteCanvasEntry("preview", "视频", "实时视频 / ASS"),
         InfiniteCanvasEntry("subtitles", "字幕", "选择 / 文本"),
@@ -2962,7 +2981,7 @@ private fun SpatialWorkspace(
             InfiniteCanvasEntry(toolInstance.id, tool.title,
                 if (toolInstance.binding is WorkspaceBinding.PinnedEvent) "固定字幕对象" else "跟随当前选择")
         }
-    }
+    } + parameterEntries
     InfiniteCanvasHost(
         sessionId = state.workspaceSessionId,
         savedScene = surfaceController.infiniteSceneForSession(state.workspaceSessionId),
@@ -3004,16 +3023,46 @@ private fun SpatialWorkspace(
                 ) { }
             }
             "audio" -> InfiniteAudioEvidence(state, viewModel, interactive)
-            else -> visibleTools.firstOrNull { it.id == id }?.let { toolInstance ->
-                val tool = WorkbenchTool.entries.firstOrNull { it.name == toolInstance.toolKey } ?: return@let
-                FloatingToolContent(
-                    instance = toolInstance, tool = tool, state = state, viewModel = viewModel,
-                    issues = issues, expandedEventId = expandedEventId,
-                    onExpandedChange = onExpandedChange, onImportFont = onImportFont,
-                    onSaveMkv = onSaveMkv, eventEditorStateHolder = eventEditorStateHolder,
-                    onOpenTool = onActiveTool, onCloseText = { onExpandedChange(null) },
-                    searchOpen = searchOpen, onCloseSearch = onCloseSearch,
-                )
+            else -> {
+                val projection = workspaceState.parameterProjections.firstOrNull { it.id == id }
+                if (projection != null) {
+                    WorkspaceParameterProjectionPane(
+                        projection = projection,
+                        state = state,
+                        viewModel = viewModel,
+                        onRemove = {
+                            onWorkspaceStateChange(workspaceState.removeParameterProjection(projection.id))
+                        },
+                        onPresentationChange = { presentation ->
+                            onWorkspaceStateChange(
+                                workspaceState.updateParameterPresentation(projection.id, presentation)
+                            )
+                        },
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                } else {
+                    visibleTools.firstOrNull { it.id == id }?.let { toolInstance ->
+                        val tool = WorkbenchTool.entries.firstOrNull { it.name == toolInstance.toolKey }
+                            ?: return@let
+                        FloatingToolContent(
+                            instance = toolInstance, tool = tool, state = state, viewModel = viewModel,
+                            issues = issues, expandedEventId = expandedEventId,
+                            onExpandedChange = onExpandedChange, onImportFont = onImportFont,
+                            onSaveMkv = onSaveMkv, eventEditorStateHolder = eventEditorStateHolder,
+                            onOpenTool = onActiveTool, onCloseText = { onExpandedChange(null) },
+                            searchOpen = searchOpen, onCloseSearch = onCloseSearch,
+                            onExtractParameter = { descriptor, presentation, binding ->
+                                onWorkspaceStateChange(
+                                    workspaceState.addParameterProjection(
+                                        descriptor.key,
+                                        presentation,
+                                        binding,
+                                    )
+                                )
+                            },
+                        )
+                    }
+                }
             }
         }
     }
@@ -3603,6 +3652,11 @@ private fun FloatingToolContent(
     onCloseText: () -> Unit,
     searchOpen: Boolean,
     onCloseSearch: () -> Unit,
+    onExtractParameter: ((
+        WorkspaceParameterDescriptor,
+        WorkspaceParameterPresentation,
+        WorkspaceBinding,
+    ) -> Unit)? = null,
 ) {
     val editorUiState = state.toEditorUiState()
     val bindingState = instance.resolveUiBinding(editorUiState)
@@ -3685,6 +3739,8 @@ private fun FloatingToolContent(
                 modifier = paneModifier,
                 targetEventId = boundEventId,
                 unresolvedPinnedEventId = unresolvedPinnedEventId,
+                parameterBinding = instance.binding,
+                onExtractParameter = onExtractParameter,
             )
         }
         WorkbenchTool.FONTS -> FontManagerPane(state, viewModel, onImportFont, Modifier.fillMaxSize())
@@ -6227,6 +6283,12 @@ private fun PositionPane(
     modifier: Modifier = Modifier,
     targetEventId: Long? = state.focusedEventId,
     unresolvedPinnedEventId: Long? = null,
+    parameterBinding: WorkspaceBinding = WorkspaceBinding.FollowFocus,
+    onExtractParameter: ((
+        WorkspaceParameterDescriptor,
+        WorkspaceParameterPresentation,
+        WorkspaceBinding,
+    ) -> Unit)? = null,
 ) {
     if (unresolvedPinnedEventId != null) {
         Box(modifier, contentAlignment = Alignment.Center) {
@@ -6728,6 +6790,22 @@ private fun PositionPane(
                     }
                 },
             )
+            if (onExtractParameter != null) {
+                TextButton(
+                    onClick = {
+                        onExtractParameter(
+                            WorkspaceParameterCatalog.rotationZ,
+                            WorkspaceParameterPresentation.SLIDER,
+                            parameterBinding,
+                        )
+                    },
+                    modifier = Modifier.testTag("extract-rotation-z-${event.id}"),
+                ) {
+                    Icon(Icons.Filled.OpenInNew, null, Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("拆出旋转控件")
+                }
+            }
             Text(
                 if (geometry.positionMode == AssPositionMode.MOVE && geometry.origin == null) {
                     "当前是 \\move 且没有显式 \\org：数值/Slider 可用，但画布旋转手柄暂不显示，因为默认旋转中心随运动位置变化。"
