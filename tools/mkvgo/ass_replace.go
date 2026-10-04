@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -123,14 +124,21 @@ type TrackMetadataEdit struct {
 	IsForced  bool
 }
 
+const (
+	trackAdditionSourceMatroska = "matroska"
+	trackAdditionSourceASS      = "ass"
+)
+
 type TrackAddition struct {
+	SourceKind     string
 	SourcePath     string
 	SourceTrackID  uint64
 	SourceTrackUID uint64
+	SourceSHA256   string
 	Name           string
-	Language      string
-	IsDefault     bool
-	IsForced      bool
+	Language       string
+	IsDefault      bool
+	IsForced       bool
 }
 
 func ReplaceASSWithAttachmentEdits(
@@ -180,7 +188,7 @@ func ReplaceASSWithAttachmentEdits(
 	if err != nil {
 		return err
 	}
-	addedTracks, addedSources, addedTags, addedDurationMs, err := planTrackAdditions(
+	addedTracks, addedSources, addedExtraBlocks, addedTags, addedDurationMs, err := planTrackAdditions(
 		ctx,
 		baseSourceTracks,
 		trackAdditions,
@@ -231,6 +239,11 @@ func ReplaceASSWithAttachmentEdits(
 		}
 	}
 
+	allExtraBlocks := append(append([]mkv.Block(nil), subBlocks...), addedExtraBlocks...)
+	sort.SliceStable(allExtraBlocks, func(i, j int) bool {
+		return allExtraBlocks[i].Timecode < allExtraBlocks[j].Timecode
+	})
+
 	// Source blocks for the target track are omitted; replacement blocks are
 	// injected under the exact same TrackNumber.
 	remap := identityRemap(baseSourceTracks)
@@ -255,7 +268,7 @@ func ReplaceASSWithAttachmentEdits(
 		return err
 	}
 
-	meta, durationMs := metaForMergedSubs(c, subBlocks)
+	meta, durationMs := metaForMergedSubs(c, allExtraBlocks)
 	if addedDurationMs > durationMs {
 		durationMs = addedDurationMs
 		meta = metaForNewDuration(&meta)
@@ -281,7 +294,7 @@ func ReplaceASSWithAttachmentEdits(
 		c.Info.TimecodeScale,
 		fs,
 		sources,
-		subBlocks,
+		allExtraBlocks,
 		mkv.ProgressFrom(opts),
 		plan.wantHashes,
 	)
@@ -366,7 +379,7 @@ func EditContainerResources(
 	if err != nil {
 		return err
 	}
-	addedTracks, addedSources, addedTags, addedDurationMs, err := planTrackAdditions(
+	addedTracks, addedSources, addedExtraBlocks, addedTags, addedDurationMs, err := planTrackAdditions(
 		ctx,
 		probe.Tracks,
 		trackAdditions,
@@ -431,7 +444,20 @@ func EditContainerResources(
 		remap: remap,
 	}}
 	sources = append(sources, addedSources...)
-	if _, err := streamMergeToWriter(
+	if len(addedExtraBlocks) > 0 {
+		if _, _, err := streamMergeWithExtraBlocks(
+			ctx,
+			mw,
+			probe.Info.TimecodeScale,
+			fs,
+			sources,
+			addedExtraBlocks,
+			mkv.ProgressFrom(opts),
+			false,
+		); err != nil {
+			return err
+		}
+	} else if _, err := streamMergeToWriter(
 		ctx,
 		mw,
 		probe.Info.TimecodeScale,
@@ -603,9 +629,9 @@ func planTrackAdditions(
 	existing []mkv.Track,
 	additions []TrackAddition,
 	fs *mkv.FS,
-) ([]mkv.Track, []mergeSource, []mkv.Tag, int64, error) {
+) ([]mkv.Track, []mergeSource, []mkv.Block, []mkv.Tag, int64, error) {
 	if len(additions) == 0 {
-		return nil, nil, nil, 0, nil
+		return nil, nil, nil, nil, 0, nil
 	}
 
 	var nextID uint64 = 1
@@ -613,7 +639,7 @@ func planTrackAdditions(
 	for _, track := range existing {
 		if track.ID >= nextID {
 			if track.ID == ^uint64(0) {
-				return nil, nil, nil, 0, fmt.Errorf("cannot allocate a new TrackNumber")
+				return nil, nil, nil, nil, 0, fmt.Errorf("cannot allocate a new TrackNumber")
 			}
 			nextID = track.ID + 1
 		}
@@ -623,7 +649,7 @@ func planTrackAdditions(
 		}
 		if uid >= nextUID {
 			if uid == ^uint64(0) {
-				return nil, nil, nil, 0, fmt.Errorf("cannot allocate a new TrackUID")
+				return nil, nil, nil, nil, 0, fmt.Errorf("cannot allocate a new TrackUID")
 			}
 			nextUID = uid + 1
 		}
@@ -632,102 +658,171 @@ func planTrackAdditions(
 	out := make([]mkv.Track, 0, len(additions))
 	sourcesByPath := make(map[string]*mergeSource)
 	order := make([]string, 0, len(additions))
+	var extraBlocks []mkv.Block
 	var tags []mkv.Tag
 	var durationMs int64
 	seen := make(map[string]struct{}, len(additions))
 
 	for _, addition := range additions {
-		if addition.SourcePath == "" || addition.SourceTrackID == 0 {
-			return nil, nil, nil, 0, fmt.Errorf("invalid track addition source")
+		if addition.SourcePath == "" {
+			return nil, nil, nil, nil, 0, fmt.Errorf("invalid track addition source")
 		}
-		key := addition.SourcePath + "\x00" + strconv.FormatUint(addition.SourceTrackID, 10)
+		kind := addition.SourceKind
+		if kind == "" {
+			kind = trackAdditionSourceMatroska
+		}
+		var key string
+		switch kind {
+		case trackAdditionSourceMatroska:
+			if addition.SourceTrackID == 0 {
+				return nil, nil, nil, nil, 0, fmt.Errorf("invalid Matroska track addition source")
+			}
+			key = kind + "\x00" + addition.SourcePath + "\x00" + strconv.FormatUint(addition.SourceTrackID, 10)
+		case trackAdditionSourceASS:
+			key = kind + "\x00" + addition.SourcePath
+		default:
+			return nil, nil, nil, nil, 0, fmt.Errorf("unsupported track addition source kind %q", kind)
+		}
 		if _, duplicate := seen[key]; duplicate {
-			return nil, nil, nil, 0, fmt.Errorf(
-				"track %d from %s was added more than once",
-				addition.SourceTrackID,
+			return nil, nil, nil, nil, 0, fmt.Errorf(
+				"track source %s was added more than once",
 				filepath.Base(addition.SourcePath),
 			)
 		}
 		seen[key] = struct{}{}
 
-		source, err := reader.OpenWithFS(ctx, addition.SourcePath, fs, reader.WithoutAttachmentData())
-		if err != nil {
-			return nil, nil, nil, 0, fmt.Errorf("open track source %s: %w", filepath.Base(addition.SourcePath), err)
-		}
-		var srcTrack *mkv.Track
-		for i := range source.Tracks {
-			if source.Tracks[i].ID == addition.SourceTrackID {
-				srcTrack = &source.Tracks[i]
-				break
+		switch kind {
+		case trackAdditionSourceMatroska:
+			source, err := reader.OpenWithFS(ctx, addition.SourcePath, fs, reader.WithoutAttachmentData())
+			if err != nil {
+				return nil, nil, nil, nil, 0, fmt.Errorf("open track source %s: %w", filepath.Base(addition.SourcePath), err)
+			}
+			var srcTrack *mkv.Track
+			for i := range source.Tracks {
+				if source.Tracks[i].ID == addition.SourceTrackID {
+					srcTrack = &source.Tracks[i]
+					break
+				}
+			}
+			if srcTrack == nil {
+				return nil, nil, nil, nil, 0, fmt.Errorf(
+					"track %d not found in %s",
+					addition.SourceTrackID,
+					filepath.Base(addition.SourcePath),
+				)
+			}
+			if addition.SourceTrackUID != 0 && srcTrack.UID != addition.SourceTrackUID {
+				return nil, nil, nil, nil, 0, fmt.Errorf(
+					"track %d in %s changed identity: expected TrackUID %d, got %d",
+					addition.SourceTrackID,
+					filepath.Base(addition.SourcePath),
+					addition.SourceTrackUID,
+					srcTrack.UID,
+				)
+			}
+			if srcTrack.Type != mkv.VideoTrack &&
+				srcTrack.Type != mkv.AudioTrack &&
+				srcTrack.Type != mkv.SubtitleTrack {
+				return nil, nil, nil, nil, 0, fmt.Errorf(
+					"track %d in %s has unsupported type %s",
+					addition.SourceTrackID,
+					filepath.Base(addition.SourcePath),
+					srcTrack.Type,
+				)
+			}
+
+			track := *srcTrack
+			track.ID = nextID
+			track.UID = nextUID
+			track.Name = addition.Name
+			track.Language = addition.Language
+			track.IsDefault = addition.IsDefault
+			track.IsForced = addition.IsForced
+			out = append(out, track)
+
+			sourceUID := srcTrack.UID
+			if sourceUID == 0 {
+				sourceUID = srcTrack.ID
+			}
+			for _, tag := range source.Tags {
+				if tag.TargetID != sourceUID {
+					continue
+				}
+				tag.TargetID = nextUID
+				tags = append(tags, tag)
+			}
+
+			if source.DurationMs > durationMs {
+				durationMs = source.DurationMs
+			}
+			state := sourcesByPath[addition.SourcePath]
+			if state == nil {
+				state = &mergeSource{
+					path: addition.SourcePath,
+					scale: source.Info.TimecodeScale,
+					remap: make(map[uint64]uint64),
+				}
+				sourcesByPath[addition.SourcePath] = state
+				order = append(order, addition.SourcePath)
+			}
+			state.remap[addition.SourceTrackID] = nextID
+
+		case trackAdditionSourceASS:
+			raw, err := os.ReadFile(addition.SourcePath)
+			if err != nil {
+				return nil, nil, nil, nil, 0, fmt.Errorf("read ASS source %s: %w", filepath.Base(addition.SourcePath), err)
+			}
+			if addition.SourceSHA256 != "" {
+				sum := sha256.Sum256(raw)
+				actual := hex.EncodeToString(sum[:])
+				if !strings.EqualFold(actual, addition.SourceSHA256) {
+					return nil, nil, nil, nil, 0, fmt.Errorf(
+						"ASS source %s changed identity: expected sha256 %s, got %s",
+						filepath.Base(addition.SourcePath),
+						addition.SourceSHA256,
+						actual,
+					)
+				}
+			}
+			ass, err := subtitle.ParseASS(addition.SourcePath)
+			if err != nil {
+				return nil, nil, nil, nil, 0, fmt.Errorf("parse ASS source %s: %w", filepath.Base(addition.SourcePath), err)
+			}
+			if len(ass.Events) == 0 {
+				return nil, nil, nil, nil, 0, fmt.Errorf("ASS source %s has no dialogue events", filepath.Base(addition.SourcePath))
+			}
+			track := mkv.Track{
+				ID: nextID,
+				UID: nextUID,
+				Type: mkv.SubtitleTrack,
+				Codec: "ass",
+				CodecPrivate: []byte(ass.Header),
+				Name: addition.Name,
+				Language: addition.Language,
+				IsDefault: addition.IsDefault,
+				IsForced: addition.IsForced,
+			}
+			out = append(out, track)
+			for i, ev := range ass.Events {
+				var dur int64
+				if ev.EndMs > ev.StartMs {
+					dur = ev.EndMs - ev.StartMs
+				}
+				extraBlocks = append(extraBlocks, mkv.Block{
+					TrackNumber: nextID,
+					Timecode: ev.StartMs,
+					Duration: dur,
+					Data: []byte(fmt.Sprintf("%d,0,%s", i, ev.Fields)),
+				})
+				if ev.EndMs > durationMs {
+					durationMs = ev.EndMs
+				}
 			}
 		}
-		if srcTrack == nil {
-			return nil, nil, nil, 0, fmt.Errorf(
-				"track %d not found in %s",
-				addition.SourceTrackID,
-				filepath.Base(addition.SourcePath),
-			)
-		}
-		if addition.SourceTrackUID != 0 && srcTrack.UID != addition.SourceTrackUID {
-			return nil, nil, nil, 0, fmt.Errorf(
-				"track %d in %s changed identity: expected TrackUID %d, got %d",
-				addition.SourceTrackID,
-				filepath.Base(addition.SourcePath),
-				addition.SourceTrackUID,
-				srcTrack.UID,
-			)
-		}
-		if srcTrack.Type != mkv.VideoTrack &&
-			srcTrack.Type != mkv.AudioTrack &&
-			srcTrack.Type != mkv.SubtitleTrack {
-			return nil, nil, nil, 0, fmt.Errorf(
-				"track %d in %s has unsupported type %s",
-				addition.SourceTrackID,
-				filepath.Base(addition.SourcePath),
-				srcTrack.Type,
-			)
-		}
-
-		track := *srcTrack
-		track.ID = nextID
-		track.UID = nextUID
-		track.Name = addition.Name
-		track.Language = addition.Language
-		track.IsDefault = addition.IsDefault
-		track.IsForced = addition.IsForced
-		out = append(out, track)
-
-		sourceUID := srcTrack.UID
-		if sourceUID == 0 {
-			sourceUID = srcTrack.ID
-		}
-		for _, tag := range source.Tags {
-			if tag.TargetID != sourceUID {
-				continue
-			}
-			tag.TargetID = nextUID
-			tags = append(tags, tag)
-		}
-
-		ms := source.DurationMs
-		if ms > durationMs {
-			durationMs = ms
-		}
-		state := sourcesByPath[addition.SourcePath]
-		if state == nil {
-			state = &mergeSource{
-				path: addition.SourcePath,
-				scale: source.Info.TimecodeScale,
-				remap: make(map[uint64]uint64),
-			}
-			sourcesByPath[addition.SourcePath] = state
-			order = append(order, addition.SourcePath)
-		}
-		state.remap[addition.SourceTrackID] = nextID
 
 		if nextID == ^uint64(0) || nextUID == ^uint64(0) {
 			if len(out) < len(additions) {
-				return nil, nil, nil, 0, fmt.Errorf("cannot allocate another track identity")
+				return nil, nil, nil, nil, 0, fmt.Errorf("cannot allocate another track identity")
 			}
 		} else {
 			nextID++
@@ -739,7 +834,10 @@ func planTrackAdditions(
 	for _, path := range order {
 		sources = append(sources, *sourcesByPath[path])
 	}
-	return out, sources, tags, durationMs, nil
+	sort.SliceStable(extraBlocks, func(i, j int) bool {
+		return extraBlocks[i].Timecode < extraBlocks[j].Timecode
+	})
+	return out, sources, extraBlocks, tags, durationMs, nil
 }
 
 func maxInt64(a, b int64) int64 {
