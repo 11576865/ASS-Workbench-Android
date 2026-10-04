@@ -24,6 +24,8 @@ func main() {
 		runEditContainer(os.Args[2:])
 	case "extract-attachment":
 		runExtractAttachment(os.Args[2:])
+	case "digest-track":
+		runDigestTrack(os.Args[2:])
 	default:
 		fatal(usage())
 	}
@@ -155,6 +157,10 @@ func runReplaceASS(args []string) {
 				IsForced: parseBoolFlag(args[i+6], "--add-ass-track forced"),
 			})
 			i += 6
+		case "--add-packet-audio":
+			addition, consumed := parsePacketAudioAddition(args, i)
+			trackAdditions = append(trackAdditions, addition)
+			i += consumed
 		default:
 			if len(args[i]) > 0 && args[i][0] == '-' {
 				fatal("unknown flag: " + args[i])
@@ -398,6 +404,10 @@ func runEditContainer(args []string) {
 				IsForced: parseBoolFlag(args[i+6], "--add-ass-track forced"),
 			})
 			i += 6
+		case "--add-packet-audio":
+			addition, consumed := parsePacketAudioAddition(args, i)
+			trackAdditions = append(trackAdditions, addition)
+			i += consumed
 		default:
 			fatal("unknown argument: " + args[i])
 		}
@@ -467,6 +477,29 @@ func runExtractAttachment(args []string) {
 	}
 }
 
+func runDigestTrack(args []string) {
+	if len(args) != 3 || args[1] != "--track" {
+		fatal("digest-track needs <file.mkv> --track <trackID>")
+	}
+	trackID, err := strconv.ParseUint(args[2], 10, 64)
+	if err != nil || trackID == 0 {
+		fatal("invalid digest-track TrackNumber")
+	}
+	digest, err := ops.DigestTrackContent(context.Background(), args[0], trackID)
+	if err != nil {
+		fatal(err.Error())
+	}
+	fmt.Println("sha256=" + digest.SHA256)
+	fmt.Printf("count=%d\n", digest.PacketCount)
+	if digest.Seen {
+		fmt.Printf("first_ms=%d\n", digest.FirstMs)
+		fmt.Printf("last_ms=%d\n", digest.LastMs)
+	} else {
+		fmt.Println("first_ms=-")
+		fmt.Println("last_ms=-")
+	}
+}
+
 func parseBoolFlag(value, label string) bool {
 	switch value {
 	case "1", "true":
@@ -479,6 +512,32 @@ func parseBoolFlag(value, label string) bool {
 	}
 }
 
+func parsePacketAudioAddition(args []string, flagIndex int) (ops.TrackAddition, int) {
+	if flagIndex+9 >= len(args) {
+		fatal("--add-packet-audio needs <source.awpkt> <sha256> <codec> <sampleRate> <channels> <name> <language> <default> <forced>")
+	}
+	sampleRate, err := strconv.ParseUint(args[flagIndex+4], 10, 32)
+	if err != nil || sampleRate == 0 {
+		fatal("invalid --add-packet-audio sampleRate")
+	}
+	channels, err := strconv.ParseUint(args[flagIndex+5], 10, 8)
+	if err != nil || channels == 0 {
+		fatal("invalid --add-packet-audio channels")
+	}
+	return ops.TrackAddition{
+		SourceKind: "packet-audio",
+		SourcePath: args[flagIndex+1],
+		SourceSHA256: args[flagIndex+2],
+		SourceCodec: args[flagIndex+3],
+		SampleRate: uint32(sampleRate),
+		Channels: uint8(channels),
+		Name: args[flagIndex+6],
+		Language: args[flagIndex+7],
+		IsDefault: parseBoolFlag(args[flagIndex+8], "--add-packet-audio default"),
+		IsForced: parseBoolFlag(args[flagIndex+9], "--add-packet-audio forced"),
+	}, 9
+}
+
 func ensureOutputAbsent(path string) {
 	if _, err := os.Stat(path); err == nil {
 		fatal("output already exists: " + path)
@@ -487,11 +546,12 @@ func ensureOutputAbsent(path string) {
 
 func usage() string {
 	return "usage:\n" +
-		"  asswb-mkvgo replace-ass <file.mkv> -o <out.mkv> -t <trackID> [--font <font.ttf>]... [--attachment <file>]... [--remove-attachment <uid-or-name>]... [--replace-attachment <uid-or-name> <file>]... [--edit-attachment-meta <uid-or-name> <name> <description>]... [--remove-track <uid:id|number:id>]... [--edit-track-meta <uid:id|number:id> <name> <language> <default> <forced>]... [--add-track <source.mkv> <trackID> <trackUID-or-0> <name> <language> <default> <forced>]... [--add-ass-track <source.ass> <sha256-or-> <name> <language> <default> <forced>]... <edited.ass>\n" +
+		"  asswb-mkvgo replace-ass <file.mkv> -o <out.mkv> -t <trackID> [--font <font.ttf>]... [--attachment <file>]... [--remove-attachment <uid-or-name>]... [--replace-attachment <uid-or-name> <file>]... [--edit-attachment-meta <uid-or-name> <name> <description>]... [--remove-track <uid:id|number:id>]... [--edit-track-meta <uid:id|number:id> <name> <language> <default> <forced>]... [--add-track <source.mkv> <trackID> <trackUID-or-0> <name> <language> <default> <forced>]... [--add-ass-track <source.ass> <sha256-or-> <name> <language> <default> <forced>]... [--add-packet-audio <source.awpkt> <sha256> <codec> <sampleRate> <channels> <name> <language> <default> <forced>]... <edited.ass>\n" +
 		"  asswb-mkvgo add-attachments <file.mkv> -o <out.mkv> --attachment <file> [--attachment <file>]...\n" +
 		"  asswb-mkvgo edit-attachments <file.mkv> -o <out.mkv> [--attachment <file>]... [--remove-attachment <uid-or-name>]... [--replace-attachment <uid-or-name> <file>]... [--edit-attachment-meta <uid-or-name> <name> <description>]...\n" +
-		"  asswb-mkvgo edit-container <file.mkv> -o <out.mkv> [attachment edits] [--remove-track <uid:id|number:id>]... [--edit-track-meta <uid:id|number:id> <name> <language> <default> <forced>]... [--add-track <source.mkv> <trackID> <trackUID-or-0> <name> <language> <default> <forced>]... [--add-ass-track <source.ass> <sha256-or-> <name> <language> <default> <forced>]...\n" +
-		"  asswb-mkvgo extract-attachment <file.mkv> -o <file> --target <uid-or-name>"
+		"  asswb-mkvgo edit-container <file.mkv> -o <out.mkv> [attachment edits] [--remove-track <uid:id|number:id>]... [--edit-track-meta <uid:id|number:id> <name> <language> <default> <forced>]... [--add-track <source.mkv> <trackID> <trackUID-or-0> <name> <language> <default> <forced>]... [--add-ass-track <source.ass> <sha256-or-> <name> <language> <default> <forced>]... [--add-packet-audio <source.awpkt> <sha256> <codec> <sampleRate> <channels> <name> <language> <default> <forced>]...\n" +
+		"  asswb-mkvgo extract-attachment <file.mkv> -o <file> --target <uid-or-name>\n" +
+		"  asswb-mkvgo digest-track <file.mkv> --track <trackID>"
 }
 
 func fatal(message string) {
