@@ -114,6 +114,57 @@ class AuthoringEngineSuiteTest {
     }
 
     @Test
+    fun visibleReplacementPreservesAssEscapesAndOnlyMutatesTextTokens() {
+        val source = "A\\NB\\hC{\\bord2}D"
+
+        val unchangedEscapes = AssSearchReplace.replaceVisibleSegments(
+            source,
+            Regex("[Nh]"),
+            "X",
+        )
+        assertEquals(source, unchangedEscapes)
+
+        val changed = AssSearchReplace.replaceVisibleSegments(
+            source,
+            Regex("[BCD]"),
+            "Z",
+        )
+        assertEquals("A\\NZ\\hZ{\\bord2}Z", changed)
+    }
+
+    @Test
+    fun semanticStyleReplacementAllowsExistingExactStyle() {
+        val document = AssDocument(
+            styles = listOf(
+                AssStyle(name = "Default"),
+                AssStyle(name = "Alt"),
+            ),
+            events = listOf(
+                AssEvent(
+                    id = 33,
+                    start = SubTime(0),
+                    end = SubTime(1000),
+                    style = "Default",
+                    text = "Text",
+                )
+            ),
+        )
+
+        val preview = AssSearchReplace.preview(
+            document = document,
+            query = AssSearchQuery(stylePattern = Regex("Default")),
+            replacement = AssSearchReplacement(
+                scope = AssReplaceScope.STYLE,
+                pattern = Regex("Default"),
+                replacement = "Alt",
+            ),
+        )
+
+        assertEquals("Alt", preview.document.events.single().style)
+        assertEquals(listOf(33L), preview.changedEventIds)
+    }
+
+    @Test
     fun keyframesCompileIntoChainedTransforms() {
         val plan = AssAnimationAuthoring.planNumericTrack(
             AssTransformVisualProperty.SCALE_X,
