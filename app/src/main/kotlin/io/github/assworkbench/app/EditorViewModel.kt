@@ -747,7 +747,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             val current = state.container.resources.firstOrNull { it.trackTarget == target }
             if (
                 current != null &&
-                name == current.title &&
+                name == current.trackName &&
                 language == current.trackLanguage &&
                 isDefault == current.trackIsDefault &&
                 isForced == current.trackIsForced
