@@ -121,6 +121,15 @@ type TrackMetadataEdit struct {
 	IsForced  bool
 }
 
+type TrackImport struct {
+	SourcePath string
+	TrackID    uint64
+	Name       string
+	Language   string
+	IsDefault  bool
+	IsForced   bool
+}
+
 func ReplaceASSWithAttachmentEdits(
 	ctx context.Context,
 	srcPath string,
@@ -131,6 +140,7 @@ func ReplaceASSWithAttachmentEdits(
 	metadataEdits []AttachmentMetadataEdit,
 	removeTrackTargets []string,
 	trackMetadataEdits []TrackMetadataEdit,
+	trackImports []TrackImport,
 	opts ...mkv.Options,
 ) (err error) {
 	ass, err := subtitle.ParseASS(assPath)
@@ -302,6 +312,7 @@ func EditAttachments(
 		metadataEdits,
 		nil,
 		nil,
+		nil,
 		opts...,
 	)
 }
@@ -321,7 +332,8 @@ func EditContainerResources(
 		len(replacements) == 0 &&
 		len(metadataEdits) == 0 &&
 		len(removeTrackTargets) == 0 &&
-		len(trackMetadataEdits) == 0 {
+		len(trackMetadataEdits) == 0 &&
+		len(trackImports) == 0 {
 		return fmt.Errorf("no container edits selected")
 	}
 
@@ -348,11 +360,20 @@ func EditContainerResources(
 	if err != nil {
 		return err
 	}
+	updatedTracks, importSources, importDurationMs, err := planTrackImports(
+		ctx,
+		fs,
+		updatedTracks,
+		trackImports,
+	)
+	if err != nil {
+		return err
+	}
 
 	// Metadata-only track edits and attachment edits can use mkvgo's fast
-	// metadata rewrite. Actual track removal must stream clusters so removed
-	// blocks disappear; remaining TrackNumber values are intentionally preserved.
-	if len(removedTrackIDs) == 0 {
+	// metadata rewrite. Track removal or addition changes the data plane and
+	// therefore requires a streaming remux.
+	if len(removedTrackIDs) == 0 && len(trackImports) == 0 {
 		return EditMetadata(ctx, srcPath, dstPath, func(c *mkv.Container) {
 			c.Attachments = updatedAttachments
 			c.Tracks = updatedTracks
@@ -365,6 +386,16 @@ func EditContainerResources(
 	meta.Tags = filterTagsForRemovedTrackUIDs(probe.Tags, removedTrackUIDs)
 	meta.Info.SegmentUID = derivedSegmentUID(&probe.Info, srcPath, "edit-container-tracks")
 
+	durationMs := probe.DurationMs
+	if importDurationMs > durationMs {
+		durationMs = importDurationMs
+		meta = metaForNewDuration(probe)
+		meta.Attachments = updatedAttachments
+		meta.Tracks = updatedTracks
+		meta.Tags = filterTagsForRemovedTrackUIDs(probe.Tags, removedTrackUIDs)
+		meta.Info.SegmentUID = derivedSegmentUID(&probe.Info, srcPath, "edit-container-tracks")
+	}
+
 	out, err := fs.DoCreate(dstPath)
 	if err != nil {
 		return err
@@ -376,17 +407,29 @@ func EditContainerResources(
 	if err := mw.WriteStart(); err != nil {
 		return err
 	}
-	if err := mw.WriteMetadata(&meta, updatedTracks, probe.DurationMs); err != nil {
+	if err := mw.WriteMetadata(&meta, updatedTracks, durationMs); err != nil {
 		return err
 	}
-	remap := identityRemap(probe.Tracks)
+
+	baseRemap := identityRemap(probe.Tracks)
 	for removedID := range removedTrackIDs {
-		delete(remap, removedID)
+		delete(baseRemap, removedID)
 	}
-	if err := streamToWriter(ctx, mw, srcPath, probe.Info.TimecodeScale, fs, streamOpts{
-		remap: remap,
-		progress: mkv.ProgressFrom(opts),
-	}); err != nil {
+	sources := make([]mergeSource, 0, 1+len(importSources))
+	sources = append(sources, mergeSource{
+		path: srcPath,
+		scale: probe.Info.TimecodeScale,
+		remap: baseRemap,
+	})
+	sources = append(sources, importSources...)
+	if _, err := streamMergeToWriter(
+		ctx,
+		mw,
+		probe.Info.TimecodeScale,
+		fs,
+		sources,
+		mkv.ProgressFrom(opts),
+	); err != nil {
 		return err
 	}
 	return mw.Finalize()
@@ -607,6 +650,127 @@ func planTrackEdits(
 		}
 	}
 	return out, removedIDs, removedUIDs, nil
+}
+
+func planTrackImports(
+	ctx context.Context,
+	fs *mkv.FS,
+	existing []mkv.Track,
+	imports []TrackImport,
+) ([]mkv.Track, []mergeSource, int64, error) {
+	if len(imports) == 0 {
+		return existing, nil, 0, nil
+	}
+
+	usedIDs := make(map[uint64]struct{}, len(existing)+len(imports))
+	usedUIDs := make(map[uint64]struct{}, len(existing)+len(imports))
+	var nextID uint64 = 1
+	var nextUID uint64 = 1
+	for _, track := range existing {
+		usedIDs[track.ID] = struct{}{}
+		if track.ID >= nextID {
+			if track.ID == ^uint64(0) {
+				return nil, nil, 0, fmt.Errorf("cannot allocate another TrackNumber")
+			}
+			nextID = track.ID + 1
+		}
+		uid := track.UID
+		if uid == 0 {
+			uid = track.ID
+		}
+		usedUIDs[uid] = struct{}{}
+		if uid >= nextUID {
+			if uid == ^uint64(0) {
+				return nil, nil, 0, fmt.Errorf("cannot allocate another TrackUID")
+			}
+			nextUID = uid + 1
+		}
+	}
+
+	out := append([]mkv.Track(nil), existing...)
+	sources := make([]mergeSource, 0, len(imports))
+	seen := make(map[string]struct{}, len(imports))
+	var maxDuration int64
+
+	for _, input := range imports {
+		if err := ctx.Err(); err != nil {
+			return nil, nil, 0, err
+		}
+		if input.SourcePath == "" || input.TrackID == 0 {
+			return nil, nil, 0, fmt.Errorf("track import needs a source path and non-zero track ID")
+		}
+		key := input.SourcePath + "\x00" + strconv.FormatUint(input.TrackID, 10)
+		if _, duplicate := seen[key]; duplicate {
+			return nil, nil, 0, fmt.Errorf(
+				"track %d from %s is selected more than once",
+				input.TrackID,
+				input.SourcePath,
+			)
+		}
+		seen[key] = struct{}{}
+
+		source, err := reader.OpenWithFS(ctx, input.SourcePath, fs, reader.WithoutAttachmentData())
+		if err != nil {
+			return nil, nil, 0, fmt.Errorf("open track import %s: %w", input.SourcePath, err)
+		}
+		var sourceTrack *mkv.Track
+		for i := range source.Tracks {
+			if source.Tracks[i].ID == input.TrackID {
+				sourceTrack = &source.Tracks[i]
+				break
+			}
+		}
+		if sourceTrack == nil {
+			return nil, nil, 0, fmt.Errorf(
+				"track %d not found in %s",
+				input.TrackID,
+				input.SourcePath,
+			)
+		}
+
+		for {
+			if _, used := usedIDs[nextID]; !used {
+				break
+			}
+			if nextID == ^uint64(0) {
+				return nil, nil, 0, fmt.Errorf("cannot allocate another TrackNumber")
+			}
+			nextID++
+		}
+		for {
+			if _, used := usedUIDs[nextUID]; !used && nextUID != 0 {
+				break
+			}
+			if nextUID == ^uint64(0) {
+				return nil, nil, 0, fmt.Errorf("cannot allocate another TrackUID")
+			}
+			nextUID++
+		}
+
+		track := *sourceTrack
+		track.ID = nextID
+		track.UID = nextUID
+		track.Name = input.Name
+		track.Language = input.Language
+		track.IsDefault = input.IsDefault
+		track.IsForced = input.IsForced
+		out = append(out, track)
+		sources = append(sources, mergeSource{
+			path: input.SourcePath,
+			scale: source.Info.TimecodeScale,
+			remap: map[uint64]uint64{input.TrackID: nextID},
+		})
+
+		usedIDs[nextID] = struct{}{}
+		usedUIDs[nextUID] = struct{}{}
+		nextID++
+		nextUID++
+		if source.DurationMs > maxDuration {
+			maxDuration = source.DurationMs
+		}
+	}
+
+	return out, sources, maxDuration, nil
 }
 
 func resolveTrackIndex(existing []mkv.Track, target string) (int, error) {
