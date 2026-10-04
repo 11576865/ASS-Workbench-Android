@@ -57,6 +57,7 @@ import io.github.assworkbench.app.ContainerInventoryEvidence
 import io.github.assworkbench.app.ContainerResourceChange
 import io.github.assworkbench.app.ContainerResourceKind
 import io.github.assworkbench.app.ContainerResourceUi
+import io.github.assworkbench.app.ContainerTrackImportSourceKind
 import io.github.assworkbench.app.EditorViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -161,143 +162,14 @@ fun ContainerBridgePanel(
                 Text(
                     buildString {
                         append("$actualCount 项 · ")
-                        append(when (state.inventoryEvidence) {
-                        ContainerInventoryEvidence.BASELINE -> "首次检测"
-                        ContainerInventoryEvidence.CURRENT_SOURCE -> "重新检测"
-                            ContainerInventoryEvidence.VERIFIED_OUTPUT -> "已验证输出"
-                        })
-                        if (state.trackImportCandidates.isNotEmpty()) {
-            HorizontalDivider()
-            Row(
-                Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        "外部 Matroska 可导入轨道 · ${state.trackImportCandidates.size}",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                    )
-                    Text(
-                        "只导入所选 Track；源容器的 Chapters / Attachments / 全局 Tags 不会自动带入。新轨默认 non-Default，避免改变既有自动选轨。",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                TextButton(
-                    enabled = !state.trackImportLoading && !state.writeBackBusy,
-                    onClick = viewModel::clearContainerTrackImportCandidates,
-                ) { Text("关闭") }
-            }
-            state.trackImportCandidates.forEach { candidate ->
-                val alreadyPlanned = state.pendingTrackAdditions.any {
-                    it.sourceUri == candidate.sourceUri &&
-                        it.sourceTrackNumber == candidate.sourceTrackNumber
-                }
-                Row(
-                    Modifier.fillMaxWidth().padding(vertical = 6.dp, horizontal = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    Icon(
-                        imageVector = when (candidate.kind) {
-                            ContainerResourceKind.VIDEO -> Icons.Filled.Movie
-                            ContainerResourceKind.AUDIO -> Icons.Filled.Audiotrack
-                            ContainerResourceKind.SUBTITLE -> Icons.Filled.Subtitles
-                            else -> Icons.Filled.HelpOutline
-                        },
-                        contentDescription = null,
-                        modifier = Modifier.size(20.dp),
-                        tint = MaterialTheme.colorScheme.primary,
-                    )
-                    Column(Modifier.weight(1f)) {
-                        Text(
-                            candidate.name.ifBlank {
-                                candidate.codecId.ifBlank { "Track #${candidate.sourceTrackNumber}" }
-                            },
-                            style = MaterialTheme.typography.bodyMedium,
+                        append(
+                            when (state.inventoryEvidence) {
+                                ContainerInventoryEvidence.BASELINE -> "首次检测"
+                                ContainerInventoryEvidence.CURRENT_SOURCE -> "重新检测"
+                                ContainerInventoryEvidence.VERIFIED_OUTPUT -> "已验证输出"
+                            }
                         )
-                        Text(
-                            buildString {
-                                append(candidate.sourceName)
-                                append(" · Track #").append(candidate.sourceTrackNumber)
-                                if (candidate.codecId.isNotBlank()) append(" · ").append(candidate.codecId)
-                                if (candidate.language.isNotBlank()) append(" · ").append(candidate.language)
-                                if (candidate.sourceIsDefault) append(" · 源 Default")
-                                append(" · 导入后 non-Default")
-                                if (candidate.isForced) append(" · Forced")
-                                if (candidate.kind == ContainerResourceKind.SUBTITLE) {
-                                    append(" · 源附件/字体不自动导入")
-                                }
-                            },
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    TextButton(
-                        enabled = !alreadyPlanned && !state.writeBackBusy,
-                        onClick = { viewModel.planContainerTrackAddition(candidate) },
-                    ) {
-                        Text(if (alreadyPlanned) "已加入" else "加入")
-                    }
-                }
-            }
-        }
-
-        if (state.pendingTrackAdditions.isNotEmpty()) {
-            HorizontalDivider()
-            Text(
-                "待添加轨道 · ${state.pendingTrackAdditions.size}",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.primary,
-            )
-            state.pendingTrackAdditions.forEach { addition ->
-                Row(
-                    Modifier.fillMaxWidth().padding(vertical = 6.dp, horizontal = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    Icon(
-                        imageVector = when (addition.kind) {
-                            ContainerResourceKind.VIDEO -> Icons.Filled.Movie
-                            ContainerResourceKind.AUDIO -> Icons.Filled.Audiotrack
-                            ContainerResourceKind.SUBTITLE -> Icons.Filled.Subtitles
-                            else -> Icons.Filled.HelpOutline
-                        },
-                        contentDescription = null,
-                        modifier = Modifier.size(20.dp),
-                        tint = MaterialTheme.colorScheme.primary,
-                    )
-                    Column(Modifier.weight(1f)) {
-                        Text(
-                            addition.name.ifBlank {
-                                addition.codecId.ifBlank { "Track #${addition.sourceTrackNumber}" }
-                            },
-                            style = MaterialTheme.typography.bodyMedium,
-                        )
-                        Text(
-                            "${addition.sourceName} · source Track #${addition.sourceTrackNumber} · 输出将获得新的 TrackNumber / TrackUID",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    IconButton(
-                        enabled = !state.writeBackBusy,
-                        onClick = {
-                            viewModel.removeContainerTrackAddition(
-                                sourceUri = addition.sourceUri,
-                                sourceTrackNumber = addition.sourceTrackNumber,
-                            )
-                        },
-                    ) {
-                        Icon(Icons.Filled.RemoveCircle, contentDescription = "移除待添加轨道")
-                    }
-                }
-            }
-        }
-
-        if (state.pendingAttachments.isNotEmpty()) {
+                        if (state.pendingAttachments.isNotEmpty()) {
                             append(" · 待添加 ").append(state.pendingAttachments.size)
                         }
                         if (state.pendingAttachmentRemovals.isNotEmpty()) {
@@ -323,6 +195,7 @@ fun ContainerBridgePanel(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+
             if (state.loading || state.attachmentExtractBusy || state.trackImportLoading) {
                 CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
             }
@@ -337,7 +210,7 @@ fun ContainerBridgePanel(
                 Icon(Icons.Filled.Refresh, contentDescription = "重新检测容器内容")
             }
             ContainerIconButton(
-                label = "从另一个 Matroska 导入视频 / 音频 / 字幕轨道",
+                label = "从 Matroska 或独立 ASS 导入轨道",
                 enabled = !state.loading &&
                     !state.writeBackBusy &&
                     !state.attachmentExtractBusy &&
@@ -349,6 +222,9 @@ fun ContainerBridgePanel(
                             "video/x-matroska",
                             "audio/x-matroska",
                             "application/x-matroska",
+                            "text/x-ass",
+                            "text/x-ssa",
+                            "text/plain",
                             "application/octet-stream",
                         )
                     )
@@ -522,6 +398,162 @@ fun ContainerBridgePanel(
                     }
                 },
             )
+        }
+
+        if (state.trackImportCandidates.isNotEmpty()) {
+            HorizontalDivider()
+            Row(
+                Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        "外部可导入轨道 · ${state.trackImportCandidates.size}",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    Text(
+                        "Matroska 只导入所选 Track；独立 ASS 会规范化为新的 S_TEXT/ASS Track。两种来源都不会自动带入外部 Chapters / Attachments / 全局 Tags；新轨默认 non-Default。",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                TextButton(
+                    enabled = !state.trackImportLoading && !state.writeBackBusy,
+                    onClick = viewModel::clearContainerTrackImportCandidates,
+                ) { Text("关闭") }
+            }
+
+            state.trackImportCandidates.forEach { candidate ->
+                val alreadyPlanned = state.pendingTrackAdditions.any {
+                    it.sourceKind == candidate.sourceKind &&
+                        it.sourceUri == candidate.sourceUri &&
+                        it.sourceTrackNumber == candidate.sourceTrackNumber
+                }
+                Row(
+                    Modifier.fillMaxWidth().padding(vertical = 6.dp, horizontal = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Icon(
+                        imageVector = when (candidate.kind) {
+                            ContainerResourceKind.VIDEO -> Icons.Filled.Movie
+                            ContainerResourceKind.AUDIO -> Icons.Filled.Audiotrack
+                            ContainerResourceKind.SUBTITLE -> Icons.Filled.Subtitles
+                            else -> Icons.Filled.HelpOutline
+                        },
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp),
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            candidate.name.ifBlank {
+                                when (candidate.sourceKind) {
+                                    ContainerTrackImportSourceKind.MATROSKA_TRACK ->
+                                        candidate.codecId.ifBlank { "Track #${candidate.sourceTrackNumber}" }
+                                    ContainerTrackImportSourceKind.STANDALONE_ASS ->
+                                        candidate.sourceName
+                                }
+                            },
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        Text(
+                            buildString {
+                                append(candidate.sourceName)
+                                when (candidate.sourceKind) {
+                                    ContainerTrackImportSourceKind.MATROSKA_TRACK -> {
+                                        append(" · source Track #").append(candidate.sourceTrackNumber)
+                                        if (candidate.sourceIsDefault) append(" · 源 Default")
+                                    }
+                                    ContainerTrackImportSourceKind.STANDALONE_ASS -> {
+                                        append(" · 独立 ASS → S_TEXT/ASS")
+                                        append(" · SHA-256 已固定")
+                                    }
+                                }
+                                if (candidate.codecId.isNotBlank()) append(" · ").append(candidate.codecId)
+                                if (candidate.language.isNotBlank()) append(" · ").append(candidate.language)
+                                append(" · 导入后 non-Default")
+                                if (candidate.isForced) append(" · Forced")
+                                if (candidate.kind == ContainerResourceKind.SUBTITLE) {
+                                    append(" · 外部字体/附件不自动导入")
+                                }
+                            },
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    TextButton(
+                        enabled = !alreadyPlanned && !state.writeBackBusy,
+                        onClick = { viewModel.planContainerTrackAddition(candidate) },
+                    ) {
+                        Text(if (alreadyPlanned) "已加入" else "加入")
+                    }
+                }
+            }
+        }
+
+        if (state.pendingTrackAdditions.isNotEmpty()) {
+            HorizontalDivider()
+            Text(
+                "待添加轨道 · ${state.pendingTrackAdditions.size}",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            state.pendingTrackAdditions.forEach { addition ->
+                Row(
+                    Modifier.fillMaxWidth().padding(vertical = 6.dp, horizontal = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Icon(
+                        imageVector = when (addition.kind) {
+                            ContainerResourceKind.VIDEO -> Icons.Filled.Movie
+                            ContainerResourceKind.AUDIO -> Icons.Filled.Audiotrack
+                            ContainerResourceKind.SUBTITLE -> Icons.Filled.Subtitles
+                            else -> Icons.Filled.HelpOutline
+                        },
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp),
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            addition.name.ifBlank {
+                                addition.codecId.ifBlank { addition.sourceName }
+                            },
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        Text(
+                            buildString {
+                                append(addition.sourceName)
+                                when (addition.sourceKind) {
+                                    ContainerTrackImportSourceKind.MATROSKA_TRACK ->
+                                        append(" · source Track #").append(addition.sourceTrackNumber)
+                                    ContainerTrackImportSourceKind.STANDALONE_ASS ->
+                                        append(" · 独立 ASS 规范化")
+                                }
+                                append(" · 输出分配新的 TrackNumber / TrackUID")
+                            },
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    IconButton(
+                        enabled = !state.writeBackBusy,
+                        onClick = {
+                            viewModel.removeContainerTrackAddition(
+                                sourceKind = addition.sourceKind,
+                                sourceUri = addition.sourceUri,
+                                sourceTrackNumber = addition.sourceTrackNumber,
+                            )
+                        },
+                    ) {
+                        Icon(Icons.Filled.RemoveCircle, contentDescription = "移除待添加轨道")
+                    }
+                }
+            }
         }
 
         if (state.pendingAttachments.isNotEmpty()) {
