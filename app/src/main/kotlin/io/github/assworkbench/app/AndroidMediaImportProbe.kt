@@ -69,7 +69,11 @@ internal object AndroidMediaImportProbe {
             require(assessments.isNotEmpty()) {
                 "Android MediaExtractor 未发现可检测的 Track"
             }
-            return MediaImportSourceAssessment(sourceName, assessments)
+            return MediaImportSourceAssessment(
+                sourceUri = uri.toString(),
+                sourceName = sourceName,
+                tracks = assessments,
+            )
         } finally {
             extractor.release()
         }
