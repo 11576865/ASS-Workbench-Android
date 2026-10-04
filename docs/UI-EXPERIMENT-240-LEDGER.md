@@ -188,8 +188,8 @@
 
 | ID | 原始要求 | 状态 | Authority | Surface / code | 自动证据 | Visual | DEVICE / 阻塞 |
 |---|---|---|---|---|---|---|---|
-| 109 | 将任意参数从原工具拖到工作区，生成独立参数工具。 | **Planned** | main · no dedicated 240 slice | No dedicated custom-tool-construction surface | No 240-ID automated mapping | Not 240-ID mapped | Not item-mapped；Custom parameter extraction/composition system has not been established. |
-| 110 | 同一参数可同时以滑块、角度盘、数值或二维板呈现，全部连接同一正式状态。 | **Planned** | main · no dedicated 240 slice | No dedicated custom-tool-construction surface | No 240-ID automated mapping | Not 240-ID mapped | Not item-mapped |
+| 109 | 将任意参数从原工具拖到工作区，生成独立参数工具。 | **Partial** | `feat/workspace-parameter-contract` · contract-first slice | `WorkspaceParameterContract.kt` · stable descriptor/address/intent identity | `WorkspaceParameterContractTest` | Not 240-ID mapped | Drag-to-extract UI and persisted parameter instances are still pending；contract boundary now exists. |
+| 110 | 同一参数可同时以滑块、角度盘、数值或二维板呈现，全部连接同一正式状态。 | **Partial** | `feat/workspace-parameter-contract` · contract-first slice | Descriptor identity is separate from `NUMBER` / `SLIDER` / `ANGLE_DIAL` / `XY_PAD` presentation | `WorkspaceParameterContractTest` verifies multi-presentation identity and intent validation | Not 240-ID mapped | Live extracted controls and EditorViewModel routing are still pending. |
 | 111 | 把字号、字距和描边拼成一个“排版手柄”，用户自定控件顺序。 | **Planned** | main · no dedicated 240 slice | No dedicated custom-tool-construction surface | No 240-ID automated mapping | Not 240-ID mapped | Not item-mapped |
 | 112 | 把 X、Y、角度和旋转中心组合成几何控制台。 | **Planned** | main · no dedicated 240 slice | No dedicated custom-tool-construction surface | No 240-ID automated mapping | Not 240-ID mapped | Not item-mapped |
 | 113 | 为多个事件建立比较工具，同屏显示差异与来源。 | **Planned** | main · no dedicated 240 slice | No dedicated custom-tool-construction surface | No 240-ID automated mapping | Not 240-ID mapped | Not item-mapped |
