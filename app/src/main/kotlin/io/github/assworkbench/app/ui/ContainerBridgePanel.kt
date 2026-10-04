@@ -128,6 +128,18 @@ fun ContainerBridgePanel(
             outputUri = uri,
         )
     }
+    val trackSourcePicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        runCatching {
+            context.contentResolver.takePersistableUriPermission(
+                uri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION,
+            )
+        }
+        viewModel.probeContainerTrackSource(uri)
+    }
 
     val actualCount = state.resources.count { it.change != ContainerResourceChange.REMOVED }
     val added = state.resources.count { it.change == ContainerResourceChange.ADDED }
@@ -154,7 +166,131 @@ fun ContainerBridgePanel(
                         ContainerInventoryEvidence.CURRENT_SOURCE -> "重新检测"
                             ContainerInventoryEvidence.VERIFIED_OUTPUT -> "已验证输出"
                         })
-                        if (state.pendingAttachments.isNotEmpty()) {
+                        if (state.trackImportCandidates.isNotEmpty()) {
+            HorizontalDivider()
+            Row(
+                Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    "外部 Matroska 可导入轨道 · ${state.trackImportCandidates.size}",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.weight(1f),
+                )
+                TextButton(
+                    enabled = !state.trackImportLoading && !state.writeBackBusy,
+                    onClick = viewModel::clearContainerTrackImportCandidates,
+                ) { Text("关闭") }
+            }
+            state.trackImportCandidates.forEach { candidate ->
+                val alreadyPlanned = state.pendingTrackAdditions.any {
+                    it.sourceUri == candidate.sourceUri &&
+                        it.sourceTrackNumber == candidate.sourceTrackNumber
+                }
+                Row(
+                    Modifier.fillMaxWidth().padding(vertical = 6.dp, horizontal = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Icon(
+                        imageVector = when (candidate.kind) {
+                            ContainerResourceKind.VIDEO -> Icons.Filled.Movie
+                            ContainerResourceKind.AUDIO -> Icons.Filled.Audiotrack
+                            ContainerResourceKind.SUBTITLE -> Icons.Filled.Subtitles
+                            else -> Icons.Filled.HelpOutline
+                        },
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp),
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            candidate.name.ifBlank {
+                                candidate.codecId.ifBlank { "Track #${candidate.sourceTrackNumber}" }
+                            },
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        Text(
+                            buildString {
+                                append(candidate.sourceName)
+                                append(" · Track #").append(candidate.sourceTrackNumber)
+                                if (candidate.codecId.isNotBlank()) append(" · ").append(candidate.codecId)
+                                if (candidate.language.isNotBlank()) append(" · ").append(candidate.language)
+                                if (candidate.isDefault) append(" · Default")
+                                if (candidate.isForced) append(" · Forced")
+                                if (candidate.kind == ContainerResourceKind.SUBTITLE) {
+                                    append(" · 源附件/字体不自动导入")
+                                }
+                            },
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    TextButton(
+                        enabled = !alreadyPlanned && !state.writeBackBusy,
+                        onClick = { viewModel.planContainerTrackAddition(candidate) },
+                    ) {
+                        Text(if (alreadyPlanned) "已加入" else "加入")
+                    }
+                }
+            }
+        }
+
+        if (state.pendingTrackAdditions.isNotEmpty()) {
+            HorizontalDivider()
+            Text(
+                "待添加轨道 · ${state.pendingTrackAdditions.size}",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            state.pendingTrackAdditions.forEach { addition ->
+                Row(
+                    Modifier.fillMaxWidth().padding(vertical = 6.dp, horizontal = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Icon(
+                        imageVector = when (addition.kind) {
+                            ContainerResourceKind.VIDEO -> Icons.Filled.Movie
+                            ContainerResourceKind.AUDIO -> Icons.Filled.Audiotrack
+                            ContainerResourceKind.SUBTITLE -> Icons.Filled.Subtitles
+                            else -> Icons.Filled.HelpOutline
+                        },
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp),
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            addition.name.ifBlank {
+                                addition.codecId.ifBlank { "Track #${addition.sourceTrackNumber}" }
+                            },
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        Text(
+                            "${addition.sourceName} · source Track #${addition.sourceTrackNumber} · 输出将获得新的 TrackNumber / TrackUID",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    IconButton(
+                        enabled = !state.writeBackBusy,
+                        onClick = {
+                            viewModel.removeContainerTrackAddition(
+                                sourceUri = addition.sourceUri,
+                                sourceTrackNumber = addition.sourceTrackNumber,
+                            )
+                        },
+                    ) {
+                        Icon(Icons.Filled.RemoveCircle, contentDescription = "移除待添加轨道")
+                    }
+                }
+            }
+        }
+
+        if (state.pendingAttachments.isNotEmpty()) {
                             append(" · 待添加 ").append(state.pendingAttachments.size)
                         }
                         if (state.pendingAttachmentRemovals.isNotEmpty()) {
@@ -165,6 +301,9 @@ fun ContainerBridgePanel(
                         }
                         if (state.pendingAttachmentMetadataEdits.isNotEmpty()) {
                             append(" · 待改附件信息 ").append(state.pendingAttachmentMetadataEdits.size)
+                        }
+                        if (state.pendingTrackAdditions.isNotEmpty()) {
+                            append(" · 待加轨 ").append(state.pendingTrackAdditions.size)
                         }
                         if (state.pendingTrackRemovals.isNotEmpty()) {
                             append(" · 待删轨 ").append(state.pendingTrackRemovals.size)
@@ -177,19 +316,46 @@ fun ContainerBridgePanel(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            if (state.loading || state.attachmentExtractBusy) {
+            if (state.loading || state.attachmentExtractBusy || state.trackImportLoading) {
                 CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
             }
             ContainerIconButton(
                 label = "重新检测容器内容",
-                enabled = !state.loading && !state.writeBackBusy && !state.attachmentExtractBusy,
+                enabled = !state.loading &&
+                    !state.writeBackBusy &&
+                    !state.attachmentExtractBusy &&
+                    !state.trackImportLoading,
                 onClick = viewModel::rescanContainer,
             ) {
                 Icon(Icons.Filled.Refresh, contentDescription = "重新检测容器内容")
             }
             ContainerIconButton(
+                label = "从另一个 Matroska 导入视频 / 音频 / 字幕轨道",
+                enabled = !state.loading &&
+                    !state.writeBackBusy &&
+                    !state.attachmentExtractBusy &&
+                    !state.trackImportLoading &&
+                    state.inventoryEvidence != ContainerInventoryEvidence.VERIFIED_OUTPUT,
+                onClick = {
+                    trackSourcePicker.launch(
+                        arrayOf(
+                            "video/x-matroska",
+                            "audio/x-matroska",
+                            "application/x-matroska",
+                            "application/octet-stream",
+                        )
+                    )
+                },
+            ) {
+                Icon(Icons.Filled.AddCircle, contentDescription = "导入轨道")
+            }
+            ContainerIconButton(
                 label = "添加附件",
-                enabled = !state.loading && !state.writeBackBusy && !state.attachmentExtractBusy,
+                enabled = !state.loading &&
+                    !state.writeBackBusy &&
+                    !state.attachmentExtractBusy &&
+                    !state.trackImportLoading &&
+                    state.inventoryEvidence != ContainerInventoryEvidence.VERIFIED_OUTPUT,
                 onClick = { attachmentPicker.launch(arrayOf("*/*")) },
             ) {
                 Icon(Icons.Filled.AttachFile, contentDescription = "添加附件")
@@ -199,7 +365,8 @@ fun ContainerBridgePanel(
                 enabled = editPlan.executable &&
                     !state.loading &&
                     !state.writeBackBusy &&
-                    !state.attachmentExtractBusy,
+                    !state.attachmentExtractBusy &&
+                    !state.trackImportLoading,
                 onClick = onSaveMkv,
             ) {
                 Icon(Icons.Filled.Save, contentDescription = "保存为新 MKV")
