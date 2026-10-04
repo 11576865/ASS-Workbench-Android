@@ -61,6 +61,26 @@ internal data class WorkspaceParameterAddress(
     }
 }
 
+internal data class WorkspaceParameterProjection(
+    val id: String,
+    val descriptorKey: String,
+    val binding: WorkspaceBinding,
+    val presentation: WorkspaceParameterPresentation,
+) {
+    init {
+        require(id.isNotBlank()) { "Parameter projection id must not be blank." }
+        val descriptor = requireNotNull(WorkspaceParameterCatalog.find(descriptorKey)) {
+            "Unknown workspace parameter: $descriptorKey"
+        }
+        require(descriptor.supports(presentation)) {
+            "Presentation $presentation is not supported by $descriptorKey"
+        }
+    }
+
+    val address: WorkspaceParameterAddress
+        get() = WorkspaceParameterAddress(id, descriptorKey, binding)
+}
+
 internal enum class WorkspaceParameterIntentPhase {
     PREVIEW,
     COMMIT,
