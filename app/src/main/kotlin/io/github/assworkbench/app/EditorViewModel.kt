@@ -2839,14 +2839,22 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    fun previewEventRotationZ(id: Long, angle: Double) {
+    fun previewEventRotationZ(
+        id: Long,
+        angle: Double,
+        ownerId: String = "geometry:$id",
+    ) {
         val state = _state.value
         if (state.document.events.none { it.id == id }) return
+        val baseOwner = "geometry:$id"
+        require(ownerId == baseOwner || ownerId.startsWith("$baseOwner:")) {
+            "Rotation preview owner must belong to Event #$id."
+        }
         val preview = withEventRotationZ(state.document, id, angle)
         _state.update { current ->
             current.copy(
                 previewDocument = if (preview == state.document) null else preview,
-                previewOwnerId = if (preview == state.document) null else "geometry:$id",
+                previewOwnerId = if (preview == state.document) null else ownerId,
                 geometryPreviewRevision = state.geometryPreviewRevision + 1L,
             )
         }

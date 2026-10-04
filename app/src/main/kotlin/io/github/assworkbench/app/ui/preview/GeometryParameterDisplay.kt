@@ -11,7 +11,8 @@ internal object GeometryParameterDisplay {
     }
     fun event(document: AssDocument, preview: AssDocument?, owner: String?, id: Long): AssEvent? {
         val committed = document.events.firstOrNull { it.id == id } ?: return null
-        if (owner != "geometry:$id") return committed
+        val baseOwner = "geometry:$id"
+        if (owner != baseOwner && owner?.startsWith("$baseOwner:") != true) return committed
         return preview?.events?.firstOrNull { it.id == id } ?: committed
     }
 }
