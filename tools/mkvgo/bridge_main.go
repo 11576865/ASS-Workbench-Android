@@ -139,7 +139,6 @@ func runReplaceASS(args []string) {
 		metadataEdits,
 		removeTrackTargets,
 		trackMetadataEdits,
-		trackImports,
 	); err != nil {
 		fatal(err.Error())
 	}
@@ -359,6 +358,7 @@ func runEditContainer(args []string) {
 		metadataEdits,
 		removeTrackTargets,
 		trackMetadataEdits,
+		trackImports,
 	); err != nil {
 		fatal(err.Error())
 	}
