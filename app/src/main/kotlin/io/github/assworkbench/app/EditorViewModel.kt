@@ -6,6 +6,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.assworkbench.container.MatroskaReader
 import io.github.assworkbench.container.MatroskaScanResult
+import io.github.assworkbench.container.MatroskaTrackKind
 import io.github.assworkbench.domain.AssCodec
 import io.github.assworkbench.domain.AssDocument
 import io.github.assworkbench.domain.AssDocumentEditing
@@ -85,6 +86,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     private var sceneCutJob: Job? = null
     private var mediaCatalogJob: Job? = null
     private var containerScanJob: Job? = null
+    private var trackImportScanJob: Job? = null
     private var waveformSourceUri: String? = null
     private var containerScan: MatroskaScanResult? = null
     private var containerBaselineScan: MatroskaScanResult? = null
@@ -118,6 +120,8 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     private fun beginWorkspaceBoundary(resetProjectFonts: Boolean = true): Long {
         containerScanJob?.cancel()
         containerScanJob = null
+        trackImportScanJob?.cancel()
+        trackImportScanJob = null
         containerScan = null
         containerBaselineScan = null
         val epoch = workspaceEpoch.incrementAndGet()
@@ -796,6 +800,180 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 container = state.container.copy(pendingTrackMetadataEdits = next),
                 status = "已取消轨道信息修改计划。",
             )
+        }
+    }
+    fun scanContainerTrackImportSource(uri: Uri) {
+        val snapshot = _state.value
+        if (snapshot.container.uri == null) {
+            _state.update { it.copy(status = "请先打开 MKV 工程，再导入外部轨道。") }
+            return
+        }
+        if (snapshot.container.writeBackBusy) {
+            _state.update { it.copy(status = "MKV 写回进行中；完成后才能导入轨道。") }
+            return
+        }
+        if (snapshot.container.inventoryEvidence == ContainerInventoryEvidence.VERIFIED_OUTPUT) {
+            _state.update { it.copy(status = "当前显示的是已验证输出快照；请先重新打开该 MKV，再继续修改轨道。") }
+            return
+        }
+
+        val sourceUri = uri.toString()
+        val sourceName = displayName(uri) ?: "external.mkv"
+        val epoch = workspaceEpoch.get()
+        val targetContainerUri = snapshot.container.uri
+        trackImportScanJob?.cancel()
+        _state.update {
+            it.copy(
+                container = it.container.copy(
+                    trackImportBusy = true,
+                    trackImportSourceName = sourceName,
+                    trackImportCandidates = emptyList(),
+                ),
+                status = "正在检测外部 Matroska 轨道：$sourceName……",
+            )
+        }
+        trackImportScanJob = viewModelScope.launch {
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    app.contentResolver.openInputStream(uri)?.buffered()?.use { input ->
+                        MatroskaReader().scan(input, retainAttachments = false)
+                    } ?: error("无法读取轨道来源文件")
+                }
+            }.onSuccess { scan ->
+                if (workspaceEpoch.get() != epoch || _state.value.container.uri != targetContainerUri) {
+                    return@onSuccess
+                }
+                val candidates = scan.trackInfos.mapNotNull { info ->
+                    val kind = when (info.kind) {
+                        MatroskaTrackKind.VIDEO -> ContainerResourceKind.VIDEO
+                        MatroskaTrackKind.AUDIO -> ContainerResourceKind.AUDIO
+                        MatroskaTrackKind.SUBTITLE -> ContainerResourceKind.SUBTITLE
+                        else -> null
+                    } ?: return@mapNotNull null
+                    ContainerTrackImportCandidateUi(
+                        sourceUri = sourceUri,
+                        sourceName = sourceName,
+                        sourceTrackNumber = info.number,
+                        sourceTrackUid = info.uid,
+                        kind = kind,
+                        codecId = info.codecId,
+                        name = info.name,
+                        language = info.language,
+                        isDefault = info.isDefault,
+                        isForced = info.isForced,
+                        sourceAttachmentCount = scan.attachmentInfos.size,
+                    )
+                }
+                _state.update {
+                    it.copy(
+                        container = it.container.copy(
+                            trackImportBusy = false,
+                            trackImportSourceName = sourceName,
+                            trackImportCandidates = candidates,
+                        ),
+                        status = if (candidates.isEmpty()) {
+                            "来源 $sourceName 中没有可导入的 Video / Audio / Subtitle Track。"
+                        } else {
+                            "已检测 $sourceName：${candidates.size} 条可导入轨道。选择轨道后再加入写入计划。"
+                        },
+                    )
+                }
+            }.onFailure { error ->
+                if (error is kotlinx.coroutines.CancellationException) return@onFailure
+                if (workspaceEpoch.get() != epoch || _state.value.container.uri != targetContainerUri) {
+                    return@onFailure
+                }
+                _state.update {
+                    it.copy(
+                        container = it.container.copy(
+                            trackImportBusy = false,
+                            trackImportSourceName = "",
+                            trackImportCandidates = emptyList(),
+                        ),
+                        status = "轨道来源检测失败：${error.message ?: error::class.java.simpleName}。当前入口只接受可读取的 Matroska MKV/WebM。",
+                    )
+                }
+            }
+        }
+    }
+
+    fun dismissContainerTrackImportCandidates() {
+        trackImportScanJob?.cancel()
+        trackImportScanJob = null
+        _state.update {
+            it.copy(
+                container = it.container.copy(
+                    trackImportBusy = false,
+                    trackImportSourceName = "",
+                    trackImportCandidates = emptyList(),
+                ),
+            )
+        }
+    }
+
+    fun planContainerTrackImport(
+        candidate: ContainerTrackImportCandidateUi,
+        name: String,
+        language: String,
+        isDefault: Boolean,
+        isForced: Boolean,
+    ) {
+        val cleanLanguage = language.trim().lowercase()
+        if (cleanLanguage.isNotEmpty() && !cleanLanguage.matches(Regex("[a-z]{3}"))) {
+            _state.update {
+                it.copy(status = "导入轨道的 Language 当前写入 legacy ISO 639-2；请输入 3 字母代码（例如 jpn / eng / und）或留空。")
+            }
+            return
+        }
+        _state.update { state ->
+            if (state.container.writeBackBusy) {
+                return@update state.copy(status = "MKV 写回进行中；完成后才能修改轨道计划。")
+            }
+            if (state.container.inventoryEvidence == ContainerInventoryEvidence.VERIFIED_OUTPUT) {
+                return@update state.copy(status = "当前显示的是已验证输出快照；请先重新打开该 MKV，再继续修改轨道。")
+            }
+            val keyExists = state.container.pendingTrackImports.any {
+                it.sourceUri == candidate.sourceUri &&
+                    it.sourceTrackNumber == candidate.sourceTrackNumber
+            }
+            if (keyExists) {
+                return@update state.copy(status = "该来源 Track 已在待导入计划中。")
+            }
+            val planned = PendingContainerTrackImportUi(
+                sourceUri = candidate.sourceUri,
+                sourceName = candidate.sourceName,
+                sourceTrackNumber = candidate.sourceTrackNumber,
+                sourceTrackUid = candidate.sourceTrackUid,
+                kind = candidate.kind,
+                codecId = candidate.codecId,
+                name = name,
+                language = cleanLanguage,
+                isDefault = isDefault,
+                isForced = isForced,
+                sourceAttachmentCount = candidate.sourceAttachmentCount,
+            )
+            state.copy(
+                container = state.container.copy(
+                    pendingTrackImports = state.container.pendingTrackImports + planned,
+                ),
+                status = "已计划从 ${candidate.sourceName} 导入 Track #${candidate.sourceTrackNumber}；保存新 MKV 前不会修改源文件。",
+            )
+        }
+    }
+
+    fun cancelContainerTrackImport(sourceUri: String, sourceTrackNumber: Long) {
+        _state.update { state ->
+            val next = state.container.pendingTrackImports.filterNot {
+                it.sourceUri == sourceUri && it.sourceTrackNumber == sourceTrackNumber
+            }
+            if (next.size == state.container.pendingTrackImports.size) {
+                state
+            } else {
+                state.copy(
+                    container = state.container.copy(pendingTrackImports = next),
+                    status = "已取消外部轨道导入计划。",
+                )
+            }
         }
     }
 
