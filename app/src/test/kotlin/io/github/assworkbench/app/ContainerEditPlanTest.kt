@@ -147,4 +147,53 @@ class ContainerEditPlanTest {
             plan.checks.single { it.dimension == ContainerCompatibilityDimension.CONTAINER_STRUCTURE }.status,
         )
     }
+
+    @Test
+    fun attachmentMetadataEditIsExplicitAndConflictsFailClosed() {
+        val resource = ContainerResourceUi(
+            rowKey = "attachment:uid:12",
+            kind = ContainerResourceKind.ATTACHMENT,
+            title = "notes.txt",
+            detail = "text/plain",
+            attachmentTarget = "12",
+            attachmentMimeType = "text/plain",
+            attachmentDescription = "old",
+            attachmentSizeBytes = 42L,
+        )
+        val metadataOnly = EditorState(
+            container = ContainerBridgeState(
+                uri = "fixture-source",
+                writeBackAvailable = true,
+                resources = listOf(resource),
+                pendingAttachmentMetadataEdits = listOf(
+                    PendingContainerAttachmentMetadataUi(
+                        target = "12",
+                        originalName = "notes.txt",
+                        name = "translator-notes.txt",
+                        description = "translation notes",
+                    )
+                ),
+            ),
+        )
+
+        val plan = buildContainerEditPlan(metadataOnly)
+        assertTrue(plan.executable)
+        assertEquals(ContainerMutationKind.EDIT_ATTACHMENT_METADATA, plan.mutations.single().kind)
+
+        val conflict = metadataOnly.copy(
+            container = metadataOnly.container.copy(
+                pendingAttachmentRemovals = listOf(
+                    PendingContainerAttachmentRemovalUi(target = "12", name = "notes.txt")
+                ),
+            ),
+        )
+        val conflictPlan = buildContainerEditPlan(conflict)
+        assertFalse(conflictPlan.executable)
+        assertEquals(
+            ContainerCompatibilityStatus.UNSUPPORTED,
+            conflictPlan.checks.single {
+                it.dimension == ContainerCompatibilityDimension.CONTAINER_STRUCTURE
+            }.status,
+        )
+    }
 }
