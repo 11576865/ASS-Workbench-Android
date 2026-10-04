@@ -1563,7 +1563,14 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun applyBatchRecipe(recipe: AssBatchRecipe) {
-        val preview = AssBatchEngine.preview(_state.value.document, recipe)
+        val preview = runCatching {
+            AssBatchEngine.preview(_state.value.document, recipe)
+        }.getOrElse { error ->
+            _state.update {
+                it.copy(status = "批处理预检失败：" + (error.message ?: error::class.java.simpleName))
+            }
+            return
+        }
         if (preview.changedEventIds.isEmpty()) {
             _state.update { it.copy(status = "批处理规则没有产生修改。") }
             return
