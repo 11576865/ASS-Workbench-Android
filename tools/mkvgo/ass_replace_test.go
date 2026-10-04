@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/hex"
 	"io"
 	"os"
@@ -1547,5 +1548,312 @@ func TestReplaceASSCanAddStandaloneASSInSameRemux(t *testing.T) {
 	}
 	if !editedSeen || !importedSeen || oldSeen {
 		t.Fatalf("combined synthetic remux wrong: edited=%v imported=%v old=%v", editedSeen, importedSeen, oldSeen)
+	}
+}
+
+
+type packetBundleFixturePacket struct {
+	ptsUs int64
+	flags uint32
+	data  []byte
+}
+
+func writePacketBundleFixture(
+	t *testing.T,
+	path string,
+	durationUs int64,
+	packets []packetBundleFixturePacket,
+	trailing []byte,
+) (bundleSHA, contentSHA string) {
+	t.Helper()
+	out, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := out.Write([]byte(packetBundleMagic)); err != nil {
+		t.Fatal(err)
+	}
+	if err := binary.Write(out, binary.BigEndian, durationUs); err != nil {
+		t.Fatal(err)
+	}
+	if err := binary.Write(out, binary.BigEndian, uint64(len(packets))); err != nil {
+		t.Fatal(err)
+	}
+	content := sha256.New()
+	var header [12]byte
+	for _, packet := range packets {
+		if err := binary.Write(out, binary.BigEndian, packet.ptsUs); err != nil {
+			t.Fatal(err)
+		}
+		if err := binary.Write(out, binary.BigEndian, packet.flags); err != nil {
+			t.Fatal(err)
+		}
+		if err := binary.Write(out, binary.BigEndian, uint32(len(packet.data))); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := out.Write(packet.data); err != nil {
+			t.Fatal(err)
+		}
+		binary.BigEndian.PutUint64(header[:8], uint64(packet.ptsUs/1000))
+		binary.BigEndian.PutUint32(header[8:], uint32(len(packet.data)))
+		_, _ = content.Write(header[:])
+		_, _ = content.Write(packet.data)
+	}
+	if len(trailing) > 0 {
+		if _, err := out.Write(trailing); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := out.Close(); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sum := sha256.Sum256(raw)
+	return hex.EncodeToString(sum[:]), hex.EncodeToString(content.Sum(nil))
+}
+
+func writeBaseVideoFixture(t *testing.T, path string) {
+	t.Helper()
+	out, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mw := writer.NewMKVWriter(out)
+	if err := mw.WriteStart(); err != nil {
+		t.Fatal(err)
+	}
+	container := &mkv.Container{
+		Info: mkv.SegmentInfo{TimecodeScale: 1_000_000, Title: "Base"},
+		Chapters: []mkv.Chapter{{ID: 7, Title: "Keep", StartMs: 0, EndMs: 1000}},
+		Attachments: []mkv.Attachment{{
+			ID: 9,
+			Name: "keep.txt",
+			MIMEType: "text/plain",
+			Data: []byte("keep"),
+			Size: 4,
+		}},
+	}
+	video := mkv.Track{ID: 4, UID: 404, Type: mkv.VideoTrack, Codec: "vp9", Name: "Base video"}
+	if err := mw.WriteMetadata(container, []mkv.Track{video}, 1000); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.WriteCluster(out, 0, 1_000_000, []mkv.Block{
+		{TrackNumber: 4, Timecode: 0, Keyframe: true, Data: []byte("video")},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := mw.Finalize(); err != nil {
+		t.Fatal(err)
+	}
+	if err := out.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestEditContainerResourcesAddsPacketAudioWithFreshIdentity(t *testing.T) {
+	dir := t.TempDir()
+	base := filepath.Join(dir, "base.mkv")
+	packetPath := filepath.Join(dir, "audio.awpkt")
+	dst := filepath.Join(dir, "with-audio.mkv")
+	writeBaseVideoFixture(t, base)
+
+	packets := []packetBundleFixturePacket{
+		{ptsUs: 0, data: []byte{0xff, 0xfb, 0x10, 0x01, 0x02}},
+		{ptsUs: 26_000, data: []byte{0xff, 0xfb, 0x10, 0x03, 0x04}},
+		{ptsUs: 52_000, data: []byte{0xff, 0xfb, 0x10, 0x05, 0x06}},
+	}
+	bundleSHA, contentSHA := writePacketBundleFixture(t, packetPath, 80_000, packets, nil)
+
+	if err := EditContainerResources(
+		context.Background(),
+		base,
+		dst,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		[]TrackAddition{{
+			SourceKind: trackAdditionSourcePacketAudio,
+			SourcePath: packetPath,
+			SourceSHA256: bundleSHA,
+			SourceCodec: "A_MPEG/L3",
+			SampleRate: 44_100,
+			Channels: 2,
+			Name: "Imported MP3",
+			Language: "und",
+			IsDefault: false,
+			IsForced: false,
+		}},
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := reader.Open(context.Background(), dst)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Tracks) != 2 {
+		t.Fatalf("track count = %d, want 2: %+v", len(got.Tracks), got.Tracks)
+	}
+	if got.Tracks[0].ID != 4 || got.Tracks[0].UID != 404 {
+		t.Fatalf("surviving destination identity changed: %+v", got.Tracks[0])
+	}
+	added := got.Tracks[1]
+	if added.ID != 5 || added.UID <= 404 {
+		t.Fatalf("packet audio did not get fresh destination identity: %+v", added)
+	}
+	if added.Type != mkv.AudioTrack || added.Codec != "A_MPEG/L3" ||
+		added.Name != "Imported MP3" || added.Language != "und" ||
+		added.IsDefault || added.IsForced {
+		t.Fatalf("packet audio metadata wrong: %+v", added)
+	}
+	if added.SampleRate == nil || *added.SampleRate != 44_100 {
+		t.Fatalf("sample rate = %+v, want 44100", added.SampleRate)
+	}
+	if added.Channels == nil || *added.Channels != 2 {
+		t.Fatalf("channels = %+v, want 2", added.Channels)
+	}
+	if len(got.Chapters) != 1 || got.Chapters[0].ID != 7 {
+		t.Fatalf("chapters changed: %+v", got.Chapters)
+	}
+	if len(got.Attachments) != 1 || got.Attachments[0].ID != 9 ||
+		!bytes.Equal(got.Attachments[0].Data, []byte("keep")) {
+		t.Fatalf("untouched attachment changed: %+v", got.Attachments)
+	}
+
+	digest, err := DigestTrackContent(context.Background(), dst, added.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if digest.SHA256 != contentSHA {
+		t.Fatalf("output digest = %s, want %s", digest.SHA256, contentSHA)
+	}
+	if digest.PacketCount != uint64(len(packets)) || digest.FirstMs != 0 || digest.LastMs != 52 {
+		t.Fatalf("output packet evidence = %+v", digest)
+	}
+	if got.DurationMs < 80 {
+		t.Fatalf("duration = %dms, want >= 80ms", got.DurationMs)
+	}
+}
+
+func TestPacketAudioRejectsBundleHashDrift(t *testing.T) {
+	dir := t.TempDir()
+	base := filepath.Join(dir, "base.mkv")
+	packetPath := filepath.Join(dir, "audio.awpkt")
+	dst := filepath.Join(dir, "out.mkv")
+	writeBaseVideoFixture(t, base)
+	writePacketBundleFixture(
+		t,
+		packetPath,
+		30_000,
+		[]packetBundleFixturePacket{{ptsUs: 0, data: []byte{1, 2, 3}}},
+		nil,
+	)
+
+	err := EditContainerResources(
+		context.Background(),
+		base,
+		dst,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		[]TrackAddition{{
+			SourceKind: trackAdditionSourcePacketAudio,
+			SourcePath: packetPath,
+			SourceSHA256: strings.Repeat("0", 64),
+			SourceCodec: "A_MPEG/L3",
+			SampleRate: 44_100,
+			Channels: 2,
+		}},
+	)
+	if err == nil || !strings.Contains(err.Error(), "changed identity") {
+		t.Fatalf("expected packet bundle hash drift rejection, got %v", err)
+	}
+}
+
+func TestPacketAudioRejectsTrailingBytesAfterDeclaredPackets(t *testing.T) {
+	dir := t.TempDir()
+	base := filepath.Join(dir, "base.mkv")
+	packetPath := filepath.Join(dir, "audio.awpkt")
+	dst := filepath.Join(dir, "out.mkv")
+	writeBaseVideoFixture(t, base)
+	bundleSHA, _ := writePacketBundleFixture(
+		t,
+		packetPath,
+		30_000,
+		[]packetBundleFixturePacket{{ptsUs: 0, data: []byte{1, 2, 3}}},
+		[]byte{9, 9, 9},
+	)
+
+	err := EditContainerResources(
+		context.Background(),
+		base,
+		dst,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		[]TrackAddition{{
+			SourceKind: trackAdditionSourcePacketAudio,
+			SourcePath: packetPath,
+			SourceSHA256: bundleSHA,
+			SourceCodec: "A_MPEG/L3",
+			SampleRate: 44_100,
+			Channels: 2,
+		}},
+	)
+	if err == nil || !strings.Contains(err.Error(), "trailing bytes") {
+		t.Fatalf("expected trailing-byte rejection, got %v", err)
+	}
+}
+
+func TestPacketAudioRejectsNonMonotonicTimestamps(t *testing.T) {
+	dir := t.TempDir()
+	base := filepath.Join(dir, "base.mkv")
+	packetPath := filepath.Join(dir, "audio.awpkt")
+	dst := filepath.Join(dir, "out.mkv")
+	writeBaseVideoFixture(t, base)
+	bundleSHA, _ := writePacketBundleFixture(
+		t,
+		packetPath,
+		50_000,
+		[]packetBundleFixturePacket{
+			{ptsUs: 30_000, data: []byte{1}},
+			{ptsUs: 20_000, data: []byte{2}},
+		},
+		nil,
+	)
+
+	err := EditContainerResources(
+		context.Background(),
+		base,
+		dst,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		[]TrackAddition{{
+			SourceKind: trackAdditionSourcePacketAudio,
+			SourcePath: packetPath,
+			SourceSHA256: bundleSHA,
+			SourceCodec: "A_MPEG/L3",
+			SampleRate: 44_100,
+			Channels: 2,
+		}},
+	)
+	if err == nil || !strings.Contains(err.Error(), "not monotonic") {
+		t.Fatalf("expected non-monotonic packet rejection, got %v", err)
 	}
 }
