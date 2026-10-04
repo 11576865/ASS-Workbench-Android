@@ -10,6 +10,7 @@ enum class ContainerMutationKind {
     EDIT_ATTACHMENT_METADATA,
     REMOVE_TRACK,
     EDIT_TRACK_METADATA,
+    ADD_TRACK,
 }
 
 enum class ContainerMutationSource {
@@ -18,6 +19,7 @@ enum class ContainerMutationSource {
     GENERIC_ATTACHMENT,
     EXISTING_ATTACHMENT,
     EXISTING_TRACK,
+    EXTERNAL_TRACK,
 }
 
 data class ContainerMutationUi(
@@ -174,6 +176,26 @@ internal fun buildContainerEditPlan(state: EditorState): ContainerEditPlanUi {
         )
     }
 
+    state.container.pendingTrackAdditions.forEach { addition ->
+        mutations += ContainerMutationUi(
+            id = "add-track:${addition.sourceUri}:${addition.sourceTrackNumber}",
+            kind = ContainerMutationKind.ADD_TRACK,
+            source = ContainerMutationSource.EXTERNAL_TRACK,
+            title = "添加轨道 " + addition.name.ifBlank {
+                "${addition.codecId} · Track #${addition.sourceTrackNumber}"
+            },
+            detail = buildString {
+                append(addition.sourceName)
+                append(" · source Track #").append(addition.sourceTrackNumber)
+                append(" · ").append(addition.codecId)
+                if (addition.language.isNotBlank()) append(" · ").append(addition.language)
+                if (addition.isDefault) append(" · Default")
+                if (addition.isForced) append(" · Forced")
+                append(" · 输出分配新的 TrackNumber / TrackUID")
+            },
+        )
+    }
+
     val checks = mutableListOf<ContainerCompatibilityCheckUi>()
 
     checks += if (state.container.skippedAttachmentCount > 0) {
@@ -212,7 +234,14 @@ internal fun buildContainerEditPlan(state: EditorState): ContainerEditPlanUi {
     val currentTrackTargets = state.container.resources.mapNotNullTo(hashSetOf()) { it.trackTarget }
     val missingTrackTargets =
         (trackRemovalTargets + trackMetadataTargets).filterNot { it in currentTrackTargets }
-    val remainingTrackCount = currentTrackTargets.size - trackRemovalTargets.size
+    val trackAdditionKeys = state.container.pendingTrackAdditions.map {
+        it.sourceUri + "\u0000" + it.sourceTrackNumber
+    }
+    val duplicateTrackAdditions = trackAdditionKeys.groupingBy { it }.eachCount()
+        .filterValues { it > 1 }
+        .keys
+    val remainingTrackCount =
+        currentTrackTargets.size - trackRemovalTargets.size + state.container.pendingTrackAdditions.size
     val selectedTrackTarget = state.container.resources.firstOrNull {
         it.trackNumber == state.container.selectedTrackNumber
     }?.trackTarget
@@ -226,6 +255,7 @@ internal fun buildContainerEditPlan(state: EditorState): ContainerEditPlanUi {
             missingAttachmentTargets.isNotEmpty() -> ContainerCompatibilityStatus.UNSUPPORTED
             conflictingTrackTargets.isNotEmpty() -> ContainerCompatibilityStatus.UNSUPPORTED
             missingTrackTargets.isNotEmpty() -> ContainerCompatibilityStatus.UNSUPPORTED
+            duplicateTrackAdditions.isNotEmpty() -> ContainerCompatibilityStatus.UNSUPPORTED
             trackRemovalTargets.isNotEmpty() && remainingTrackCount <= 0 -> ContainerCompatibilityStatus.UNSUPPORTED
             removesDirtySelectedAss -> ContainerCompatibilityStatus.UNSUPPORTED
             mutations.isEmpty() -> ContainerCompatibilityStatus.WARNING
@@ -241,13 +271,15 @@ internal fun buildContainerEditPlan(state: EditorState): ContainerEditPlanUi {
                 "同一轨道不能在一次计划中同时删除和修改元数据：" + conflictingTrackTargets.joinToString()
             missingTrackTargets.isNotEmpty() ->
                 "轨道目标已不在当前检测 Inventory 中：" + missingTrackTargets.joinToString()
+            duplicateTrackAdditions.isNotEmpty() ->
+                "同一外部源轨不能在一次计划中重复添加：" + duplicateTrackAdditions.joinToString()
             trackRemovalTargets.isNotEmpty() && remainingTrackCount <= 0 ->
                 "不能删除容器中的全部轨道。"
             removesDirtySelectedAss ->
                 "当前正在编辑且未保存的 ASS 轨被计划删除；请先保存、放弃修改或取消删除。"
             mutations.isEmpty() -> "尚无待执行的容器修改。"
             else ->
-                "当前计划中的 ASS 同槽位替换、Track 删除 / 元数据修改与 Attachment 修改，均映射到已实现的 Matroska 写入路径。"
+                "当前计划中的 ASS 同槽位替换、Track 添加 / 删除 / 元数据修改与 Attachment 修改，均映射到已实现的 Matroska 写入路径。"
         },
     )
 
@@ -270,14 +302,20 @@ internal fun buildContainerEditPlan(state: EditorState): ContainerEditPlanUi {
         dimension = ContainerCompatibilityDimension.OUTPUT_VERIFICATION,
         status = ContainerCompatibilityStatus.SUPPORTED,
         title = "输出验证",
-        detail = "写回后重新扫描实际 MKV，并验证 TrackNumber / TrackUID / codec / 顺序、章节、未改附件，以及计划中的 Track 与 Attachment 修改。",
+        detail = "写回后重新扫描实际 MKV，并验证幸存轨身份、追加轨的新 TrackNumber / TrackUID、codec / 顺序、章节、未改附件，以及计划中的 Track 与 Attachment 修改。",
     )
 
     val hasGenericAttachment = mutations.any {
         it.source == ContainerMutationSource.GENERIC_ATTACHMENT ||
             it.source == ContainerMutationSource.EXISTING_ATTACHMENT
     }
-    val hasTrackMutation = mutations.any { it.source == ContainerMutationSource.EXISTING_TRACK }
+    val hasTrackMutation = mutations.any {
+        it.source == ContainerMutationSource.EXISTING_TRACK ||
+            it.source == ContainerMutationSource.EXTERNAL_TRACK
+    }
+    val hasImportedSubtitleTrack = state.container.pendingTrackAdditions.any {
+        it.kind == ContainerResourceKind.SUBTITLE
+    }
     val hasFontAttachment = mutations.any { it.source == ContainerMutationSource.FONT_PACKAGE }
     val hasAss = mutations.any { it.kind == ContainerMutationKind.REPLACE_ASS_TRACK }
 
@@ -286,7 +324,12 @@ internal fun buildContainerEditPlan(state: EditorState): ContainerEditPlanUi {
             dimension = ContainerCompatibilityDimension.DOWNSTREAM,
             status = ContainerCompatibilityStatus.WARNING,
             title = "播放器轨道选择行为需验证",
-            detail = "Track 删除、语言 / Default / Forced 等元数据会影响播放器的自动选轨；容器写入可验证，但不同播放器的选择策略不是 Matroska 结构保证。",
+            detail = buildString {
+                append("Track 添加 / 删除、语言 / Default / Forced 等元数据会影响播放器的自动选轨；容器写入可验证，但不同播放器的选择策略不是 Matroska 结构保证。")
+                if (hasImportedSubtitleTrack) {
+                    append(" 外部字幕轨只导入所选 Track；源 MKV 的字体/其他 Attachment 不会自动随轨导入。")
+                }
+            },
         )
         hasGenericAttachment -> ContainerCompatibilityCheckUi(
             dimension = ContainerCompatibilityDimension.DOWNSTREAM,
