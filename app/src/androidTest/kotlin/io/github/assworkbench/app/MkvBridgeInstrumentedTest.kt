@@ -194,4 +194,50 @@ class MkvBridgeInstrumentedTest {
         assertTrue(after.attachmentInfos.any { it.fileName == "cover.png" })
         assertTrue(after.attachmentInfos.none { it.fileName == "notes.txt" })
     }
+
+    @Test
+    fun nativeBridgeEditsAttachmentMetadataAndExtractsPayload() {
+        val source = File(workDir, "attachment-meta-source.mkv")
+        InstrumentationRegistry.getInstrumentation().context.assets
+            .open("mkv/source.mkv")
+            .use { input -> source.outputStream().use { output -> input.copyTo(output) } }
+
+        val before = source.inputStream().use { MatroskaReader().scan(it) }
+        val original = before.attachmentInfos.single()
+        val target = original.uid?.toString() ?: original.fileName
+        val extracted = File(workDir, "extracted-font.bin")
+
+        val tool = MkvGoTool(application)
+        assertTrue("x86_64 emulator APK must package the mkvgo helper", tool.isAvailable())
+        tool.extractAttachment(source, target, extracted)
+        assertTrue(extracted.isFile)
+        assertTrue(extracted.length() > 0L)
+
+        val output = File(workDir, "attachment-meta-updated.mkv")
+        tool.editAttachments(
+            source = source,
+            output = output,
+            metadataEdits = listOf(
+                AttachmentMetadataEditInput(
+                    target = target,
+                    name = "RenamedFixture.ttf",
+                    description = "renamed on Android emulator",
+                )
+            ),
+        )
+
+        val after = output.inputStream().use { MatroskaReader().scan(it) }
+        assertEquals(before.trackPreservationSignature(), after.trackPreservationSignature())
+        assertEquals(before.chapterCount, after.chapterCount)
+        assertEquals(before.attachmentInfos.size, after.attachmentInfos.size)
+
+        val renamed = after.attachmentInfos.single()
+        assertEquals("RenamedFixture.ttf", renamed.fileName)
+        assertEquals("renamed on Android emulator", renamed.description)
+        assertEquals(original.mimeType, renamed.mimeType)
+        assertEquals(original.sizeBytes, renamed.sizeBytes)
+        if (original.uid != null) {
+            assertEquals(original.uid, renamed.uid)
+        }
+    }
 }
