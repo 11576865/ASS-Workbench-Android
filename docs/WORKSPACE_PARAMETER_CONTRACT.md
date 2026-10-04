@@ -55,3 +55,28 @@ The first consumer is Rotation Z:
 The extraction affordance is currently explicit ("拆出旋转控件"), not drag-to-extract.
 Angle Dial remains declared by the descriptor but does not yet have a live renderer.
 Items 109/110 therefore remain Partial.
+
+
+## Drag extraction and Angle Dial slice
+
+The second live slice exercises the contract rather than bypassing it:
+
+- Rotation Z now has a long-press drag extraction gesture in the Position tool.
+  Releasing the drag creates a workspace projection; a normal click remains an
+  accessibility-compatible fallback.
+- Extracting the projection changes only WorkspaceState. It does not mutate the
+  ASS document or create an ASS Undo entry.
+- ANGLE_DIAL is now a live presentation. Its convention is 0° at the top and
+  positive rotation clockwise, matching the visual editing convention used by
+  the geometry surface.
+- NUMBER, SLIDER and ANGLE_DIAL all dispatch typed WorkspaceParameterIntent
+  values through WorkspaceParameterIntentRouter.
+- The router validates the descriptor/binding/arity/revision contract first,
+  then delegates preview/commit/cancel to the existing EditorViewModel geometry
+  mutation boundary.
+- Connected tests cover long-press drag extraction and Angle Dial
+  preview → commit → Undo; pure tests cover dial coordinate semantics.
+
+This still does not claim arbitrary drag-to-extract for every parameter family.
+Position XY, Scale XY and Shear XY remain descriptor-only until their live
+projections are connected.
