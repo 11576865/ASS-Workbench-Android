@@ -27,6 +27,7 @@ import io.github.assworkbench.domain.AssSubtitleSynchronizer
 import io.github.assworkbench.domain.AssSearchQuery
 import io.github.assworkbench.domain.AssSearchReplacement
 import io.github.assworkbench.domain.AssSearchReplace
+import io.github.assworkbench.domain.AssStyleInheritance
 import io.github.assworkbench.domain.AssAnimationKeyframe
 import io.github.assworkbench.domain.AssAnimationAuthoring
 import io.github.assworkbench.domain.AssTransformVisualProperty
@@ -2382,7 +2383,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
 
     fun clearEventStyleOverrides(id: Long) {
         if (_state.value.document.events.none { it.id == id }) return
-        editDocument("已清除字幕 #$id 的样式/位置覆盖；该字幕现在继承 Style。") { doc ->
+        editDocument("已清除字幕 #$id 的直接样式/位置覆盖；Transform 动画等嵌套语义保持不变。") { doc ->
             doc.copy(events = doc.events.map { event ->
                 if (event.id == id) event.inheritStyle() else event
             })
@@ -2392,7 +2393,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     fun clearSelectedStyleOverrides() {
         val ids = _state.value.selectedEventIds
         if (ids.isEmpty()) return
-        editDocument("已让 " + ids.size + " 条选中字幕完全继承各自 Style。") { doc ->
+        editDocument("已清除 " + ids.size + " 条选中字幕的直接 Style 覆盖；Transform 动画等嵌套语义保持不变。") { doc ->
             doc.copy(events = doc.events.map { event ->
                 if (event.id in ids) event.inheritStyle() else event
             })
@@ -3095,18 +3096,8 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             marginV = 0,
         )
 
-    private fun stripInlineStyleOverrides(text: String): String {
-        val overrideBlock = Regex("""\{[^}]*\}""")
-        val managedTag = Regex(
-            """\\(?:fn[^\\}]*|fs(?!c)[+-]?(?:\d+(?:\.\d+)?)?|b-?\d+|i-?\d+|u-?\d+|s-?\d+|fsp[+-]?(?:\d+(?:\.\d+)?)?|bord[+-]?(?:\d+(?:\.\d+)?)?|shad[+-]?(?:\d+(?:\.\d+)?)?|an[1-9]|a\d+|pos\([^)]*\)|move\([^)]*\)|org\([^)]*\)|r[^\\}]*|(?:c|1c|3c|4c)&H[0-9A-Fa-f]+&)""",
-            RegexOption.IGNORE_CASE,
-        )
-        return overrideBlock.replace(text) { block ->
-            val inner = block.value.substring(1, block.value.length - 1)
-            val stripped = managedTag.replace(inner, "")
-            if (stripped.isBlank()) "" else "{$stripped}"
-        }
-    }
+    private fun stripInlineStyleOverrides(text: String): String =
+        AssStyleInheritance.clearDirectManagedOverrides(text)
 
     private fun displayName(uri: Uri): String? {
         val projection = arrayOf(android.provider.OpenableColumns.DISPLAY_NAME)
