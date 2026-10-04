@@ -384,7 +384,7 @@ func EditContainerResourcesWithTrackImports(
 	if err != nil {
 		return err
 	}
-	updatedTracks, importSources, importDurationMs, err := planTrackImports(
+	updatedTracks, importSources, importedTags, importDurationMs, err := planTrackImports(
 		ctx,
 		fs,
 		updatedTracks,
@@ -408,7 +408,10 @@ func EditContainerResourcesWithTrackImports(
 	meta := *probe
 	meta.Attachments = updatedAttachments
 	meta.Tracks = updatedTracks
-	meta.Tags = filterTagsForRemovedTrackUIDs(probe.Tags, removedTrackUIDs)
+	meta.Tags = append(
+		append([]mkv.Tag(nil), filterTagsForRemovedTrackUIDs(probe.Tags, removedTrackUIDs)...),
+		importedTags...,
+	)
 	meta.Info.SegmentUID = derivedSegmentUID(&probe.Info, srcPath, "edit-container-tracks")
 
 	durationMs := probe.DurationMs
@@ -417,7 +420,10 @@ func EditContainerResourcesWithTrackImports(
 		meta = metaForNewDuration(probe)
 		meta.Attachments = updatedAttachments
 		meta.Tracks = updatedTracks
-		meta.Tags = filterTagsForRemovedTrackUIDs(probe.Tags, removedTrackUIDs)
+		meta.Tags = append(
+			append([]mkv.Tag(nil), filterTagsForRemovedTrackUIDs(probe.Tags, removedTrackUIDs)...),
+			importedTags...,
+		)
 		meta.Info.SegmentUID = derivedSegmentUID(&probe.Info, srcPath, "edit-container-tracks")
 	}
 
@@ -683,9 +689,9 @@ func planTrackImports(
 	existing []mkv.Track,
 	reserved []mkv.Track,
 	imports []TrackImport,
-) ([]mkv.Track, []mergeSource, int64, error) {
+) ([]mkv.Track, []mergeSource, []mkv.Tag, int64, error) {
 	if len(imports) == 0 {
-		return existing, nil, 0, nil
+		return existing, nil, nil, 0, nil
 	}
 
 	// Reserve identities from every source track, including tracks removed in
@@ -699,7 +705,7 @@ func planTrackImports(
 		usedIDs[track.ID] = struct{}{}
 		if track.ID >= nextID {
 			if track.ID == ^uint64(0) {
-				return nil, nil, 0, fmt.Errorf("cannot allocate another TrackNumber")
+				return nil, nil, nil, 0, fmt.Errorf("cannot allocate another TrackNumber")
 			}
 			nextID = track.ID + 1
 		}
@@ -710,7 +716,7 @@ func planTrackImports(
 		usedUIDs[uid] = struct{}{}
 		if uid >= nextUID {
 			if uid == ^uint64(0) {
-				return nil, nil, 0, fmt.Errorf("cannot allocate another TrackUID")
+				return nil, nil, nil, 0, fmt.Errorf("cannot allocate another TrackUID")
 			}
 			nextUID = uid + 1
 		}
@@ -718,19 +724,20 @@ func planTrackImports(
 
 	out := append([]mkv.Track(nil), existing...)
 	sources := make([]mergeSource, 0, len(imports))
+	importedTags := make([]mkv.Tag, 0)
 	seen := make(map[string]struct{}, len(imports))
 	var maxDuration int64
 
 	for _, input := range imports {
 		if err := ctx.Err(); err != nil {
-			return nil, nil, 0, err
+			return nil, nil, nil, 0, err
 		}
 		if input.SourcePath == "" || input.TrackID == 0 {
-			return nil, nil, 0, fmt.Errorf("track import needs a source path and non-zero track ID")
+			return nil, nil, nil, 0, fmt.Errorf("track import needs a source path and non-zero track ID")
 		}
 		key := input.SourcePath + "\x00" + strconv.FormatUint(input.TrackID, 10)
 		if _, duplicate := seen[key]; duplicate {
-			return nil, nil, 0, fmt.Errorf(
+			return nil, nil, nil, 0, fmt.Errorf(
 				"track %d from %s is selected more than once",
 				input.TrackID,
 				input.SourcePath,
@@ -740,7 +747,7 @@ func planTrackImports(
 
 		source, err := reader.OpenWithFS(ctx, input.SourcePath, fs, reader.WithoutAttachmentData())
 		if err != nil {
-			return nil, nil, 0, fmt.Errorf("open track import %s: %w", input.SourcePath, err)
+			return nil, nil, nil, 0, fmt.Errorf("open track import %s: %w", input.SourcePath, err)
 		}
 		var sourceTrack *mkv.Track
 		for i := range source.Tracks {
@@ -750,7 +757,7 @@ func planTrackImports(
 			}
 		}
 		if sourceTrack == nil {
-			return nil, nil, 0, fmt.Errorf(
+			return nil, nil, nil, 0, fmt.Errorf(
 				"track %d not found in %s",
 				input.TrackID,
 				input.SourcePath,
@@ -762,7 +769,7 @@ func planTrackImports(
 				break
 			}
 			if nextID == ^uint64(0) {
-				return nil, nil, 0, fmt.Errorf("cannot allocate another TrackNumber")
+				return nil, nil, nil, 0, fmt.Errorf("cannot allocate another TrackNumber")
 			}
 			nextID++
 		}
@@ -771,7 +778,7 @@ func planTrackImports(
 				break
 			}
 			if nextUID == ^uint64(0) {
-				return nil, nil, 0, fmt.Errorf("cannot allocate another TrackUID")
+				return nil, nil, nil, 0, fmt.Errorf("cannot allocate another TrackUID")
 			}
 			nextUID++
 		}
@@ -790,6 +797,23 @@ func planTrackImports(
 			remap: map[uint64]uint64{input.TrackID: nextID},
 		})
 
+		// Track-targeted source Tags belong to the selected resource. Carry
+		// those across and retarget them to the fresh destination TrackUID.
+		// Global/source-container Tags and tags for other source tracks remain
+		// source provenance and are intentionally not imported.
+		sourceUID := sourceTrack.UID
+		if sourceUID == 0 {
+			sourceUID = sourceTrack.ID
+		}
+		for _, tag := range source.Tags {
+			if tag.TargetID != sourceUID {
+				continue
+			}
+			carried := tag
+			carried.TargetID = nextUID
+			importedTags = append(importedTags, carried)
+		}
+
 		usedIDs[nextID] = struct{}{}
 		usedUIDs[nextUID] = struct{}{}
 		nextID++
@@ -799,7 +823,7 @@ func planTrackImports(
 		}
 	}
 
-	return out, sources, maxDuration, nil
+	return out, sources, importedTags, maxDuration, nil
 }
 
 func resolveTrackIndex(existing []mkv.Track, target string) (int, error) {
