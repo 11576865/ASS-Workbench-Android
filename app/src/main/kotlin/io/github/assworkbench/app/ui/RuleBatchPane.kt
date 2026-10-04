@@ -257,14 +257,19 @@ internal fun RuleBatchPane(
         return AssBatchRecipe("interactive-rule", filter(), actions)
     }
 
-    val recipe = remember(
+    val recipeResult = remember(
         uiState.selection.eventIds,
         selectedOnly, styleFilter, textFilter, actorFilter, layerFilter, tagFilter, commentFilter,
         rawRegexFilter, durationMin, durationMax,
         shiftText, styleText, layerText, actorText, marginL, marginR, marginV, findText, replaceText, commentAction,
         regexFind, regexReplace, regexRaw, timingOrigin, timingNumerator, timingDenominator, overridePropertyName, overrideValue,
         karaokeRevealEnabled, karaokeRevealMs, karaokeRevealBlur, karaokeRevealAccel,
-    ) { recipe() }
+        batchInputError,
+    ) {
+        if (batchInputError == null) runCatching { recipe() } else null
+    }
+    val recipe = recipeResult?.getOrNull()
+    val recipeError = recipeResult?.exceptionOrNull()?.message
     var explicitPreview by remember(state.document, recipe) {
         mutableStateOf<AssBatchPreview?>(null)
     }
@@ -272,8 +277,8 @@ internal fun RuleBatchPane(
         mutableStateOf<String?>(null)
     }
     val preview = explicitPreview
-    val previewError = batchInputError ?: explicitPreviewError
-    val previewPending = batchInputError == null && preview == null && previewError == null
+    val previewError = batchInputError ?: recipeError ?: explicitPreviewError
+    val previewPending = previewError == null && recipe != null && preview == null
     val changedExamples = remember(state.document, preview) {
         if (preview == null) {
             emptyList()
@@ -444,11 +449,12 @@ internal fun RuleBatchPane(
         Text("Preview", style = MaterialTheme.typography.labelLarge)
         OutlinedButton(
             onClick = {
-                val result = runCatching { AssBatchEngine.preview(state.document, recipe) }
+                val currentRecipe = recipe ?: return@OutlinedButton
+                val result = runCatching { AssBatchEngine.preview(state.document, currentRecipe) }
                 explicitPreview = result.getOrNull()
                 explicitPreviewError = result.exceptionOrNull()?.message
             },
-            enabled = batchInputError == null,
+            enabled = previewError == null && recipe != null,
             modifier = Modifier.fillMaxWidth().testTag("batch-preview-explicit"),
         ) {
             Text("预检并生成批处理预览")
@@ -491,8 +497,8 @@ internal fun RuleBatchPane(
             }
         }
         Button(
-            onClick = { uiActions.applyBatchRecipe(recipe) },
-            enabled = preview?.changedEventIds?.isNotEmpty() == true,
+            onClick = { recipe?.let(uiActions::applyBatchRecipe) },
+            enabled = recipe != null && preview?.changedEventIds?.isNotEmpty() == true,
             modifier = Modifier.fillMaxWidth(),
         ) { Text("应用为一个事务") }
 
