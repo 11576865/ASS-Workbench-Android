@@ -90,6 +90,106 @@ internal fun MatroskaScanResult.trackPreservationSignature(): List<String> =
         ).joinToString("\u001f")
     }
 
+internal fun verifyContainerTrackMutations(
+    source: MatroskaScanResult,
+    output: MatroskaScanResult,
+    removals: List<PendingContainerTrackRemovalUi>,
+    metadataEdits: List<PendingContainerTrackMetadataUi>,
+    imports: List<PendingContainerTrackImportUi> = emptyList(),
+) {
+    val removalTargets = removals.mapTo(hashSetOf()) { it.target }
+    val metadataByTarget = metadataEdits.associateBy { it.target }
+    val survivors = source.trackInfos.filterNot { it.containerTrackTarget() in removalTargets }
+
+    require(output.trackInfos.size == survivors.size + imports.size) {
+        "写回验证失败：预期轨道数 ${survivors.size + imports.size}，实际 ${output.trackInfos.size}"
+    }
+
+    survivors.zip(output.trackInfos.take(survivors.size)).forEachIndexed { index, (before, after) ->
+        val target = before.containerTrackTarget()
+        require(after.number == before.number) {
+            "写回验证失败：第 ${index + 1} 个未删除轨道的 TrackNumber 改变"
+        }
+        require(after.uid == before.uid) {
+            "写回验证失败：Track #${before.number} 的 TrackUID 改变"
+        }
+        require(after.typeCode == before.typeCode && after.codecId == before.codecId) {
+            "写回验证失败：Track #${before.number} 的类型或 codec 改变"
+        }
+
+        val edit = metadataByTarget[target]
+        if (edit == null) {
+            require(
+                after.name == before.name &&
+                    after.language == before.language &&
+                    after.isDefault == before.isDefault &&
+                    after.isForced == before.isForced
+            ) {
+                "写回验证失败：未计划修改的 Track #${before.number} 元数据发生变化"
+            }
+        } else {
+            require(after.name == edit.name) {
+                "写回验证失败：Track #${before.number} 名称修改未生效"
+            }
+            require(after.language == edit.language) {
+                "写回验证失败：Track #${before.number} 语言修改未生效"
+            }
+            require(after.isDefault == edit.isDefault) {
+                "写回验证失败：Track #${before.number} Default 标志修改未生效"
+            }
+            require(after.isForced == edit.isForced) {
+                "写回验证失败：Track #${before.number} Forced 标志修改未生效"
+            }
+        }
+    }
+
+    removals.forEach { removal ->
+        require(output.trackInfos.none { it.containerTrackTarget() == removal.target }) {
+            "写回验证失败：计划删除的轨道仍存在：${removal.name}"
+        }
+    }
+
+    val originalNumbers = source.trackInfos.mapTo(hashSetOf()) { it.number }
+    val originalUids = source.trackInfos.mapNotNullTo(hashSetOf()) { it.uid }
+    val importedOutput = output.trackInfos.drop(survivors.size)
+    val importedNumbers = hashSetOf<Long>()
+    val importedUids = hashSetOf<Long>()
+
+    imports.zip(importedOutput).forEach { (planned, actual) ->
+        require(actual.number !in originalNumbers && importedNumbers.add(actual.number)) {
+            "写回验证失败：导入轨道复用了已有 TrackNumber #${actual.number}"
+        }
+        val uid = actual.uid
+        require(uid != null && uid !in originalUids && importedUids.add(uid)) {
+            "写回验证失败：导入轨道没有获得新的唯一 TrackUID"
+        }
+        require(actual.kind.toContainerResourceKind() == planned.kind) {
+            "写回验证失败：导入轨道类型不匹配：${planned.sourceName} Track #${planned.sourceTrackNumber}"
+        }
+        require(actual.codecId == planned.codecId) {
+            "写回验证失败：导入轨道 codec 不匹配：${planned.codecId} → ${actual.codecId}"
+        }
+        require(
+            actual.name == planned.name &&
+                actual.language == planned.language &&
+                actual.isDefault == planned.isDefault &&
+                actual.isForced == planned.isForced
+        ) {
+            "写回验证失败：导入轨道 metadata 与计划不一致：${planned.sourceName} Track #${planned.sourceTrackNumber}"
+        }
+    }
+}
+
+private fun MatroskaTrackKind.toContainerResourceKind(): ContainerResourceKind = when (this) {
+    MatroskaTrackKind.VIDEO -> ContainerResourceKind.VIDEO
+    MatroskaTrackKind.AUDIO -> ContainerResourceKind.AUDIO
+    MatroskaTrackKind.SUBTITLE -> ContainerResourceKind.SUBTITLE
+    else -> ContainerResourceKind.OTHER
+}
+
+private fun io.github.assworkbench.container.MatroskaTrackInfo.containerTrackTarget(): String =
+    uid?.let { "uid:$it" } ?: "number:$number"
+
 internal fun MatroskaScanResult.attachmentPreservationKeys(): List<String> =
     attachmentInfos.map { info ->
         info.uid?.let { "uid:$it" }
@@ -153,6 +253,13 @@ private fun MatroskaScanResult.inventoryItems(): List<InventoryItem> {
                 title = title,
                 detail = detail,
                 trackNumber = info.number,
+                trackTarget = info.uid?.let { "uid:$it" } ?: "number:${info.number}",
+                trackUid = info.uid,
+                trackCodecId = info.codecId,
+                trackName = info.name,
+                trackLanguage = info.language,
+                trackIsDefault = info.isDefault,
+                trackIsForced = info.isForced,
                 editableAss = info.kind == MatroskaTrackKind.SUBTITLE && info.codecId == "S_TEXT/ASS",
             ),
         )
