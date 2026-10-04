@@ -737,6 +737,13 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         isForced: Boolean,
     ) {
         if (target.isBlank()) return
+        val cleanLanguage = language.trim().lowercase()
+        if (cleanLanguage.isNotEmpty() && !cleanLanguage.matches(Regex("[a-z]{3}"))) {
+            _state.update {
+                it.copy(status = "轨道 Language 当前编辑的是 legacy ISO 639-2 字段；请输入 3 字母代码（例如 jpn / eng / und）或留空。")
+            }
+            return
+        }
         _state.update { state ->
             if (state.container.writeBackBusy) {
                 return@update state.copy(status = "MKV 写回进行中；完成后才能修改轨道计划。")
@@ -748,7 +755,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             if (
                 current != null &&
                 name == current.trackName &&
-                language == current.trackLanguage &&
+                cleanLanguage == current.trackLanguage &&
                 isDefault == current.trackIsDefault &&
                 isForced == current.trackIsForced
             ) {
@@ -765,7 +772,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 number = number,
                 originalName = originalName,
                 name = name,
-                language = language,
+                language = cleanLanguage,
                 isDefault = isDefault,
                 isForced = isForced,
             )
