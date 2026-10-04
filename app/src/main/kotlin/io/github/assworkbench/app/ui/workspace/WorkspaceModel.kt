@@ -60,6 +60,7 @@ internal data class WorkspaceToolInstance(
 
 internal data class WorkspaceState(
     val tools: List<WorkspaceToolInstance> = emptyList(),
+    val parameterProjections: List<WorkspaceParameterProjection> = emptyList(),
     val surfacesHidden: Boolean = false,
     val activeInstanceId: String? = null,
     val sessionId: Long? = null,
@@ -131,6 +132,51 @@ internal data class WorkspaceState(
         if (tools.any { it.id == instance.id }) return this
         return copy(tools = tools + instance)
     }
+
+    fun addParameterProjection(
+        descriptorKey: String,
+        presentation: WorkspaceParameterPresentation,
+        binding: WorkspaceBinding,
+    ): WorkspaceState {
+        val descriptor = WorkspaceParameterCatalog.find(descriptorKey) ?: return this
+        if (!descriptor.supports(presentation)) return this
+        var ordinal = 1
+        var id: String
+        do {
+            id = "parameter:" + descriptorKey + ":" + ordinal
+            ordinal += 1
+        } while (parameterProjections.any { it.id == id })
+        return copy(
+            parameterProjections = parameterProjections + WorkspaceParameterProjection(
+                id = id,
+                descriptorKey = descriptorKey,
+                binding = binding,
+                presentation = presentation,
+            ),
+            surfacesHidden = false,
+        )
+    }
+
+    fun updateParameterPresentation(
+        projectionId: String,
+        presentation: WorkspaceParameterPresentation,
+    ): WorkspaceState = copy(
+        parameterProjections = parameterProjections.map { projection ->
+            if (projection.id != projectionId) projection
+            else {
+                val descriptor = WorkspaceParameterCatalog.find(projection.descriptorKey)
+                if (descriptor?.supports(presentation) == true) {
+                    projection.copy(presentation = presentation)
+                } else {
+                    projection
+                }
+            }
+        },
+    )
+
+    fun removeParameterProjection(projectionId: String): WorkspaceState = copy(
+        parameterProjections = parameterProjections.filterNot { it.id == projectionId },
+    )
 
     fun updatePresence(
         instanceId: String,
@@ -248,12 +294,44 @@ internal data class WorkspaceState(
                 ).joinToString(SEPARATOR)
             )
         }
+        parameterProjections.forEach { projection ->
+            val bindingCode: String
+            val bindingArgument: String
+            when (val binding = projection.binding) {
+                WorkspaceBinding.FollowFocus -> {
+                    bindingCode = "focus"
+                    bindingArgument = ""
+                }
+
+                WorkspaceBinding.FollowSelection -> {
+                    bindingCode = "selection"
+                    bindingArgument = ""
+                }
+
+                is WorkspaceBinding.PinnedEvent -> {
+                    bindingCode = "event"
+                    bindingArgument = binding.eventId.toString()
+                }
+            }
+            add(
+                listOf(
+                    PARAMETER_RECORD,
+                    projection.id,
+                    projection.descriptorKey,
+                    bindingCode,
+                    bindingArgument,
+                    projection.presentation.name,
+                ).joinToString(SEPARATOR)
+            )
+        }
     }
 
     companion object {
-        private const val SCHEMA_VERSION = "workspace-v3"
+        private const val SCHEMA_VERSION = "workspace-v4"
+        private const val V3_SCHEMA_VERSION = "workspace-v3"
         private const val V2_SCHEMA_VERSION = "workspace-v2"
         private const val LEGACY_SCHEMA_VERSION = "workspace-v1"
+        private const val PARAMETER_RECORD = "@parameter"
         private const val SEPARATOR = "\u001F"
 
         fun primaryInstanceId(toolKey: String): String =
@@ -261,20 +339,27 @@ internal data class WorkspaceState(
 
         fun fromSaveableList(values: List<String>): WorkspaceState {
             val version = values.firstOrNull()
-            if (version != SCHEMA_VERSION && version != V2_SCHEMA_VERSION &&
-                version != LEGACY_SCHEMA_VERSION
+            if (version != SCHEMA_VERSION && version != V3_SCHEMA_VERSION &&
+                version != V2_SCHEMA_VERSION && version != LEGACY_SCHEMA_VERSION
             ) return WorkspaceState()
 
             val hidden = values.getOrNull(1) == "1"
             val serializedActive = values.getOrNull(2)?.takeIf(String::isNotBlank)
-            val sessionId = if (version == SCHEMA_VERSION || version == V2_SCHEMA_VERSION) {
+            val sessionId = if (
+                version == SCHEMA_VERSION || version == V3_SCHEMA_VERSION ||
+                version == V2_SCHEMA_VERSION
+            ) {
                 values.getOrNull(3)?.toLongOrNull()
             } else {
                 null
             }
-            val toolStart = if (version == SCHEMA_VERSION || version == V2_SCHEMA_VERSION) 4 else 3
+            val toolStart = if (
+                version == SCHEMA_VERSION || version == V3_SCHEMA_VERSION ||
+                version == V2_SCHEMA_VERSION
+            ) 4 else 3
             val restoredTools = values.drop(toolStart).mapNotNull { encoded ->
                 val fields = encoded.split(SEPARATOR)
+                if (fields.firstOrNull() == PARAMETER_RECORD) return@mapNotNull null
                 if (fields.size != 4 && fields.size != 6) return@mapNotNull null
 
                 val binding = when (fields[2]) {
@@ -297,12 +382,40 @@ internal data class WorkspaceState(
                 )
             }.distinctBy { it.id }
 
+            val restoredParameters = if (version == SCHEMA_VERSION) {
+                values.drop(toolStart).mapNotNull { encoded ->
+                    val fields = encoded.split(SEPARATOR)
+                    if (fields.size != 6 || fields[0] != PARAMETER_RECORD) {
+                        return@mapNotNull null
+                    }
+                    val binding = when (fields[3]) {
+                        "focus" -> WorkspaceBinding.FollowFocus
+                        "event" -> fields[4].toLongOrNull()?.let(WorkspaceBinding::PinnedEvent)
+                        else -> null
+                    } ?: return@mapNotNull null
+                    val presentation = WorkspaceParameterPresentation.entries
+                        .firstOrNull { it.name == fields[5] }
+                        ?: return@mapNotNull null
+                    runCatching {
+                        WorkspaceParameterProjection(
+                            id = fields[1],
+                            descriptorKey = fields[2],
+                            binding = binding,
+                            presentation = presentation,
+                        )
+                    }.getOrNull()
+                }.distinctBy { it.id }
+            } else {
+                emptyList()
+            }
+
             val active = serializedActive?.takeIf { activeId ->
                 restoredTools.any { it.id == activeId }
             }
 
             return WorkspaceState(
                 tools = restoredTools,
+                parameterProjections = restoredParameters,
                 surfacesHidden = hidden,
                 activeInstanceId = active,
                 sessionId = sessionId,
