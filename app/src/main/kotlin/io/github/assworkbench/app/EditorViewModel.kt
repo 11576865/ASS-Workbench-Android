@@ -522,7 +522,8 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                         codecId = info.codecId,
                         name = info.name,
                         language = info.language,
-                        isDefault = info.isDefault,
+                        sourceIsDefault = info.isDefault,
+                        isDefault = false,
                         isForced = info.isForced,
                     )
                 }
