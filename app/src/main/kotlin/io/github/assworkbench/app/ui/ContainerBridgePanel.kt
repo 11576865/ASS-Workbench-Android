@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.RemoveCircle
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Subtitles
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -75,6 +76,11 @@ fun ContainerBridgePanel(
     var metadataName by remember { mutableStateOf("") }
     var metadataDescription by remember { mutableStateOf("") }
     var extractTarget by remember { mutableStateOf<ContainerResourceUi?>(null) }
+    var trackMetadataTarget by remember { mutableStateOf<ContainerResourceUi?>(null) }
+    var trackMetadataName by remember { mutableStateOf("") }
+    var trackMetadataLanguage by remember { mutableStateOf("") }
+    var trackMetadataDefault by remember { mutableStateOf(false) }
+    var trackMetadataForced by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val attachmentPicker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenMultipleDocuments()
@@ -158,7 +164,13 @@ fun ContainerBridgePanel(
                             append(" · 待替换 ").append(state.pendingAttachmentReplacements.size)
                         }
                         if (state.pendingAttachmentMetadataEdits.isNotEmpty()) {
-                            append(" · 待改信息 ").append(state.pendingAttachmentMetadataEdits.size)
+                            append(" · 待改附件信息 ").append(state.pendingAttachmentMetadataEdits.size)
+                        }
+                        if (state.pendingTrackRemovals.isNotEmpty()) {
+                            append(" · 待删轨 ").append(state.pendingTrackRemovals.size)
+                        }
+                        if (state.pendingTrackMetadataEdits.isNotEmpty()) {
+                            append(" · 待改轨道信息 ").append(state.pendingTrackMetadataEdits.size)
                         }
                     },
                     style = MaterialTheme.typography.labelSmall,
@@ -236,13 +248,27 @@ fun ContainerBridgePanel(
             val pendingMetadata = attachmentTarget?.let { target ->
                 state.pendingAttachmentMetadataEdits.firstOrNull { it.target == target }
             }
+            val trackTarget = resource.trackTarget
+            val pendingTrackRemoval = trackTarget?.let { target ->
+                state.pendingTrackRemovals.any { it.target == target }
+            } == true
+            val pendingTrackMetadata = trackTarget?.let { target ->
+                state.pendingTrackMetadataEdits.firstOrNull { it.target == target }
+            }
             ContainerResourceRow(
                 resource = resource,
                 selected = resource.editableAss && resource.trackNumber == state.selectedTrackNumber,
                 enabled = resource.editableAss &&
                     resource.change != ContainerResourceChange.REMOVED &&
-                    !state.writeBackBusy,
+                    !pendingTrackRemoval &&
+                    !state.writeBackBusy &&
+                    state.inventoryEvidence != ContainerInventoryEvidence.VERIFIED_OUTPUT,
                 attachmentActionsEnabled = attachmentTarget != null &&
+                    resource.change != ContainerResourceChange.REMOVED &&
+                    !state.writeBackBusy &&
+                    !state.attachmentExtractBusy &&
+                    state.inventoryEvidence != ContainerInventoryEvidence.VERIFIED_OUTPUT,
+                trackActionsEnabled = trackTarget != null &&
                     resource.change != ContainerResourceChange.REMOVED &&
                     !state.writeBackBusy &&
                     !state.attachmentExtractBusy &&
@@ -250,6 +276,8 @@ fun ContainerBridgePanel(
                 pendingRemoval = pendingRemoval,
                 pendingReplacementName = pendingReplacement?.name,
                 pendingMetadataName = pendingMetadata?.name,
+                pendingTrackRemoval = pendingTrackRemoval,
+                pendingTrackMetadataName = pendingTrackMetadata?.name,
                 onClick = {
                     val trackNumber = resource.trackNumber ?: return@ContainerResourceRow
                     if (trackNumber == state.selectedTrackNumber) return@ContainerResourceRow
@@ -291,6 +319,30 @@ fun ContainerBridgePanel(
                         viewModel.cancelExistingAttachmentRemoval(target)
                         viewModel.cancelExistingAttachmentReplacement(target)
                         viewModel.cancelExistingAttachmentMetadata(target)
+                    }
+                },
+                onRemoveTrack = trackTarget?.let { target ->
+                    {
+                        viewModel.planExistingTrackRemoval(
+                            target = target,
+                            number = resource.trackNumber ?: return@let,
+                            name = resource.title,
+                        )
+                    }
+                },
+                onEditTrackMetadata = trackTarget?.let {
+                    {
+                        trackMetadataTarget = resource
+                        trackMetadataName = pendingTrackMetadata?.name ?: resource.trackName
+                        trackMetadataLanguage = pendingTrackMetadata?.language ?: resource.trackLanguage
+                        trackMetadataDefault = pendingTrackMetadata?.isDefault ?: resource.trackIsDefault
+                        trackMetadataForced = pendingTrackMetadata?.isForced ?: resource.trackIsForced
+                    }
+                },
+                onCancelTrackEdit = trackTarget?.let { target ->
+                    {
+                        viewModel.cancelExistingTrackRemoval(target)
+                        viewModel.cancelExistingTrackMetadata(target)
                     }
                 },
             )
@@ -426,6 +478,73 @@ fun ContainerBridgePanel(
                 },
             )
         }
+
+        trackMetadataTarget?.let { resource ->
+            val target = resource.trackTarget
+            AlertDialog(
+                onDismissRequest = { trackMetadataTarget = null },
+                title = { Text("Track #${resource.trackNumber} 信息") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value = trackMetadataName,
+                            onValueChange = { trackMetadataName = it },
+                            label = { Text("轨道名称") },
+                            singleLine = true,
+                        )
+                        OutlinedTextField(
+                            value = trackMetadataLanguage,
+                            onValueChange = { trackMetadataLanguage = it },
+                            label = { Text("语言代码") },
+                            supportingText = { Text("保持原始 Matroska language；显式未知建议使用 und") },
+                            singleLine = true,
+                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            Checkbox(
+                                checked = trackMetadataDefault,
+                                onCheckedChange = { trackMetadataDefault = it },
+                            )
+                            Text("Default")
+                            Checkbox(
+                                checked = trackMetadataForced,
+                                onCheckedChange = { trackMetadataForced = it },
+                            )
+                            Text("Forced")
+                        }
+                        Text(
+                            "只修改轨道元数据；TrackNumber、TrackUID、codec 与 payload 保持。",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                },
+                confirmButton = {
+                    TextButton(
+                        enabled = target != null,
+                        onClick = {
+                            val resolved = target ?: return@TextButton
+                            val number = resource.trackNumber ?: return@TextButton
+                            viewModel.planExistingTrackMetadata(
+                                target = resolved,
+                                number = number,
+                                originalName = resource.trackName,
+                                name = trackMetadataName,
+                                language = trackMetadataLanguage,
+                                isDefault = trackMetadataDefault,
+                                isForced = trackMetadataForced,
+                            )
+                            trackMetadataTarget = null
+                        },
+                    ) { Text("加入计划") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { trackMetadataTarget = null }) { Text("取消") }
+                },
+            )
+        }
     }
 }
 
@@ -521,15 +640,21 @@ private fun ContainerResourceRow(
     selected: Boolean,
     enabled: Boolean,
     attachmentActionsEnabled: Boolean,
+    trackActionsEnabled: Boolean,
     pendingRemoval: Boolean,
     pendingReplacementName: String?,
     pendingMetadataName: String?,
+    pendingTrackRemoval: Boolean,
+    pendingTrackMetadataName: String?,
     onClick: () -> Unit,
     onRemoveAttachment: (() -> Unit)?,
     onReplaceAttachment: (() -> Unit)?,
     onEditAttachmentMetadata: (() -> Unit)?,
     onExtractAttachment: (() -> Unit)?,
     onCancelAttachmentEdit: (() -> Unit)?,
+    onRemoveTrack: (() -> Unit)?,
+    onEditTrackMetadata: (() -> Unit)?,
+    onCancelTrackEdit: (() -> Unit)?,
 ) {
     val background = if (selected) {
         MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.45f)
@@ -581,6 +706,18 @@ private fun ContainerResourceRow(
                 )
             }
             when {
+                pendingTrackRemoval -> {
+                    Text("待删轨", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+                    TextButton(onClick = { onCancelTrackEdit?.invoke() }) { Text("取消") }
+                }
+                pendingTrackMetadataName != null -> {
+                    Text(
+                        "轨道信息 → " + pendingTrackMetadataName.ifBlank { "未命名" },
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    TextButton(onClick = { onCancelTrackEdit?.invoke() }) { Text("取消") }
+                }
                 pendingRemoval -> {
                     Text("待删除", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
                     TextButton(onClick = { onCancelAttachmentEdit?.invoke() }) { Text("取消") }
@@ -600,6 +737,18 @@ private fun ContainerResourceRow(
                         color = MaterialTheme.colorScheme.primary,
                     )
                     TextButton(onClick = { onCancelAttachmentEdit?.invoke() }) { Text("取消") }
+                }
+                trackActionsEnabled -> {
+                    TextButton(
+                        onClick = { onEditTrackMetadata?.invoke() },
+                        enabled = onEditTrackMetadata != null,
+                    ) { Text("信息") }
+                    IconButton(
+                        onClick = { onRemoveTrack?.invoke() },
+                        enabled = onRemoveTrack != null,
+                    ) {
+                        Icon(Icons.Filled.RemoveCircle, contentDescription = "删除轨道")
+                    }
                 }
                 attachmentActionsEnabled -> {
                     TextButton(
