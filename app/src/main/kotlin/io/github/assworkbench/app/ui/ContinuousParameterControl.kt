@@ -11,6 +11,7 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -18,6 +19,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import kotlin.math.round
 
@@ -44,6 +46,8 @@ internal fun ContinuousParameterControl(
     onReset: (() -> Unit)? = null,
     onPreview: (Double) -> Unit = {},
     onGestureActive: (Boolean) -> Unit = {},
+    readOnly: Boolean = false,
+    testTagPrefix: String? = null,
     modifier: Modifier = Modifier,
 ) {
     val parsed = valueText.toDoubleOrNull()
@@ -52,6 +56,7 @@ internal fun ContinuousParameterControl(
         .toFloat()
     var lastPreviewAt by remember { mutableLongStateOf(0L) }
     var latestGestureValue by remember { mutableStateOf<Double?>(null) }
+    LaunchedEffect(readOnly) { if (readOnly) latestGestureValue = null }
 
     fun format(value: Double): String {
         if (step >= 1.0) return round(value).toLong().toString()
@@ -72,6 +77,7 @@ internal fun ContinuousParameterControl(
     }
 
     fun discreteUpdate(value: Double) {
+        if (readOnly) return
         onGestureActive(true)
         update(value, preview = true)
         onGestureActive(false)
@@ -97,14 +103,15 @@ internal fun ContinuousParameterControl(
                 }
             }
             if (onReset != null && resetLabel != null) {
-                TextButton(onClick = onReset) { Text(resetLabel) }
+                TextButton(onClick = onReset, enabled = !readOnly) { Text(resetLabel) }
             }
             OutlinedTextField(
                 value = valueText,
-                onValueChange = onValueTextChange,
+                onValueChange = { if (!readOnly) onValueTextChange(it) },
+                readOnly = readOnly,
                 singleLine = true,
                 suffix = if (suffix.isBlank()) null else ({ Text(suffix) }),
-                modifier = Modifier.width(112.dp),
+                modifier = Modifier.width(112.dp).then(if (testTagPrefix != null) Modifier.testTag("$testTagPrefix-value") else Modifier),
             )
         }
 
@@ -114,12 +121,15 @@ internal fun ContinuousParameterControl(
             horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro),
         ) {
             OutlinedButton(
+                enabled = !readOnly,
                 onClick = { discreteUpdate((parsed ?: sliderValue.toDouble()) - step) },
             ) { Text("−") }
 
             Slider(
+                enabled = !readOnly,
                 value = sliderValue,
                 onValueChange = { raw ->
+                    if (readOnly) return@Slider
                     onGestureActive(true)
                     val snapped = if (step > 0.0) {
                         round(raw.toDouble() / step) * step
@@ -133,6 +143,7 @@ internal fun ContinuousParameterControl(
                     }
                 },
                 onValueChangeFinished = {
+                    if (readOnly) return@Slider
                     val finalValue = latestGestureValue
                         ?: valueText.toDoubleOrNull()
                         ?: sliderValue.toDouble()
@@ -141,10 +152,11 @@ internal fun ContinuousParameterControl(
                     onGestureActive(false)
                 },
                 valueRange = range,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(1f).then(if (testTagPrefix != null) Modifier.testTag("$testTagPrefix-slider") else Modifier),
             )
 
             OutlinedButton(
+                enabled = !readOnly,
                 onClick = { discreteUpdate((parsed ?: sliderValue.toDouble()) + step) },
             ) { Text("+") }
         }

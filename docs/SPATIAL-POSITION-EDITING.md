@@ -16,3 +16,30 @@ GeometryParameterDisplay now selects the preview Event only when its owner is `g
 ## Boundaries
 
 This slice updates live position coordinates and the effective readout. It does not synchronize every rotation/scale/shear draft, add a position slider that did not previously exist, or implement spectrogram analysis. Numeric tests establish parameter-state behavior, not libass pixel correctness or tablet usability. Native media fixtures and temporary test output are not committed as build artifacts.
+
+## Transform feedback follow-up (2026-10-04)
+
+The Transform section now projects the active geometry preview for rotation X/Y/Z,
+scale X/Y and shear X/Y. External rod previews temporarily make these controls
+read-only; cancelling the preview restores the independent typed drafts, including
+invalid/unsubmitted input. The pane's own sliders remain interactive and commit
+one document edit at release. This does not alter canvas layout history.
+
+Geometry publications advance an observable revision even when ASS values are
+unchanged. This avoids StateFlow equality conflation hiding an equal-valued writer
+takeover. The pane records its parameter and revision, and each debounced numeric
+edit captures its own revision before the delay. An obsolete timer cannot commit
+another control's preview. External takeover cancels automatic commits while
+retaining draft text; editing the restored draft starts a new submission.
+
+This is preview provenance for the existing geometry path, not a complete global
+edit-session fence. A geometry no-op that produces no transient document does not
+lock the controls. Origin/move/clip retain their existing editing behavior.
+
+Validation: seven standalone app projection tests passed under JUnit 4/Vintage.
+The complete 168-test domain suite passed under its configured Jupiter engine.
+Four connected regressions cover all seven projected controls/draft restoration,
+slider single-Undo behavior, equal-valued publication revisions and cancellation
+of a pending valid numeric draft after an equal-valued external takeover. Android
+compilation and connected execution are Pending CI. Previous revision 91087d9e
+passed Android CI, emulator regressions and the Fontconfig native probe.

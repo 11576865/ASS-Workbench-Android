@@ -1,5 +1,7 @@
 package io.github.assworkbench.app
 
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
 import android.content.pm.ActivityInfo
 import android.content.res.Configuration
 import android.graphics.Bitmap
@@ -447,6 +449,89 @@ class EditorRegressionInstrumentedTest {
         composeRule.onNodeWithTag("position-value-y-1").assertTextContains("200.0")
         composeRule.runOnIdle { viewModel.undo() }
         composeRule.waitUntil(5_000) { eventText(1L) == "Recovered line" }
+    }
+
+    @Test fun equalGeometryPublicationStillAdvancesWriterRevision() {
+        restoreRecovery()
+        val vm = viewModel
+        composeRule.runOnIdle {
+            vm.previewEventRotationX(1L, 12.5)
+            val first = vm.state.value
+            vm.previewEventRotationX(1L, 12.5)
+            val second = vm.state.value
+            assertEquals(first.previewDocument, second.previewDocument)
+            assertEquals(first.geometryPreviewRevision + 1L, second.geometryPreviewRevision)
+            vm.clearTransientPreview("geometry:1")
+        }
+    }
+
+    @Test fun transformFieldsProjectExternalPreviewAndRestoreDrafts() {
+        restoreRecovery()
+        viewModel.focusEvent(1L, seek = false)
+        openTool("POSITION")
+        composeRule.onNodeWithTag("position-section-TRANSFORM").performScrollTo().performClick()
+        val before = viewModel.state.value.document
+        val cases = listOf<Triple<String, String, () -> Unit>>(
+            Triple("rotation-x", "12.5") { viewModel.previewEventRotationX(1L, 12.5) },
+            Triple("rotation-y", "23.5") { viewModel.previewEventRotationY(1L, 23.5) },
+            Triple("rotation-z", "34.5") { viewModel.previewEventRotationZ(1L, 34.5) },
+            Triple("scale-x", "125.0") { viewModel.previewEventScale(1L, 125.0, 175.0) },
+            Triple("scale-y", "175.0") { viewModel.previewEventScale(1L, 125.0, 175.0) },
+            Triple("shear-x", "0.25") { viewModel.previewEventShear(1L, 0.25, -0.5) },
+            Triple("shear-y", "-0.5") { viewModel.previewEventShear(1L, 0.25, -0.5) },
+        )
+        for ((parameter, value, preview) in cases) {
+            val field = composeRule.onNodeWithTag("geometry-$parameter-1-value")
+            field.performScrollTo().performTextReplacement("unfinished")
+            composeRule.runOnIdle(preview)
+            field.assertTextContains(value)
+            composeRule.onNodeWithTag("geometry-$parameter-1-slider").assertIsNotEnabled()
+            assertEquals(before, viewModel.state.value.document)
+            composeRule.runOnIdle { viewModel.clearTransientPreview("geometry:1") }
+            field.assertTextContains("unfinished")
+            composeRule.onNodeWithTag("geometry-$parameter-1-slider").assertIsEnabled()
+        }
+        assertEquals(before, viewModel.state.value.document)
+        assertFalse(viewModel.state.value.canUndo)
+    }
+
+    @Test fun equalExternalTakeoverCancelsPendingNumericCommit() {
+        restoreRecovery()
+        viewModel.focusEvent(1L, seek = false)
+        openTool("POSITION")
+        composeRule.onNodeWithTag("position-section-TRANSFORM").performScrollTo().performClick()
+        val before = viewModel.state.value.document
+        val field = composeRule.onNodeWithTag("geometry-rotation-x-1-value")
+        field.performScrollTo().performTextReplacement("12.5")
+        composeRule.waitUntil(5_000) { viewModel.state.value.previewDocument != null }
+        composeRule.runOnIdle { viewModel.previewEventRotationX(1L, 12.5) }
+        composeRule.onNodeWithTag("geometry-rotation-x-1-slider").assertIsNotEnabled()
+        var deadline = android.os.SystemClock.uptimeMillis() + 400L
+        composeRule.waitUntil(2_000) { android.os.SystemClock.uptimeMillis() >= deadline }
+        assertEquals(before, viewModel.state.value.document)
+        composeRule.runOnIdle { viewModel.clearTransientPreview("geometry:1") }
+        field.assertTextContains("12.5")
+        composeRule.onNodeWithTag("geometry-rotation-x-1-slider").assertIsEnabled()
+        deadline = android.os.SystemClock.uptimeMillis() + 400L
+        composeRule.waitUntil(2_000) { android.os.SystemClock.uptimeMillis() >= deadline }
+        assertEquals(before, viewModel.state.value.document)
+        assertFalse(viewModel.state.value.canUndo)
+    }
+
+    @Test fun transformSliderStillOwnsItsPreviewAndCommitsOneUndoStep() {
+        restoreRecovery()
+        viewModel.focusEvent(1L, seek = false)
+        openTool("POSITION")
+        composeRule.onNodeWithTag("position-section-TRANSFORM").performScrollTo().performClick()
+        val before = viewModel.state.value.document
+        composeRule.onNodeWithTag("geometry-rotation-x-1-slider").performScrollTo().performTouchInput {
+            swipe(start = center, end = androidx.compose.ui.geometry.Offset(width * 0.75f, center.y), durationMillis = 700)
+        }
+        composeRule.waitUntil(5_000) { viewModel.state.value.document != before }
+        composeRule.onNodeWithTag("geometry-rotation-x-1-slider").assertIsEnabled()
+        composeRule.runOnIdle { viewModel.undo() }
+        composeRule.waitUntil(5_000) { viewModel.state.value.document == before }
+        assertFalse(viewModel.state.value.canUndo)
     }
 
     private fun captureLayout(name: String) {

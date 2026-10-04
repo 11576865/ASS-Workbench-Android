@@ -1284,6 +1284,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             current.copy(
                 previewDocument = if (preview == state.document) null else preview,
                 previewOwnerId = if (preview == state.document) null else "geometry:$id",
+                geometryPreviewRevision = state.geometryPreviewRevision + 1L,
             )
         }
     }
@@ -1323,6 +1324,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             current.copy(
                 previewDocument = if (preview == state.document) null else preview,
                 previewOwnerId = if (preview == state.document) null else "geometry:$id",
+                geometryPreviewRevision = state.geometryPreviewRevision + 1L,
             )
         }
     }
@@ -1377,6 +1379,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             current.copy(
                 previewDocument = if (preview == state.document) null else preview,
                 previewOwnerId = if (preview == state.document) null else "geometry:$id",
+                geometryPreviewRevision = state.geometryPreviewRevision + 1L,
             )
         }
     }
@@ -1421,6 +1424,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             current.copy(
                 previewDocument = if (preview == state.document) null else preview,
                 previewOwnerId = if (preview == state.document) null else "geometry:$id",
+                geometryPreviewRevision = state.geometryPreviewRevision + 1L,
             )
         }
     }
@@ -1489,6 +1493,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             current.copy(
                 previewDocument = if (preview == state.document) null else preview,
                 previewOwnerId = if (preview == state.document) null else "geometry:$id",
+                geometryPreviewRevision = state.geometryPreviewRevision + 1L,
             )
         }
     }
@@ -1535,6 +1540,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             current.copy(
                 previewDocument = if (preview == state.document) null else preview,
                 previewOwnerId = if (preview == state.document) null else "geometry:$id",
+                geometryPreviewRevision = state.geometryPreviewRevision + 1L,
             )
         }
     }
@@ -1587,6 +1593,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             current.copy(
                 previewDocument = if (preview == state.document) null else preview,
                 previewOwnerId = if (preview == state.document) null else "geometry:$id",
+                geometryPreviewRevision = state.geometryPreviewRevision + 1L,
             )
         }
     }
@@ -1668,6 +1675,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             current.copy(
                 previewDocument = if (preview == state.document) null else preview,
                 previewOwnerId = if (preview == state.document) null else "geometry:$id",
+                geometryPreviewRevision = state.geometryPreviewRevision + 1L,
             )
         }
     }
@@ -1687,6 +1695,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             current.copy(
                 previewDocument = if (preview == state.document) null else preview,
                 previewOwnerId = if (preview == state.document) null else "geometry:$id",
+                geometryPreviewRevision = state.geometryPreviewRevision + 1L,
             )
         }
     }
@@ -1706,6 +1715,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             current.copy(
                 previewDocument = if (preview == state.document) null else preview,
                 previewOwnerId = if (preview == state.document) null else "geometry:$id",
+                geometryPreviewRevision = state.geometryPreviewRevision + 1L,
             )
         }
     }
@@ -1734,6 +1744,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             current.copy(
                 previewDocument = if (preview == state.document) null else preview,
                 previewOwnerId = if (preview == state.document) null else "geometry:$id",
+                geometryPreviewRevision = state.geometryPreviewRevision + 1L,
             )
         }
     }
@@ -1762,6 +1773,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             current.copy(
                 previewDocument = if (preview == state.document) null else preview,
                 previewOwnerId = if (preview == state.document) null else "geometry:$id",
+                geometryPreviewRevision = state.geometryPreviewRevision + 1L,
             )
         }
     }
@@ -1790,6 +1802,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             current.copy(
                 previewDocument = if (preview == state.document) null else preview,
                 previewOwnerId = if (preview == state.document) null else "geometry:$id",
+                geometryPreviewRevision = state.geometryPreviewRevision + 1L,
             )
         }
     }
@@ -1818,6 +1831,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             current.copy(
                 previewDocument = if (preview == state.document) null else preview,
                 previewOwnerId = if (preview == state.document) null else "geometry:$id",
+                geometryPreviewRevision = state.geometryPreviewRevision + 1L,
             )
         }
     }
@@ -1846,6 +1860,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             current.copy(
                 previewDocument = if (preview == state.document) null else preview,
                 previewOwnerId = if (preview == state.document) null else "geometry:$id",
+                geometryPreviewRevision = state.geometryPreviewRevision + 1L,
             )
         }
     }
@@ -1881,6 +1896,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             current.copy(
                 previewDocument = if (preview == state.document) null else preview,
                 previewOwnerId = if (preview == state.document) null else "geometry:$id",
+                geometryPreviewRevision = state.geometryPreviewRevision + 1L,
             )
         }
     }

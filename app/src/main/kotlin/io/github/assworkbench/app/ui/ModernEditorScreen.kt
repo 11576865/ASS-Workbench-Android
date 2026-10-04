@@ -6109,6 +6109,25 @@ private fun PositionPane(
         state.document, state.previewDocument, state.previewOwnerId, event.id,
     ) ?: event
     val externalPreview = displayEvent != event
+    var localPreviewRevision by remember(event.id, event.text) { mutableStateOf<Long?>(null) }
+    var localPreviewParameter by remember(event.id, event.text) { mutableStateOf<String?>(null) }
+    val externalTransformPreview = io.github.assworkbench.app.ui.preview.GeometryParameterDisplay.externalPreview(
+        state.document, state.previewDocument, state.previewOwnerId, event.id,
+        state.geometryPreviewRevision, localPreviewRevision,
+    )
+    fun publishLocalPreview(parameter: String, action: () -> Unit): Long {
+        action()
+        val revision = viewModel.state.value.geometryPreviewRevision
+        localPreviewParameter = parameter
+        localPreviewRevision = revision
+        return revision
+    }
+    fun ownsLocalPreview(parameter: String, revision: Long? = localPreviewRevision): Boolean {
+        val current = viewModel.state.value
+        return revision != null && current.geometryPreviewRevision == revision &&
+            localPreviewParameter == parameter && current.previewDocument != null &&
+            current.previewOwnerId == "geometry:${event.id}"
+    }
     val displayGeometry = remember(displayEvent.text) { AssGeometrySemantic.inspect(displayEvent.text) }
     val style = state.document.styles.firstOrNull { it.name == event.style }
     val geometry = remember(event.text) { AssGeometrySemantic.inspect(event.text) }
@@ -6137,9 +6156,9 @@ private fun PositionPane(
     var rotationXGestureActive by remember(event.id) { mutableStateOf(false) }
     var rotationYGestureActive by remember(event.id) { mutableStateOf(false) }
     var rotationGestureActive by remember(event.id) { mutableStateOf(false) }
-    var rotationXDraftChanged by remember(event.id) { mutableStateOf(false) }
-    var rotationYDraftChanged by remember(event.id) { mutableStateOf(false) }
-    var rotationDraftChanged by remember(event.id) { mutableStateOf(false) }
+    var rotationXDraftChanged by remember(event.id, event.text) { mutableStateOf(false) }
+    var rotationYDraftChanged by remember(event.id, event.text) { mutableStateOf(false) }
+    var rotationDraftChanged by remember(event.id, event.text) { mutableStateOf(false) }
     var rotationXPreviewValue by remember(event.id, event.text) {
         mutableStateOf(geometry.rotationX ?: 0.0)
     }
@@ -6154,13 +6173,13 @@ private fun PositionPane(
     var scaleXText by remember(event.id, event.text, style?.scaleX) { mutableStateOf(effectiveScaleX.toString()) }
     var scaleYText by remember(event.id, event.text, style?.scaleY) { mutableStateOf(effectiveScaleY.toString()) }
     var scaleGestureActive by remember(event.id) { mutableStateOf(false) }
-    var scaleDraftChanged by remember(event.id) { mutableStateOf(false) }
+    var scaleDraftChanged by remember(event.id, event.text) { mutableStateOf(false) }
     var scalePreviewX by remember(event.id, event.text, style?.scaleX) { mutableStateOf(effectiveScaleX) }
     var scalePreviewY by remember(event.id, event.text, style?.scaleY) { mutableStateOf(effectiveScaleY) }
     var shearXText by remember(event.id, event.text) { mutableStateOf((geometry.shearX ?: 0.0).toString()) }
     var shearYText by remember(event.id, event.text) { mutableStateOf((geometry.shearY ?: 0.0).toString()) }
     var shearGestureActive by remember(event.id) { mutableStateOf(false) }
-    var shearDraftChanged by remember(event.id) { mutableStateOf(false) }
+    var shearDraftChanged by remember(event.id, event.text) { mutableStateOf(false) }
     var shearPreviewX by remember(event.id, event.text) { mutableStateOf(geometry.shearX ?: 0.0) }
     var shearPreviewY by remember(event.id, event.text) { mutableStateOf(geometry.shearY ?: 0.0) }
     var clipLeftText by remember(event.id, event.text) { mutableStateOf(geometry.clipRect?.left?.toString().orEmpty()) }
@@ -6180,51 +6199,86 @@ private fun PositionPane(
     var styleMarginR by remember(style?.name, style?.marginR) { mutableStateOf((style?.marginR ?: 0).toString()) }
     var styleMarginV by remember(style?.name, style?.marginV) { mutableStateOf((style?.marginV ?: 0).toString()) }
 
-    LaunchedEffect(event.id, rotationXText, rotationXGestureActive, rotationXDraftChanged) {
-        if (!rotationXDraftChanged || rotationXGestureActive) return@LaunchedEffect
+    LaunchedEffect(externalTransformPreview) {
+        if (externalTransformPreview) {
+            rotationXGestureActive = false
+            rotationYGestureActive = false
+            rotationGestureActive = false
+            scaleGestureActive = false
+            shearGestureActive = false
+            rotationXDraftChanged = false
+            rotationYDraftChanged = false
+            rotationDraftChanged = false
+            scaleDraftChanged = false
+            shearDraftChanged = false
+        }
+    }
+
+    LaunchedEffect(event.id, rotationXText, rotationXGestureActive, rotationXDraftChanged, externalTransformPreview) {
+        if (externalTransformPreview || !rotationXDraftChanged || rotationXGestureActive) return@LaunchedEffect
         val value = rotationXText.toDoubleOrNull() ?: return@LaunchedEffect
         rotationXPreviewValue = value
-        viewModel.previewEventRotationX(event.id, value)
+        val pendingRevision = publishLocalPreview("rotation-x") { viewModel.previewEventRotationX(event.id, value) }
         kotlinx.coroutines.delay(320)
+        if (!ownsLocalPreview("rotation-x", pendingRevision)) {
+            rotationXDraftChanged = false
+            return@LaunchedEffect
+        }
         viewModel.setEventRotationX(event.id, value)
         rotationXDraftChanged = false
     }
-    LaunchedEffect(event.id, rotationYText, rotationYGestureActive, rotationYDraftChanged) {
-        if (!rotationYDraftChanged || rotationYGestureActive) return@LaunchedEffect
+    LaunchedEffect(event.id, rotationYText, rotationYGestureActive, rotationYDraftChanged, externalTransformPreview) {
+        if (externalTransformPreview || !rotationYDraftChanged || rotationYGestureActive) return@LaunchedEffect
         val value = rotationYText.toDoubleOrNull() ?: return@LaunchedEffect
         rotationYPreviewValue = value
-        viewModel.previewEventRotationY(event.id, value)
+        val pendingRevision = publishLocalPreview("rotation-y") { viewModel.previewEventRotationY(event.id, value) }
         kotlinx.coroutines.delay(320)
+        if (!ownsLocalPreview("rotation-y", pendingRevision)) {
+            rotationYDraftChanged = false
+            return@LaunchedEffect
+        }
         viewModel.setEventRotationY(event.id, value)
         rotationYDraftChanged = false
     }
-    LaunchedEffect(event.id, rotationText, rotationGestureActive, rotationDraftChanged) {
-        if (!rotationDraftChanged || rotationGestureActive) return@LaunchedEffect
+    LaunchedEffect(event.id, rotationText, rotationGestureActive, rotationDraftChanged, externalTransformPreview) {
+        if (externalTransformPreview || !rotationDraftChanged || rotationGestureActive) return@LaunchedEffect
         val value = rotationText.toDoubleOrNull() ?: return@LaunchedEffect
-        viewModel.previewEventRotationZ(event.id, value)
+        val pendingRevision = publishLocalPreview("rotation-z") { viewModel.previewEventRotationZ(event.id, value) }
         kotlinx.coroutines.delay(320)
+        if (!ownsLocalPreview("rotation-z", pendingRevision)) {
+            rotationDraftChanged = false
+            return@LaunchedEffect
+        }
         viewModel.setEventRotationZ(event.id, value)
         rotationDraftChanged = false
     }
-    LaunchedEffect(event.id, scaleXText, scaleYText, scaleGestureActive, scaleDraftChanged) {
-        if (!scaleDraftChanged || scaleGestureActive) return@LaunchedEffect
+    LaunchedEffect(event.id, scaleXText, scaleYText, scaleGestureActive, scaleDraftChanged, externalTransformPreview) {
+        if (externalTransformPreview || !scaleDraftChanged || scaleGestureActive) return@LaunchedEffect
         val sx = scaleXText.toDoubleOrNull() ?: return@LaunchedEffect
         val sy = scaleYText.toDoubleOrNull() ?: return@LaunchedEffect
         scalePreviewX = sx
         scalePreviewY = sy
-        viewModel.previewEventScale(event.id, sx, sy)
+        val pendingRevision = publishLocalPreview("scale") { viewModel.previewEventScale(event.id, sx, sy) }
         kotlinx.coroutines.delay(320)
+        if (!ownsLocalPreview("scale", pendingRevision)) {
+            scaleDraftChanged = false
+            return@LaunchedEffect
+        }
         viewModel.setEventScale(event.id, sx, sy)
         scaleDraftChanged = false
     }
-    LaunchedEffect(event.id, shearXText, shearYText, shearGestureActive, shearDraftChanged) {
-        if (!shearDraftChanged || shearGestureActive) return@LaunchedEffect
+    LaunchedEffect(event.id, shearXText, shearYText, shearGestureActive, shearDraftChanged, externalTransformPreview) {
+        if (externalTransformPreview || !shearDraftChanged || shearGestureActive) return@LaunchedEffect
         val fx = shearXText.toDoubleOrNull() ?: return@LaunchedEffect
         val fy = shearYText.toDoubleOrNull() ?: return@LaunchedEffect
         shearPreviewX = fx
         shearPreviewY = fy
-        viewModel.previewEventShear(event.id, fx, fy)
+        val pendingRevision = publishLocalPreview("shear") { viewModel.previewEventShear(event.id, fx, fy) }
         kotlinx.coroutines.delay(320)
+        if (!ownsLocalPreview("shear", pendingRevision)) {
+            shearDraftChanged = false
+            return@LaunchedEffect
+        }
         viewModel.setEventShear(event.id, fx, fy)
         shearDraftChanged = false
     }
@@ -6378,7 +6432,9 @@ private fun PositionPane(
             )
             ContinuousParameterControl(
                 label = "Rotation X · \\frx",
-                valueText = rotationXText,
+                valueText = if (externalTransformPreview) (displayGeometry.rotationX ?: 0.0).toString() else rotationXText,
+                readOnly = externalTransformPreview,
+                testTagPrefix = "geometry-rotation-x-${event.id}",
                 onValueTextChange = {
                     rotationXText = it
                     rotationXDraftChanged = true
@@ -6401,19 +6457,23 @@ private fun PositionPane(
                 }) else null,
                 onPreview = { value ->
                     rotationXPreviewValue = value
-                    viewModel.previewEventRotationX(event.id, value)
+                    publishLocalPreview("rotation-x") { viewModel.previewEventRotationX(event.id, value) }
                 },
                 onGestureActive = { active ->
                     rotationXGestureActive = active
                     if (!active) {
-                        viewModel.setEventRotationX(event.id, rotationXPreviewValue)
+                        if (ownsLocalPreview("rotation-x")) {
+                            viewModel.setEventRotationX(event.id, rotationXPreviewValue)
+                        }
                         rotationXDraftChanged = false
                     }
                 },
             )
             ContinuousParameterControl(
                 label = "Rotation Y · \\fry",
-                valueText = rotationYText,
+                valueText = if (externalTransformPreview) (displayGeometry.rotationY ?: 0.0).toString() else rotationYText,
+                readOnly = externalTransformPreview,
+                testTagPrefix = "geometry-rotation-y-${event.id}",
                 onValueTextChange = {
                     rotationYText = it
                     rotationYDraftChanged = true
@@ -6436,19 +6496,23 @@ private fun PositionPane(
                 }) else null,
                 onPreview = { value ->
                     rotationYPreviewValue = value
-                    viewModel.previewEventRotationY(event.id, value)
+                    publishLocalPreview("rotation-y") { viewModel.previewEventRotationY(event.id, value) }
                 },
                 onGestureActive = { active ->
                     rotationYGestureActive = active
                     if (!active) {
-                        viewModel.setEventRotationY(event.id, rotationYPreviewValue)
+                        if (ownsLocalPreview("rotation-y")) {
+                            viewModel.setEventRotationY(event.id, rotationYPreviewValue)
+                        }
                         rotationYDraftChanged = false
                     }
                 },
             )
             ContinuousParameterControl(
                 label = "Rotation Z · \\frz",
-                valueText = rotationText,
+                valueText = if (externalTransformPreview) (displayGeometry.rotationZ ?: style?.angle ?: 0.0).toString() else rotationText,
+                readOnly = externalTransformPreview,
+                testTagPrefix = "geometry-rotation-z-${event.id}",
                 onValueTextChange = {
                     rotationText = it
                     rotationDraftChanged = true
@@ -6470,12 +6534,14 @@ private fun PositionPane(
                 }) else null,
                 onPreview = { value ->
                     rotationPreviewValue = value
-                    viewModel.previewEventRotationZ(event.id, value)
+                    publishLocalPreview("rotation-z") { viewModel.previewEventRotationZ(event.id, value) }
                 },
                 onGestureActive = { active ->
                     rotationGestureActive = active
                     if (!active) {
-                        viewModel.setEventRotationZ(event.id, rotationPreviewValue)
+                        if (ownsLocalPreview("rotation-z")) {
+                            viewModel.setEventRotationZ(event.id, rotationPreviewValue)
+                        }
                         rotationDraftChanged = false
                     }
                 },
@@ -6509,7 +6575,9 @@ private fun PositionPane(
             }
             ContinuousParameterControl(
                 label = "Scale X",
-                valueText = scaleXText,
+                valueText = if (externalTransformPreview) (displayGeometry.scaleX ?: style?.scaleX ?: 100.0).toString() else scaleXText,
+                readOnly = externalTransformPreview,
+                testTagPrefix = "geometry-scale-x-${event.id}",
                 onValueTextChange = { raw ->
                     scaleXText = raw
                     raw.toDoubleOrNull()?.let { sx ->
@@ -6526,19 +6594,23 @@ private fun PositionPane(
                     if (state.geometryScaleLocked) scaleYText = formatScale(sy)
                     scalePreviewX = sx
                     scalePreviewY = sy
-                    viewModel.previewEventScale(event.id, sx, sy)
+                    publishLocalPreview("scale") { viewModel.previewEventScale(event.id, sx, sy) }
                 },
                 onGestureActive = { active ->
                     scaleGestureActive = active
                     if (!active) {
-                        viewModel.setEventScale(event.id, scalePreviewX, scalePreviewY)
+                        if (ownsLocalPreview("scale")) {
+                            viewModel.setEventScale(event.id, scalePreviewX, scalePreviewY)
+                        }
                         scaleDraftChanged = false
                     }
                 },
             )
             ContinuousParameterControl(
                 label = "Scale Y",
-                valueText = scaleYText,
+                valueText = if (externalTransformPreview) (displayGeometry.scaleY ?: style?.scaleY ?: 100.0).toString() else scaleYText,
+                readOnly = externalTransformPreview,
+                testTagPrefix = "geometry-scale-y-${event.id}",
                 onValueTextChange = { raw ->
                     scaleYText = raw
                     raw.toDoubleOrNull()?.let { sy ->
@@ -6555,12 +6627,14 @@ private fun PositionPane(
                     if (state.geometryScaleLocked) scaleXText = formatScale(sx)
                     scalePreviewX = sx
                     scalePreviewY = sy
-                    viewModel.previewEventScale(event.id, sx, sy)
+                    publishLocalPreview("scale") { viewModel.previewEventScale(event.id, sx, sy) }
                 },
                 onGestureActive = { active ->
                     scaleGestureActive = active
                     if (!active) {
-                        viewModel.setEventScale(event.id, scalePreviewX, scalePreviewY)
+                        if (ownsLocalPreview("scale")) {
+                            viewModel.setEventScale(event.id, scalePreviewX, scalePreviewY)
+                        }
                         scaleDraftChanged = false
                     }
                 },
@@ -6596,7 +6670,9 @@ private fun PositionPane(
             )
             ContinuousParameterControl(
                 label = "Shear X · \\fax",
-                valueText = shearXText,
+                valueText = if (externalTransformPreview) (displayGeometry.shearX ?: 0.0).toString() else shearXText,
+                readOnly = externalTransformPreview,
+                testTagPrefix = "geometry-shear-x-${event.id}",
                 onValueTextChange = {
                     shearXText = it
                     shearDraftChanged = true
@@ -6608,19 +6684,23 @@ private fun PositionPane(
                     val fy = shearYText.toDoubleOrNull() ?: 0.0
                     shearPreviewX = fx
                     shearPreviewY = fy
-                    viewModel.previewEventShear(event.id, fx, fy)
+                    publishLocalPreview("shear") { viewModel.previewEventShear(event.id, fx, fy) }
                 },
                 onGestureActive = { active ->
                     shearGestureActive = active
                     if (!active) {
-                        viewModel.setEventShear(event.id, shearPreviewX, shearPreviewY)
+                        if (ownsLocalPreview("shear")) {
+                            viewModel.setEventShear(event.id, shearPreviewX, shearPreviewY)
+                        }
                         shearDraftChanged = false
                     }
                 },
             )
             ContinuousParameterControl(
                 label = "Shear Y · \\fay",
-                valueText = shearYText,
+                valueText = if (externalTransformPreview) (displayGeometry.shearY ?: 0.0).toString() else shearYText,
+                readOnly = externalTransformPreview,
+                testTagPrefix = "geometry-shear-y-${event.id}",
                 onValueTextChange = {
                     shearYText = it
                     shearDraftChanged = true
@@ -6632,12 +6712,14 @@ private fun PositionPane(
                     val fx = shearXText.toDoubleOrNull() ?: 0.0
                     shearPreviewX = fx
                     shearPreviewY = fy
-                    viewModel.previewEventShear(event.id, fx, fy)
+                    publishLocalPreview("shear") { viewModel.previewEventShear(event.id, fx, fy) }
                 },
                 onGestureActive = { active ->
                     shearGestureActive = active
                     if (!active) {
-                        viewModel.setEventShear(event.id, shearPreviewX, shearPreviewY)
+                        if (ownsLocalPreview("shear")) {
+                            viewModel.setEventShear(event.id, shearPreviewX, shearPreviewY)
+                        }
                         shearDraftChanged = false
                     }
                 },

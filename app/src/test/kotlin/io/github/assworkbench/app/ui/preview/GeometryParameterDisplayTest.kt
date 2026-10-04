@@ -13,6 +13,17 @@ class GeometryParameterDisplayTest {
     private val changed = a.copy(text = "{\\pos(125,240)}A")
     private val preview = document.copy(events = listOf(changed, b))
 
+    @Test fun externalWriterProjectsReadOnlyEvenWhenItsDocumentHasEqualValues() {
+        assertTrue(GeometryParameterDisplay.externalPreview(document, preview, "geometry:1", 1L, 2L, 1L))
+        assertFalse(GeometryParameterDisplay.externalPreview(document, preview, "geometry:1", 1L, 2L, 2L))
+    }
+
+    @Test fun foreignOrCancelledPreviewsDoNotDisableThisTarget() {
+        assertFalse(GeometryParameterDisplay.externalPreview(document, preview, "geometry:2", 1L, 1L, null))
+        assertFalse(GeometryParameterDisplay.externalPreview(document, null, "geometry:1", 1L, 1L, null))
+        assertFalse(GeometryParameterDisplay.externalPreview(document, preview, "geometry:1", 2L, 1L, null))
+    }
+
     @Test fun activeGeometryDisplaysTransientValuesWithoutChangingDocument() {
         assertEquals(changed, GeometryParameterDisplay.event(document, preview, "geometry:1", 1L))
         assertEquals(a, document.events.first())
