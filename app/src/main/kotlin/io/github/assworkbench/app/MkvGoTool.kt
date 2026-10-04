@@ -23,6 +23,15 @@ data class TrackMetadataEditInput(
     val isForced: Boolean,
 )
 
+data class TrackAdditionInput(
+    val source: File,
+    val sourceTrackNumber: Long,
+    val name: String,
+    val language: String,
+    val isDefault: Boolean,
+    val isForced: Boolean,
+)
+
 class MkvGoTool(private val context: Context) {
     private val executable: File
         get() = File(context.applicationInfo.nativeLibraryDir, "libmkvgo.so")
@@ -46,6 +55,7 @@ class MkvGoTool(private val context: Context) {
         metadataEdits: List<AttachmentMetadataEditInput> = emptyList(),
         removeTracks: List<String> = emptyList(),
         trackMetadataEdits: List<TrackMetadataEditInput> = emptyList(),
+        addTracks: List<TrackAdditionInput> = emptyList(),
     ) {
         require(isAvailable()) { "MKV 写回工具在此 ABI 上不可用" }
         output.parentFile?.mkdirs() ?: error("输出目录不可用")
@@ -114,6 +124,21 @@ class MkvGoTool(private val context: Context) {
                 args += if (metadata.isDefault) "1" else "0"
                 args += if (metadata.isForced) "1" else "0"
             }
+        addTracks
+            .distinctBy { it.source.absolutePath + "\u0000" + it.sourceTrackNumber }
+            .forEach { addition ->
+                require(addition.source.isFile && addition.source.length() > 0L) {
+                    "轨道来源文件不可用：" + addition.source.name
+                }
+                require(addition.sourceTrackNumber > 0L) { "轨道来源 TrackNumber 无效" }
+                args += "--add-track"
+                args += addition.source.absolutePath
+                args += addition.sourceTrackNumber.toString()
+                args += addition.name
+                args += addition.language
+                args += if (addition.isDefault) "1" else "0"
+                args += if (addition.isForced) "1" else "0"
+            }
         args += editedAss.absolutePath
         run(*args.toTypedArray())
         require(output.isFile && output.length() > 0L) { "MKV 写回未生成输出文件" }
@@ -164,7 +189,8 @@ class MkvGoTool(private val context: Context) {
                 replacements.isNotEmpty() ||
                 metadataEdits.isNotEmpty() ||
                 removeTracks.isNotEmpty() ||
-                trackMetadataEdits.isNotEmpty()
+                trackMetadataEdits.isNotEmpty() ||
+                addTracks.isNotEmpty()
         ) { "没有待执行的容器修改" }
         output.parentFile?.mkdirs() ?: error("输出目录不可用")
         output.delete()
@@ -222,6 +248,21 @@ class MkvGoTool(private val context: Context) {
                 args += metadata.language
                 args += if (metadata.isDefault) "1" else "0"
                 args += if (metadata.isForced) "1" else "0"
+            }
+        addTracks
+            .distinctBy { it.source.absolutePath + "\u0000" + it.sourceTrackNumber }
+            .forEach { addition ->
+                require(addition.source.isFile && addition.source.length() > 0L) {
+                    "轨道来源文件不可用：" + addition.source.name
+                }
+                require(addition.sourceTrackNumber > 0L) { "轨道来源 TrackNumber 无效" }
+                args += "--add-track"
+                args += addition.source.absolutePath
+                args += addition.sourceTrackNumber.toString()
+                args += addition.name
+                args += addition.language
+                args += if (addition.isDefault) "1" else "0"
+                args += if (addition.isForced) "1" else "0"
             }
         run(*args.toTypedArray())
         require(output.isFile && output.length() > 0L) { "MKV 写回未生成输出文件" }
