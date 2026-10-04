@@ -35,8 +35,14 @@ data class ContainerResourceUi(
     val trackCodecId: String = "",
     val trackName: String = "",
     val trackLanguage: String = "",
+    val trackLanguageBcp47: String = "",
     val trackIsDefault: Boolean = false,
     val trackIsForced: Boolean = false,
+    val trackHearingImpaired: Boolean = false,
+    val trackVisualImpaired: Boolean = false,
+    val trackTextDescriptions: Boolean = false,
+    val trackOriginal: Boolean = false,
+    val trackCommentary: Boolean = false,
     val editableAss: Boolean = false,
     /** Stable mkvgo mutation/extraction target: FileUID when available, otherwise a unique filename. */
     val attachmentTarget: String? = null,
@@ -96,6 +102,12 @@ data class PendingContainerTrackMetadataUi(
     val language: String,
     val isDefault: Boolean,
     val isForced: Boolean,
+    val languageBcp47: String = "",
+    val hearingImpaired: Boolean = false,
+    val visualImpaired: Boolean = false,
+    val textDescriptions: Boolean = false,
+    val original: Boolean = false,
+    val commentary: Boolean = false,
 )
 
 data class ContainerTrackImportCandidateUi(
@@ -110,6 +122,12 @@ data class ContainerTrackImportCandidateUi(
     val isDefault: Boolean,
     val isForced: Boolean,
     val sourceAttachmentCount: Int,
+    val languageBcp47: String = "",
+    val hearingImpaired: Boolean = false,
+    val visualImpaired: Boolean = false,
+    val textDescriptions: Boolean = false,
+    val original: Boolean = false,
+    val commentary: Boolean = false,
 )
 
 data class PendingContainerTrackImportUi(
@@ -124,6 +142,12 @@ data class PendingContainerTrackImportUi(
     val isDefault: Boolean,
     val isForced: Boolean,
     val sourceAttachmentCount: Int,
+    val languageBcp47: String = "",
+    val hearingImpaired: Boolean = false,
+    val visualImpaired: Boolean = false,
+    val textDescriptions: Boolean = false,
+    val original: Boolean = false,
+    val commentary: Boolean = false,
 )
 
 data class ContainerBridgeState(
