@@ -1,0 +1,44 @@
+{
+  "packet_version": 1,
+  "packet_id": "ci-11576865-ASS-Workbench-Android-37182132523-1",
+  "status": "pending",
+  "record_type": "ci_failure",
+  "title": "Fontconfig renderer native probe: failure",
+  "summary": "Tracked CI workflow did not complete successfully. Source adapter captured failed job/step evidence when available.",
+  "source_repository": "11576865/ASS-Workbench-Android",
+  "source_event": "workflow_run",
+  "source_ref": "feature/karaoke-batch-rules-v2",
+  "source_sha": "258b8837c0fa11cdb24aa16497af9098bd199a36",
+  "source_url": "https://github.com/11576865/ASS-Workbench-Android/actions/runs/37182132523",
+  "created_at": "2026-10-04T06:23:56+00:00",
+  "dedupe_key": "workflow_run:11576865/ASS-Workbench-Android:37182132523:1",
+  "routing_hints": [
+    "interface-grammar",
+    "operations",
+    "red-reason",
+    "reliability"
+  ],
+  "evidence": {
+    "workflow": "Fontconfig renderer native probe",
+    "run_id": "37182132523",
+    "run_attempt": "1",
+    "conclusion": "failure",
+    "trigger_event": "pull_request",
+    "failed_jobs": [
+      {
+        "id": 111376655747,
+        "name": "arm64-fontconfig-native",
+        "conclusion": "failure"
+      }
+    ],
+    "failed_steps": [
+      {
+        "job": "arm64-fontconfig-native",
+        "number": 24,
+        "name": "Build ASS Workbench production Fontconfig APK",
+        "conclusion": "failure"
+      }
+    ],
+    "capture_error": ""
+  }
+}
