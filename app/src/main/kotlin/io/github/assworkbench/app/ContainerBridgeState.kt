@@ -94,21 +94,28 @@ data class PendingContainerTrackMetadataUi(
     val originalName: String,
     val name: String,
     val language: String,
-    val sourceIsDefault: Boolean = false,
     val isDefault: Boolean,
     val isForced: Boolean,
 )
 
+enum class ContainerTrackImportSourceKind {
+    MATROSKA_TRACK,
+    STANDALONE_ASS,
+}
+
 data class PendingContainerTrackAdditionUi(
+    val sourceKind: ContainerTrackImportSourceKind = ContainerTrackImportSourceKind.MATROSKA_TRACK,
     val sourceUri: String,
     val sourceName: String,
-    val sourceTrackNumber: Long,
-    val sourceTrackUid: Long?,
+    val sourceTrackNumber: Long? = null,
+    val sourceTrackUid: Long? = null,
+    val sourceSha256: String? = null,
     val kind: ContainerResourceKind,
     val typeCode: Long,
     val codecId: String,
     val name: String,
     val language: String,
+    val sourceIsDefault: Boolean = false,
     val isDefault: Boolean,
     val isForced: Boolean,
 )
