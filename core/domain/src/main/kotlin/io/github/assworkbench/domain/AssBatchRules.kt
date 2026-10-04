@@ -48,11 +48,9 @@ sealed interface AssBatchFilter {
             require(tag.isNotBlank()) { "Tag Filter 不能为空。" }
             require(ASS_TAG_NAME.matches(tag)) { "Tag Filter 标签名无效：$tag" }
         }
-        override fun matches(event: AssEvent, document: AssDocument): Boolean {
-            val analysis = AssInlineSyntax.analyze(event.text)
-            return !analysis.hasErrors &&
-                analysis.tags.any { it.name.equals(tag, ignoreCase = true) }
-        }
+        override fun matches(event: AssEvent, document: AssDocument): Boolean =
+            AssTopLevelOverrideSyntax.tags(event.text)
+                .any { it.name.equals(tag, ignoreCase = true) }
     }
     data class KaraokeRevealCompatible(
         val spec: AssKaraokeRevealFxSpec = AssKaraokeRevealFxSpec(),
