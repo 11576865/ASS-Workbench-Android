@@ -154,3 +154,17 @@ internal object MediaImportCompatibilityPlanner {
         reason = reason,
     )
 }
+
+
+internal fun isMatroskaFamilySource(
+    sourceName: String,
+    mimeType: String?,
+): Boolean {
+    val extension = sourceName.substringAfterLast('.', "").lowercase()
+    val mime = mimeType.orEmpty().lowercase()
+    return extension in setOf("mkv", "mka", "mks", "webm") ||
+        "matroska" in mime ||
+        mime == "video/webm" ||
+        mime == "audio/webm" ||
+        mime == "application/webm"
+}
