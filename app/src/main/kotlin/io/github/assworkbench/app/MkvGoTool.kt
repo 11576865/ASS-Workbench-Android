@@ -309,7 +309,8 @@ class MkvGoTool(private val context: Context) {
                         args += if (addition.isDefault) "1" else "0"
                         args += if (addition.isForced) "1" else "0"
                     }
-                    ContainerTrackImportSourceKind.STANDALONE_ASS -> {
+                    ContainerTrackImportSourceKind.STANDALONE_ASS,
+                    ContainerTrackImportSourceKind.STANDALONE_SRT -> {
                         val sha256 = addition.sourceSha256.orEmpty()
                         require(sha256.matches(Regex("[0-9a-fA-F]{64}"))) {
                             "独立 ASS 来源缺少有效 SHA-256 证据"
