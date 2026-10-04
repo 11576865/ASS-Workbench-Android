@@ -9,6 +9,11 @@ package io.github.assworkbench.domain
  * parenthesis depth without rewriting or normalizing the source.
  */
 object AssTopLevelOverrideSyntax {
+    private val TAG_NAME = Regex("""[A-Za-z0-9_-]+""")
+
+    fun isValidTagName(tag: String): Boolean =
+        tag.isNotBlank() && TAG_NAME.matches(tag)
+
     fun tags(text: String): List<AssInlineTag> {
         val analysis = AssInlineSyntax.analyze(text)
         if (analysis.tags.isEmpty()) return emptyList()
