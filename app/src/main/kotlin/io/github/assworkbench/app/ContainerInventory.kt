@@ -95,16 +95,17 @@ internal fun verifyContainerTrackMutations(
     output: MatroskaScanResult,
     removals: List<PendingContainerTrackRemovalUi>,
     metadataEdits: List<PendingContainerTrackMetadataUi>,
+    imports: List<PendingContainerTrackImportUi> = emptyList(),
 ) {
     val removalTargets = removals.mapTo(hashSetOf()) { it.target }
     val metadataByTarget = metadataEdits.associateBy { it.target }
-    val expected = source.trackInfos.filterNot { it.containerTrackTarget() in removalTargets }
+    val survivors = source.trackInfos.filterNot { it.containerTrackTarget() in removalTargets }
 
-    require(output.trackInfos.size == expected.size) {
-        "写回验证失败：预期轨道数 ${expected.size}，实际 ${output.trackInfos.size}"
+    require(output.trackInfos.size == survivors.size + imports.size) {
+        "写回验证失败：预期轨道数 ${survivors.size + imports.size}，实际 ${output.trackInfos.size}"
     }
 
-    expected.zip(output.trackInfos).forEachIndexed { index, (before, after) ->
+    survivors.zip(output.trackInfos.take(survivors.size)).forEachIndexed { index, (before, after) ->
         val target = before.containerTrackTarget()
         require(after.number == before.number) {
             "写回验证失败：第 ${index + 1} 个未删除轨道的 TrackNumber 改变"
@@ -147,6 +148,43 @@ internal fun verifyContainerTrackMutations(
             "写回验证失败：计划删除的轨道仍存在：${removal.name}"
         }
     }
+
+    val originalNumbers = source.trackInfos.mapTo(hashSetOf()) { it.number }
+    val originalUids = source.trackInfos.mapNotNullTo(hashSetOf()) { it.uid }
+    val importedOutput = output.trackInfos.drop(survivors.size)
+    val importedNumbers = hashSetOf<Long>()
+    val importedUids = hashSetOf<Long>()
+
+    imports.zip(importedOutput).forEach { (planned, actual) ->
+        require(actual.number !in originalNumbers && importedNumbers.add(actual.number)) {
+            "写回验证失败：导入轨道复用了已有 TrackNumber #${actual.number}"
+        }
+        val uid = actual.uid
+        require(uid != null && uid !in originalUids && importedUids.add(uid)) {
+            "写回验证失败：导入轨道没有获得新的唯一 TrackUID"
+        }
+        require(actual.kind.toContainerResourceKind() == planned.kind) {
+            "写回验证失败：导入轨道类型不匹配：${planned.sourceName} Track #${planned.sourceTrackNumber}"
+        }
+        require(actual.codecId == planned.codecId) {
+            "写回验证失败：导入轨道 codec 不匹配：${planned.codecId} → ${actual.codecId}"
+        }
+        require(
+            actual.name == planned.name &&
+                actual.language == planned.language &&
+                actual.isDefault == planned.isDefault &&
+                actual.isForced == planned.isForced
+        ) {
+            "写回验证失败：导入轨道 metadata 与计划不一致：${planned.sourceName} Track #${planned.sourceTrackNumber}"
+        }
+    }
+}
+
+private fun MatroskaTrackKind.toContainerResourceKind(): ContainerResourceKind = when (this) {
+    MatroskaTrackKind.VIDEO -> ContainerResourceKind.VIDEO
+    MatroskaTrackKind.AUDIO -> ContainerResourceKind.AUDIO
+    MatroskaTrackKind.SUBTITLE -> ContainerResourceKind.SUBTITLE
+    else -> ContainerResourceKind.OTHER
 }
 
 private fun io.github.assworkbench.container.MatroskaTrackInfo.containerTrackTarget(): String =
