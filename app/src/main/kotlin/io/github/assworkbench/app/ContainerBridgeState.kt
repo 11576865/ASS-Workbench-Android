@@ -102,6 +102,7 @@ enum class ContainerTrackImportSourceKind {
     MATROSKA_TRACK,
     STANDALONE_ASS,
     STANDALONE_SRT,
+    NORMALIZED_MEDIA_PACKETS,
 }
 
 data class PendingContainerTrackAdditionUi(
@@ -110,7 +111,12 @@ data class PendingContainerTrackAdditionUi(
     val sourceName: String,
     val sourceTrackNumber: Long? = null,
     val sourceTrackUid: Long? = null,
+    val sourceExtractorIndex: Int? = null,
     val sourceSha256: String? = null,
+    val sourceContentSha256: String? = null,
+    val sampleRate: Int? = null,
+    val channelCount: Int? = null,
+    val packetCount: Long? = null,
     val kind: ContainerResourceKind,
     val typeCode: Long,
     val codecId: String,
