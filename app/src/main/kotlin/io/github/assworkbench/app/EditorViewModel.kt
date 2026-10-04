@@ -1248,7 +1248,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                             )
                         }
                         val trackSourceFiles = mutableMapOf<String, File>()
-                        plannedTrackAdditions.mapIndexed { index, addition ->
+                        val trackAdditionInputs = plannedTrackAdditions.map { addition ->
                             val sourceFile = trackSourceFiles.getOrPut(addition.sourceUri) {
                                 val target = File(work, "track-source-${trackSourceFiles.size}.mkv")
                                 app.contentResolver.openInputStream(Uri.parse(addition.sourceUri))?.use { input ->
@@ -1269,14 +1269,10 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                                 isDefault = addition.isDefault,
                                 isForced = addition.isForced,
                             )
-                        }.also { trackAdditionInputs ->
-                            if (trackAdditionInputs.size != plannedTrackAdditions.size) {
-                                error("外部轨道计划解析失败")
-                            }
-                        }.let { trackAdditionInputs ->
+                        }
 
-                            if (replaceAss) {
-                                val editedAss = File(work, "edited.ass")
+                        if (replaceAss) {
+                            val editedAss = File(work, "edited.ass")
                             editedAss.writeText(AssCodec.write(snapshot.document), Charsets.UTF_8)
                             mkvGoTool.replaceAss(
                                 source = source,
@@ -1304,7 +1300,6 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                                 trackMetadataEdits = trackMetadataInputs,
                                 addTracks = trackAdditionInputs,
                             )
-                            }
                         }
 
                         // Verify the complete remux product before publishing it to
