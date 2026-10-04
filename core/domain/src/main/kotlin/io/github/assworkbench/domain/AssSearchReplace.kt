@@ -73,31 +73,7 @@ object AssSearchReplace {
         return out.toString()
     }
 
-    fun topLevelTagNames(text: String): Set<String> {
-        val names = linkedSetOf<String>()
-        var cursor = 0
-        while (cursor < text.length && text[cursor] == '{') {
-            val close = text.indexOf('}', cursor + 1)
-            if (close < 0) break
-            val block = text.substring(cursor + 1, close)
-            var i = 0
-            var depth = 0
-            while (i < block.length) {
-                when (block[i]) {
-                    '(' -> { depth++; i++ }
-                    ')' -> { if (depth > 0) depth--; i++ }
-                    '\\' -> if (depth == 0) {
-                        i++
-                        val start = i
-                        if (i < block.length && block[i].isDigit()) i++
-                        while (i < block.length && block[i].isLetter()) i++
-                        if (i > start) names += block.substring(start, i)
-                    } else i++
-                    else -> i++
-                }
-            }
-            cursor = close + 1
-        }
-        return names
-    }
+    fun topLevelTagNames(text: String): Set<String> =
+        AssTopLevelOverrideSyntax.tags(text)
+            .mapTo(linkedSetOf()) { it.name }
 }
