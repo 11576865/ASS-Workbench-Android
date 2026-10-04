@@ -1470,7 +1470,13 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                         }
                         val trackSourceFiles = mutableMapOf<String, File>()
                         val trackAdditionInputs = plannedTrackAdditions.map { addition ->
-                            val sourceKey = addition.sourceKind.name + "\u0000" + addition.sourceUri
+                            val sourceKey = buildString {
+                                append(addition.sourceKind.name)
+                                append('\u0000').append(addition.sourceUri)
+                                addition.sourceExtractorIndex?.let {
+                                    append('\u0000').append(it)
+                                }
+                            }
                             val sourceFile = trackSourceFiles.getOrPut(sourceKey) {
                                 when (addition.sourceKind) {
                                     ContainerTrackImportSourceKind.MATROSKA_TRACK -> {
@@ -1485,6 +1491,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                                         }
                                         target
                                     }
+
                                     ContainerTrackImportSourceKind.STANDALONE_ASS,
                                     ContainerTrackImportSourceKind.STANDALONE_SRT -> {
                                         val raw = app.contentResolver.openInputStream(Uri.parse(addition.sourceUri))
@@ -1501,6 +1508,14 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                                         ) {
                                             "独立字幕规范化结果已变化；请重新扫描后再保存：" + addition.sourceName
                                         }
+                                        val target = File(work, "track-source-${trackSourceFiles.size}.ass")
+                                        target.writeText(normalized.normalizedAssText, Charsets.UTF_8)
+                                        require(target.length() > 0L) {
+                                            "规范化 ASS 为空：" + addition.sourceName
+                                        }
+                                        target
+                                    }
+
                                     ContainerTrackImportSourceKind.NORMALIZED_MEDIA_PACKETS -> {
                                         val extractorIndex = requireNotNull(addition.sourceExtractorIndex) {
                                             "媒体 packet 来源缺少 extractor index"
@@ -1534,13 +1549,6 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                                         }
                                         require(normalized.packetCount == addition.packetCount) {
                                             "媒体 packet 数量已变化；请重新检测来源"
-                                        }
-                                        target
-                                    }
-                                        val target = File(work, "track-source-${trackSourceFiles.size}.ass")
-                                        target.writeText(normalized.normalizedAssText, Charsets.UTF_8)
-                                        require(target.length() > 0L) {
-                                            "规范化 ASS 为空：" + addition.sourceName
                                         }
                                         target
                                     }
