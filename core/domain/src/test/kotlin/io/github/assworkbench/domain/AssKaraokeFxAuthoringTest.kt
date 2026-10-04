@@ -244,6 +244,110 @@ class AssKaraokeFxAuthoringTest {
     }
 
     @Test
+    fun compatibilityReturnsIncompatibleForMalformedKaraokeDurationInsteadOfThrowing() {
+        val document = AssDocument(
+            events = listOf(
+                AssEvent(
+                    id = 12,
+                    start = SubTime(0),
+                    end = SubTime(1000),
+                    text = "{\\k999999999999999999999}Huge",
+                )
+            )
+        )
+
+        val compatibility = AssKaraokeFxAuthoring.inspectProgressiveRevealCompatibility(
+            document = document,
+            eventId = 12,
+        )
+
+        assertTrue(!compatibility.compatible)
+        assertEquals(0, compatibility.segmentCount)
+        assertTrue(!compatibility.reason.isNullOrBlank())
+        assertEquals("{\\k999999999999999999999}Huge", document.events.single().text)
+    }
+
+    @Test
+    fun documentPlannerRejectsMissingStyleInsteadOfInventingFallbackState() {
+        val document = AssDocument(
+            styles = listOf(AssStyle(name = "Default")),
+            events = listOf(
+                AssEvent(
+                    id = 13,
+                    start = SubTime(0),
+                    end = SubTime(1000),
+                    style = "Missing",
+                    text = "{\\k20}A",
+                )
+            )
+        )
+
+        val error = assertFailsWith<IllegalStateException> {
+            AssKaraokeFxAuthoring.planProgressiveReveal(document, 13)
+        }
+        assertTrue(error.message.orEmpty().contains("Style"))
+        assertEquals("{\\k20}A", document.events.single().text)
+    }
+
+    @Test
+    fun zeroScaleIsValidAndFlipDerivedOverflowFailsClosed() {
+        val zeroScale = AssKaraokeFxAuthoring.planProgressiveReveal(
+            text = "{\\k20}A",
+            spec = AssKaraokeRevealFxSpec(
+                revealMs = 100,
+                flip = AssKaraokeFlipFxSpec(),
+            ),
+            baseScaleY = 0.0,
+            baseRotationX = 0.0,
+        )
+        assertTrue(zeroScale.generatedText.contains("\\fscy0"))
+
+        val overflow = assertFailsWith<IllegalArgumentException> {
+            AssKaraokeFxAuthoring.planProgressiveReveal(
+                text = "{\\k20}A",
+                spec = AssKaraokeRevealFxSpec(
+                    flip = AssKaraokeFlipFxSpec(
+                        startScalePercent = 1e308,
+                        overshootScalePercent = 1e308,
+                        startRotationXDegrees = 0.0,
+                    ),
+                ),
+                baseScaleY = 1e308,
+                baseRotationX = 0.0,
+            )
+        }
+        assertTrue(overflow.message.orEmpty().contains("派生几何计算溢出"))
+    }
+
+    @Test
+    fun compatibilityUsesDocumentContextWithoutMutatingText() {
+        val document = AssDocument(
+            styles = listOf(AssStyle(name = "Alt", scaleY = 82.0)),
+            events = listOf(
+                AssEvent(
+                    id = 11,
+                    start = SubTime(0),
+                    end = SubTime(1000),
+                    style = "Alt",
+                    text = "{\\k20}Hi{\\kf30}there",
+                )
+            ),
+        )
+        val before = document.events.single().text
+        val safe = AssKaraokeFxAuthoring.inspectProgressiveRevealCompatibility(document, 11)
+        assertTrue(safe.compatible)
+        assertEquals(2, safe.segmentCount)
+        assertEquals(before, document.events.single().text)
+
+        val absolute = document.copy(
+            events = listOf(document.events.single().copy(text = "{\\kt50}A"))
+        )
+        val unsafe = AssKaraokeFxAuthoring.inspectProgressiveRevealCompatibility(absolute, 11)
+        assertTrue(!unsafe.compatible)
+        assertTrue(unsafe.reason?.contains("\\kt") == true)
+    }
+
+    @Test
     fun rejectsAbsoluteKtAndExistingControlledFx() {
         assertFailsWith<IllegalArgumentException> {
             AssKaraokeFxAuthoring.applyProgressiveReveal("{\\kt50}A")
