@@ -21,6 +21,7 @@ class UiVariantRegistryTest {
         assertTrue(UiVariantRegistry.entries.contains(WorkspacePresentationMode.GLASS_LAYERED_EXPERIMENTAL))
         assertTrue(UiVariantRegistry.entries.contains(WorkspacePresentationMode.SUBTITLE_OBJECT_EXPERIMENTAL))
         assertTrue(UiVariantRegistry.entries.contains(WorkspacePresentationMode.EDGE_BOOKMARK_EXPERIMENTAL))
+        assertTrue(UiVariantRegistry.entries.contains(WorkspacePresentationMode.TIMELINE_DOCK_EXPERIMENTAL))
     }
 
     @Test
@@ -60,6 +61,10 @@ class UiVariantRegistryTest {
         assertSame(
             WorkspacePresentationMode.EDGE_BOOKMARK_EXPERIMENTAL,
             UiVariantRegistry.resolve("EDGE_BOOKMARK_EXPERIMENTAL"),
+        )
+        assertSame(
+            WorkspacePresentationMode.TIMELINE_DOCK_EXPERIMENTAL,
+            UiVariantRegistry.resolve("TIMELINE_DOCK_EXPERIMENTAL"),
         )
     }
 
