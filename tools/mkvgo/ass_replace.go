@@ -308,7 +308,6 @@ func planAttachmentEdits(
 		if err != nil {
 			return nil, err
 		}
-		att.Description = existing[index].Description
 		for otherIndex, other := range existing {
 			if otherIndex == index {
 				continue

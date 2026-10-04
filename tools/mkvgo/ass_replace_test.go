@@ -334,7 +334,7 @@ func TestEditAttachmentsRemovesAndReplacesInOneRemux(t *testing.T) {
 		Attachments: []mkv.Attachment{
 			{ID: 7, Name: "keep.bin", MIMEType: "application/octet-stream", Data: keepData, Size: int64(len(keepData))},
 			{ID: 8, Name: "remove.txt", MIMEType: "text/plain", Data: removeData, Size: int64(len(removeData))},
-			{ID: 9, Name: "old-cover.jpg", MIMEType: "image/jpeg", Description: "cover", Data: replaceOldData, Size: int64(len(replaceOldData))},
+			{ID: 9, Name: "old-cover.jpg", MIMEType: "image/jpeg", Data: replaceOldData, Size: int64(len(replaceOldData))},
 		},
 		Chapters: []mkv.Chapter{{ID: 2, Title: "Chapter", StartMs: 0, EndMs: 1000}},
 	}
@@ -401,8 +401,8 @@ func TestEditAttachmentsRemovesAndReplacesInOneRemux(t *testing.T) {
 	}
 	replaced := byID[9]
 	if replaced.Name != "cover.png" || replaced.MIMEType != "image/png" ||
-		replaced.Description != "cover" || !bytes.Equal(replaced.Data, replacementData) {
-		t.Fatalf("replacement did not preserve identity/description: %+v", replaced)
+		!bytes.Equal(replaced.Data, replacementData) {
+		t.Fatalf("replacement did not preserve identity/content: %+v", replaced)
 	}
 	added, ok := byName["notes.txt"]
 	if !ok || added.MIMEType != "text/plain" || !bytes.Equal(added.Data, addedData) {
