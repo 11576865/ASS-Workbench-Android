@@ -605,8 +605,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 return@update state.copy(status = "当前显示的是已验证输出快照；请先重新打开该 MKV，再继续修改轨道。")
             }
             val exists = state.container.pendingTrackAdditions.any {
-                it.sourceUri == candidate.sourceUri &&
-                    it.sourceTrackNumber == candidate.sourceTrackNumber
+                trackImportSourceKey(it) == trackImportSourceKey(candidate)
             }
             if (exists) {
                 return@update state.copy(status = "该外部源轨已经在待添加列表中。")
@@ -615,18 +614,27 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 container = state.container.copy(
                     pendingTrackAdditions = state.container.pendingTrackAdditions + candidate,
                 ),
-                status = "已计划添加 ${candidate.sourceName} · Track #${candidate.sourceTrackNumber}；保存新 MKV 前不会修改源文件。",
+                status = if (candidate.sourceKind == ContainerTrackImportSourceKind.STANDALONE_ASS) {
+                    "已计划把 ${candidate.sourceName} 作为新的 ASS 字幕轨加入；保存新 MKV 前不会修改源文件。"
+                } else {
+                    "已计划添加 ${candidate.sourceName} · Track #${candidate.sourceTrackNumber}；保存新 MKV 前不会修改源文件。"
+                },
             )
         }
     }
 
-    fun removeContainerTrackAddition(sourceUri: String, sourceTrackNumber: Long) {
+    fun removeContainerTrackAddition(
+        sourceKind: ContainerTrackImportSourceKind,
+        sourceUri: String,
+        sourceTrackNumber: Long?,
+    ) {
         _state.update { state ->
             if (state.container.writeBackBusy) {
                 return@update state.copy(status = "MKV 写回进行中；完成后才能修改轨道计划。")
             }
+            val key = trackImportSourceKey(sourceKind, sourceUri, sourceTrackNumber)
             val next = state.container.pendingTrackAdditions.filterNot {
-                it.sourceUri == sourceUri && it.sourceTrackNumber == sourceTrackNumber
+                trackImportSourceKey(it) == key
             }
             if (next.size == state.container.pendingTrackAdditions.size) state
             else state.copy(
@@ -1287,22 +1295,47 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                         }
                         val trackSourceFiles = mutableMapOf<String, File>()
                         val trackAdditionInputs = plannedTrackAdditions.map { addition ->
-                            val sourceFile = trackSourceFiles.getOrPut(addition.sourceUri) {
-                                val target = File(work, "track-source-${trackSourceFiles.size}.mkv")
-                                app.contentResolver.openInputStream(Uri.parse(addition.sourceUri))?.use { input ->
-                                    target.outputStream().buffered().use { output ->
-                                        input.copyTo(output, 1024 * 1024)
+                            val sourceKey = addition.sourceKind.name + "\u0000" + addition.sourceUri
+                            val sourceFile = trackSourceFiles.getOrPut(sourceKey) {
+                                when (addition.sourceKind) {
+                                    ContainerTrackImportSourceKind.MATROSKA_TRACK -> {
+                                        val target = File(work, "track-source-${trackSourceFiles.size}.mkv")
+                                        app.contentResolver.openInputStream(Uri.parse(addition.sourceUri))?.use { input ->
+                                            target.outputStream().buffered().use { output ->
+                                                input.copyTo(output, 1024 * 1024)
+                                            }
+                                        } ?: error("无法读取外部 Matroska：" + addition.sourceName)
+                                        require(target.length() > 0L) {
+                                            "外部 Matroska 为空：" + addition.sourceName
+                                        }
+                                        target
                                     }
-                                } ?: error("无法读取外部轨道来源：" + addition.sourceName)
-                                require(target.length() > 0L) {
-                                    "外部轨道来源为空：" + addition.sourceName
+                                    ContainerTrackImportSourceKind.STANDALONE_ASS -> {
+                                        val raw = app.contentResolver.openInputStream(Uri.parse(addition.sourceUri))
+                                            ?.use { it.readBytes() }
+                                            ?: error("无法重新读取独立 ASS：" + addition.sourceName)
+                                        val normalized = AssTextDecoder.decode(raw).text.toByteArray(Charsets.UTF_8)
+                                        val expected = addition.sourceSha256
+                                            ?: error("独立 ASS 缺少来源 SHA-256 证据")
+                                        val actual = sha256Hex(normalized)
+                                        require(actual.equals(expected, ignoreCase = true)) {
+                                            "独立 ASS 来源已变化；请重新扫描后再保存：" + addition.sourceName
+                                        }
+                                        val target = File(work, "track-source-${trackSourceFiles.size}.ass")
+                                        target.writeBytes(normalized)
+                                        require(target.length() > 0L) {
+                                            "独立 ASS 为空：" + addition.sourceName
+                                        }
+                                        target
+                                    }
                                 }
-                                target
                             }
                             TrackAdditionInput(
+                                sourceKind = addition.sourceKind,
                                 source = sourceFile,
                                 sourceTrackNumber = addition.sourceTrackNumber,
                                 sourceTrackUid = addition.sourceTrackUid,
+                                sourceSha256 = addition.sourceSha256,
                                 name = addition.name,
                                 language = addition.language,
                                 isDefault = addition.isDefault,
