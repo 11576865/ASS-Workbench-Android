@@ -129,11 +129,13 @@ class AuthoringEngineSuiteTest {
     }
 
     @Test
-    fun batchTagFilterMatchesParsedOverrideTagsNotVisibleBackslashes() {
+    fun batchTagFilterMatchesDirectOverrideTagsOnly() {
         val document = AssDocument(
             events = listOf(
                 event(20, 0, 1000, "{\\pos(10,20)}Real tag"),
                 event(21, 1000, 2000, "Visible \\pos(10,20) text"),
+                event(22, 2000, 3000, "{\\t(0,500,\\pos(30,40))}Nested transform tag"),
+                event(23, 3000, 4000, "A{\\pos(50,60)}Later direct tag"),
             )
         )
         val preview = AssBatchEngine.preview(
@@ -145,9 +147,11 @@ class AuthoringEngineSuiteTest {
             ),
         )
 
-        assertEquals(listOf(20L), preview.affectedEventIds)
+        assertEquals(listOf(20L, 23L), preview.affectedEventIds)
         assertEquals("matched", preview.document.events.first { it.id == 20L }.name)
         assertEquals("", preview.document.events.first { it.id == 21L }.name)
+        assertEquals("", preview.document.events.first { it.id == 22L }.name)
+        assertEquals("matched", preview.document.events.first { it.id == 23L }.name)
     }
 
     @Test
