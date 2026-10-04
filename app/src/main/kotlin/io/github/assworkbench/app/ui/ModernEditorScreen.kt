@@ -6818,7 +6818,7 @@ private fun PositionPane(
                         .testTag("extract-rotation-z-${event.id}"),
                 ) {
                     Icon(
-                        if (rotationExtractionDragging) Icons.Filled.DragIndicator else Icons.Filled.OpenInNew,
+                        if (rotationExtractionDragging) Icons.Filled.DragHandle else Icons.Filled.OpenInNew,
                         null,
                         Modifier.size(18.dp),
                     )
