@@ -922,3 +922,108 @@ func TestEditContainerResourcesImportsExternalTrackWithFreshIdentity(t *testing.
 		)
 	}
 }
+
+
+func TestTrackImportDoesNotReuseIdentityRemovedInSameTransaction(t *testing.T) {
+	dir := t.TempDir()
+	targetPath := filepath.Join(dir, "target-remove-import.mkv")
+	importPath := filepath.Join(dir, "external-remove-import.mkv")
+	dst := filepath.Join(dir, "updated-remove-import.mkv")
+
+	target := &mkv.Container{Info: mkv.SegmentInfo{TimecodeScale: 1_000_000}}
+	targetVideo := mkv.Track{ID: 1, UID: 101, Type: mkv.VideoTrack, Codec: "vp9"}
+	targetAudio := mkv.Track{ID: 5, UID: 505, Type: mkv.AudioTrack, Codec: "opus"}
+
+	f, err := os.Create(targetPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mw := writer.NewMKVWriter(f)
+	if err := mw.WriteStart(); err != nil {
+		t.Fatal(err)
+	}
+	if err := mw.WriteMetadata(target, []mkv.Track{targetVideo, targetAudio}, 1000); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.WriteCluster(f, 0, 1_000_000, []mkv.Block{
+		{TrackNumber: 1, Timecode: 0, Keyframe: true, Data: []byte{0x01}},
+		{TrackNumber: 5, Timecode: 0, Keyframe: true, Data: []byte{0x05}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := mw.Finalize(); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	external := &mkv.Container{Info: mkv.SegmentInfo{TimecodeScale: 1_000_000}}
+	externalSub := mkv.Track{
+		ID: 2, UID: 202, Type: mkv.SubtitleTrack, Codec: "ass",
+		CodecPrivate: []byte("[Script Info]\nScriptType: v4.00+\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text"),
+	}
+	g, err := os.Create(importPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mw2 := writer.NewMKVWriter(g)
+	if err := mw2.WriteStart(); err != nil {
+		t.Fatal(err)
+	}
+	if err := mw2.WriteMetadata(external, []mkv.Track{externalSub}, 1000); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.WriteCluster(g, 0, 1_000_000, []mkv.Block{
+		{TrackNumber: 2, Timecode: 100, Duration: 500, Data: []byte("0,0,Default,,0,0,0,,Imported")},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := mw2.Finalize(); err != nil {
+		t.Fatal(err)
+	}
+	if err := g.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := EditContainerResourcesWithTrackImports(
+		context.Background(),
+		targetPath,
+		dst,
+		nil,
+		nil,
+		nil,
+		nil,
+		[]string{"uid:505"},
+		nil,
+		[]TrackImport{{
+			SourcePath: importPath,
+			TrackID: 2,
+			Name: "Imported subtitles",
+			Language: "eng",
+		}},
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := reader.Open(context.Background(), dst)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Tracks) != 2 {
+		t.Fatalf("track count = %d, want 2: %+v", len(got.Tracks), got.Tracks)
+	}
+	if got.Tracks[0].ID != 1 || got.Tracks[0].UID != 101 {
+		t.Fatalf("surviving target identity changed: %+v", got.Tracks[0])
+	}
+	imported := got.Tracks[1]
+	if imported.ID == 5 || imported.UID == 505 {
+		t.Fatalf("import reused identity removed in same transaction: %+v", imported)
+	}
+	if imported.ID <= 5 || imported.UID <= 505 {
+		t.Fatalf("import identity should be allocated above source reservation floor: %+v", imported)
+	}
+	if imported.Type != mkv.SubtitleTrack || imported.Codec != "ass" {
+		t.Fatalf("wrong imported resource: %+v", imported)
+	}
+}
