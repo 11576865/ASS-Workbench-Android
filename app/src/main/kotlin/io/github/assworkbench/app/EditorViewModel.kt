@@ -85,6 +85,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     private var sceneCutJob: Job? = null
     private var mediaCatalogJob: Job? = null
     private var containerScanJob: Job? = null
+    private var trackImportJob: Job? = null
     private var waveformSourceUri: String? = null
     private var containerScan: MatroskaScanResult? = null
     private var containerBaselineScan: MatroskaScanResult? = null
@@ -118,6 +119,8 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     private fun beginWorkspaceBoundary(resetProjectFonts: Boolean = true): Long {
         containerScanJob?.cancel()
         containerScanJob = null
+        trackImportJob?.cancel()
+        trackImportJob = null
         containerScan = null
         containerBaselineScan = null
         val epoch = workspaceEpoch.incrementAndGet()
@@ -451,6 +454,160 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                     )
                 }
             }
+        }
+    }
+
+    fun probeContainerTrackSource(uri: Uri) {
+        val snapshot = _state.value
+        val containerUri = snapshot.container.uri ?: run {
+            _state.update { it.copy(status = "请先打开 MKV 工程，再导入外部轨道。") }
+            return
+        }
+        if (snapshot.container.writeBackBusy || snapshot.container.attachmentExtractBusy) {
+            _state.update { it.copy(status = "容器任务进行中；完成后再导入外部轨道。") }
+            return
+        }
+        if (snapshot.container.inventoryEvidence == ContainerInventoryEvidence.VERIFIED_OUTPUT) {
+            _state.update { it.copy(status = "当前显示的是已验证输出快照；请先重新打开该 MKV，再继续修改轨道。") }
+            return
+        }
+
+        val sessionId = snapshot.workspaceSessionId
+        val sourceName = displayName(uri)
+            ?.substringAfterLast('/')
+            ?.substringAfterLast('\\')
+            ?.takeIf { it.isNotBlank() }
+            ?: "外部 Matroska"
+        trackImportJob?.cancel()
+        _state.update {
+            it.copy(
+                container = it.container.copy(
+                    trackImportLoading = true,
+                    trackImportCandidates = emptyList(),
+                ),
+                status = "正在扫描外部 Matroska 轨道……",
+            )
+        }
+        trackImportJob = viewModelScope.launch {
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    val stream = app.contentResolver.openInputStream(uri)
+                        ?: error("无法读取外部 Matroska")
+                    stream.use {
+                        MatroskaReader().scan(
+                            input = it,
+                            retainAttachments = false,
+                        )
+                    }
+                }
+            }.onSuccess { scan ->
+                if (
+                    _state.value.workspaceSessionId != sessionId ||
+                    _state.value.container.uri != containerUri
+                ) return@onSuccess
+                val candidates = scan.trackInfos.mapNotNull { info ->
+                    val kind = info.kind.toContainerResourceKind()
+                    if (
+                        kind != ContainerResourceKind.VIDEO &&
+                        kind != ContainerResourceKind.AUDIO &&
+                        kind != ContainerResourceKind.SUBTITLE
+                    ) return@mapNotNull null
+                    PendingContainerTrackAdditionUi(
+                        sourceUri = uri.toString(),
+                        sourceName = sourceName,
+                        sourceTrackNumber = info.number,
+                        sourceTrackUid = info.uid,
+                        kind = kind,
+                        typeCode = info.typeCode,
+                        codecId = info.codecId,
+                        name = info.name,
+                        language = info.language,
+                        isDefault = info.isDefault,
+                        isForced = info.isForced,
+                    )
+                }
+                _state.update {
+                    it.copy(
+                        container = it.container.copy(
+                            trackImportLoading = false,
+                            trackImportCandidates = candidates,
+                        ),
+                        status = if (candidates.isEmpty()) {
+                            "外部 Matroska 没有可导入的视频 / 音频 / 字幕轨道。"
+                        } else {
+                            "外部 Matroska 已检测 ${candidates.size} 条可导入轨道；请选择需要加入当前容器的轨道。"
+                        },
+                    )
+                }
+            }.onFailure { error ->
+                if (error is kotlinx.coroutines.CancellationException) return@onFailure
+                if (
+                    _state.value.workspaceSessionId != sessionId ||
+                    _state.value.container.uri != containerUri
+                ) return@onFailure
+                _state.update {
+                    it.copy(
+                        container = it.container.copy(
+                            trackImportLoading = false,
+                            trackImportCandidates = emptyList(),
+                        ),
+                        status = "外部轨道扫描失败：" + (error.message ?: error::class.java.simpleName),
+                    )
+                }
+            }
+        }
+    }
+
+    fun planContainerTrackAddition(candidate: PendingContainerTrackAdditionUi) {
+        _state.update { state ->
+            if (state.container.writeBackBusy || state.container.attachmentExtractBusy) {
+                return@update state.copy(status = "容器任务进行中；完成后再修改轨道计划。")
+            }
+            if (state.container.inventoryEvidence == ContainerInventoryEvidence.VERIFIED_OUTPUT) {
+                return@update state.copy(status = "当前显示的是已验证输出快照；请先重新打开该 MKV，再继续修改轨道。")
+            }
+            val exists = state.container.pendingTrackAdditions.any {
+                it.sourceUri == candidate.sourceUri &&
+                    it.sourceTrackNumber == candidate.sourceTrackNumber
+            }
+            if (exists) {
+                return@update state.copy(status = "该外部源轨已经在待添加列表中。")
+            }
+            state.copy(
+                container = state.container.copy(
+                    pendingTrackAdditions = state.container.pendingTrackAdditions + candidate,
+                ),
+                status = "已计划添加 ${candidate.sourceName} · Track #${candidate.sourceTrackNumber}；保存新 MKV 前不会修改源文件。",
+            )
+        }
+    }
+
+    fun removeContainerTrackAddition(sourceUri: String, sourceTrackNumber: Long) {
+        _state.update { state ->
+            if (state.container.writeBackBusy) {
+                return@update state.copy(status = "MKV 写回进行中；完成后才能修改轨道计划。")
+            }
+            val next = state.container.pendingTrackAdditions.filterNot {
+                it.sourceUri == sourceUri && it.sourceTrackNumber == sourceTrackNumber
+            }
+            if (next.size == state.container.pendingTrackAdditions.size) state
+            else state.copy(
+                container = state.container.copy(pendingTrackAdditions = next),
+                status = "已从待写入计划移除外部轨道。",
+            )
+        }
+    }
+
+    fun clearContainerTrackImportCandidates() {
+        trackImportJob?.cancel()
+        trackImportJob = null
+        _state.update {
+            it.copy(
+                container = it.container.copy(
+                    trackImportLoading = false,
+                    trackImportCandidates = emptyList(),
+                ),
+            )
         }
     }
 
@@ -940,6 +1097,10 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             _state.update { it.copy(status = "附件提取进行中；完成后再保存 MKV。") }
             return
         }
+        if (snapshot.container.trackImportLoading) {
+            _state.update { it.copy(status = "外部轨道扫描进行中；完成后再保存 MKV。") }
+            return
+        }
         val saveEpoch = workspaceEpoch.get()
         val sourceScanSnapshot = containerScan
         val baselineScanSnapshot = containerBaselineScan ?: sourceScanSnapshot
@@ -990,6 +1151,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         val plannedMetadataEdits = snapshot.container.pendingAttachmentMetadataEdits
         val plannedTrackRemovals = snapshot.container.pendingTrackRemovals
         val plannedTrackMetadataEdits = snapshot.container.pendingTrackMetadataEdits
+        val plannedTrackAdditions = snapshot.container.pendingTrackAdditions
 
         val plannedAttachmentCount = editPlan.mutations.count {
             it.kind == ContainerMutationKind.ADD_ATTACHMENT
@@ -1008,6 +1170,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                     if (plannedRemovals.isNotEmpty()) append(" · 删除 ").append(plannedRemovals.size)
                     if (plannedReplacements.isNotEmpty()) append(" · 替换 ").append(plannedReplacements.size)
                     if (plannedMetadataEdits.isNotEmpty()) append(" · 附件信息 ").append(plannedMetadataEdits.size)
+                    if (plannedTrackAdditions.isNotEmpty()) append(" · 加轨 ").append(plannedTrackAdditions.size)
                     if (plannedTrackRemovals.isNotEmpty()) append(" · 删轨 ").append(plannedTrackRemovals.size)
                     if (plannedTrackMetadataEdits.isNotEmpty()) append(" · 轨道信息 ").append(plannedTrackMetadataEdits.size)
                     append("；大文件可能需要一些时间……")
@@ -1084,9 +1247,36 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                                 isForced = metadata.isForced,
                             )
                         }
+                        val trackSourceFiles = mutableMapOf<String, File>()
+                        plannedTrackAdditions.mapIndexed { index, addition ->
+                            val sourceFile = trackSourceFiles.getOrPut(addition.sourceUri) {
+                                val target = File(work, "track-source-${trackSourceFiles.size}.mkv")
+                                app.contentResolver.openInputStream(Uri.parse(addition.sourceUri))?.use { input ->
+                                    target.outputStream().buffered().use { output ->
+                                        input.copyTo(output, 1024 * 1024)
+                                    }
+                                } ?: error("无法读取外部轨道来源：" + addition.sourceName)
+                                require(target.length() > 0L) {
+                                    "外部轨道来源为空：" + addition.sourceName
+                                }
+                                target
+                            }
+                            TrackAdditionInput(
+                                source = sourceFile,
+                                sourceTrackNumber = addition.sourceTrackNumber,
+                                name = addition.name,
+                                language = addition.language,
+                                isDefault = addition.isDefault,
+                                isForced = addition.isForced,
+                            )
+                        }.also { trackAdditionInputs ->
+                            if (trackAdditionInputs.size != plannedTrackAdditions.size) {
+                                error("外部轨道计划解析失败")
+                            }
+                        }.let { trackAdditionInputs ->
 
-                        if (replaceAss) {
-                            val editedAss = File(work, "edited.ass")
+                            if (replaceAss) {
+                                val editedAss = File(work, "edited.ass")
                             editedAss.writeText(AssCodec.write(snapshot.document), Charsets.UTF_8)
                             mkvGoTool.replaceAss(
                                 source = source,
@@ -1100,6 +1290,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                                 metadataEdits = metadataInputs,
                                 removeTracks = plannedTrackRemovals.map { it.target },
                                 trackMetadataEdits = trackMetadataInputs,
+                                addTracks = trackAdditionInputs,
                             )
                         } else {
                             mkvGoTool.editContainer(
@@ -1111,7 +1302,9 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                                 metadataEdits = metadataInputs,
                                 removeTracks = plannedTrackRemovals.map { it.target },
                                 trackMetadataEdits = trackMetadataInputs,
+                                addTracks = trackAdditionInputs,
                             )
+                            }
                         }
 
                         // Verify the complete remux product before publishing it to
@@ -1139,6 +1332,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                                 output = verifiedScan,
                                 removals = plannedTrackRemovals,
                                 metadataEdits = plannedTrackMetadataEdits,
+                                additions = plannedTrackAdditions,
                             )
                             require(verifiedScan.chapterCount == sourceScan.chapterCount) {
                                 "写回验证失败：章节数量发生意外变化"
@@ -1249,6 +1443,9 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 val savedMetadataTargets = plannedMetadataEdits.mapTo(hashSetOf()) { it.target }
                 val savedTrackRemovalTargets = plannedTrackRemovals.mapTo(hashSetOf()) { it.target }
                 val savedTrackMetadataTargets = plannedTrackMetadataEdits.mapTo(hashSetOf()) { it.target }
+                val savedTrackAdditionKeys = plannedTrackAdditions.mapTo(hashSetOf()) {
+                    it.sourceUri + "\u0000" + it.sourceTrackNumber
+                }
                 _state.update { state ->
                     state.copy(
                         dirty = if (documentSaved) false else state.dirty,
@@ -1266,6 +1463,11 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                                 .filterNot { it.target in savedTrackRemovalTargets },
                             pendingTrackMetadataEdits = state.container.pendingTrackMetadataEdits
                                 .filterNot { it.target in savedTrackMetadataTargets },
+                            pendingTrackAdditions = state.container.pendingTrackAdditions
+                                .filterNot {
+                                    (it.sourceUri + "\u0000" + it.sourceTrackNumber) in savedTrackAdditionKeys
+                                },
+                            trackImportCandidates = emptyList(),
                             resources = baselineScanSnapshot?.let { baseline ->
                                 diffContainerResources(baseline, verifiedScan)
                             } ?: baselineContainerResources(verifiedScan),
@@ -1281,6 +1483,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                             if (plannedRemovals.isNotEmpty()) append(" 删除附件 ").append(plannedRemovals.size).append(" 个。")
                             if (plannedReplacements.isNotEmpty()) append(" 替换附件 ").append(plannedReplacements.size).append(" 个。")
                             if (plannedMetadataEdits.isNotEmpty()) append(" 修改附件信息 ").append(plannedMetadataEdits.size).append(" 个。")
+                            if (plannedTrackAdditions.isNotEmpty()) append(" 添加轨道 ").append(plannedTrackAdditions.size).append(" 个。")
                             if (plannedTrackRemovals.isNotEmpty()) append(" 删除轨道 ").append(plannedTrackRemovals.size).append(" 个。")
                             if (plannedTrackMetadataEdits.isNotEmpty()) append(" 修改轨道信息 ").append(plannedTrackMetadataEdits.size).append(" 个。")
                             if (replaceAss && !documentSaved) append(" · 保存期间出现新字幕编辑，当前工程仍未保存。")
