@@ -139,6 +139,7 @@ func runReplaceASS(args []string) {
 		metadataEdits,
 		removeTrackTargets,
 		trackMetadataEdits,
+		trackImports,
 	); err != nil {
 		fatal(err.Error())
 	}
@@ -258,6 +259,7 @@ func runEditContainer(args []string) {
 	var replacements []ops.AttachmentReplacement
 	var metadataEdits []ops.AttachmentMetadataEdit
 	var trackMetadataEdits []ops.TrackMetadataEdit
+	var trackImports []ops.TrackImport
 	for i := 1; i < len(args); i++ {
 		switch args[i] {
 		case "-o":
@@ -315,6 +317,23 @@ func runEditContainer(args []string) {
 				IsForced: parseBoolFlag(args[i+5], "--edit-track-meta forced"),
 			})
 			i += 5
+		case "--add-track":
+			if i+6 >= len(args) {
+				fatal("--add-track needs <file> <trackID> <name> <language> <default> <forced>")
+			}
+			id, err := strconv.ParseUint(args[i+2], 10, 64)
+			if err != nil || id == 0 {
+				fatal("--add-track trackID must be a non-zero integer")
+			}
+			trackImports = append(trackImports, ops.TrackImport{
+				SourcePath: args[i+1],
+				TrackID: id,
+				Name: args[i+3],
+				Language: args[i+4],
+				IsDefault: parseBoolFlag(args[i+5], "--add-track default"),
+				IsForced: parseBoolFlag(args[i+6], "--add-track forced"),
+			})
+			i += 6
 		default:
 			fatal("unknown argument: " + args[i])
 		}
@@ -325,7 +344,8 @@ func runEditContainer(args []string) {
 			len(replacements) == 0 &&
 			len(metadataEdits) == 0 &&
 			len(removeTrackTargets) == 0 &&
-			len(trackMetadataEdits) == 0) {
+			len(trackMetadataEdits) == 0 &&
+			len(trackImports) == 0) {
 		fatal(usage())
 	}
 	ensureOutputAbsent(output)
@@ -405,7 +425,7 @@ func usage() string {
 		"  asswb-mkvgo replace-ass <file.mkv> -o <out.mkv> -t <trackID> [--font <font.ttf>]... [--attachment <file>]... [--remove-attachment <uid-or-name>]... [--replace-attachment <uid-or-name> <file>]... [--edit-attachment-meta <uid-or-name> <name> <description>]... [--remove-track <uid:id|number:id>]... [--edit-track-meta <uid:id|number:id> <name> <language> <default> <forced>]... <edited.ass>\n" +
 		"  asswb-mkvgo add-attachments <file.mkv> -o <out.mkv> --attachment <file> [--attachment <file>]...\n" +
 		"  asswb-mkvgo edit-attachments <file.mkv> -o <out.mkv> [--attachment <file>]... [--remove-attachment <uid-or-name>]... [--replace-attachment <uid-or-name> <file>]... [--edit-attachment-meta <uid-or-name> <name> <description>]...\n" +
-		"  asswb-mkvgo edit-container <file.mkv> -o <out.mkv> [attachment edits] [--remove-track <uid:id|number:id>]... [--edit-track-meta <uid:id|number:id> <name> <language> <default> <forced>]...\n" +
+		"  asswb-mkvgo edit-container <file.mkv> -o <out.mkv> [attachment edits] [--remove-track <uid:id|number:id>]... [--edit-track-meta <uid:id|number:id> <name> <language> <default> <forced>]... [--add-track <source.mkv> <trackID> <name> <language> <default> <forced>]...\n" +
 		"  asswb-mkvgo extract-attachment <file.mkv> -o <file> --target <uid-or-name>"
 }
 
