@@ -95,16 +95,17 @@ internal fun verifyContainerTrackMutations(
     output: MatroskaScanResult,
     removals: List<PendingContainerTrackRemovalUi>,
     metadataEdits: List<PendingContainerTrackMetadataUi>,
+    additions: List<PendingContainerTrackAdditionUi> = emptyList(),
 ) {
     val removalTargets = removals.mapTo(hashSetOf()) { it.target }
     val metadataByTarget = metadataEdits.associateBy { it.target }
     val expected = source.trackInfos.filterNot { it.containerTrackTarget() in removalTargets }
 
-    require(output.trackInfos.size == expected.size) {
-        "写回验证失败：预期轨道数 ${expected.size}，实际 ${output.trackInfos.size}"
+    require(output.trackInfos.size == expected.size + additions.size) {
+        "写回验证失败：预期轨道数 ${expected.size + additions.size}，实际 ${output.trackInfos.size}"
     }
 
-    expected.zip(output.trackInfos).forEachIndexed { index, (before, after) ->
+    expected.zip(output.trackInfos.take(expected.size)).forEachIndexed { index, (before, after) ->
         val target = before.containerTrackTarget()
         require(after.number == before.number) {
             "写回验证失败：第 ${index + 1} 个未删除轨道的 TrackNumber 改变"
@@ -147,6 +148,34 @@ internal fun verifyContainerTrackMutations(
             "写回验证失败：计划删除的轨道仍存在：${removal.name}"
         }
     }
+
+    val originalNumbers = source.trackInfos.mapTo(hashSetOf()) { it.number }
+    val originalUids = source.trackInfos.mapNotNullTo(hashSetOf()) { it.uid }
+    val maxOriginalNumber = source.trackInfos.maxOfOrNull { it.number } ?: 0L
+    val actualAdditions = output.trackInfos.drop(expected.size)
+    additions.zip(actualAdditions).forEachIndexed { index, (planned, actual) ->
+        require(actual.number > maxOriginalNumber && actual.number !in originalNumbers) {
+            "写回验证失败：新增轨道 ${index + 1} 复用了源 TrackNumber #${actual.number}"
+        }
+        require(actual.uid != null && actual.uid !in originalUids) {
+            "写回验证失败：新增轨道 ${index + 1} 没有获得新的 TrackUID"
+        }
+        require(actual.typeCode == planned.typeCode && actual.codecId == planned.codecId) {
+            "写回验证失败：新增轨道 ${index + 1} 的类型或 codec 不匹配"
+        }
+        require(actual.name == planned.name) {
+            "写回验证失败：新增轨道 ${index + 1} 的名称不匹配"
+        }
+        require(actual.language == planned.language) {
+            "写回验证失败：新增轨道 ${index + 1} 的语言不匹配"
+        }
+        require(actual.isDefault == planned.isDefault) {
+            "写回验证失败：新增轨道 ${index + 1} 的 Default 标志不匹配"
+        }
+        require(actual.isForced == planned.isForced) {
+            "写回验证失败：新增轨道 ${index + 1} 的 Forced 标志不匹配"
+        }
+    }
 }
 
 private fun io.github.assworkbench.container.MatroskaTrackInfo.containerTrackTarget(): String =
@@ -159,17 +188,19 @@ internal fun MatroskaScanResult.attachmentPreservationKeys(): List<String> =
             ?: "weak:${info.fileName}\u001f${info.mimeType}\u001f${info.sizeBytes ?: -1L}"
     }
 
+internal fun MatroskaTrackKind.toContainerResourceKind(): ContainerResourceKind = when (this) {
+    MatroskaTrackKind.VIDEO -> ContainerResourceKind.VIDEO
+    MatroskaTrackKind.AUDIO -> ContainerResourceKind.AUDIO
+    MatroskaTrackKind.SUBTITLE -> ContainerResourceKind.SUBTITLE
+    else -> ContainerResourceKind.OTHER
+}
+
 private fun MatroskaScanResult.inventoryItems(): List<InventoryItem> {
     val assEvents = subtitleTracks.associateBy({ it.number }, { it.packets.size })
     val items = mutableListOf<InventoryItem>()
 
     trackInfos.forEach { info ->
-        val kind = when (info.kind) {
-            MatroskaTrackKind.VIDEO -> ContainerResourceKind.VIDEO
-            MatroskaTrackKind.AUDIO -> ContainerResourceKind.AUDIO
-            MatroskaTrackKind.SUBTITLE -> ContainerResourceKind.SUBTITLE
-            else -> ContainerResourceKind.OTHER
-        }
+        val kind = info.kind.toContainerResourceKind()
         val kindLabel = when (kind) {
             ContainerResourceKind.VIDEO -> "视频"
             ContainerResourceKind.AUDIO -> "音频"
