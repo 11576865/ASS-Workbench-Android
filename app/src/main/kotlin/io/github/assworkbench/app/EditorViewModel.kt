@@ -478,7 +478,9 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             ?.substringAfterLast('\\')
             ?.takeIf { it.isNotBlank() }
             ?: "外部轨道来源"
+        val sourceMime = runCatching { app.contentResolver.getType(uri) }.getOrNull()
         val standaloneKind = detectStandaloneSubtitleTrackSourceKind(sourceName)
+        val matroskaFamily = isMatroskaFamilySource(sourceName, sourceMime)
 
         trackImportJob?.cancel()
         _state.update {
@@ -486,75 +488,90 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 container = it.container.copy(
                     trackImportLoading = true,
                     trackImportCandidates = emptyList(),
+                    mediaImportAssessment = null,
                 ),
-                status = if (standaloneKind != null) {
-                    "正在验证独立字幕并建立规范化导入计划……"
-                } else {
-                    "正在扫描外部 Matroska 轨道……"
+                status = when {
+                    standaloneKind != null ->
+                        "正在验证独立字幕并建立规范化导入计划……"
+                    matroskaFamily ->
+                        "正在扫描外部 Matroska 轨道……"
+                    else ->
+                        "正在检测外部媒体的 Track 与导入兼容性……"
                 },
             )
         }
         trackImportJob = viewModelScope.launch {
             runCatching {
                 withContext(Dispatchers.IO) {
-                    if (standaloneKind != null) {
-                        val raw = app.contentResolver.openInputStream(uri)?.use { it.readBytes() }
-                            ?: error("无法读取独立字幕")
-                        val normalized = normalizeStandaloneSubtitleTrackSource(
-                            sourceKind = standaloneKind,
-                            raw = raw,
-                        )
-                        listOf(
-                            PendingContainerTrackAdditionUi(
+                    when {
+                        standaloneKind != null -> {
+                            val raw = app.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                                ?: error("无法读取独立字幕")
+                            val normalized = normalizeStandaloneSubtitleTrackSource(
                                 sourceKind = standaloneKind,
-                                sourceUri = uri.toString(),
-                                sourceName = sourceName,
-                                sourceSha256 = normalized.normalizedSha256,
-                                kind = ContainerResourceKind.SUBTITLE,
-                                typeCode = 17L,
-                                codecId = "S_TEXT/ASS",
-                                name = sourceName.substringBeforeLast('.').ifBlank { "Imported subtitle" },
-                                language = "und",
-                                sourceIsDefault = false,
-                                isDefault = false,
-                                isForced = false,
+                                raw = raw,
                             )
-                        )
-                    } else {
-                        val stream = app.contentResolver.openInputStream(uri)
-                            ?: error("无法读取外部 Matroska")
-                        val scan = stream.use {
-                            MatroskaReader().scan(
-                                input = it,
-                                retainAttachments = false,
-                            )
+                            listOf(
+                                PendingContainerTrackAdditionUi(
+                                    sourceKind = standaloneKind,
+                                    sourceUri = uri.toString(),
+                                    sourceName = sourceName,
+                                    sourceSha256 = normalized.normalizedSha256,
+                                    kind = ContainerResourceKind.SUBTITLE,
+                                    typeCode = 17L,
+                                    codecId = "S_TEXT/ASS",
+                                    name = sourceName.substringBeforeLast('.').ifBlank { "Imported subtitle" },
+                                    language = "und",
+                                    sourceIsDefault = false,
+                                    isDefault = false,
+                                    isForced = false,
+                                )
+                            ) to null
                         }
-                        scan.trackInfos.mapNotNull { info ->
-                            val kind = info.kind.toContainerResourceKind()
-                            if (
-                                kind != ContainerResourceKind.VIDEO &&
-                                kind != ContainerResourceKind.AUDIO &&
-                                kind != ContainerResourceKind.SUBTITLE
-                            ) return@mapNotNull null
-                            PendingContainerTrackAdditionUi(
-                                sourceKind = ContainerTrackImportSourceKind.MATROSKA_TRACK,
-                                sourceUri = uri.toString(),
-                                sourceName = sourceName,
-                                sourceTrackNumber = info.number,
-                                sourceTrackUid = info.uid,
-                                kind = kind,
-                                typeCode = info.typeCode,
-                                codecId = info.codecId,
-                                name = info.name,
-                                language = info.language,
-                                sourceIsDefault = info.isDefault,
-                                isDefault = false,
-                                isForced = info.isForced,
-                            )
+                        matroskaFamily -> {
+                            val stream = app.contentResolver.openInputStream(uri)
+                                ?: error("无法读取外部 Matroska")
+                            val scan = stream.use {
+                                MatroskaReader().scan(
+                                    input = it,
+                                    retainAttachments = false,
+                                )
+                            }
+                            scan.trackInfos.mapNotNull { info ->
+                                val kind = info.kind.toContainerResourceKind()
+                                if (
+                                    kind != ContainerResourceKind.VIDEO &&
+                                    kind != ContainerResourceKind.AUDIO &&
+                                    kind != ContainerResourceKind.SUBTITLE
+                                ) return@mapNotNull null
+                                PendingContainerTrackAdditionUi(
+                                    sourceKind = ContainerTrackImportSourceKind.MATROSKA_TRACK,
+                                    sourceUri = uri.toString(),
+                                    sourceName = sourceName,
+                                    sourceTrackNumber = info.number,
+                                    sourceTrackUid = info.uid,
+                                    kind = kind,
+                                    typeCode = info.typeCode,
+                                    codecId = info.codecId,
+                                    name = info.name,
+                                    language = info.language,
+                                    sourceIsDefault = info.isDefault,
+                                    isDefault = false,
+                                    isForced = info.isForced,
+                                )
+                            } to null
+                        }
+                        else -> {
+                            emptyList<PendingContainerTrackAdditionUi>() to
+                                AndroidMediaImportProbe.probe(
+                                    context = app,
+                                    uri = uri,
+                                    sourceName = sourceName,
+                                )
                         }
                     }
                 }
-            }.onSuccess { candidates ->
+            }.onSuccess { (candidates, assessment) ->
                 if (
                     _state.value.workspaceSessionId != sessionId ||
                     _state.value.container.uri != containerUri
@@ -564,8 +581,21 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                         container = it.container.copy(
                             trackImportLoading = false,
                             trackImportCandidates = candidates,
+                            mediaImportAssessment = assessment,
                         ),
                         status = when {
+                            assessment != null -> {
+                                val streamCopy = assessment.tracks.count {
+                                    it.disposition == MediaImportDisposition.STREAM_COPY_COMPATIBLE
+                                }
+                                val transcode = assessment.tracks.count {
+                                    it.disposition == MediaImportDisposition.TRANSCODE_REQUIRED
+                                }
+                                val unresolved = assessment.tracks.size - streamCopy - transcode
+                                "媒体兼容性检测完成：${assessment.tracks.size} 条 Track；" +
+                                    "stream-copy 候选 $streamCopy，需转码 $transcode，" +
+                                    "未决/不支持 $unresolved。当前仅检测，不会进入写入计划。"
+                            }
                             candidates.isEmpty() ->
                                 "外部来源没有可导入的视频 / 音频 / 字幕轨道。"
                             standaloneKind == ContainerTrackImportSourceKind.STANDALONE_ASS ->
@@ -588,6 +618,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                         container = it.container.copy(
                             trackImportLoading = false,
                             trackImportCandidates = emptyList(),
+                            mediaImportAssessment = null,
                         ),
                         status = "外部轨道扫描失败：" + (error.message ?: error::class.java.simpleName),
                     )
@@ -652,6 +683,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 container = it.container.copy(
                     trackImportLoading = false,
                     trackImportCandidates = emptyList(),
+                    mediaImportAssessment = null,
                 ),
             )
         }
