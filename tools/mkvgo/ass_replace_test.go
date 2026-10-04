@@ -611,6 +611,7 @@ func TestEditContainerResourcesPreservesSurvivingTrackIdentity(t *testing.T) {
 			IsDefault: false,
 			IsForced: false,
 		}},
+		nil,
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -705,5 +706,408 @@ func TestPlanTrackEditsRejectsRemovingAllTracks(t *testing.T) {
 	)
 	if err == nil || !strings.Contains(err.Error(), "cannot remove all tracks") {
 		t.Fatalf("expected remove-all rejection, got %v", err)
+	}
+}
+
+
+func TestEditContainerResourcesAddsExternalTrackWithFreshIdentity(t *testing.T) {
+	dir := t.TempDir()
+	base := filepath.Join(dir, "base.mkv")
+	external := filepath.Join(dir, "external.mkv")
+	dst := filepath.Join(dir, "with-audio.mkv")
+
+	keepAttachment := []byte("keep attachment")
+	baseContainer := &mkv.Container{
+		Info: mkv.SegmentInfo{
+			TimecodeScale: 1_000_000,
+			Title: "Base",
+			SegmentUID: []byte("base-segment-0001"),
+		},
+		Chapters: []mkv.Chapter{{ID: 4, Title: "Base chapter", StartMs: 0, EndMs: 1800}},
+		Attachments: []mkv.Attachment{{
+			ID: 11,
+			Name: "keep.txt",
+			MIMEType: "text/plain",
+			Data: keepAttachment,
+			Size: int64(len(keepAttachment)),
+		}},
+		Tags: []mkv.Tag{{
+			TargetType: "MOVIE",
+			SimpleTags: []mkv.SimpleTag{{Name: "BASE_GLOBAL", Value: "keep"}},
+		}},
+	}
+	baseVideo := mkv.Track{
+		ID: 1, UID: 101, Type: mkv.VideoTrack, Codec: "vp9",
+		Name: "Video", Language: "und", IsDefault: true,
+	}
+	baseSub := mkv.Track{
+		ID: 5, UID: 505, Type: mkv.SubtitleTrack, Codec: "ass",
+		Name: "Signs", Language: "eng",
+		CodecPrivate: []byte("[Script Info]\nScriptType: v4.00+\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text"),
+	}
+	out, err := os.Create(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mw := writer.NewMKVWriter(out)
+	if err := mw.WriteStart(); err != nil {
+		t.Fatal(err)
+	}
+	if err := mw.WriteMetadata(baseContainer, []mkv.Track{baseVideo, baseSub}, 2000); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.WriteCluster(out, 0, 1_000_000, []mkv.Block{
+		{TrackNumber: 1, Timecode: 0, Keyframe: true, Data: []byte{0x01}},
+		{TrackNumber: 5, Timecode: 100, Duration: 700, Data: []byte("0,0,Default,,0,0,0,,Base subtitle")},
+		{TrackNumber: 1, Timecode: 1000, Keyframe: true, Data: []byte{0x02}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := mw.Finalize(); err != nil {
+		t.Fatal(err)
+	}
+	if err := out.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	externalContainer := &mkv.Container{
+		Info: mkv.SegmentInfo{
+			TimecodeScale: 1_000_000,
+			Title: "External audio",
+		},
+		Tags: []mkv.Tag{{
+			TargetID: 202,
+			SimpleTags: []mkv.SimpleTag{{Name: "SOURCE_TRACK_NOTE", Value: "retarget-me"}},
+		}},
+	}
+	externalAudio := mkv.Track{
+		ID: 2, UID: 202, Type: mkv.AudioTrack, Codec: "opus",
+		Name: "Source audio", Language: "jpn", IsDefault: true,
+	}
+	out, err = os.Create(external)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mw = writer.NewMKVWriter(out)
+	if err := mw.WriteStart(); err != nil {
+		t.Fatal(err)
+	}
+	if err := mw.WriteMetadata(externalContainer, []mkv.Track{externalAudio}, 3500); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.WriteCluster(out, 0, 1_000_000, []mkv.Block{
+		{TrackNumber: 2, Timecode: 0, Keyframe: true, Data: []byte("audio-0")},
+		{TrackNumber: 2, Timecode: 1500, Keyframe: true, Data: []byte("audio-1")},
+		{TrackNumber: 2, Timecode: 3000, Keyframe: true, Data: []byte("audio-2")},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := mw.Finalize(); err != nil {
+		t.Fatal(err)
+	}
+	if err := out.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := EditContainerResources(
+		context.Background(),
+		base,
+		dst,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		[]TrackAddition{{
+			SourcePath: external,
+			SourceTrackID: 2,
+			Name: "Japanese commentary",
+			Language: "jpn",
+			IsDefault: false,
+			IsForced: false,
+		}},
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := reader.Open(context.Background(), dst)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Tracks) != 3 {
+		t.Fatalf("track count = %d, want 3: %+v", len(got.Tracks), got.Tracks)
+	}
+	if got.Tracks[0].ID != 1 || got.Tracks[0].UID != 101 ||
+		got.Tracks[1].ID != 5 || got.Tracks[1].UID != 505 {
+		t.Fatalf("surviving destination identities changed: %+v", got.Tracks)
+	}
+	added := got.Tracks[2]
+	if added.ID != 6 {
+		t.Fatalf("added TrackNumber = %d, want 6 (above original max 5)", added.ID)
+	}
+	if added.UID <= 505 || added.UID == 202 {
+		t.Fatalf("added TrackUID = %d, want fresh destination identity above original range", added.UID)
+	}
+	if added.Type != mkv.AudioTrack || added.Codec != "opus" ||
+		added.Name != "Japanese commentary" || added.Language != "jpn" ||
+		added.IsDefault || added.IsForced {
+		t.Fatalf("added track metadata/codec changed: %+v", added)
+	}
+	if len(got.Attachments) != 1 || got.Attachments[0].ID != 11 ||
+		!bytes.Equal(got.Attachments[0].Data, keepAttachment) {
+		t.Fatalf("base attachment changed: %+v", got.Attachments)
+	}
+	if len(got.Chapters) != 1 || got.Chapters[0].Title != "Base chapter" {
+		t.Fatalf("base chapter changed: %+v", got.Chapters)
+	}
+	if got.DurationMs < 3500 {
+		t.Fatalf("output duration = %dms, want >= 3500ms from longer added source", got.DurationMs)
+	}
+
+	var retargeted bool
+	for _, tag := range got.Tags {
+		if tag.TargetID != added.UID {
+			continue
+		}
+		for _, st := range tag.SimpleTags {
+			if st.Name == "SOURCE_TRACK_NOTE" && st.Value == "retarget-me" {
+				retargeted = true
+			}
+		}
+	}
+	if !retargeted {
+		t.Fatalf("source track-targeted tag was not retargeted to new TrackUID %d: %+v", added.UID, got.Tags)
+	}
+
+	blockFile, err := os.Open(dst)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer blockFile.Close()
+	br, err := reader.NewBlockReader(blockFile, got.Info.TimecodeScale)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var addedPayloads []string
+	lastTime := int64(-1)
+	for {
+		block, err := br.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		if block.Timecode < lastTime {
+			t.Fatalf("output blocks not time-ordered: %d after %d", block.Timecode, lastTime)
+		}
+		lastTime = block.Timecode
+		if block.TrackNumber == 6 {
+			addedPayloads = append(addedPayloads, string(block.Data))
+		}
+	}
+	if strings.Join(addedPayloads, ",") != "audio-0,audio-1,audio-2" {
+		t.Fatalf("added track payloads = %v", addedPayloads)
+	}
+}
+
+func TestReplaceASSCanAddExternalTrackInSameRemux(t *testing.T) {
+	dir := t.TempDir()
+	base := filepath.Join(dir, "base-ass.mkv")
+	external := filepath.Join(dir, "external-audio.mkv")
+	assPath := filepath.Join(dir, "edited.ass")
+	dst := filepath.Join(dir, "combined.mkv")
+
+	header := "[Script Info]\nScriptType: v4.00+\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text"
+	if err := os.WriteFile(
+		assPath,
+		[]byte(header+"\nDialogue: 0,0:00:00.25,0:00:01.75,Default,,0,0,0,,Edited plus imported audio"),
+		0644,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	video := mkv.Track{ID: 1, UID: 101, Type: mkv.VideoTrack, Codec: "vp9"}
+	sub := mkv.Track{
+		ID: 2, UID: 202, Type: mkv.SubtitleTrack, Codec: "ass",
+		Name: "Main ASS", Language: "eng", CodecPrivate: []byte(header),
+	}
+	out, err := os.Create(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mw := writer.NewMKVWriter(out)
+	if err := mw.WriteStart(); err != nil {
+		t.Fatal(err)
+	}
+	if err := mw.WriteMetadata(
+		&mkv.Container{Info: mkv.SegmentInfo{TimecodeScale: 1_000_000}},
+		[]mkv.Track{video, sub},
+		2000,
+	); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.WriteCluster(out, 0, 1_000_000, []mkv.Block{
+		{TrackNumber: 1, Timecode: 0, Keyframe: true, Data: []byte{0x01}},
+		{TrackNumber: 2, Timecode: 0, Duration: 1000, Data: []byte("0,0,Default,,0,0,0,,Old line")},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := mw.Finalize(); err != nil {
+		t.Fatal(err)
+	}
+	if err := out.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	audio := mkv.Track{
+		ID: 1, UID: 901, Type: mkv.AudioTrack, Codec: "opus",
+		Name: "External", Language: "jpn",
+	}
+	out, err = os.Create(external)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mw = writer.NewMKVWriter(out)
+	if err := mw.WriteStart(); err != nil {
+		t.Fatal(err)
+	}
+	if err := mw.WriteMetadata(
+		&mkv.Container{Info: mkv.SegmentInfo{TimecodeScale: 1_000_000}},
+		[]mkv.Track{audio},
+		1800,
+	); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.WriteCluster(out, 0, 1_000_000, []mkv.Block{
+		{TrackNumber: 1, Timecode: 100, Keyframe: true, Data: []byte("external-audio")},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := mw.Finalize(); err != nil {
+		t.Fatal(err)
+	}
+	if err := out.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := ReplaceASSWithAttachmentEdits(
+		context.Background(),
+		base,
+		2,
+		assPath,
+		dst,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		[]TrackAddition{{
+			SourcePath: external,
+			SourceTrackID: 1,
+			Name: "Imported audio",
+			Language: "jpn",
+			IsDefault: false,
+			IsForced: false,
+		}},
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := reader.Open(context.Background(), dst)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Tracks) != 3 {
+		t.Fatalf("track count = %d, want 3: %+v", len(got.Tracks), got.Tracks)
+	}
+	if got.Tracks[0].ID != 1 || got.Tracks[0].UID != 101 ||
+		got.Tracks[1].ID != 2 || got.Tracks[1].UID != 202 {
+		t.Fatalf("base track identities changed: %+v", got.Tracks)
+	}
+	if got.Tracks[2].ID != 3 || got.Tracks[2].UID <= 202 || got.Tracks[2].Codec != "opus" {
+		t.Fatalf("imported track identity/codec wrong: %+v", got.Tracks[2])
+	}
+
+	blockFile, err := os.Open(dst)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer blockFile.Close()
+	br, err := reader.NewBlockReader(blockFile, got.Info.TimecodeScale)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var editedSeen, oldSeen, audioSeen bool
+	for {
+		block, err := br.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		switch block.TrackNumber {
+		case 2:
+			if bytes.Contains(block.Data, []byte("Edited plus imported audio")) {
+				editedSeen = true
+			}
+			if bytes.Contains(block.Data, []byte("Old line")) {
+				oldSeen = true
+			}
+		case 3:
+			if bytes.Equal(block.Data, []byte("external-audio")) {
+				audioSeen = true
+			}
+		}
+	}
+	if !editedSeen || oldSeen || !audioSeen {
+		t.Fatalf("combined ASS/import payload result: edited=%v old=%v audio=%v", editedSeen, oldSeen, audioSeen)
+	}
+}
+
+func TestPlanTrackAdditionsRejectsDuplicateSourceTrack(t *testing.T) {
+	dir := t.TempDir()
+	source := filepath.Join(dir, "source.mkv")
+	track := mkv.Track{ID: 1, UID: 77, Type: mkv.AudioTrack, Codec: "opus"}
+
+	out, err := os.Create(source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mw := writer.NewMKVWriter(out)
+	if err := mw.WriteStart(); err != nil {
+		t.Fatal(err)
+	}
+	if err := mw.WriteMetadata(
+		&mkv.Container{Info: mkv.SegmentInfo{TimecodeScale: 1_000_000}},
+		[]mkv.Track{track},
+		1000,
+	); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.WriteCluster(out, 0, 1_000_000, []mkv.Block{
+		{TrackNumber: 1, Timecode: 0, Keyframe: true, Data: []byte("payload")},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := mw.Finalize(); err != nil {
+		t.Fatal(err)
+	}
+	if err := out.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	addition := TrackAddition{SourcePath: source, SourceTrackID: 1}
+	_, _, _, _, err = planTrackAdditions(
+		context.Background(),
+		nil,
+		[]TrackAddition{addition, addition},
+		mkv.FSFrom(nil),
+	)
+	if err == nil || !strings.Contains(err.Error(), "more than once") {
+		t.Fatalf("expected duplicate source-track rejection, got %v", err)
 	}
 }
