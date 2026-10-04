@@ -62,6 +62,11 @@ internal enum class WorkspacePresentationMode(
         status = UiVariantStatus.EXPERIMENTAL,
         description = "左右书签轨与四边工具层围绕中央预览展开；边层可临时、驻留、拖动预览并吸附尺寸。",
     ),
+    TIMELINE_DOCK_EXPERIMENTAL(
+        title = "常驻时间轴工作台",
+        status = UiVariantStatus.EXPERIMENTAL,
+        description = "预览与底部时间骨架持续共存；时间轴可上拉展开、下拉收拢并调节高度，保持同一时间视口现场。",
+    ),
 }
 
 /**
