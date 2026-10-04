@@ -363,6 +363,71 @@ class ContainerEditPlanTest {
     }
 
     @Test
+    fun replacingEntireTrackSetWithExternalImportPassesPreflight() {
+        val resources = listOf(
+            ContainerResourceUi(
+                rowKey = "track:uid:101",
+                kind = ContainerResourceKind.VIDEO,
+                title = "Video",
+                detail = "V_VP9 · Track #1",
+                trackNumber = 1L,
+                trackTarget = "uid:101",
+            ),
+            ContainerResourceUi(
+                rowKey = "track:uid:202",
+                kind = ContainerResourceKind.AUDIO,
+                title = "Audio",
+                detail = "A_OPUS · Track #2",
+                trackNumber = 2L,
+                trackTarget = "uid:202",
+            ),
+        )
+        val state = EditorState(
+            container = ContainerBridgeState(
+                uri = "fixture-source",
+                writeBackAvailable = true,
+                resources = resources,
+                pendingTrackRemovals = listOf(
+                    PendingContainerTrackRemovalUi("uid:101", 1L, "Video"),
+                    PendingContainerTrackRemovalUi("uid:202", 2L, "Audio"),
+                ),
+                pendingTrackImports = listOf(
+                    PendingContainerTrackImportUi(
+                        sourceUri = "content://fixture/replacement.mkv",
+                        sourceName = "replacement.mkv",
+                        sourceTrackNumber = 7L,
+                        sourceTrackUid = 707L,
+                        kind = ContainerResourceKind.AUDIO,
+                        codecId = "A_OPUS",
+                        name = "Replacement",
+                        language = "und",
+                        isDefault = false,
+                        isForced = false,
+                        sourceAttachmentCount = 0,
+                    )
+                ),
+            ),
+        )
+
+        val plan = buildContainerEditPlan(state)
+
+        assertTrue(plan.executable)
+        assertEquals(
+            ContainerCompatibilityStatus.SUPPORTED,
+            plan.checks.single {
+                it.dimension == ContainerCompatibilityDimension.CONTAINER_STRUCTURE
+            }.status,
+        )
+        assertEquals(
+            setOf(
+                ContainerMutationKind.REMOVE_TRACK,
+                ContainerMutationKind.ADD_TRACK,
+            ),
+            plan.mutations.map { it.kind }.toSet(),
+        )
+    }
+
+    @Test
     fun removingDirtySelectedAssBlocksPreflight() {
         val resources = listOf(
             ContainerResourceUi(
