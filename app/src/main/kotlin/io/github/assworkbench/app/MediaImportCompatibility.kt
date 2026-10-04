@@ -41,6 +41,7 @@ data class MediaImportTrackAssessment(
 )
 
 data class MediaImportSourceAssessment(
+    val sourceUri: String,
     val sourceName: String,
     val tracks: List<MediaImportTrackAssessment>,
 )
@@ -64,7 +65,12 @@ internal object MediaImportCompatibilityPlanner {
             "video/x-vnd.on2.vp9" -> streamCopy(track, "V_VP9", "VP9 可直接映射到 Matroska CodecID。")
 
             "audio/mp4a-latm" -> codecPrivateRequired(track, "A_AAC", "AAC")
-            "audio/mpeg" -> streamCopy(track, "A_MPEG/L3", "MPEG Layer III 可直接映射到 Matroska CodecID。")
+            "audio/mpeg" -> streamCopy(
+                track,
+                "A_MPEG/L3",
+                "MPEG Layer III 可直接映射到 Matroska CodecID；当前已实现 MediaExtractor packet stream-copy adapter。",
+                executionImplemented = true,
+            )
             "audio/flac" -> codecPrivateRequired(track, "A_FLAC", "FLAC")
             "audio/ac3" -> streamCopy(track, "A_AC3", "AC-3 可直接映射到 Matroska CodecID。")
             "audio/eac3" -> streamCopy(track, "A_EAC3", "E-AC-3 可直接映射到 Matroska CodecID。")
@@ -134,12 +140,17 @@ internal object MediaImportCompatibilityPlanner {
         track: MediaImportTrackDescriptor,
         codecId: String,
         reason: String,
+        executionImplemented: Boolean = false,
     ) = MediaImportTrackAssessment(
         descriptor = track,
         disposition = MediaImportDisposition.STREAM_COPY_COMPATIBLE,
         matroskaCodecId = codecId,
-        executionImplemented = false,
-        reason = reason + " 当前仅完成兼容性判定，实际外部 demux → Matroska 写入尚未接线。",
+        executionImplemented = executionImplemented,
+        reason = if (executionImplemented) {
+            reason
+        } else {
+            reason + " 当前仅完成兼容性判定，实际外部 demux → Matroska 写入尚未接线。"
+        },
     )
 
     private fun unknown(
