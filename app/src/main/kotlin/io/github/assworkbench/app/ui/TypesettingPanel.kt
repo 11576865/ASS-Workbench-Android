@@ -344,7 +344,7 @@ fun TypesettingPanel(
                             onClick = viewModel::clearSelectedStyleOverrides,
                             modifier = Modifier.fillMaxWidth(),
                         ) {
-                            Text("让已选字幕全部继承 Style（$selectedOverrideCount 条存在覆盖）")
+                            Text("清除已选字幕的直接 Style 覆盖（$selectedOverrideCount 条）")
                         }
                     }
                 }
@@ -506,7 +506,7 @@ fun TypesettingPanel(
                     OutlinedButton(
                         onClick = { focusedEvent?.id?.let(viewModel::clearEventStyleOverrides) },
                         modifier = Modifier.fillMaxWidth(),
-                    ) { Text("清除覆盖，改由 Style 控制") }
+                    ) { Text("清除直接覆盖，保留 Transform 动画") }
                 }
             }
         }
