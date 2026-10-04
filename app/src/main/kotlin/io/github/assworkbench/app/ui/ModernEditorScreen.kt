@@ -6109,24 +6109,27 @@ private fun PositionPane(
         state.document, state.previewDocument, state.previewOwnerId, event.id,
     ) ?: event
     val externalPreview = displayEvent != event
-    var localPreviewRevision by remember(event.id, event.text) { mutableStateOf<Long?>(null) }
-    var localPreviewParameter by remember(event.id, event.text) { mutableStateOf<String?>(null) }
-    val externalTransformPreview = io.github.assworkbench.app.ui.preview.GeometryParameterDisplay.externalPreview(
-        state.document, state.previewDocument, state.previewOwnerId, event.id,
-        state.geometryPreviewRevision, localPreviewRevision,
-    )
-    fun publishLocalPreview(parameter: String, action: () -> Unit): Long {
-        action()
-        val revision = viewModel.state.value.geometryPreviewRevision
-        localPreviewParameter = parameter
-        localPreviewRevision = revision
-        return revision
+    var localPreviewLease by remember(state.workspaceSessionId, event.id, event.text) {
+        mutableStateOf<io.github.assworkbench.app.ui.preview.GeometryPreviewLease?>(null)
     }
-    fun ownsLocalPreview(parameter: String, revision: Long? = localPreviewRevision): Boolean {
+    val externalParameterPreview = io.github.assworkbench.app.ui.preview.GeometryParameterDisplay.externalPreview(
+        state.document, state.previewDocument, state.previewOwnerId, event.id,
+        state.geometryPreviewRevision, localPreviewLease?.revision,
+    )
+    fun publishLocalPreview(parameter: String, action: () -> Unit): io.github.assworkbench.app.ui.preview.GeometryPreviewLease {
+        action()
         val current = viewModel.state.value
-        return revision != null && current.geometryPreviewRevision == revision &&
-            localPreviewParameter == parameter && current.previewDocument != null &&
-            current.previewOwnerId == "geometry:${event.id}"
+        return io.github.assworkbench.app.ui.preview.GeometryPreviewLease(
+            current.workspaceSessionId, event.id, parameter, current.geometryPreviewRevision,
+        ).also { localPreviewLease = it }
+    }
+    fun ownsLocalPreview(
+        parameter: String,
+        lease: io.github.assworkbench.app.ui.preview.GeometryPreviewLease? = localPreviewLease,
+    ): Boolean {
+        val current = viewModel.state.value
+        return lease?.owns(current.workspaceSessionId, event.id, parameter,
+            current.geometryPreviewRevision, current.previewOwnerId, current.previewDocument != null) == true
     }
     val displayGeometry = remember(displayEvent.text) { AssGeometrySemantic.inspect(displayEvent.text) }
     val style = state.document.styles.firstOrNull { it.name == event.style }
@@ -6136,71 +6139,71 @@ private fun PositionPane(
         AssEffectiveInspector.inspect(displayDocument, displayEvent).associateBy { it.name }
     }
 
-    var x by remember(event.id, event.text) { mutableStateOf(geometry.position?.x?.toString().orEmpty()) }
-    var y by remember(event.id, event.text) { mutableStateOf(geometry.position?.y?.toString().orEmpty()) }
-    var moveStartX by remember(event.id, event.text) { mutableStateOf(geometry.move?.start?.x?.toString().orEmpty()) }
-    var moveStartY by remember(event.id, event.text) { mutableStateOf(geometry.move?.start?.y?.toString().orEmpty()) }
-    var moveEndX by remember(event.id, event.text) { mutableStateOf(geometry.move?.end?.x?.toString().orEmpty()) }
-    var moveEndY by remember(event.id, event.text) { mutableStateOf(geometry.move?.end?.y?.toString().orEmpty()) }
-    var originX by remember(event.id, event.text) { mutableStateOf(geometry.origin?.x?.toString().orEmpty()) }
-    var originY by remember(event.id, event.text) { mutableStateOf(geometry.origin?.y?.toString().orEmpty()) }
-    var rotationXText by remember(event.id, event.text) {
+    var x by remember(state.workspaceSessionId, event.id, event.text) { mutableStateOf(geometry.position?.x?.toString().orEmpty()) }
+    var y by remember(state.workspaceSessionId, event.id, event.text) { mutableStateOf(geometry.position?.y?.toString().orEmpty()) }
+    var moveStartX by remember(state.workspaceSessionId, event.id, event.text) { mutableStateOf(geometry.move?.start?.x?.toString().orEmpty()) }
+    var moveStartY by remember(state.workspaceSessionId, event.id, event.text) { mutableStateOf(geometry.move?.start?.y?.toString().orEmpty()) }
+    var moveEndX by remember(state.workspaceSessionId, event.id, event.text) { mutableStateOf(geometry.move?.end?.x?.toString().orEmpty()) }
+    var moveEndY by remember(state.workspaceSessionId, event.id, event.text) { mutableStateOf(geometry.move?.end?.y?.toString().orEmpty()) }
+    var originX by remember(state.workspaceSessionId, event.id, event.text) { mutableStateOf(geometry.origin?.x?.toString().orEmpty()) }
+    var originY by remember(state.workspaceSessionId, event.id, event.text) { mutableStateOf(geometry.origin?.y?.toString().orEmpty()) }
+    var rotationXText by remember(state.workspaceSessionId, event.id, event.text) {
         mutableStateOf((geometry.rotationX ?: 0.0).toString())
     }
-    var rotationYText by remember(event.id, event.text) {
+    var rotationYText by remember(state.workspaceSessionId, event.id, event.text) {
         mutableStateOf((geometry.rotationY ?: 0.0).toString())
     }
-    var rotationText by remember(event.id, event.text, style?.angle) {
+    var rotationText by remember(state.workspaceSessionId, event.id, event.text, style?.angle) {
         mutableStateOf((geometry.rotationZ ?: style?.angle ?: 0.0).toString())
     }
-    var rotationXGestureActive by remember(event.id) { mutableStateOf(false) }
-    var rotationYGestureActive by remember(event.id) { mutableStateOf(false) }
-    var rotationGestureActive by remember(event.id) { mutableStateOf(false) }
-    var rotationXDraftChanged by remember(event.id, event.text) { mutableStateOf(false) }
-    var rotationYDraftChanged by remember(event.id, event.text) { mutableStateOf(false) }
-    var rotationDraftChanged by remember(event.id, event.text) { mutableStateOf(false) }
-    var rotationXPreviewValue by remember(event.id, event.text) {
+    var rotationXGestureActive by remember(state.workspaceSessionId, event.id) { mutableStateOf(false) }
+    var rotationYGestureActive by remember(state.workspaceSessionId, event.id) { mutableStateOf(false) }
+    var rotationGestureActive by remember(state.workspaceSessionId, event.id) { mutableStateOf(false) }
+    var rotationXDraftChanged by remember(state.workspaceSessionId, event.id, event.text) { mutableStateOf(false) }
+    var rotationYDraftChanged by remember(state.workspaceSessionId, event.id, event.text) { mutableStateOf(false) }
+    var rotationDraftChanged by remember(state.workspaceSessionId, event.id, event.text) { mutableStateOf(false) }
+    var rotationXPreviewValue by remember(state.workspaceSessionId, event.id, event.text) {
         mutableStateOf(geometry.rotationX ?: 0.0)
     }
-    var rotationYPreviewValue by remember(event.id, event.text) {
+    var rotationYPreviewValue by remember(state.workspaceSessionId, event.id, event.text) {
         mutableStateOf(geometry.rotationY ?: 0.0)
     }
-    var rotationPreviewValue by remember(event.id, event.text, style?.angle) {
+    var rotationPreviewValue by remember(state.workspaceSessionId, event.id, event.text, style?.angle) {
         mutableStateOf(geometry.rotationZ ?: style?.angle ?: 0.0)
     }
     val effectiveScaleX = geometry.scaleX ?: style?.scaleX ?: 100.0
     val effectiveScaleY = geometry.scaleY ?: style?.scaleY ?: 100.0
-    var scaleXText by remember(event.id, event.text, style?.scaleX) { mutableStateOf(effectiveScaleX.toString()) }
-    var scaleYText by remember(event.id, event.text, style?.scaleY) { mutableStateOf(effectiveScaleY.toString()) }
-    var scaleGestureActive by remember(event.id) { mutableStateOf(false) }
-    var scaleDraftChanged by remember(event.id, event.text) { mutableStateOf(false) }
-    var scalePreviewX by remember(event.id, event.text, style?.scaleX) { mutableStateOf(effectiveScaleX) }
-    var scalePreviewY by remember(event.id, event.text, style?.scaleY) { mutableStateOf(effectiveScaleY) }
-    var shearXText by remember(event.id, event.text) { mutableStateOf((geometry.shearX ?: 0.0).toString()) }
-    var shearYText by remember(event.id, event.text) { mutableStateOf((geometry.shearY ?: 0.0).toString()) }
-    var shearGestureActive by remember(event.id) { mutableStateOf(false) }
-    var shearDraftChanged by remember(event.id, event.text) { mutableStateOf(false) }
-    var shearPreviewX by remember(event.id, event.text) { mutableStateOf(geometry.shearX ?: 0.0) }
-    var shearPreviewY by remember(event.id, event.text) { mutableStateOf(geometry.shearY ?: 0.0) }
-    var clipLeftText by remember(event.id, event.text) { mutableStateOf(geometry.clipRect?.left?.toString().orEmpty()) }
-    var clipTopText by remember(event.id, event.text) { mutableStateOf(geometry.clipRect?.top?.toString().orEmpty()) }
-    var clipRightText by remember(event.id, event.text) { mutableStateOf(geometry.clipRect?.right?.toString().orEmpty()) }
-    var clipBottomText by remember(event.id, event.text) { mutableStateOf(geometry.clipRect?.bottom?.toString().orEmpty()) }
-    var clipDraftChanged by remember(event.id) { mutableStateOf(false) }
-    val scaleRatioYPerX = remember(event.id, event.text, style?.scaleX, style?.scaleY) {
+    var scaleXText by remember(state.workspaceSessionId, event.id, event.text, style?.scaleX) { mutableStateOf(effectiveScaleX.toString()) }
+    var scaleYText by remember(state.workspaceSessionId, event.id, event.text, style?.scaleY) { mutableStateOf(effectiveScaleY.toString()) }
+    var scaleGestureActive by remember(state.workspaceSessionId, event.id) { mutableStateOf(false) }
+    var scaleDraftChanged by remember(state.workspaceSessionId, event.id, event.text) { mutableStateOf(false) }
+    var scalePreviewX by remember(state.workspaceSessionId, event.id, event.text, style?.scaleX) { mutableStateOf(effectiveScaleX) }
+    var scalePreviewY by remember(state.workspaceSessionId, event.id, event.text, style?.scaleY) { mutableStateOf(effectiveScaleY) }
+    var shearXText by remember(state.workspaceSessionId, event.id, event.text) { mutableStateOf((geometry.shearX ?: 0.0).toString()) }
+    var shearYText by remember(state.workspaceSessionId, event.id, event.text) { mutableStateOf((geometry.shearY ?: 0.0).toString()) }
+    var shearGestureActive by remember(state.workspaceSessionId, event.id) { mutableStateOf(false) }
+    var shearDraftChanged by remember(state.workspaceSessionId, event.id, event.text) { mutableStateOf(false) }
+    var shearPreviewX by remember(state.workspaceSessionId, event.id, event.text) { mutableStateOf(geometry.shearX ?: 0.0) }
+    var shearPreviewY by remember(state.workspaceSessionId, event.id, event.text) { mutableStateOf(geometry.shearY ?: 0.0) }
+    var clipLeftText by remember(state.workspaceSessionId, event.id, event.text) { mutableStateOf(geometry.clipRect?.left?.toString().orEmpty()) }
+    var clipTopText by remember(state.workspaceSessionId, event.id, event.text) { mutableStateOf(geometry.clipRect?.top?.toString().orEmpty()) }
+    var clipRightText by remember(state.workspaceSessionId, event.id, event.text) { mutableStateOf(geometry.clipRect?.right?.toString().orEmpty()) }
+    var clipBottomText by remember(state.workspaceSessionId, event.id, event.text) { mutableStateOf(geometry.clipRect?.bottom?.toString().orEmpty()) }
+    var clipDraftChanged by remember(state.workspaceSessionId, event.id, event.text) { mutableStateOf(false) }
+    val scaleRatioYPerX = remember(state.workspaceSessionId, event.id, event.text, style?.scaleX, style?.scaleY) {
         if (effectiveScaleX != 0.0) effectiveScaleY / effectiveScaleX else 1.0
     }
     fun formatScale(value: Double): String {
         val rounded = kotlin.math.round(value * 100.0) / 100.0
         return if (rounded % 1.0 == 0.0) rounded.toInt().toString() else rounded.toString()
     }
-    var styleAlignment by remember(style?.name, style?.alignment) { mutableIntStateOf(style?.alignment ?: 2) }
-    var styleMarginL by remember(style?.name, style?.marginL) { mutableStateOf((style?.marginL ?: 0).toString()) }
-    var styleMarginR by remember(style?.name, style?.marginR) { mutableStateOf((style?.marginR ?: 0).toString()) }
-    var styleMarginV by remember(style?.name, style?.marginV) { mutableStateOf((style?.marginV ?: 0).toString()) }
+    var styleAlignment by remember(state.workspaceSessionId, style?.name, style?.alignment) { mutableIntStateOf(style?.alignment ?: 2) }
+    var styleMarginL by remember(state.workspaceSessionId, style?.name, style?.marginL) { mutableStateOf((style?.marginL ?: 0).toString()) }
+    var styleMarginR by remember(state.workspaceSessionId, style?.name, style?.marginR) { mutableStateOf((style?.marginR ?: 0).toString()) }
+    var styleMarginV by remember(state.workspaceSessionId, style?.name, style?.marginV) { mutableStateOf((style?.marginV ?: 0).toString()) }
 
-    LaunchedEffect(externalTransformPreview) {
-        if (externalTransformPreview) {
+    LaunchedEffect(state.workspaceSessionId, externalParameterPreview) {
+        if (externalParameterPreview) {
             rotationXGestureActive = false
             rotationYGestureActive = false
             rotationGestureActive = false
@@ -6211,95 +6214,107 @@ private fun PositionPane(
             rotationDraftChanged = false
             scaleDraftChanged = false
             shearDraftChanged = false
+            clipDraftChanged = false
         }
     }
 
-    LaunchedEffect(event.id, rotationXText, rotationXGestureActive, rotationXDraftChanged, externalTransformPreview) {
-        if (externalTransformPreview || !rotationXDraftChanged || rotationXGestureActive) return@LaunchedEffect
+    LaunchedEffect(state.workspaceSessionId, event.id, rotationXText, rotationXGestureActive, rotationXDraftChanged, externalParameterPreview) {
+        if (externalParameterPreview || !rotationXDraftChanged || rotationXGestureActive) return@LaunchedEffect
         val value = rotationXText.toDoubleOrNull() ?: return@LaunchedEffect
         rotationXPreviewValue = value
-        val pendingRevision = publishLocalPreview("rotation-x") { viewModel.previewEventRotationX(event.id, value) }
+        val pendingLease = publishLocalPreview("rotation-x") { viewModel.previewEventRotationX(event.id, value) }
         kotlinx.coroutines.delay(320)
-        if (!ownsLocalPreview("rotation-x", pendingRevision)) {
+        if (!ownsLocalPreview("rotation-x", pendingLease)) {
             rotationXDraftChanged = false
             return@LaunchedEffect
         }
         viewModel.setEventRotationX(event.id, value)
         rotationXDraftChanged = false
     }
-    LaunchedEffect(event.id, rotationYText, rotationYGestureActive, rotationYDraftChanged, externalTransformPreview) {
-        if (externalTransformPreview || !rotationYDraftChanged || rotationYGestureActive) return@LaunchedEffect
+    LaunchedEffect(state.workspaceSessionId, event.id, rotationYText, rotationYGestureActive, rotationYDraftChanged, externalParameterPreview) {
+        if (externalParameterPreview || !rotationYDraftChanged || rotationYGestureActive) return@LaunchedEffect
         val value = rotationYText.toDoubleOrNull() ?: return@LaunchedEffect
         rotationYPreviewValue = value
-        val pendingRevision = publishLocalPreview("rotation-y") { viewModel.previewEventRotationY(event.id, value) }
+        val pendingLease = publishLocalPreview("rotation-y") { viewModel.previewEventRotationY(event.id, value) }
         kotlinx.coroutines.delay(320)
-        if (!ownsLocalPreview("rotation-y", pendingRevision)) {
+        if (!ownsLocalPreview("rotation-y", pendingLease)) {
             rotationYDraftChanged = false
             return@LaunchedEffect
         }
         viewModel.setEventRotationY(event.id, value)
         rotationYDraftChanged = false
     }
-    LaunchedEffect(event.id, rotationText, rotationGestureActive, rotationDraftChanged, externalTransformPreview) {
-        if (externalTransformPreview || !rotationDraftChanged || rotationGestureActive) return@LaunchedEffect
+    LaunchedEffect(state.workspaceSessionId, event.id, rotationText, rotationGestureActive, rotationDraftChanged, externalParameterPreview) {
+        if (externalParameterPreview || !rotationDraftChanged || rotationGestureActive) return@LaunchedEffect
         val value = rotationText.toDoubleOrNull() ?: return@LaunchedEffect
-        val pendingRevision = publishLocalPreview("rotation-z") { viewModel.previewEventRotationZ(event.id, value) }
+        val pendingLease = publishLocalPreview("rotation-z") { viewModel.previewEventRotationZ(event.id, value) }
         kotlinx.coroutines.delay(320)
-        if (!ownsLocalPreview("rotation-z", pendingRevision)) {
+        if (!ownsLocalPreview("rotation-z", pendingLease)) {
             rotationDraftChanged = false
             return@LaunchedEffect
         }
         viewModel.setEventRotationZ(event.id, value)
         rotationDraftChanged = false
     }
-    LaunchedEffect(event.id, scaleXText, scaleYText, scaleGestureActive, scaleDraftChanged, externalTransformPreview) {
-        if (externalTransformPreview || !scaleDraftChanged || scaleGestureActive) return@LaunchedEffect
+    LaunchedEffect(state.workspaceSessionId, event.id, scaleXText, scaleYText, scaleGestureActive, scaleDraftChanged, externalParameterPreview) {
+        if (externalParameterPreview || !scaleDraftChanged || scaleGestureActive) return@LaunchedEffect
         val sx = scaleXText.toDoubleOrNull() ?: return@LaunchedEffect
         val sy = scaleYText.toDoubleOrNull() ?: return@LaunchedEffect
         scalePreviewX = sx
         scalePreviewY = sy
-        val pendingRevision = publishLocalPreview("scale") { viewModel.previewEventScale(event.id, sx, sy) }
+        val pendingLease = publishLocalPreview("scale") { viewModel.previewEventScale(event.id, sx, sy) }
         kotlinx.coroutines.delay(320)
-        if (!ownsLocalPreview("scale", pendingRevision)) {
+        if (!ownsLocalPreview("scale", pendingLease)) {
             scaleDraftChanged = false
             return@LaunchedEffect
         }
         viewModel.setEventScale(event.id, sx, sy)
         scaleDraftChanged = false
     }
-    LaunchedEffect(event.id, shearXText, shearYText, shearGestureActive, shearDraftChanged, externalTransformPreview) {
-        if (externalTransformPreview || !shearDraftChanged || shearGestureActive) return@LaunchedEffect
+    LaunchedEffect(state.workspaceSessionId, event.id, shearXText, shearYText, shearGestureActive, shearDraftChanged, externalParameterPreview) {
+        if (externalParameterPreview || !shearDraftChanged || shearGestureActive) return@LaunchedEffect
         val fx = shearXText.toDoubleOrNull() ?: return@LaunchedEffect
         val fy = shearYText.toDoubleOrNull() ?: return@LaunchedEffect
         shearPreviewX = fx
         shearPreviewY = fy
-        val pendingRevision = publishLocalPreview("shear") { viewModel.previewEventShear(event.id, fx, fy) }
+        val pendingLease = publishLocalPreview("shear") { viewModel.previewEventShear(event.id, fx, fy) }
         kotlinx.coroutines.delay(320)
-        if (!ownsLocalPreview("shear", pendingRevision)) {
+        if (!ownsLocalPreview("shear", pendingLease)) {
             shearDraftChanged = false
             return@LaunchedEffect
         }
         viewModel.setEventShear(event.id, fx, fy)
         shearDraftChanged = false
     }
-    LaunchedEffect(event.id, clipLeftText, clipTopText, clipRightText, clipBottomText, clipDraftChanged) {
-        val rect = geometry.clipRect ?: return@LaunchedEffect
+    LaunchedEffect(state.workspaceSessionId, event.id, clipLeftText, clipTopText, clipRightText, clipBottomText, clipDraftChanged, externalParameterPreview) {
+        if (geometry.clipRect == null || externalParameterPreview) return@LaunchedEffect
         if (!clipDraftChanged) return@LaunchedEffect
         val left = clipLeftText.toDoubleOrNull() ?: return@LaunchedEffect
         val top = clipTopText.toDoubleOrNull() ?: return@LaunchedEffect
         val right = clipRightText.toDoubleOrNull() ?: return@LaunchedEffect
         val bottom = clipBottomText.toDoubleOrNull() ?: return@LaunchedEffect
-        viewModel.previewEventRectClip(event.id, left, top, right, bottom, geometry.clipInverted)
+        val pendingLease = publishLocalPreview("clip") {
+            viewModel.previewEventRectClip(event.id, left, top, right, bottom, geometry.clipInverted)
+        }
         kotlinx.coroutines.delay(320)
+        if (!ownsLocalPreview("clip", pendingLease)) {
+            clipDraftChanged = false
+            return@LaunchedEffect
+        }
         viewModel.setEventRectClip(event.id, left, top, right, bottom, geometry.clipInverted)
         clipDraftChanged = false
     }
 
-    DisposableEffect(event.id) {
-        onDispose { viewModel.clearTransientPreview("geometry:${event.id}") }
+    DisposableEffect(state.workspaceSessionId, event.id) {
+        val sessionId = state.workspaceSessionId
+        onDispose {
+            if (viewModel.state.value.workspaceSessionId == sessionId) {
+                viewModel.clearTransientPreview("geometry:${event.id}")
+            }
+        }
     }
 
-    var sectionName by rememberSaveable { mutableStateOf(PositionSection.PLACEMENT.name) }
+    var sectionName by rememberSaveable(state.workspaceSessionId) { mutableStateOf(PositionSection.PLACEMENT.name) }
     val section = PositionSection.valueOf(sectionName)
     val sectionScroll = rememberLazyListState()
     LaunchedEffect(section) { sectionScroll.scrollToItem(0) }
@@ -6342,17 +6357,38 @@ private fun PositionPane(
                 }
             }
         }
-        val moveGeometry = geometry.move
-        if (geometry.positionMode == AssPositionMode.MOVE && moveGeometry != null) {
+        val placementGeometry = if (externalParameterPreview) displayGeometry else geometry
+        val moveGeometry = placementGeometry.move
+        if (placementGeometry.positionMode == AssPositionMode.MOVE && moveGeometry != null) {
             item {
                 Text("运动路径 · \\move", style = MaterialTheme.typography.titleSmall)
                 Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small)) {
-                    OutlinedTextField(moveStartX, { moveStartX = it }, label = { Text("Start X") }, singleLine = true, modifier = Modifier.weight(1f))
-                    OutlinedTextField(moveStartY, { moveStartY = it }, label = { Text("Start Y") }, singleLine = true, modifier = Modifier.weight(1f))
+                    OutlinedTextField(
+                        if (externalParameterPreview) moveGeometry.start.x.toString() else moveStartX,
+                        { moveStartX = it }, label = { Text("Start X") }, singleLine = true,
+                        readOnly = externalParameterPreview,
+                        modifier = Modifier.weight(1f).testTag("geometry-move-start-x-${event.id}-value"),
+                    )
+                    OutlinedTextField(
+                        if (externalParameterPreview) moveGeometry.start.y.toString() else moveStartY,
+                        { moveStartY = it }, label = { Text("Start Y") }, singleLine = true,
+                        readOnly = externalParameterPreview,
+                        modifier = Modifier.weight(1f).testTag("geometry-move-start-y-${event.id}-value"),
+                    )
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small)) {
-                    OutlinedTextField(moveEndX, { moveEndX = it }, label = { Text("End X") }, singleLine = true, modifier = Modifier.weight(1f))
-                    OutlinedTextField(moveEndY, { moveEndY = it }, label = { Text("End Y") }, singleLine = true, modifier = Modifier.weight(1f))
+                    OutlinedTextField(
+                        if (externalParameterPreview) moveGeometry.end.x.toString() else moveEndX,
+                        { moveEndX = it }, label = { Text("End X") }, singleLine = true,
+                        readOnly = externalParameterPreview,
+                        modifier = Modifier.weight(1f).testTag("geometry-move-end-x-${event.id}-value"),
+                    )
+                    OutlinedTextField(
+                        if (externalParameterPreview) moveGeometry.end.y.toString() else moveEndY,
+                        { moveEndY = it }, label = { Text("End Y") }, singleLine = true,
+                        readOnly = externalParameterPreview,
+                        modifier = Modifier.weight(1f).testTag("geometry-move-end-y-${event.id}-value"),
+                    )
                 }
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     val moveStartMs = moveGeometry.startMs
@@ -6375,7 +6411,8 @@ private fun PositionPane(
                         if (sx != null && sy != null && ex != null && ey != null) {
                             viewModel.setEventMove(event.id, sx, sy, ex, ey)
                         }
-                    }) { Text("应用路径") }
+                    }, enabled = !externalParameterPreview,
+                        modifier = Modifier.testTag("geometry-move-${event.id}-apply")) { Text("应用路径") }
                 }
                 Text(
                     "预览上的空心圆是 Start，实心圆是 End；拖任一端点都会实时走 libass transient preview。",
@@ -6390,18 +6427,29 @@ private fun PositionPane(
         item { Divider() }
         item {
             Text("变换原点 · \\org", style = MaterialTheme.typography.titleSmall)
-            if (geometry.origin != null) {
+            if ((if (externalParameterPreview) displayGeometry else geometry).origin != null) {
                 Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small)) {
-                    OutlinedTextField(originX, { originX = it }, label = { Text("Origin X") }, singleLine = true, modifier = Modifier.weight(1f))
-                    OutlinedTextField(originY, { originY = it }, label = { Text("Origin Y") }, singleLine = true, modifier = Modifier.weight(1f))
+                    OutlinedTextField(
+                        if (externalParameterPreview) displayGeometry.origin?.x?.toString().orEmpty() else originX,
+                        { originX = it }, label = { Text("Origin X") }, singleLine = true,
+                        readOnly = externalParameterPreview,
+                        modifier = Modifier.weight(1f).testTag("geometry-origin-x-${event.id}-value"),
+                    )
+                    OutlinedTextField(
+                        if (externalParameterPreview) displayGeometry.origin?.y?.toString().orEmpty() else originY,
+                        { originY = it }, label = { Text("Origin Y") }, singleLine = true,
+                        readOnly = externalParameterPreview,
+                        modifier = Modifier.weight(1f).testTag("geometry-origin-y-${event.id}-value"),
+                    )
                 }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                    TextButton(onClick = { viewModel.clearEventOrigin(event.id) }) { Text("移除 \\org") }
+                    TextButton(enabled = !externalParameterPreview, onClick = { viewModel.clearEventOrigin(event.id) }) { Text("移除 \\org") }
                     Button(onClick = {
                         val ox = originX.toDoubleOrNull()
                         val oy = originY.toDoubleOrNull()
                         if (ox != null && oy != null) viewModel.setEventOrigin(event.id, ox, oy)
-                    }) { Text("应用原点") }
+                    }, enabled = !externalParameterPreview,
+                        modifier = Modifier.testTag("geometry-origin-${event.id}-apply")) { Text("应用原点") }
                 }
                 Text(
                     "预览上的圆环叉标记是显式变换原点；可直接拖动。精确值允许超出画布范围。",
@@ -6419,7 +6467,7 @@ private fun PositionPane(
                         state.document.playResX / 2.0,
                         state.document.playResY / 2.0,
                     )
-                }) { Text("在画布中心添加 \\org") }
+                }, enabled = !externalParameterPreview) { Text("在画布中心添加 \\org") }
             }
         }
         item { Divider() }
@@ -6432,8 +6480,8 @@ private fun PositionPane(
             )
             ContinuousParameterControl(
                 label = "Rotation X · \\frx",
-                valueText = if (externalTransformPreview) (displayGeometry.rotationX ?: 0.0).toString() else rotationXText,
-                readOnly = externalTransformPreview,
+                valueText = if (externalParameterPreview) (displayGeometry.rotationX ?: 0.0).toString() else rotationXText,
+                readOnly = externalParameterPreview,
                 testTagPrefix = "geometry-rotation-x-${event.id}",
                 onValueTextChange = {
                     rotationXText = it
@@ -6471,8 +6519,8 @@ private fun PositionPane(
             )
             ContinuousParameterControl(
                 label = "Rotation Y · \\fry",
-                valueText = if (externalTransformPreview) (displayGeometry.rotationY ?: 0.0).toString() else rotationYText,
-                readOnly = externalTransformPreview,
+                valueText = if (externalParameterPreview) (displayGeometry.rotationY ?: 0.0).toString() else rotationYText,
+                readOnly = externalParameterPreview,
                 testTagPrefix = "geometry-rotation-y-${event.id}",
                 onValueTextChange = {
                     rotationYText = it
@@ -6510,8 +6558,8 @@ private fun PositionPane(
             )
             ContinuousParameterControl(
                 label = "Rotation Z · \\frz",
-                valueText = if (externalTransformPreview) (displayGeometry.rotationZ ?: style?.angle ?: 0.0).toString() else rotationText,
-                readOnly = externalTransformPreview,
+                valueText = if (externalParameterPreview) (displayGeometry.rotationZ ?: style?.angle ?: 0.0).toString() else rotationText,
+                readOnly = externalParameterPreview,
                 testTagPrefix = "geometry-rotation-z-${event.id}",
                 onValueTextChange = {
                     rotationText = it
@@ -6575,8 +6623,8 @@ private fun PositionPane(
             }
             ContinuousParameterControl(
                 label = "Scale X",
-                valueText = if (externalTransformPreview) (displayGeometry.scaleX ?: style?.scaleX ?: 100.0).toString() else scaleXText,
-                readOnly = externalTransformPreview,
+                valueText = if (externalParameterPreview) (displayGeometry.scaleX ?: style?.scaleX ?: 100.0).toString() else scaleXText,
+                readOnly = externalParameterPreview,
                 testTagPrefix = "geometry-scale-x-${event.id}",
                 onValueTextChange = { raw ->
                     scaleXText = raw
@@ -6608,8 +6656,8 @@ private fun PositionPane(
             )
             ContinuousParameterControl(
                 label = "Scale Y",
-                valueText = if (externalTransformPreview) (displayGeometry.scaleY ?: style?.scaleY ?: 100.0).toString() else scaleYText,
-                readOnly = externalTransformPreview,
+                valueText = if (externalParameterPreview) (displayGeometry.scaleY ?: style?.scaleY ?: 100.0).toString() else scaleYText,
+                readOnly = externalParameterPreview,
                 testTagPrefix = "geometry-scale-y-${event.id}",
                 onValueTextChange = { raw ->
                     scaleYText = raw
@@ -6670,8 +6718,8 @@ private fun PositionPane(
             )
             ContinuousParameterControl(
                 label = "Shear X · \\fax",
-                valueText = if (externalTransformPreview) (displayGeometry.shearX ?: 0.0).toString() else shearXText,
-                readOnly = externalTransformPreview,
+                valueText = if (externalParameterPreview) (displayGeometry.shearX ?: 0.0).toString() else shearXText,
+                readOnly = externalParameterPreview,
                 testTagPrefix = "geometry-shear-x-${event.id}",
                 onValueTextChange = {
                     shearXText = it
@@ -6698,8 +6746,8 @@ private fun PositionPane(
             )
             ContinuousParameterControl(
                 label = "Shear Y · \\fay",
-                valueText = if (externalTransformPreview) (displayGeometry.shearY ?: 0.0).toString() else shearYText,
-                readOnly = externalTransformPreview,
+                valueText = if (externalParameterPreview) (displayGeometry.shearY ?: 0.0).toString() else shearYText,
+                readOnly = externalParameterPreview,
                 testTagPrefix = "geometry-shear-y-${event.id}",
                 onValueTextChange = {
                     shearYText = it
@@ -6755,38 +6803,43 @@ private fun PositionPane(
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            val clipGeometry = if (externalParameterPreview) displayGeometry else geometry
             when {
-                geometry.clipNonRectangular -> {
+                clipGeometry.clipNonRectangular -> {
                     Text(
-                        "当前 Event 使用非矩形 / vector ${if (geometry.clipInverted) "\\iclip" else "\\clip"}。0.26 的矩形编辑器不会自动重写它。",
+                        "当前 Event 使用非矩形 / vector ${if (clipGeometry.clipInverted) "\\iclip" else "\\clip"}。0.26 的矩形编辑器不会自动重写它。",
                         color = MaterialTheme.colorScheme.error,
                         style = MaterialTheme.typography.bodySmall,
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small)) {
-                        OutlinedButton(onClick = { viewModel.clearEventClip(event.id) }) { Text("移除现有 clip") }
-                        Button(onClick = {
+                        OutlinedButton(enabled = !externalParameterPreview, onClick = { viewModel.clearEventClip(event.id) }) { Text("移除现有 clip") }
+                        Button(enabled = !externalParameterPreview, onClick = {
                             viewModel.setEventRectClip(event.id,
                                 state.document.playResX * 0.1,
                                 state.document.playResY * 0.1,
                                 state.document.playResX * 0.9,
                                 state.document.playResY * 0.9,
-                                geometry.clipInverted,
+                                clipGeometry.clipInverted,
                             )
                         }) { Text("明确替换为矩形") }
                     }
                 }
-                geometry.clipRect != null -> {
-                    val clipRect = requireNotNull(geometry.clipRect)
+                clipGeometry.clipRect != null -> {
+                    val clipRect = requireNotNull(clipGeometry.clipRect)
                     Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small)) {
                         FilterChip(
-                            selected = !geometry.clipInverted,
+                            selected = !clipGeometry.clipInverted,
+                            enabled = !externalParameterPreview,
+                            modifier = Modifier.testTag("geometry-clip-normal-${event.id}"),
                             onClick = {
                                 viewModel.setEventRectClip(event.id, clipRect.left, clipRect.top, clipRect.right, clipRect.bottom, false)
                             },
                             label = { Text("\\clip · 内部显示") },
                         )
                         FilterChip(
-                            selected = geometry.clipInverted,
+                            selected = clipGeometry.clipInverted,
+                            enabled = !externalParameterPreview,
+                            modifier = Modifier.testTag("geometry-clip-inverted-${event.id}"),
                             onClick = {
                                 viewModel.setEventRectClip(event.id, clipRect.left, clipRect.top, clipRect.right, clipRect.bottom, true)
                             },
@@ -6794,25 +6847,45 @@ private fun PositionPane(
                         )
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small)) {
-                        OutlinedTextField(clipLeftText, { clipLeftText = it; clipDraftChanged = true }, label = { Text("Left") }, singleLine = true, modifier = Modifier.weight(1f))
-                        OutlinedTextField(clipTopText, { clipTopText = it; clipDraftChanged = true }, label = { Text("Top") }, singleLine = true, modifier = Modifier.weight(1f))
+                        OutlinedTextField(
+                            if (externalParameterPreview) clipRect.left.toString() else clipLeftText,
+                            { clipLeftText = it; clipDraftChanged = true }, label = { Text("Left") }, singleLine = true,
+                            readOnly = externalParameterPreview,
+                            modifier = Modifier.weight(1f).testTag("geometry-clip-left-${event.id}-value"),
+                        )
+                        OutlinedTextField(
+                            if (externalParameterPreview) clipRect.top.toString() else clipTopText,
+                            { clipTopText = it; clipDraftChanged = true }, label = { Text("Top") }, singleLine = true,
+                            readOnly = externalParameterPreview,
+                            modifier = Modifier.weight(1f).testTag("geometry-clip-top-${event.id}-value"),
+                        )
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small)) {
-                        OutlinedTextField(clipRightText, { clipRightText = it; clipDraftChanged = true }, label = { Text("Right") }, singleLine = true, modifier = Modifier.weight(1f))
-                        OutlinedTextField(clipBottomText, { clipBottomText = it; clipDraftChanged = true }, label = { Text("Bottom") }, singleLine = true, modifier = Modifier.weight(1f))
+                        OutlinedTextField(
+                            if (externalParameterPreview) clipRect.right.toString() else clipRightText,
+                            { clipRightText = it; clipDraftChanged = true }, label = { Text("Right") }, singleLine = true,
+                            readOnly = externalParameterPreview,
+                            modifier = Modifier.weight(1f).testTag("geometry-clip-right-${event.id}-value"),
+                        )
+                        OutlinedTextField(
+                            if (externalParameterPreview) clipRect.bottom.toString() else clipBottomText,
+                            { clipBottomText = it; clipDraftChanged = true }, label = { Text("Bottom") }, singleLine = true,
+                            readOnly = externalParameterPreview,
+                            modifier = Modifier.weight(1f).testTag("geometry-clip-bottom-${event.id}-value"),
+                        )
                     }
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                        TextButton(onClick = { viewModel.clearEventClip(event.id) }) { Text("移除 clip") }
-                        Button(onClick = {
+                        TextButton(enabled = !externalParameterPreview, onClick = { viewModel.clearEventClip(event.id) }) { Text("移除 clip") }
+                        Button(enabled = !externalParameterPreview, onClick = {
                             val left = clipLeftText.toDoubleOrNull()
                             val top = clipTopText.toDoubleOrNull()
                             val right = clipRightText.toDoubleOrNull()
                             val bottom = clipBottomText.toDoubleOrNull()
                             if (left != null && top != null && right != null && bottom != null) {
                                 clipDraftChanged = false
-                                viewModel.setEventRectClip(event.id, left, top, right, bottom, geometry.clipInverted)
+                                viewModel.setEventRectClip(event.id, left, top, right, bottom, clipGeometry.clipInverted)
                             }
-                        }) { Text("应用矩形") }
+                        }, modifier = Modifier.testTag("geometry-clip-${event.id}-apply")) { Text("应用矩形") }
                     }
                     Text(
                         "预览中四个角均可直接拖动；拖动只改矩形裁剪坐标，不会改字幕本身的位置、旋转或缩放。",
@@ -6827,7 +6900,7 @@ private fun PositionPane(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small)) {
-                        Button(onClick = {
+                        Button(enabled = !externalParameterPreview, onClick = {
                             viewModel.setEventRectClip(event.id,
                                 state.document.playResX * 0.1,
                                 state.document.playResY * 0.1,
@@ -6836,7 +6909,7 @@ private fun PositionPane(
                                 false,
                             )
                         }) { Text("添加 \\clip") }
-                        OutlinedButton(onClick = {
+                        OutlinedButton(enabled = !externalParameterPreview, onClick = {
                             viewModel.setEventRectClip(event.id,
                                 state.document.playResX * 0.1,
                                 state.document.playResY * 0.1,
