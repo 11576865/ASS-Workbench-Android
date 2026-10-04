@@ -460,7 +460,8 @@ fun ContainerBridgePanel(
                                     ContainerTrackImportSourceKind.MATROSKA_TRACK ->
                                         candidate.codecId.ifBlank { "Track #${candidate.sourceTrackNumber}" }
                                     ContainerTrackImportSourceKind.STANDALONE_ASS,
-                                    ContainerTrackImportSourceKind.STANDALONE_SRT ->
+                                    ContainerTrackImportSourceKind.STANDALONE_SRT,
+                                    ContainerTrackImportSourceKind.NORMALIZED_MEDIA_PACKETS ->
                                         candidate.sourceName
                                 }
                             },
@@ -482,6 +483,8 @@ fun ContainerBridgePanel(
                                         append(" · 独立 SRT → normalized ASS → S_TEXT/ASS")
                                         append(" · normalized SHA-256 已固定")
                                     }
+                                    ContainerTrackImportSourceKind.NORMALIZED_MEDIA_PACKETS ->
+                                        append(" · normalized media packet source")
                                 }
                                 if (candidate.codecId.isNotBlank()) append(" · ").append(candidate.codecId)
                                 if (candidate.language.isNotBlank()) append(" · ").append(candidate.language)
