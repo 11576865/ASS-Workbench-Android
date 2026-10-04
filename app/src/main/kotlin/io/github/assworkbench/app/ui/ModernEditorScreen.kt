@@ -79,6 +79,8 @@ import io.github.assworkbench.app.ui.preview.PreviewTargetConfidence
 import io.github.assworkbench.app.ui.preview.PreviewTargetResolver
 import io.github.assworkbench.app.ui.workspace.InfiniteCanvasHost
 import io.github.assworkbench.app.ui.workspace.InfiniteCanvasEntry
+import io.github.assworkbench.app.ui.workspace.InfiniteCanvasOpenRequest
+import io.github.assworkbench.app.ui.workspace.InfiniteCanvasToolChoice
 import io.github.assworkbench.app.ui.workspace.WorkspaceBinding
 import io.github.assworkbench.app.ui.workspace.SurfaceGeometry
 import io.github.assworkbench.app.ui.workspace.FloatingWorkbenchSurface
@@ -147,6 +149,12 @@ fun ModernEditorScreen(
     var fixedToolName by rememberSaveable { mutableStateOf(WorkbenchTool.STYLE.name) }
     var fixedNavigationRevision by rememberSaveable { mutableIntStateOf(0) }
     var fixedListRequested by rememberSaveable { mutableStateOf(false) }
+    var spatialOpenRequest by remember(state.workspaceSessionId) { mutableStateOf<InfiniteCanvasOpenRequest?>(null) }
+    var spatialOpenRevision by remember(state.workspaceSessionId) { mutableLongStateOf(0L) }
+    fun revealSpatialInstance(id: String) {
+        spatialOpenRevision += 1L
+        spatialOpenRequest = InfiniteCanvasOpenRequest(id, spatialOpenRevision)
+    }
     val workspaceMode = UiVariantRegistry.resolve(workspaceModeName)
     val fixedTool = WorkbenchTool.valueOf(fixedToolName)
 
@@ -259,6 +267,9 @@ fun ModernEditorScreen(
             fixedListRequested = next == WorkbenchTool.SUBTITLES
             fixedNavigationRevision += 1
             if (!fixedListRequested) fixedToolName = next.name
+            if (workspaceMode == WorkspacePresentationMode.SPATIAL_EXPERIMENTAL) {
+                revealSpatialInstance(if (next == WorkbenchTool.SUBTITLES) "subtitles" else primaryId)
+            }
             return
         }
         workspaceState = workspaceState.withSurfacesHidden(false)
@@ -274,6 +285,9 @@ fun ModernEditorScreen(
         fixedListRequested = false
         fixedNavigationRevision += 1
         fixedToolName = toolKey
+        if (workspaceMode == WorkspacePresentationMode.SPATIAL_EXPERIMENTAL) {
+            workspaceState.activeInstanceId?.let(::revealSpatialInstance)
+        }
         if (workspaceMode == WorkspacePresentationMode.CANVAS_EXPERIMENTAL) {
             workspaceState = workspaceState.withSurfacesHidden(false)
             workspaceState.activeInstanceId?.let { id -> surfaceController.bringToFront(id) }
@@ -561,6 +575,12 @@ fun ModernEditorScreen(
                 SpatialWorkspace(
                     surfaceController = surfaceController,
                     workspaceState = workspaceState,
+                    onWorkspaceStateChange = { next ->
+                        workspaceState = next
+                        next.tools.firstOrNull { it.id == next.activeInstanceId }?.let { fixedToolName = it.toolKey }
+                    },
+                    onRevealInstance = ::revealSpatialInstance,
+                    openRequest = spatialOpenRequest,
                     interactionRegistry = interactionRegistry,
                     positionEditEventId = positionEditEventId,
                     onActivateInstance = { id ->
@@ -577,12 +597,7 @@ fun ModernEditorScreen(
                             toolKey = fixedTool.name,
                             binding = fixedTool.descriptor.defaultBinding,
                         ),
-                    onActiveTool = { tool ->
-                        fixedToolName = tool.name
-                        workspaceState = workspaceState
-                            .openPrimary(tool.name, tool.descriptor.defaultBinding)
-                            .activate(WorkspaceState.primaryInstanceId(tool.name))
-                    },
+                    onActiveTool = ::openTool,
                     expandedEventId = expandedEventId,
                     onExpandedChange = { expandedEventId = it },
                     onImportFont = onImportFont,
@@ -2929,6 +2944,9 @@ private fun ObjectRelationPanel(
 private fun SpatialWorkspace(
     surfaceController: WorkbenchSurfaceController,
     workspaceState: WorkspaceState,
+    onWorkspaceStateChange: (WorkspaceState) -> Unit,
+    onRevealInstance: (String) -> Unit,
+    openRequest: InfiniteCanvasOpenRequest?,
     interactionRegistry: InteractionOverlayRegistry,
     positionEditEventId: Long?,
     onActivateInstance: (String) -> Unit,
@@ -2951,15 +2969,49 @@ private fun SpatialWorkspace(
     onCloseSearch: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val visibleTools = workspaceState.tools.filter { it.presence != WorkspaceToolPresence.HIDDEN }
+    val visibleTools = workspaceState.tools.filter { it.presence != WorkspaceToolPresence.HIDDEN && it.toolKey != WorkbenchTool.SUBTITLES.name }
+    fun duplicate(source: WorkspaceToolInstance, followFocus: Boolean) {
+        workspaceState.newSibling(source.id)?.let { sibling ->
+            val copy = sibling.copy(
+                binding = if (followFocus) WorkspaceBinding.FollowFocus else source.binding,
+                presence = WorkspaceToolPresence.RESIDENT,
+            )
+            onWorkspaceStateChange(workspaceState.addInstance(copy).activate(copy.id))
+            onRevealInstance(copy.id)
+        }
+    }
     val entries = listOf(
         InfiniteCanvasEntry("preview", "视频", "实时视频 / ASS"),
         InfiniteCanvasEntry("subtitles", "字幕", "选择 / 文本"),
         InfiniteCanvasEntry("audio", "音频证据", "波形 / 声谱图 · 与视频同步"),
     ) + visibleTools.mapNotNull { toolInstance ->
         WorkbenchTool.entries.firstOrNull { it.name == toolInstance.toolKey }?.let { tool ->
-            InfiniteCanvasEntry(toolInstance.id, tool.title,
-                if (toolInstance.binding is WorkspaceBinding.PinnedEvent) "固定字幕对象" else "跟随当前选择")
+            val pinned = toolInstance.binding as? WorkspaceBinding.PinnedEvent
+            val bindingLabel = when (val binding = toolInstance.binding) {
+                is WorkspaceBinding.PinnedEvent -> "固定 Event #${binding.eventId}" +
+                    if (state.document.events.none { it.id == binding.eventId }) " · 已失效" else ""
+                WorkspaceBinding.FollowSelection -> "跟随选择 · ${state.selectedEventIds.size} 个 Event"
+                WorkspaceBinding.FollowFocus -> if (tool.descriptor.eventBindable) {
+                    state.focusedEventId?.let { "跟随 Event #$it" } ?: "未选择 Event"
+                } else tool.group.title
+            }
+            InfiniteCanvasEntry(
+                id = toolInstance.id,
+                title = tool.title + if (toolInstance.id.endsWith(":primary")) "" else " · ${toolInstance.id.substringAfterLast(':')}",
+                subtitle = bindingLabel,
+                pinLabel = if (pinned != null) "解除对象固定" else "固定当前 Event",
+                onTogglePin = if (tool.descriptor.supportsPinnedEvent && (pinned != null || state.focusedEventId != null)) ({
+                    val next = if (pinned != null) WorkspaceBinding.FollowFocus else WorkspaceBinding.PinnedEvent(requireNotNull(state.focusedEventId))
+                    onWorkspaceStateChange(workspaceState.updateBinding(toolInstance.id, next).activate(toolInstance.id))
+                }) else null,
+                onDuplicate = if (tool.descriptor.canDuplicate) ({ duplicate(toolInstance, false) }) else null,
+                onDuplicateFollowFocus = if (tool.descriptor.canDuplicate) ({ duplicate(toolInstance, true) }) else null,
+                onClose = {
+                    if (tool == WorkbenchTool.TEXT) onExpandedChange(null)
+                    surfaceController.remove(toolInstance.id)
+                    onWorkspaceStateChange(workspaceState.closeInstance(toolInstance.id))
+                },
+            )
         }
     }
     InfiniteCanvasHost(
@@ -2967,6 +3019,10 @@ private fun SpatialWorkspace(
         savedScene = surfaceController.infiniteSceneForSession(state.workspaceSessionId),
         onSaveScene = { surfaceController.saveInfiniteScene(state.workspaceSessionId, it) },
         entries = entries,
+        toolChoices = WorkbenchTool.entries.map { InfiniteCanvasToolChoice(it.name, it.title) },
+        onOpenTool = { key -> WorkbenchTool.entries.firstOrNull { it.name == key }?.let(onActiveTool) },
+        openRequest = openRequest,
+        retainedEntryIds = setOf("preview", "subtitles", "audio") + workspaceState.tools.map { it.id },
         gestureOwned = interactionRegistry.activeHandleId != null,
         onAddTool = { onActiveTool(WorkbenchTool.CAPABILITIES) },
         onActivate = { id -> if (visibleTools.any { it.id == id }) onActivateInstance(id) },
@@ -6438,10 +6494,13 @@ private fun PositionPane(
         clipDraftChanged = false
     }
 
+    val disposalLease = key(state.workspaceSessionId, event.id) { rememberUpdatedState(localPreviewLease) }
     DisposableEffect(state.workspaceSessionId, event.id) {
-        val sessionId = state.workspaceSessionId
         onDispose {
-            if (viewModel.state.value.workspaceSessionId == sessionId) {
+            val lease = disposalLease.value
+            val current = viewModel.state.value
+            if (lease?.owns(current.workspaceSessionId, event.id, lease.parameter,
+                    current.geometryPreviewRevision, current.previewOwnerId, current.previewDocument != null) == true) {
                 viewModel.clearTransientPreview("geometry:${event.id}")
             }
         }
@@ -6460,7 +6519,7 @@ private fun PositionPane(
         }
     }
     LazyColumn(
-        Modifier.weight(1f).padding(WorkbenchDimens.Small),
+        Modifier.weight(1f).padding(WorkbenchDimens.Small).testTag("position-parameter-list-${event.id}"),
         state = sectionScroll,
         verticalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small),
     ) {

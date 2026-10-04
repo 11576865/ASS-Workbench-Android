@@ -15,3 +15,10 @@ This iteration follows the user's request to directly build an infinite-canvas v
 Audio follow-up: on-demand PCM-derived STFT spectrogram is now implemented alongside waveform; see SPATIAL-SPECTROGRAM-V1.md for analysis limits and validation. PositionPane live feedback now includes position, move endpoints, explicit origin, rotation/scale/shear and rectangle edges/inversion; see SPATIAL-POSITION-EDITING.md. Evidence limits: moving-media composition/time synchronization and full authoring acceptance remain unverified. Transparent surfaces do not guarantee every legacy tool's internal background is transparent; the waveform overlay is built for transparent composition. Playback/resource virtualization, real tablet/IME verification and the complete authoring acceptance loop require further measurement. Approximate infinity refers to unbounded world placement within finite Float precision, not unlimited hardware resources.
 
 Verification is recorded in the PR. Pure model/registry tests can run with standalone Kotlin+JUnit; complete Compose compilation and instrumentation use the repository's Android CI setup.
+
+
+Functional closure: direct tool opening/approach, object pinning, declared-capability
+binding-preserving/follow-focus duplication, close vs hide, stale scene cleanup and
+persistent layout locks are now implemented. See
+[INFINITE-CANVAS-FUNCTIONAL-CHECKLIST.md](INFINITE-CANVAS-FUNCTIONAL-CHECKLIST.md)
+for the exact v1 scope, automated evidence and user-owned acceptance boundary.

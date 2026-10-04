@@ -1,5 +1,8 @@
 package io.github.assworkbench.app
 
+import androidx.compose.ui.test.performTextReplacement
+import androidx.compose.ui.test.assertTextContains
+import androidx.compose.ui.test.assertDoesNotExist
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
@@ -66,6 +69,79 @@ class PresentationStateSmokeInstrumentedTest {
         assertEquals(selection, viewModel.state.value.focusedEventId)
         viewModel.undo()
         composeRule.waitUntil(5_000) { eventText(1L) == "Recovered line" }
+    }
+
+    @Test fun spatialToolsCanPinDuplicateCloseAndReopenWithoutDocumentEdits() {
+        composeRule.activityRule.scenario.onActivity { it.restoreDeterministicFixture() }
+        composeRule.waitUntil(10_000) { viewModel.state.value.document.events.size == 2 }
+        viewModel.focusEvent(1L, seek = false)
+        viewModel.updateEventText(1L, "Lifecycle invariant")
+        switchPresentation("SPATIAL_EXPERIMENTAL", "spatial-workspace")
+        val document = viewModel.state.value.document
+        composeRule.onNodeWithTag("spatial-add-tool").performClick()
+        composeRule.onNodeWithTag("spatial-open-POSITION").performScrollTo().performClick()
+        composeRule.onNodeWithTag("spatial-menu-POSITION-primary").performClick()
+        composeRule.onNodeWithTag("spatial-pin-POSITION-primary").performClick()
+        composeRule.runOnIdle { viewModel.focusEvent(2L, seek = false) }
+        composeRule.onNodeWithTag("spatial-binding-POSITION-primary").assertTextContains("#1")
+        composeRule.onNodeWithTag("spatial-menu-POSITION-primary").performClick()
+        composeRule.onNodeWithTag("spatial-duplicate-follow-POSITION-primary").performScrollTo().performClick()
+        composeRule.onNodeWithTag("spatial-binding-POSITION-2").assertTextContains("#2")
+        composeRule.onNodeWithTag("spatial-menu-POSITION-2").performClick()
+        composeRule.onNodeWithTag("spatial-close-POSITION-2").performScrollTo().performClick()
+        composeRule.onNodeWithTag("spatial-node-POSITION-2").assertDoesNotExist()
+        composeRule.onNodeWithText("召回").performClick()
+        composeRule.onNodeWithTag("spatial-recall-POSITION-primary").performScrollTo().performClick()
+        composeRule.onNodeWithTag("spatial-menu-POSITION-primary").performClick()
+        composeRule.onNodeWithTag("spatial-hide-POSITION-primary").performClick()
+        composeRule.onNodeWithTag("spatial-node-POSITION-primary").assertDoesNotExist()
+        composeRule.onNodeWithTag("spatial-add-tool").performClick()
+        composeRule.onNodeWithTag("spatial-open-POSITION").performScrollTo().performClick()
+        composeRule.onNodeWithTag("spatial-node-POSITION-primary").assertIsDisplayed()
+        composeRule.onNodeWithTag("spatial-binding-POSITION-primary").assertTextContains("#1")
+        assertEquals(document, viewModel.state.value.document)
+        assertEquals(2L, viewModel.state.value.focusedEventId)
+        composeRule.runOnIdle { viewModel.undo() }
+        composeRule.waitUntil(5_000) { eventText(1L) == "Recovered line" }
+    }
+
+    @Test fun closingUnownedPositionPanePreservesOtherWritersPreview() {
+        composeRule.activityRule.scenario.onActivity { it.restoreDeterministicFixture() }
+        composeRule.waitUntil(10_000) { viewModel.state.value.document.events.size == 2 }
+        viewModel.focusEvent(1L, seek = false)
+        switchPresentation("SPATIAL_EXPERIMENTAL", "spatial-workspace")
+        composeRule.onNodeWithTag("spatial-add-tool").performClick()
+        composeRule.onNodeWithTag("spatial-open-POSITION").performScrollTo().performClick()
+        composeRule.onNodeWithTag("spatial-menu-POSITION-primary").performClick()
+        composeRule.onNodeWithTag("spatial-duplicate-POSITION-primary").performScrollTo().performClick()
+        composeRule.runOnIdle { viewModel.previewEventPosition(1L, 125.0, 240.0) }
+        val preview = viewModel.state.value.previewDocument
+        assertTrue(preview != null)
+        composeRule.onNodeWithText("召回").performClick()
+        composeRule.onNodeWithTag("spatial-recall-POSITION-primary").performScrollTo().performClick()
+        composeRule.onNodeWithTag("spatial-menu-POSITION-primary").performClick()
+        composeRule.onNodeWithTag("spatial-close-POSITION-primary").performScrollTo().performClick()
+        composeRule.waitForIdle()
+        assertEquals(preview, viewModel.state.value.previewDocument)
+        composeRule.runOnIdle { viewModel.clearTransientPreview("geometry:1") }
+    }
+
+    @Test fun switchingPositionTargetCancelsItsOwnedPendingPreview() {
+        composeRule.activityRule.scenario.onActivity { it.restoreDeterministicFixture() }
+        composeRule.waitUntil(10_000) { viewModel.state.value.document.events.size == 2 }
+        viewModel.focusEvent(1L, seek = false)
+        switchPresentation("SPATIAL_EXPERIMENTAL", "spatial-workspace")
+        composeRule.onNodeWithTag("spatial-add-tool").performClick()
+        composeRule.onNodeWithTag("spatial-open-POSITION").performScrollTo().performClick()
+        composeRule.onNodeWithTag("position-section-TRANSFORM").performScrollTo().performClick()
+        val document = viewModel.state.value.document
+        composeRule.onNodeWithTag("geometry-rotation-x-1-value").performScrollTo().performTextReplacement("12.5")
+        composeRule.waitUntil(5_000) { viewModel.state.value.previewDocument != null }
+        composeRule.runOnIdle { viewModel.focusEvent(2L, seek = false) }
+        composeRule.waitUntil(5_000) { viewModel.state.value.previewDocument == null }
+        val deadline = android.os.SystemClock.uptimeMillis() + 400L
+        composeRule.waitUntil(2_000) { android.os.SystemClock.uptimeMillis() >= deadline }
+        assertEquals(document, viewModel.state.value.document)
     }
 
     @Test

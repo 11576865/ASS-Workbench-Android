@@ -86,6 +86,11 @@ internal data class WorkspaceState(
         val id = primaryInstanceId(toolKey)
         if (tools.any { it.id == id }) {
             return copy(
+                tools = tools.map { instance ->
+                    if (instance.id == id && instance.presence in setOf(WorkspaceToolPresence.HIDDEN, WorkspaceToolPresence.BOOKMARKED)) {
+                        instance.copy(presence = WorkspaceToolPresence.TEMPORARY)
+                    } else instance
+                },
                 activeInstanceId = id,
                 surfacesHidden = false,
             )

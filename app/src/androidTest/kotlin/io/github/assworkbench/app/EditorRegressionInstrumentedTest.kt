@@ -29,6 +29,8 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipe
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.performTextInput
 import androidx.test.core.app.ApplicationProvider
@@ -482,6 +484,8 @@ class EditorRegressionInstrumentedTest {
             Triple("shear-y", "-0.5") { viewModel.previewEventShear(1L, 0.25, -0.5) },
         )
         for ((parameter, value, preview) in cases) {
+            composeRule.onNodeWithTag("position-parameter-list-1")
+                .performScrollToNode(hasTestTag("geometry-$parameter-1-value"))
             val field = composeRule.onNodeWithTag("geometry-$parameter-1-value")
             field.performScrollTo().performTextReplacement("unfinished")
             composeRule.runOnIdle(preview)

@@ -26,7 +26,18 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 
-internal data class InfiniteCanvasEntry(val id: String, val title: String, val subtitle: String = "")
+internal data class InfiniteCanvasEntry(
+    val id: String,
+    val title: String,
+    val subtitle: String = "",
+    val pinLabel: String? = null,
+    val onTogglePin: (() -> Unit)? = null,
+    val onDuplicate: (() -> Unit)? = null,
+    val onDuplicateFollowFocus: (() -> Unit)? = null,
+    val onClose: (() -> Unit)? = null,
+)
+
+internal data class InfiniteCanvasToolChoice(val key: String, val title: String)
 
 
 /**
@@ -68,6 +79,10 @@ internal fun InfiniteCanvasHost(
     onRedo: () -> Unit,
     canUndo: Boolean,
     canRedo: Boolean,
+    toolChoices: List<InfiniteCanvasToolChoice> = emptyList(),
+    onOpenTool: (String) -> Unit = {},
+    openRequest: InfiniteCanvasOpenRequest? = null,
+    retainedEntryIds: Set<String> = entries.map { it.id }.toSet(),
     modifier: Modifier = Modifier,
     content: @Composable (String, Boolean) -> Unit,
 ) {
@@ -80,14 +95,18 @@ internal fun InfiniteCanvasHost(
             else InfiniteCanvasPersistence.decode(savedScene))
     }
     SideEffect { onSaveScene(InfiniteCanvasPersistence.encode(scene.first, scene.second)) }
-    var detailedId by rememberSaveable { mutableStateOf<String?>(null) }
-    var recall by remember { mutableStateOf(false) }
+    var detailedId by rememberSaveable(sessionId) { mutableStateOf<String?>(null) }
+    var recall by remember(sessionId) { mutableStateOf(false) }
+    var addMenu by remember(sessionId) { mutableStateOf(false) }
+    var handledOpenRevision by remember(sessionId) { mutableStateOf<Long?>(null) }
     val camera = scene.first
     val nodes = scene.second
     val density = LocalDensity.current.density
     val activeCallback by rememberUpdatedState(onActivate)
     val captured by rememberUpdatedState(gestureOwned)
-    LaunchedEffect(entries.map { it.id }) {
+    LaunchedEffect(entries.map { it.id }, retainedEntryIds) {
+        val retained = retainCanvasNodes(scene.second, retainedEntryIds)
+        if (retained != scene.second) scene = scene.first to retained
         val missing = entries.filter { e -> scene.second.none { it.id == e.id } }
         if (missing.isNotEmpty()) {
             val added = missing.mapIndexed { i, e ->
@@ -113,11 +132,17 @@ internal fun InfiniteCanvasHost(
         fun focus(node: InfiniteCanvasNode) {
             if (captured) return
             detailedId = node.id
-            val scale = minOf(1f, (viewportW - 32f) / node.width, (viewportH - 96f) / node.height).coerceIn(0.25f, 2f)
-            val expanded = expandAudioCanvasForFocus(node, scale, viewportH)
-            scene = InfiniteCanvasCamera(
-                (viewportW - node.width * scale) / 2f - node.x * scale,
-                64f - node.y * scale, scale) to scene.second.map { if (it.id == node.id) expanded.copy(hidden = false) else it }
+            val (nextCamera, shown) = approachCanvasNode(node, viewportW, viewportH)
+            scene = nextCamera to scene.second.map { if (it.id == node.id) shown else it }
+            activeCallback(node.id)
+        }
+        LaunchedEffect(openRequest, nodes.map { it.id }, gestureOwned) {
+            if (openRequest != null && openRequest.revision != handledOpenRevision && !captured) {
+                scene.second.firstOrNull { it.id == openRequest.id }?.let {
+                    focus(it)
+                    handledOpenRevision = openRequest.revision
+                }
+            }
         }
         fun overview() {
             detailedId = null
@@ -157,13 +182,13 @@ internal fun InfiniteCanvasHost(
                             Row(Modifier.fillMaxWidth().height(48.dp), verticalAlignment = Alignment.CenterVertically) {
                                 Row(Modifier.weight(1f).fillMaxHeight()
                                     .testTag("spatial-drag-" + entry.id.replace(':', '-'))
-                                    .pointerInput(entry.id) {
+                                    .pointerInput(entry.id, node.layoutLocked) {
                                         detectDragGestures(
-                                            onDragStart = { if (!captured) { candidate = latest; activeCallback(entry.id) } },
-                                            onDragEnd = { candidate?.let(::update); candidate = null },
+                                            onDragStart = { if (!captured && !latest.layoutLocked) { candidate = latest; activeCallback(entry.id) } },
+                                            onDragEnd = { if (!captured && !latest.layoutLocked) candidate?.let(::update); candidate = null },
                                             onDragCancel = { candidate = null },
                                             onDrag = { change, delta ->
-                                                if (!captured) {
+                                                if (!captured && !latest.layoutLocked) {
                                                     change.consume()
                                                     candidate = latest.move(delta.x / density / zoom, delta.y / density / zoom)
                                                 }
@@ -172,7 +197,7 @@ internal fun InfiniteCanvasHost(
                                     Icon(Icons.Filled.DragIndicator, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                                     Column(Modifier.padding(start = 6.dp)) {
                                         Text(entry.title, style = MaterialTheme.typography.labelLarge, maxLines = 1)
-                                        if (entry.subtitle.isNotBlank()) Text(entry.subtitle, style = MaterialTheme.typography.labelSmall, maxLines = 1)
+                                        if (entry.subtitle.isNotBlank()) Text(entry.subtitle, modifier = Modifier.testTag("spatial-binding-" + entry.id.replace(':', '-')), style = MaterialTheme.typography.labelSmall, maxLines = 1)
                                     }
                                 }
                                 Box {
@@ -180,19 +205,46 @@ internal fun InfiniteCanvasHost(
                                         Icon(Icons.Filled.MoreHoriz, "管理 " + entry.title)
                                     }
                                     DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                                        DropdownMenuItem(text = { Text("置顶") }, onClick = {
+                                        val tagId = entry.id.replace(':', '-')
+                                        DropdownMenuItem(
+                                            text = { Text(if (node.layoutLocked) "解锁布局" else "锁定布局") },
+                                            enabled = !gestureOwned,
+                                            modifier = Modifier.testTag("spatial-lock-$tagId"),
+                                            onClick = { update(node.copy(layoutLocked = !node.layoutLocked)); menu = false },
+                                        )
+                                        entry.onTogglePin?.let { action ->
+                                            DropdownMenuItem(text = { Text(entry.pinLabel.orEmpty()) }, enabled = !gestureOwned,
+                                                modifier = Modifier.testTag("spatial-pin-$tagId"),
+                                                onClick = { menu = false; action() })
+                                        }
+                                        entry.onDuplicate?.let { action ->
+                                            DropdownMenuItem(text = { Text("复制当前绑定") }, enabled = !gestureOwned,
+                                                modifier = Modifier.testTag("spatial-duplicate-$tagId"),
+                                                onClick = { menu = false; action() })
+                                        }
+                                        entry.onDuplicateFollowFocus?.let { action ->
+                                            DropdownMenuItem(text = { Text("复制并跟随焦点") }, enabled = !gestureOwned,
+                                                modifier = Modifier.testTag("spatial-duplicate-follow-$tagId"),
+                                                onClick = { menu = false; action() })
+                                        }
+                                        entry.onClose?.let { action ->
+                                            DropdownMenuItem(text = { Text("关闭工具") }, enabled = !gestureOwned,
+                                                modifier = Modifier.testTag("spatial-close-$tagId"),
+                                                onClick = { menu = false; action() })
+                                        }
+                                        DropdownMenuItem(text = { Text("置顶") }, enabled = !gestureOwned, onClick = {
                                             scene = scene.first to raiseCanvasNode(scene.second, entry.id); menu = false
                                         })
                                         DropdownMenuItem(text = { Text("靠近 / 展开") }, enabled = !gestureOwned, onClick = { focus(node); menu = false })
-                                        DropdownMenuItem(text = { Text("收回") }, onClick = { update(node.copy(hidden = true)); menu = false })
-                                        DropdownMenuItem(text = { Text(if (node.alpha < 1f) "恢复实底" else "透明叠加") }, onClick = {
+                                        DropdownMenuItem(text = { Text("收回") }, enabled = !gestureOwned, modifier = Modifier.testTag("spatial-hide-" + entry.id.replace(':', '-')), onClick = { update(node.copy(hidden = true)); menu = false })
+                                        DropdownMenuItem(enabled = !gestureOwned, text = { Text(if (node.alpha < 1f) "恢复实底" else "透明叠加") }, onClick = {
                                             update(node.copy(alpha = if (node.alpha < 1f) 1f else 0.2f)); menu = false
                                         })
                                         Text("背景透明度", Modifier.padding(horizontal = 16.dp), style = MaterialTheme.typography.labelSmall)
-                                        Slider(value = node.alpha, onValueChange = { update(latest.copy(alpha = it)) },
+                                        Slider(value = node.alpha, enabled = !gestureOwned, onValueChange = { update(latest.copy(alpha = it)) },
                                             modifier = Modifier.width(220.dp).padding(horizontal = 16.dp))
                                         if (entry.id == "audio") DropdownMenuItem(
-                                            text = { Text(if (node.passthrough) "操作波形" else "穿透操作视频") },
+                                            enabled = !gestureOwned, text = { Text(if (node.passthrough) "操作波形" else "穿透操作视频") },
                                             onClick = { update(node.copy(passthrough = !node.passthrough)); menu = false })
                                     }
                                 }
@@ -217,13 +269,13 @@ internal fun InfiniteCanvasHost(
                             }
                             Icon(Icons.Filled.OpenInFull, "调整 " + entry.title + " 大小",
                                 Modifier.align(Alignment.BottomEnd).size(44.dp).testTag("spatial-resize-" + entry.id.replace(':', '-'))
-                                    .pointerInput(entry.id) {
+                                    .pointerInput(entry.id, node.layoutLocked) {
                                         detectDragGestures(
-                                            onDragStart = { if (!captured) candidate = latest },
-                                            onDragEnd = { candidate?.let(::update); candidate = null },
+                                            onDragStart = { if (!captured && !latest.layoutLocked) candidate = latest },
+                                            onDragEnd = { if (!captured && !latest.layoutLocked) candidate?.let(::update); candidate = null },
                                             onDragCancel = { candidate = null },
                                             onDrag = { change, delta ->
-                                                if (!captured) {
+                                                if (!captured && !latest.layoutLocked) {
                                                     change.consume()
                                                     candidate = latest.resize(delta.x / density / zoom, delta.y / density / zoom)
                                                 }
@@ -237,10 +289,18 @@ internal fun InfiniteCanvasHost(
         Surface(Modifier.align(Alignment.TopCenter).padding(8.dp).zIndex(1_000_010f),
             shape = MaterialTheme.shapes.large, shadowElevation = 2.dp) {
             Row(Modifier.horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically) {
-                TextButton(onClick = {
-                    scene = scene.first to scene.second.map { if (it.id == "CAPABILITIES:primary") it.copy(hidden = false) else it }
-                    onAddTool()
-                }) { Text("＋ 工具") }
+                Box {
+                    TextButton(enabled = !gestureOwned, modifier = Modifier.testTag("spatial-add-tool"), onClick = {
+                        if (toolChoices.isEmpty()) onAddTool() else addMenu = true
+                    }) { Text("＋ 工具") }
+                    DropdownMenu(expanded = addMenu, onDismissRequest = { addMenu = false }) {
+                        toolChoices.forEach { choice ->
+                            DropdownMenuItem(text = { Text(choice.title) }, enabled = !gestureOwned,
+                                modifier = Modifier.testTag("spatial-open-${choice.key}"),
+                                onClick = { addMenu = false; onOpenTool(choice.key) })
+                        }
+                    }
+                }
                 TextButton(onClick = ::overview, enabled = !gestureOwned, modifier = Modifier.testTag("spatial-overview")) { Text("总览") }
                 Box {
                     TextButton(onClick = { recall = true }) { Text("召回") }
@@ -253,8 +313,8 @@ internal fun InfiniteCanvasHost(
                         }
                     }
                 }
-                IconButton(onClick = onUndo, enabled = canUndo) { Icon(Icons.Filled.Undo, "撤销字幕编辑") }
-                IconButton(onClick = onRedo, enabled = canRedo) { Icon(Icons.Filled.Redo, "重做字幕编辑") }
+                IconButton(onClick = onUndo, enabled = canUndo && !gestureOwned) { Icon(Icons.Filled.Undo, "撤销字幕编辑") }
+                IconButton(onClick = onRedo, enabled = canRedo && !gestureOwned) { Icon(Icons.Filled.Redo, "重做字幕编辑") }
                 IconButton(enabled = !gestureOwned, onClick = { scene = camera.zoomAt(viewportW / 2, viewportH / 2, camera.scale / 1.2f) to scene.second },
                     modifier = Modifier.testTag("spatial-zoom-out")) { Icon(Icons.Filled.Remove, "缩小工作区") }
                 Text("${(camera.scale * 100).toInt()}%", style = MaterialTheme.typography.labelSmall)

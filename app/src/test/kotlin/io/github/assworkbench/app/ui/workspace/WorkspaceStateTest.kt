@@ -6,6 +6,16 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class WorkspaceStateTest {
+    @Test fun explicitlyOpeningHiddenPrimaryPreservesBindingAndRestoresPresence() {
+        val hidden = WorkspaceState().openPinnedEvent("POSITION", 41L)
+            .updatePresence("POSITION:primary", WorkspaceToolPresence.HIDDEN)
+        val reopened = hidden.openPrimary("POSITION")
+        assertEquals(WorkspaceToolPresence.TEMPORARY, reopened.primary("POSITION")!!.presence)
+        assertEquals(WorkspaceBinding.PinnedEvent(41L), reopened.primary("POSITION")!!.binding)
+        assertEquals("POSITION:primary", reopened.activeInstanceId)
+        assertEquals(1, reopened.tools.size)
+    }
+
     @Test
     fun pinnedMissingEventDoesNotFallback() {
         val result = WorkspaceBinding.PinnedEvent(10).resolve(

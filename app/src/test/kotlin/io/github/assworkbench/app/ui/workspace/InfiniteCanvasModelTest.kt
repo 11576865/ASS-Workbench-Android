@@ -4,6 +4,30 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class InfiniteCanvasModelTest {
+    @Test fun lockedNodeCannotMoveResizeOrExpandButCanBeRecalled() {
+        val locked = InfiniteCanvasNode("audio", 900f, -500f, 650f, 190f, hidden = true, layoutLocked = true)
+        assertEquals(locked, locked.move(30f, 40f))
+        assertEquals(locked, locked.resize(30f, 40f))
+        assertEquals(locked, expandAudioCanvasForFocus(locked, 0.5f, 700f))
+        val (camera, shown) = approachCanvasNode(locked, 400f, 700f)
+        assertFalse(shown.hidden)
+        assertEquals(locked.copy(hidden = false), shown)
+        assertEquals(200f, camera.x + (shown.x + shown.width / 2f) * camera.scale, 0.001f)
+        assertEquals(64f, camera.y + shown.y * camera.scale, 0.001f)
+    }
+
+    @Test fun persistenceRestoresLockAndReadsPreviousNineFieldRows() {
+        val locked = InfiniteCanvasNode("POSITION:primary", layoutLocked = true)
+        assertEquals(locked, InfiniteCanvasPersistence.decode(InfiniteCanvasPersistence.encode(InfiniteCanvasCamera(), listOf(locked))).second.single())
+        val old = listOf("infinite-v1", "0\u001f0\u001f1", "audio\u001f10\u001f20\u001f300\u001f200\u001f3\u001f0.2\u001ftrue\u001ffalse")
+        assertEquals(InfiniteCanvasNode("audio", 10f, 20f, 300f, 200f, 3, 0.2f, true, false), InfiniteCanvasPersistence.decode(old).second.single())
+    }
+
+    @Test fun closedToolGeometryIsRemovedBeforeItsIdCanBeReused() {
+        val nodes = listOf(InfiniteCanvasNode("preview"), InfiniteCanvasNode("POSITION:2", hidden = true), InfiniteCanvasNode("STYLE:primary"))
+        assertEquals(listOf(nodes[0], nodes[2]), retainCanvasNodes(nodes, setOf("preview", "STYLE:primary")))
+    }
+
     @Test fun recalledAudioReservesUsableScreenHeightForSignalAndControls() {
         val node = expandAudioCanvasForFocus(InfiniteCanvasNode("audio", width = 650f, height = 190f), 0.5f, 700f)
         assertEquals(480f, node.height, 0f)
