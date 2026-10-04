@@ -124,9 +124,10 @@ type TrackMetadataEdit struct {
 }
 
 type TrackAddition struct {
-	SourcePath    string
-	SourceTrackID uint64
-	Name          string
+	SourcePath     string
+	SourceTrackID  uint64
+	SourceTrackUID uint64
+	Name           string
 	Language      string
 	IsDefault     bool
 	IsForced      bool
@@ -665,6 +666,15 @@ func planTrackAdditions(
 				"track %d not found in %s",
 				addition.SourceTrackID,
 				filepath.Base(addition.SourcePath),
+			)
+		}
+		if addition.SourceTrackUID != 0 && srcTrack.UID != addition.SourceTrackUID {
+			return nil, nil, nil, 0, fmt.Errorf(
+				"track %d in %s changed identity: expected TrackUID %d, got %d",
+				addition.SourceTrackID,
+				filepath.Base(addition.SourcePath),
+				addition.SourceTrackUID,
+				srcTrack.UID,
 			)
 		}
 		if srcTrack.Type != mkv.VideoTrack &&
