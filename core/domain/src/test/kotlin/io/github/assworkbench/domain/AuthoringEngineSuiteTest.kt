@@ -36,6 +36,31 @@ class AuthoringEngineSuiteTest {
     }
 
     @Test
+    fun semanticSearchUsesAllDirectTagsButIgnoresTransformPayloadTags() {
+        val laterSpan = event(2, 0, 1000, "A{\\bord4}B")
+        val nestedOnly = event(3, 0, 1000, "{\\t(0,500,\\bord8)}Animated")
+
+        assertTrue(
+            AssSearchReplace.matches(
+                laterSpan,
+                AssSearchQuery(requiredTags = setOf("bord")),
+            )
+        )
+        assertTrue(
+            !AssSearchReplace.matches(
+                nestedOnly,
+                AssSearchQuery(requiredTags = setOf("bord")),
+            )
+        )
+        assertTrue(
+            AssSearchReplace.matches(
+                nestedOnly,
+                AssSearchQuery(requiredTags = setOf("t")),
+            )
+        )
+    }
+
+    @Test
     fun keyframesCompileIntoChainedTransforms() {
         val plan = AssAnimationAuthoring.planNumericTrack(
             AssTransformVisualProperty.SCALE_X,
