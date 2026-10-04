@@ -58,6 +58,19 @@ class WorkspaceParameterProjectionTest {
     }
 
     @Test
+    fun dialPresentationSwitchRetainsIdentityAndBindingAcrossRestore() {
+        val initial = WorkspaceState(sessionId = 41L).addParameterProjection(
+            descriptorKey = WorkspaceParameterCatalog.rotationZ.key,
+            presentation = WorkspaceParameterPresentation.NUMBER,
+            binding = WorkspaceBinding.PinnedEvent(7L),
+        )
+        val before = initial.parameterProjections.single()
+        val dial = initial.updateParameterPresentation(before.id, WorkspaceParameterPresentation.ANGLE_DIAL)
+        val restored = WorkspaceState.fromSaveableList(dial.toSaveableList()).parameterProjections.single()
+        assertEquals(before.copy(presentation = WorkspaceParameterPresentation.ANGLE_DIAL), restored)
+    }
+
+    @Test
     fun legacyV3WorkspaceRestoresWithoutInventingParameterInstances() {
         val separator = "\u001F"
         val restored = WorkspaceState.fromSaveableList(

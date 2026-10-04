@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.OutlinedTextField
@@ -125,6 +124,7 @@ internal fun WorkspaceParameterProjectionPane(
             listOf(
                 WorkspaceParameterPresentation.SLIDER to "Slider",
                 WorkspaceParameterPresentation.NUMBER to "数值",
+                WorkspaceParameterPresentation.ANGLE_DIAL to "转盘",
             ).forEach { (presentation, label) ->
                 FilterChip(
                     selected = projection.presentation == presentation,
@@ -132,14 +132,45 @@ internal fun WorkspaceParameterProjectionPane(
                     label = { Text(label) },
                 )
             }
-            AssistChip(
-                onClick = {},
-                enabled = false,
-                label = { Text("${angle}°") },
-            )
         }
+        Text("${angle}°")
 
         when (projection.presentation) {
+            WorkspaceParameterPresentation.ANGLE_DIAL -> {
+                val enabled = state.previewOwnerId == null || state.previewOwnerId == ownerId
+                val sessionId = state.workspaceSessionId
+                fun mayWrite(): Boolean {
+                    val current = viewModel.state.value
+                    val target = projection.binding.resolve(
+                        current.focusedEventId, current.selectedEventIds,
+                        current.document.events.mapTo(hashSetOf()) { it.id },
+                    ) as? WorkspaceBindingResolution.Event
+                    return current.workspaceSessionId == sessionId && target?.eventId == eventId &&
+                        (current.previewOwnerId == null || current.previewOwnerId == ownerId)
+                }
+                WorkspaceAngleDialControl(
+                    angle = angle,
+                    gestureKey = "$sessionId:$ownerId",
+                    enabled = enabled,
+                    onPreview = { value ->
+                        if (mayWrite()) {
+                            viewModel.previewEventRotationZ(eventId, value, ownerId = ownerId)
+                            true
+                        } else false
+                    },
+                    onCommit = { value ->
+                        if (mayWrite()) viewModel.setEventRotationZ(eventId, value)
+                    },
+                    onCancel = {
+                        if (viewModel.state.value.workspaceSessionId == sessionId) {
+                            viewModel.clearTransientPreview(ownerId)
+                        }
+                    },
+                    modifier = Modifier.testTag("parameter-projection-dial-${projection.id.replace(':', '-')}"),
+                )
+                Text("拖动转盘调整角度，松手应用；逆时针增加。")
+            }
+
             WorkspaceParameterPresentation.SLIDER -> {
                 Slider(
                     value = sliderValue.coerceIn(-180f, 180f),
