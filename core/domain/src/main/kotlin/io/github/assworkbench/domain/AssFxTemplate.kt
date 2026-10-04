@@ -7,16 +7,18 @@ data class AssFxTemplate(
     val name: String,
     val reflection: AssReflectionFxSpec = AssReflectionFxSpec(),
     val glow: AssGlowFxSpec? = AssGlowFxSpec(),
+    val fade: AssReflectionFadeSpec? = null,
     val entrance: AssFlipEntranceSpec? = AssFlipEntranceSpec(),
 )
 
 object AssFxTemplateCodec {
-    private const val HEADER = "ASSWB_FX_TEMPLATE_V1"
+    private const val HEADER_V1 = "ASSWB_FX_TEMPLATE_V1"
+    private const val HEADER_V2 = "ASSWB_FX_TEMPLATE_V2"
 
     fun encode(template: AssFxTemplate): String {
         validate(template)
         return buildString {
-            appendLine(HEADER)
+            appendLine(HEADER_V2)
             append("name64=").appendLine(
                 Base64.getUrlEncoder().withoutPadding()
                     .encodeToString(template.name.toByteArray(StandardCharsets.UTF_8))
@@ -33,6 +35,14 @@ object AssFxTemplateCodec {
                 append("glow.border=").appendLine(format(glow.border))
             }
 
+            append("fade.enabled=").appendLine(template.fade != null)
+            template.fade?.let { fade ->
+                append("fade.bands=").appendLine(fade.bands)
+                append("fade.depthPx=").appendLine(format(fade.depthPx))
+                append("fade.farOpacityPercent=").appendLine(format(fade.farOpacityPercent))
+                append("fade.direction=").appendLine(fade.direction.name)
+            }
+
             append("entrance.enabled=").appendLine(template.entrance != null)
             template.entrance?.let { entrance ->
                 append("entrance.durationMs=").appendLine(entrance.durationMs)
@@ -46,7 +56,8 @@ object AssFxTemplateCodec {
 
     fun decode(text: String): AssFxTemplate {
         val lines = text.lineSequence().map(String::trim).filter { it.isNotEmpty() }.toList()
-        require(lines.firstOrNull() == HEADER) { "不是受支持的 FX 模板格式。" }
+        val header = lines.firstOrNull()
+        require(header == HEADER_V1 || header == HEADER_V2) { "不是受支持的 FX 模板格式。" }
         val values = linkedMapOf<String, String>()
         lines.drop(1).forEach { line ->
             val split = line.indexOf('=')
@@ -74,6 +85,18 @@ object AssFxTemplateCodec {
             )
         } else null
 
+        val fade = if (header == HEADER_V2 && values.requiredBoolean("fade.enabled")) {
+            AssReflectionFadeSpec(
+                bands = values.required("fade.bands").toIntOrNull()
+                    ?: error("fade.bands 不是整数。"),
+                depthPx = values.requiredDouble("fade.depthPx"),
+                farOpacityPercent = values.requiredDouble("fade.farOpacityPercent"),
+                direction = runCatching {
+                    AssReflectionFadeDirection.valueOf(values.required("fade.direction"))
+                }.getOrElse { error("fade.direction 不受支持。") },
+            )
+        } else null
+
         val entrance = if (values.requiredBoolean("entrance.enabled")) {
             AssFlipEntranceSpec(
                 durationMs = values.required("entrance.durationMs").toLongOrNull()
@@ -91,6 +114,7 @@ object AssFxTemplateCodec {
             name = name,
             reflection = reflection,
             glow = glow,
+            fade = fade,
             entrance = entrance,
         ).also(::validate)
     }
@@ -120,6 +144,19 @@ object AssFxTemplateCodec {
             }
             require(glow.border.isFinite() && glow.border in 0.0..20.0) {
                 "柔光 Border 必须在 0..20 之间。"
+            }
+        }
+
+        template.fade?.let { fade ->
+            require(fade.bands in 2..16) { "空间渐隐分段必须在 2..16 之间。" }
+            require(fade.depthPx.isFinite() && fade.depthPx > 0.0) {
+                "空间渐隐深度必须大于 0。"
+            }
+            require(fade.farOpacityPercent.isFinite() && fade.farOpacityPercent in 0.0..100.0) {
+                "空间渐隐末端不透明度必须在 0..100% 之间。"
+            }
+            require(fade.farOpacityPercent <= reflection.opacityPercent) {
+                "空间渐隐末端不透明度不能高于倒影起始不透明度。"
             }
         }
 
