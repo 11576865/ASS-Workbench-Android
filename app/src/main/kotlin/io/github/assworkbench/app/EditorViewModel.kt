@@ -528,6 +528,8 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             }
             val withoutReplacement = state.container.pendingAttachmentReplacements
                 .filterNot { it.target == target }
+            val withoutMetadata = state.container.pendingAttachmentMetadataEdits
+                .filterNot { it.target == target }
             val next = if (state.container.pendingAttachmentRemovals.any { it.target == target }) {
                 state.container.pendingAttachmentRemovals
             } else {
@@ -540,6 +542,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 container = state.container.copy(
                     pendingAttachmentRemovals = next,
                     pendingAttachmentReplacements = withoutReplacement,
+                    pendingAttachmentMetadataEdits = withoutMetadata,
                 ),
                 status = "已计划删除附件 $name；保存新 MKV 前不会修改源文件。",
             )
@@ -597,6 +600,8 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                         .filterNot { it.target == target },
                     pendingAttachmentReplacements = state.container.pendingAttachmentReplacements
                         .filterNot { it.target == target } + replacement,
+                    pendingAttachmentMetadataEdits = state.container.pendingAttachmentMetadataEdits
+                        .filterNot { it.target == target },
                 ),
                 status = "已计划替换附件 $originalName → $name；保存新 MKV 前不会修改源文件。",
             )
@@ -611,6 +616,140 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 container = state.container.copy(pendingAttachmentReplacements = next),
                 status = "已取消附件替换计划。",
             )
+        }
+    }
+
+    fun planExistingAttachmentMetadata(
+        target: String,
+        originalName: String,
+        name: String,
+        description: String,
+    ) {
+        val cleanName = name.trim()
+        if (target.isBlank() || cleanName.isBlank()) {
+            _state.update { it.copy(status = "附件名称不能为空。") }
+            return
+        }
+        if (cleanName.contains('/') || cleanName.contains('\\')) {
+            _state.update { it.copy(status = "附件名称必须是文件名，不能包含路径分隔符。") }
+            return
+        }
+        _state.update { state ->
+            if (state.container.writeBackBusy) {
+                return@update state.copy(status = "MKV 写回进行中；完成后才能修改附件计划。")
+            }
+            val edit = PendingContainerAttachmentMetadataUi(
+                target = target,
+                originalName = originalName,
+                name = cleanName,
+                description = description,
+            )
+            state.copy(
+                container = state.container.copy(
+                    pendingAttachmentRemovals = state.container.pendingAttachmentRemovals
+                        .filterNot { it.target == target },
+                    pendingAttachmentReplacements = state.container.pendingAttachmentReplacements
+                        .filterNot { it.target == target },
+                    pendingAttachmentMetadataEdits = state.container.pendingAttachmentMetadataEdits
+                        .filterNot { it.target == target } + edit,
+                ),
+                status = "已计划修改附件信息 $originalName → $cleanName；保存新 MKV 前不会修改源文件。",
+            )
+        }
+    }
+
+    fun cancelExistingAttachmentMetadata(target: String) {
+        _state.update { state ->
+            val next = state.container.pendingAttachmentMetadataEdits.filterNot { it.target == target }
+            if (next.size == state.container.pendingAttachmentMetadataEdits.size) state
+            else state.copy(
+                container = state.container.copy(pendingAttachmentMetadataEdits = next),
+                status = "已取消附件信息修改计划。",
+            )
+        }
+    }
+
+    fun extractContainerAttachment(
+        target: String,
+        name: String,
+        outputUri: Uri,
+    ) {
+        val snapshot = _state.value
+        val sourceUri = snapshot.container.uri?.let(Uri::parse) ?: run {
+            _state.update { it.copy(status = "没有已打开的 MKV 工程。") }
+            return
+        }
+        if (target.isBlank() || snapshot.container.loading || snapshot.container.writeBackBusy ||
+            snapshot.container.attachmentExtractBusy
+        ) {
+            return
+        }
+        if (!mkvGoTool.isAvailable()) {
+            _state.update { it.copy(status = "当前 ABI 没有可用的 MKV 附件提取工具。") }
+            return
+        }
+        val extractEpoch = workspaceEpoch.get()
+        val operationId = writeBackSerial.incrementAndGet()
+        _state.update {
+            it.copy(
+                container = it.container.copy(attachmentExtractBusy = true),
+                status = "正在提取附件 $name……",
+            )
+        }
+        viewModelScope.launch {
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    val work = File(app.cacheDir, "container-extract-" + operationId).apply {
+                        deleteRecursively()
+                        mkdirs()
+                    }
+                    try {
+                        val source = File(work, "source.mkv")
+                        app.contentResolver.openInputStream(sourceUri)?.use { input ->
+                            source.outputStream().buffered().use { output ->
+                                input.copyTo(output, 1024 * 1024)
+                            }
+                        } ?: error("无法重新读取源 MKV")
+                        val extracted = File(work, "attachment.bin")
+                        mkvGoTool.extractAttachment(
+                            source = source,
+                            target = target,
+                            output = extracted,
+                        )
+                        app.contentResolver.openOutputStream(outputUri, "w")?.use { output ->
+                            extracted.inputStream().buffered().use { input ->
+                                input.copyTo(output, 1024 * 1024)
+                            }
+                        } ?: error("无法写入附件目标文件")
+                        extracted.length()
+                    } finally {
+                        work.deleteRecursively()
+                    }
+                }
+            }.onSuccess { bytes ->
+                if (
+                    workspaceEpoch.get() != extractEpoch ||
+                    _state.value.container.uri != snapshot.container.uri
+                ) return@onSuccess
+                _state.update {
+                    it.copy(
+                        container = it.container.copy(attachmentExtractBusy = false),
+                        status = "附件 $name 已提取 · ${formatContainerExtractBytes(bytes)}。",
+                    )
+                }
+            }.onFailure { error ->
+                if (error is kotlinx.coroutines.CancellationException) return@onFailure
+                if (
+                    workspaceEpoch.get() != extractEpoch ||
+                    _state.value.container.uri != snapshot.container.uri
+                ) return@onFailure
+                _state.update {
+                    it.copy(
+                        container = it.container.copy(attachmentExtractBusy = false),
+                        status = "附件提取失败：" + (error.message ?: error::class.java.simpleName),
+                    )
+                }
+            }
         }
     }
 
@@ -714,6 +853,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         val plannedAttachments = snapshot.container.pendingAttachments
         val plannedRemovals = snapshot.container.pendingAttachmentRemovals
         val plannedReplacements = snapshot.container.pendingAttachmentReplacements
+        val plannedMetadataEdits = snapshot.container.pendingAttachmentMetadataEdits
 
         val plannedAttachmentCount = editPlan.mutations.count {
             it.kind == ContainerMutationKind.ADD_ATTACHMENT
@@ -731,6 +871,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                     if (plannedAttachments.isNotEmpty()) append(" · 新附件 ").append(plannedAttachments.size)
                     if (plannedRemovals.isNotEmpty()) append(" · 删除 ").append(plannedRemovals.size)
                     if (plannedReplacements.isNotEmpty()) append(" · 替换 ").append(plannedReplacements.size)
+                    if (plannedMetadataEdits.isNotEmpty()) append(" · 信息修改 ").append(plannedMetadataEdits.size)
                     append("；大文件可能需要一些时间……")
                 },
             )
@@ -789,6 +930,13 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                                 file = targetFile,
                             )
                         }
+                        val metadataInputs = plannedMetadataEdits.map { metadata ->
+                            AttachmentMetadataEditInput(
+                                target = metadata.target,
+                                name = metadata.name,
+                                description = metadata.description,
+                            )
+                        }
 
                         if (replaceAss) {
                             val editedAss = File(work, "edited.ass")
@@ -802,6 +950,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                                 attachments = attachmentFiles,
                                 removeAttachments = plannedRemovals.map { it.target },
                                 replaceAttachments = replacementInputs,
+                                metadataEdits = metadataInputs,
                             )
                         } else {
                             mkvGoTool.editAttachments(
@@ -810,6 +959,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                                 additions = packageFiles + attachmentFiles,
                                 removals = plannedRemovals.map { it.target },
                                 replacements = replacementInputs,
+                                metadataEdits = metadataInputs,
                             )
                         }
 
@@ -841,7 +991,8 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                             }
                             val removalTargets = plannedRemovals.mapTo(hashSetOf()) { it.target }
                             val replacementTargets = plannedReplacements.mapTo(hashSetOf()) { it.target }
-                            val mutatedTargets = removalTargets + replacementTargets
+                            val metadataTargets = plannedMetadataEdits.mapTo(hashSetOf()) { it.target }
+                            val mutatedTargets = removalTargets + replacementTargets + metadataTargets
                             val verifiedAttachments = verifiedScan.attachmentPreservationKeys().toSet()
                             sourceScan.attachmentInfos.forEach { info ->
                                 val target = info.uid?.toString() ?: info.fileName
@@ -886,6 +1037,32 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                                     }
                                 }
                             }
+                            plannedMetadataEdits.forEach { metadata ->
+                                val sourceInfo = sourceScan.attachmentInfos.firstOrNull { info ->
+                                    info.uid?.toString() == metadata.target ||
+                                        (info.uid == null && info.fileName == metadata.target)
+                                } ?: error("写回验证失败：附件信息修改目标不存在：" + metadata.originalName)
+                                val verified = if (sourceInfo.uid != null) {
+                                    verifiedScan.attachmentInfos.firstOrNull { it.uid == sourceInfo.uid }
+                                } else {
+                                    verifiedScan.attachmentInfos.firstOrNull { it.fileName == metadata.name }
+                                }
+                                require(verified != null) {
+                                    "写回验证失败：信息修改后的附件不存在：" + metadata.name
+                                }
+                                require(verified.fileName == metadata.name) {
+                                    "写回验证失败：附件名称修改未生效：" + metadata.name
+                                }
+                                require(verified.description == metadata.description) {
+                                    "写回验证失败：附件描述修改未生效：" + metadata.name
+                                }
+                                require(verified.mimeType == sourceInfo.mimeType) {
+                                    "写回验证失败：附件信息修改意外改变 MIME：" + metadata.name
+                                }
+                                require(verified.sizeBytes == sourceInfo.sizeBytes) {
+                                    "写回验证失败：附件信息修改意外改变 payload 大小：" + metadata.name
+                                }
+                            }
                             val expectedAttachmentCount =
                                 sourceScan.attachmentInfos.size + plannedAttachmentCount - plannedRemovalCount
                             require(verifiedScan.attachmentInfos.size == expectedAttachmentCount) {
@@ -915,6 +1092,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 val savedAttachmentUris = plannedAttachments.mapTo(hashSetOf()) { it.uri }
                 val savedRemovalTargets = plannedRemovals.mapTo(hashSetOf()) { it.target }
                 val savedReplacementTargets = plannedReplacements.mapTo(hashSetOf()) { it.target }
+                val savedMetadataTargets = plannedMetadataEdits.mapTo(hashSetOf()) { it.target }
                 _state.update { state ->
                     state.copy(
                         dirty = if (documentSaved) false else state.dirty,
@@ -926,6 +1104,8 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                                 .filterNot { it.target in savedRemovalTargets },
                             pendingAttachmentReplacements = state.container.pendingAttachmentReplacements
                                 .filterNot { it.target in savedReplacementTargets },
+                            pendingAttachmentMetadataEdits = state.container.pendingAttachmentMetadataEdits
+                                .filterNot { it.target in savedMetadataTargets },
                             resources = baselineScanSnapshot?.let { baseline ->
                                 diffContainerResources(baseline, verifiedScan)
                             } ?: baselineContainerResources(verifiedScan),
@@ -940,6 +1120,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                             if (plannedAttachments.isNotEmpty()) append(" 新封入附件 ").append(plannedAttachments.size).append(" 个。")
                             if (plannedRemovals.isNotEmpty()) append(" 删除附件 ").append(plannedRemovals.size).append(" 个。")
                             if (plannedReplacements.isNotEmpty()) append(" 替换附件 ").append(plannedReplacements.size).append(" 个。")
+                            if (plannedMetadataEdits.isNotEmpty()) append(" 修改附件信息 ").append(plannedMetadataEdits.size).append(" 个。")
                             if (replaceAss && !documentSaved) append(" · 保存期间出现新字幕编辑，当前工程仍未保存。")
                         },
                     )
@@ -3445,4 +3626,11 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             if (column >= 0 && cursor.moveToFirst()) cursor.getString(column) else null
         }
     }
+}
+
+
+private fun formatContainerExtractBytes(bytes: Long): String = when {
+    bytes >= 1024L * 1024L -> "%.1f MiB".format(bytes.toDouble() / (1024.0 * 1024.0))
+    bytes >= 1024L -> "%.1f KiB".format(bytes.toDouble() / 1024.0)
+    else -> "$bytes B"
 }
