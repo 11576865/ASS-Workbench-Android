@@ -557,7 +557,7 @@ fun ContainerBridgePanel(
             )
         }
 
-        if (state.trackImportCandidates.isNotEmpty()) {
+        if (state.trackImportCandidates.isNotEmpty() && trackImportCandidate == null) {
             AlertDialog(
                 onDismissRequest = viewModel::dismissContainerTrackImportCandidates,
                 title = { Text("选择要导入的轨道") },
