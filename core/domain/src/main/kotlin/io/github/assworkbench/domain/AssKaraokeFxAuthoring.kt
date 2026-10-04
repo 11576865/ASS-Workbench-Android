@@ -31,6 +31,12 @@ data class AssKaraokeRevealBatchPlan(
     val sourceSegmentCount: Int,
 )
 
+data class AssKaraokeRevealCompatibility(
+    val compatible: Boolean,
+    val segmentCount: Int,
+    val reason: String? = null,
+)
+
 /**
  * Conservative karaoke-FX compiler.
  *
@@ -52,24 +58,64 @@ object AssKaraokeFxAuthoring {
         RegexOption.IGNORE_CASE,
     )
 
+    fun inspectProgressiveRevealCompatibility(
+        document: AssDocument,
+        eventId: Long,
+        spec: AssKaraokeRevealFxSpec = AssKaraokeRevealFxSpec(),
+    ): AssKaraokeRevealCompatibility {
+        val event = document.events.firstOrNull { it.id == eventId }
+            ?: return AssKaraokeRevealCompatibility(
+                compatible = false,
+                segmentCount = 0,
+                reason = "源字幕不存在。",
+            )
+        return inspectProgressiveRevealCompatibility(document, event, spec)
+    }
+
+    fun inspectProgressiveRevealCompatibility(
+        document: AssDocument,
+        event: AssEvent,
+        spec: AssKaraokeRevealFxSpec = AssKaraokeRevealFxSpec(),
+    ): AssKaraokeRevealCompatibility {
+        return try {
+            val plan = planProgressiveReveal(document, event, spec)
+            AssKaraokeRevealCompatibility(
+                compatible = true,
+                segmentCount = plan.sourceSegmentCount,
+            )
+        } catch (error: IllegalArgumentException) {
+            AssKaraokeRevealCompatibility(
+                compatible = false,
+                segmentCount = runCatching { AssKaraokeCodec.parse(event.text).size }.getOrDefault(0),
+                reason = error.message,
+            )
+        } catch (error: IllegalStateException) {
+            AssKaraokeRevealCompatibility(
+                compatible = false,
+                segmentCount = runCatching { AssKaraokeCodec.parse(event.text).size }.getOrDefault(0),
+                reason = error.message,
+            )
+        }
+    }
+
     fun planProgressiveRevealBatch(
         document: AssDocument,
         eventIds: Set<Long>,
         spec: AssKaraokeRevealFxSpec = AssKaraokeRevealFxSpec(),
     ): AssKaraokeRevealBatchPlan {
         require(eventIds.isNotEmpty()) { "至少需要一个源字幕。" }
-        val orderedIds = document.events.map { it.id }.filter { it in eventIds }
-        require(orderedIds.size == eventIds.size) { "选择中包含已经不存在的字幕。" }
+        val orderedEvents = document.events.filter { it.id in eventIds }
+        require(orderedEvents.size == eventIds.size) { "选择中包含已经不存在的字幕。" }
 
-        val plans = orderedIds.associateWith { eventId ->
-            planProgressiveReveal(document, eventId, spec)
+        val plans = orderedEvents.associate { event ->
+            event.id to planProgressiveReveal(document, event, spec)
         }
         val next = document.copy(events = document.events.map { event ->
             plans[event.id]?.let { plan -> event.copy(text = plan.generatedText) } ?: event
         })
         return AssKaraokeRevealBatchPlan(
             document = next,
-            sourceEventIds = orderedIds,
+            sourceEventIds = orderedEvents.map { it.id },
             sourceSegmentCount = plans.values.sumOf { it.sourceSegmentCount },
         )
     }
@@ -80,8 +126,16 @@ object AssKaraokeFxAuthoring {
         spec: AssKaraokeRevealFxSpec = AssKaraokeRevealFxSpec(),
     ): AssKaraokeRevealFxPlan {
         val event = document.events.firstOrNull { it.id == eventId } ?: error("源字幕不存在。")
-        val style = document.styles.firstOrNull { it.name.equals(event.style, ignoreCase = true) }
-            ?: AssStyle(name = event.style)
+        return planProgressiveReveal(document, event, spec)
+    }
+
+    fun planProgressiveReveal(
+        document: AssDocument,
+        event: AssEvent,
+        spec: AssKaraokeRevealFxSpec = AssKaraokeRevealFxSpec(),
+    ): AssKaraokeRevealFxPlan {
+        val style = document.styles.firstOrNull { it.name == event.style }
+            ?: error("源字幕引用不存在的 Style：${event.style}")
         val geometry = AssGeometrySemantic.inspect(event.text)
         require(!geometry.malformedLeadingBlock) { "源字幕的前导 override block 不完整，不能安全生成 Karaoke FX。" }
 
@@ -229,13 +283,17 @@ object AssKaraokeFxAuthoring {
         if (spec.accel != null) {
             require(spec.accel.isFinite() && spec.accel > 0.0) { "Accel 必须大于 0。" }
         }
-        require(baseScaleY.isFinite() && baseScaleY > 0.0) { "基础 Scale Y 必须大于 0。" }
-        require(baseRotationX.isFinite()) { "基础 Rotation X 必须是有限数字。" }
         require(listOf(baseAlpha.primary, baseAlpha.secondary, baseAlpha.outline, baseAlpha.shadow).all { it in 0..255 }) {
             "基础 Alpha 必须在 0..255 之间。"
         }
 
         spec.flip?.let { flip ->
+            require(baseScaleY.isFinite() && baseScaleY >= 0.0) {
+                "翻转 FX 的基础 Scale Y 必须是有限且非负的数字。"
+            }
+            require(baseRotationX.isFinite()) {
+                "翻转 FX 的基础 Rotation X 必须是有限数字。"
+            }
             require(flip.startScalePercent.isFinite() && flip.startScalePercent > 0.0) {
                 "翻转 FX 起始高度比例必须大于 0。"
             }
@@ -244,6 +302,12 @@ object AssKaraokeFxAuthoring {
             }
             require(flip.startRotationXDegrees.isFinite()) {
                 "翻转 FX 起始 X 旋转必须是有限数字。"
+            }
+            val startScaleY = baseScaleY * flip.startScalePercent / 100.0
+            val overshootScaleY = baseScaleY * flip.overshootScalePercent / 100.0
+            val startRotationX = baseRotationX + flip.startRotationXDegrees
+            require(startScaleY.isFinite() && overshootScaleY.isFinite() && startRotationX.isFinite()) {
+                "翻转 FX 派生几何计算溢出；请缩小缩放或旋转参数。"
             }
         }
     }
