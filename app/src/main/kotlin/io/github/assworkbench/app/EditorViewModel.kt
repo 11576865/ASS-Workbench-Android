@@ -627,6 +627,123 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    fun prepareMediaTrackAddition(
+        assessment: MediaImportSourceAssessment,
+        result: MediaImportTrackAssessment,
+    ) {
+        val snapshot = _state.value
+        val containerUri = snapshot.container.uri ?: run {
+            _state.update { it.copy(status = "请先打开 MKV 工程，再导入媒体轨道。") }
+            return
+        }
+        require(result.executionImplemented) { "该媒体 Track 目前只有兼容性检测，没有可执行导入 adapter" }
+        require(result.disposition == MediaImportDisposition.STREAM_COPY_COMPATIBLE) {
+            "该媒体 Track 不是可直接 stream-copy 的来源"
+        }
+        require(result.descriptor.mime.equals("audio/mpeg", ignoreCase = true)) {
+            "当前只实现 audio/mpeg packet adapter"
+        }
+        val codecId = result.matroskaCodecId
+            ?: error("MP3 Track 缺少 Matroska CodecID")
+        require(codecId == "A_MPEG/L3") { "当前 MP3 adapter 只允许 A_MPEG/L3" }
+
+        val sourceUri = Uri.parse(assessment.sourceUri)
+        val sessionId = snapshot.workspaceSessionId
+        val extractorIndex = result.descriptor.extractorIndex
+        trackImportJob?.cancel()
+        _state.update {
+            it.copy(
+                container = it.container.copy(trackImportLoading = true),
+                status = "正在流式准备 MP3 packet source 并固定导入证据……",
+            )
+        }
+        trackImportJob = viewModelScope.launch {
+            val prepared = runCatching {
+                withContext(Dispatchers.IO) {
+                    val temp = File.createTempFile("media-plan-", ".awpkt", app.cacheDir)
+                    try {
+                        val normalized = AndroidMediaPacketNormalizer.normalizeMp3Track(
+                            context = app,
+                            uri = sourceUri,
+                            extractorIndex = extractorIndex,
+                            output = temp,
+                        )
+                        result.descriptor.sampleRate?.let {
+                            require(it == normalized.sampleRate) {
+                                "MP3 sample rate 已变化；请重新检测来源"
+                            }
+                        }
+                        result.descriptor.channelCount?.let {
+                            require(it == normalized.channelCount) {
+                                "MP3 channel count 已变化；请重新检测来源"
+                            }
+                        }
+                        PendingContainerTrackAdditionUi(
+                            sourceKind = ContainerTrackImportSourceKind.NORMALIZED_MEDIA_PACKETS,
+                            sourceUri = assessment.sourceUri,
+                            sourceName = assessment.sourceName,
+                            sourceExtractorIndex = extractorIndex,
+                            sourceSha256 = normalized.bundleSha256,
+                            sourceContentSha256 = normalized.contentSha256,
+                            sampleRate = normalized.sampleRate,
+                            channelCount = normalized.channelCount,
+                            packetCount = normalized.packetCount,
+                            kind = ContainerResourceKind.AUDIO,
+                            typeCode = 2L,
+                            codecId = codecId,
+                            name = assessment.sourceName.substringBeforeLast('.').ifBlank { "Imported MP3" },
+                            language = result.descriptor.language?.takeIf { it.isNotBlank() } ?: "und",
+                            sourceIsDefault = false,
+                            isDefault = false,
+                            isForced = false,
+                        )
+                    } finally {
+                        temp.delete()
+                    }
+                }
+            }
+            prepared.onSuccess { candidate ->
+                if (
+                    _state.value.workspaceSessionId != sessionId ||
+                    _state.value.container.uri != containerUri
+                ) return@onSuccess
+                _state.update { state ->
+                    val duplicate = state.container.pendingTrackAdditions.any {
+                        trackImportSourceKey(it) == trackImportSourceKey(candidate)
+                    }
+                    state.copy(
+                        container = state.container.copy(
+                            trackImportLoading = false,
+                            pendingTrackAdditions = if (duplicate) {
+                                state.container.pendingTrackAdditions
+                            } else {
+                                state.container.pendingTrackAdditions + candidate
+                            },
+                        ),
+                        status = if (duplicate) {
+                            "该 MP3 Track 已在待添加计划中。"
+                        } else {
+                            "MP3 packet source 已固定 · ${candidate.packetCount} packets · " +
+                                "${candidate.sampleRate}Hz · ${candidate.channelCount}ch；保存时将重新 demux 并验证 digest。"
+                        },
+                    )
+                }
+            }.onFailure { error ->
+                if (error is kotlinx.coroutines.CancellationException) return@onFailure
+                if (
+                    _state.value.workspaceSessionId != sessionId ||
+                    _state.value.container.uri != containerUri
+                ) return@onFailure
+                _state.update {
+                    it.copy(
+                        container = it.container.copy(trackImportLoading = false),
+                        status = "MP3 导入准备失败：" + (error.message ?: error::class.java.simpleName),
+                    )
+                }
+            }
+        }
+    }
+
     fun planContainerTrackAddition(candidate: PendingContainerTrackAdditionUi) {
         _state.update { state ->
             if (state.container.writeBackBusy || state.container.attachmentExtractBusy) {
@@ -658,12 +775,18 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         sourceKind: ContainerTrackImportSourceKind,
         sourceUri: String,
         sourceTrackNumber: Long?,
+        sourceExtractorIndex: Int? = null,
     ) {
         _state.update { state ->
             if (state.container.writeBackBusy) {
                 return@update state.copy(status = "MKV 写回进行中；完成后才能修改轨道计划。")
             }
-            val key = trackImportSourceKey(sourceKind, sourceUri, sourceTrackNumber)
+            val key = trackImportSourceKey(
+                sourceKind,
+                sourceUri,
+                sourceTrackNumber,
+                sourceExtractorIndex,
+            )
             val next = state.container.pendingTrackAdditions.filterNot {
                 trackImportSourceKey(it) == key
             }
@@ -690,13 +813,24 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     private fun trackImportSourceKey(addition: PendingContainerTrackAdditionUi): String =
-        trackImportSourceKey(addition.sourceKind, addition.sourceUri, addition.sourceTrackNumber)
+        trackImportSourceKey(
+            addition.sourceKind,
+            addition.sourceUri,
+            addition.sourceTrackNumber,
+            addition.sourceExtractorIndex,
+        )
 
     private fun trackImportSourceKey(
         sourceKind: ContainerTrackImportSourceKind,
         sourceUri: String,
         sourceTrackNumber: Long?,
-    ): String = sourceKind.name + "\u0000" + sourceUri + "\u0000" + (sourceTrackNumber ?: 0L)
+        sourceExtractorIndex: Int? = null,
+    ): String = buildString {
+        append(sourceKind.name)
+        append("\u0000").append(sourceUri)
+        append("\u0000").append(sourceTrackNumber ?: 0L)
+        append("\u0000").append(sourceExtractorIndex ?: -1)
+    }
 
     fun addContainerAttachments(uris: List<Uri>) {
         if (uris.isEmpty()) return
@@ -1367,6 +1501,42 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                                         ) {
                                             "独立字幕规范化结果已变化；请重新扫描后再保存：" + addition.sourceName
                                         }
+                                    ContainerTrackImportSourceKind.NORMALIZED_MEDIA_PACKETS -> {
+                                        val extractorIndex = requireNotNull(addition.sourceExtractorIndex) {
+                                            "媒体 packet 来源缺少 extractor index"
+                                        }
+                                        val target = File(work, "track-source-${trackSourceFiles.size}.awpkt")
+                                        val normalized = AndroidMediaPacketNormalizer.normalizeMp3Track(
+                                            context = app,
+                                            uri = Uri.parse(addition.sourceUri),
+                                            extractorIndex = extractorIndex,
+                                            output = target,
+                                        )
+                                        val expectedBundle = addition.sourceSha256
+                                            ?: error("媒体 packet 来源缺少 bundle SHA-256 证据")
+                                        require(
+                                            normalized.bundleSha256.equals(expectedBundle, ignoreCase = true)
+                                        ) {
+                                            "媒体 packet normalization 已变化；请重新检测来源：" + addition.sourceName
+                                        }
+                                        val expectedContent = addition.sourceContentSha256
+                                            ?: error("媒体 packet 来源缺少 content SHA-256 证据")
+                                        require(
+                                            normalized.contentSha256.equals(expectedContent, ignoreCase = true)
+                                        ) {
+                                            "媒体 packet 内容已变化；请重新检测来源：" + addition.sourceName
+                                        }
+                                        require(normalized.sampleRate == addition.sampleRate) {
+                                            "媒体 packet sample rate 已变化；请重新检测来源"
+                                        }
+                                        require(normalized.channelCount == addition.channelCount) {
+                                            "媒体 packet channel count 已变化；请重新检测来源"
+                                        }
+                                        require(normalized.packetCount == addition.packetCount) {
+                                            "媒体 packet 数量已变化；请重新检测来源"
+                                        }
+                                        target
+                                    }
                                         val target = File(work, "track-source-${trackSourceFiles.size}.ass")
                                         target.writeText(normalized.normalizedAssText, Charsets.UTF_8)
                                         require(target.length() > 0L) {
@@ -1382,6 +1552,9 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                                 sourceTrackNumber = addition.sourceTrackNumber,
                                 sourceTrackUid = addition.sourceTrackUid,
                                 sourceSha256 = addition.sourceSha256,
+                                sourceCodecId = addition.codecId,
+                                sampleRate = addition.sampleRate,
+                                channelCount = addition.channelCount,
                                 name = addition.name,
                                 language = addition.language,
                                 isDefault = addition.isDefault,
@@ -1474,6 +1647,25 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                                         )
                                         require(importedRoundTrip.equivalent) {
                                             "写回验证失败：独立 ASS 导入不等价：" + importedRoundTrip.summary
+                                        }
+                                    }
+                                    if (
+                                        plannedAddition.sourceKind ==
+                                        ContainerTrackImportSourceKind.NORMALIZED_MEDIA_PACKETS
+                                    ) {
+                                        val expected = plannedAddition.sourceContentSha256
+                                            ?: error("写回验证失败：MP3 导入缺少 content digest")
+                                        val digest = mkvGoTool.digestTrackContent(
+                                            source = result,
+                                            trackNumber = actualInfo.number,
+                                        )
+                                        require(digest.sha256.equals(expected, ignoreCase = true)) {
+                                            "写回验证失败：MP3 packet payload/timestamp digest 不一致"
+                                        }
+                                        plannedAddition.packetCount?.let { expectedCount ->
+                                            require(digest.packetCount == expectedCount) {
+                                                "写回验证失败：MP3 packet count ${digest.packetCount} != $expectedCount"
+                                            }
                                         }
                                     }
                                 }
