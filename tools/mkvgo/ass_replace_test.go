@@ -611,7 +611,6 @@ func TestEditContainerResourcesPreservesSurvivingTrackIdentity(t *testing.T) {
 			IsDefault: false,
 			IsForced: false,
 		}},
-		nil,
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -805,7 +804,7 @@ func TestEditContainerResourcesImportsExternalTrackWithFreshIdentity(t *testing.
 		t.Fatal(err)
 	}
 
-	if err := EditContainerResources(
+	if err := EditContainerResourcesWithTrackImports(
 		context.Background(),
 		targetPath,
 		dst,
