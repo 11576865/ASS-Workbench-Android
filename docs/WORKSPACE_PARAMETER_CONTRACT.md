@@ -71,3 +71,32 @@ Two connected regressions cover drag preview/release/one Undo and cancellation.
 They are Pending CI; no local Android compile or user-device acceptance is claimed.
 Gesture callbacks retain their starting session/Event, and cancellation only
 clears that session's matching owner. Source artifact/whitespace checks passed.
+
+
+## Position X/Y live projection
+
+Position's Placement section now exposes “拆出位置控件”. Position XY supports
+XY_PAD and NUMBER_PAIR presentations with persisted identity and FollowFocus or
+PinnedEvent binding. Relative pointer displacement uses the actual board dimensions
+and separate ASS PlayResX/PlayResY scales. Grabbing does not relocate the subtitle;
+bounds follow the existing EditorViewModel position-edit contract (0..PlayRes).
+Clamping does not accumulate drift, and returning to the starting coordinate cancels
+rather than adding an inherited-position override.
+
+Static anchor resolution reuses preview discovery's existing alignment/margin
+logic. This is an approximate inherited anchor, not libass glyph measurement.
+Explicit static positions are supported; motion, conflicting positions, invalid
+script dimensions and late anchor tags fail closed. A position projection never
+silently flattens an existing move path.
+
+Preview ownership uses geometry:<Event>:<projection>, with original-session and
+binding checks on writes and cleanup. Numeric edits are read-only during a foreign
+preview. Release/Apply creates ordinary ASS document Undo; cancellation only clears
+the matching preview. Presentation changes retain descriptor and binding.
+
+Supplemental validation: 209 domain Jupiter and 29 parameter/anchor Vintage tests
+passed (238 total). Three connected tests cover pinned paired-number editing and
+one Undo, pad cancel/release/Undo, and foreign preview takeover. Android compile and
+connected/native validation are Pending CI. Real-device acceptance belongs to the
+user. UI-240 109/110 remain Partial: Scale/Shear projections and arbitrary drag
+extraction are not claimed complete.

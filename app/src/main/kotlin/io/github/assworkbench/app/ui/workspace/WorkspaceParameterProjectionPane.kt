@@ -69,6 +69,12 @@ internal fun WorkspaceParameterProjectionPane(
         return
     }
 
+    if (projection.descriptorKey == WorkspaceParameterCatalog.positionXY.key) {
+        WorkspacePositionProjectionPane(projection, state, viewModel, eventId,
+            onRemove, onPresentationChange, modifier)
+        return
+    }
+
     if (projection.descriptorKey != WorkspaceParameterCatalog.rotationZ.key) {
         Column(modifier.padding(12.dp)) {
             Text(descriptor.title)
