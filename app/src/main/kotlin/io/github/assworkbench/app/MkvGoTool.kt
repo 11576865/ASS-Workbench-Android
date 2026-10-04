@@ -26,6 +26,7 @@ data class TrackMetadataEditInput(
 data class TrackAdditionInput(
     val source: File,
     val sourceTrackNumber: Long,
+    val sourceTrackUid: Long?,
     val name: String,
     val language: String,
     val isDefault: Boolean,
@@ -134,6 +135,7 @@ class MkvGoTool(private val context: Context) {
                 args += "--add-track"
                 args += addition.source.absolutePath
                 args += addition.sourceTrackNumber.toString()
+                args += (addition.sourceTrackUid ?: 0L).toString()
                 args += addition.name
                 args += addition.language
                 args += if (addition.isDefault) "1" else "0"
@@ -260,6 +262,7 @@ class MkvGoTool(private val context: Context) {
                 args += "--add-track"
                 args += addition.source.absolutePath
                 args += addition.sourceTrackNumber.toString()
+                args += (addition.sourceTrackUid ?: 0L).toString()
                 args += addition.name
                 args += addition.language
                 args += if (addition.isDefault) "1" else "0"
