@@ -1,0 +1,220 @@
+package io.github.assworkbench.app
+
+import io.github.assworkbench.container.MatroskaScanResult
+import io.github.assworkbench.container.MatroskaTrackKind
+
+private data class InventoryItem(
+    val rowKey: String,
+    val kind: ContainerResourceKind,
+    val matchKey: String,
+    val strongIdentity: Boolean,
+    val fingerprint: String,
+    val ui: ContainerResourceUi,
+)
+
+internal fun baselineContainerResources(scan: MatroskaScanResult): List<ContainerResourceUi> =
+    scan.inventoryItems().map { it.ui }
+
+internal fun diffContainerResources(
+    baseline: MatroskaScanResult,
+    current: MatroskaScanResult,
+): List<ContainerResourceUi> {
+    val before = baseline.inventoryItems()
+    val after = current.inventoryItems()
+    val beforeByKey = before.groupBy { it.matchKey }
+    val afterByKey = after.groupBy { it.matchKey }
+    val consumed = mutableSetOf<String>()
+    val result = mutableListOf<ContainerResourceUi>()
+
+    after.forEach { item ->
+        val candidates = beforeByKey[item.matchKey].orEmpty().filterNot { it.rowKey in consumed }
+        val uniqueWeakMatch = !item.strongIdentity &&
+            candidates.size == 1 &&
+            afterByKey[item.matchKey].orEmpty().size == 1
+        val matched = when {
+            item.strongIdentity && candidates.size == 1 -> candidates.single()
+            uniqueWeakMatch -> candidates.single()
+            else -> null
+        }
+
+        if (matched != null) {
+            consumed += matched.rowKey
+            result += item.ui.copy(
+                change = if (item.fingerprint == matched.fingerprint) {
+                    ContainerResourceChange.UNCHANGED
+                } else {
+                    ContainerResourceChange.MODIFIED
+                }
+            )
+        } else if (candidates.isNotEmpty()) {
+            result += item.ui.copy(change = ContainerResourceChange.UNRESOLVED)
+        } else {
+            val hasSameKindBefore = before.any { it.kind == item.kind && it.rowKey !in consumed }
+            result += item.ui.copy(
+                change = if (item.strongIdentity || !hasSameKindBefore) {
+                    ContainerResourceChange.ADDED
+                } else {
+                    ContainerResourceChange.UNRESOLVED
+                }
+            )
+        }
+    }
+
+    before.filterNot { it.rowKey in consumed }.forEach { item ->
+        val sameKeyAfter = afterByKey[item.matchKey].orEmpty()
+        if (sameKeyAfter.isEmpty()) {
+            val hasSameKindAfter = after.any { it.kind == item.kind }
+            result += item.ui.copy(
+                change = if (item.strongIdentity || !hasSameKindAfter) {
+                    ContainerResourceChange.REMOVED
+                } else {
+                    ContainerResourceChange.UNRESOLVED
+                }
+            )
+        }
+    }
+    return result
+}
+
+internal fun MatroskaScanResult.trackPreservationSignature(): List<String> =
+    trackInfos.map {
+        listOf(
+            it.number.toString(),
+            it.uid?.toString().orEmpty(),
+            it.typeCode.toString(),
+            it.codecId,
+            it.language,
+            it.name,
+            it.isDefault.toString(),
+            it.isForced.toString(),
+        ).joinToString("\u001f")
+    }
+
+internal fun MatroskaScanResult.attachmentPreservationKeys(): List<String> =
+    attachmentInfos.map { info ->
+        info.uid?.let { "uid:$it" }
+            ?: info.sha256?.let { "sha256:$it" }
+            ?: "weak:${info.fileName}\u001f${info.mimeType}\u001f${info.sizeBytes ?: -1L}"
+    }
+
+private fun MatroskaScanResult.inventoryItems(): List<InventoryItem> {
+    val assEvents = subtitleTracks.associateBy({ it.number }, { it.packets.size })
+    val items = mutableListOf<InventoryItem>()
+
+    trackInfos.forEach { info ->
+        val kind = when (info.kind) {
+            MatroskaTrackKind.VIDEO -> ContainerResourceKind.VIDEO
+            MatroskaTrackKind.AUDIO -> ContainerResourceKind.AUDIO
+            MatroskaTrackKind.SUBTITLE -> ContainerResourceKind.SUBTITLE
+            else -> ContainerResourceKind.OTHER
+        }
+        val kindLabel = when (kind) {
+            ContainerResourceKind.VIDEO -> "视频"
+            ContainerResourceKind.AUDIO -> "音频"
+            ContainerResourceKind.SUBTITLE -> "字幕"
+            else -> "轨道"
+        }
+        val title = info.name.ifBlank {
+            when {
+                kind == ContainerResourceKind.SUBTITLE && info.codecId == "S_TEXT/ASS" -> "ASS 字幕"
+                info.codecId.isNotBlank() -> info.codecId
+                else -> kindLabel
+            }
+        }
+        val detail = buildList {
+            if (info.codecId.isNotBlank()) add(info.codecId)
+            if (info.language.isNotBlank()) add(info.language)
+            add("Track #${info.number}")
+            if (info.isDefault) add("Default")
+            if (info.isForced) add("Forced")
+            assEvents[info.number]?.let { add("$it events") }
+        }.joinToString(" · ")
+        val strongKey = info.uid?.let { "track:uid:$it" }
+        val weakKey = "track:weak:${info.kind}:${info.codecId}:${info.language}:${info.name}"
+        val rowKey = strongKey ?: "track:${info.typeCode}:${info.number}:${info.codecId}"
+        val fingerprint = listOf(
+            info.kind.name,
+            info.codecId,
+            info.language,
+            info.name,
+            info.isDefault.toString(),
+            info.isForced.toString(),
+            info.contentHash.orEmpty(),
+        ).joinToString("\u001f")
+        items += InventoryItem(
+            rowKey = rowKey,
+            kind = kind,
+            matchKey = strongKey ?: weakKey,
+            strongIdentity = strongKey != null,
+            fingerprint = fingerprint,
+            ui = ContainerResourceUi(
+                rowKey = rowKey,
+                kind = kind,
+                title = title,
+                detail = detail,
+                trackNumber = info.number,
+                editableAss = info.kind == MatroskaTrackKind.SUBTITLE && info.codecId == "S_TEXT/ASS",
+            ),
+        )
+    }
+
+    val attachmentNameCounts = attachmentInfos.groupingBy { it.fileName }.eachCount()
+    attachmentInfos.forEachIndexed { index, info ->
+        val kind = if (info.isSupportedFont) ContainerResourceKind.FONT else ContainerResourceKind.ATTACHMENT
+        val strongKey = info.uid?.let { "attachment:uid:$it" }
+            ?: info.sha256?.let { "attachment:sha256:$it" }
+        val weakKey = "attachment:weak:${info.fileName}:${info.mimeType}:${info.sizeBytes ?: -1L}"
+        val rowKey = strongKey ?: "attachment:$index:${info.fileName}"
+        val size = info.sizeBytes?.let(::formatBytes)
+        val detail = buildList {
+            if (info.mimeType.isNotBlank()) add(info.mimeType)
+            if (size != null) add(size)
+            if (info.description.isNotBlank()) add(info.description)
+            if (!info.dataAvailable) add("payload 未载入")
+        }.joinToString(" · ")
+        items += InventoryItem(
+            rowKey = rowKey,
+            kind = kind,
+            matchKey = strongKey ?: weakKey,
+            strongIdentity = strongKey != null,
+            fingerprint = listOf(
+                info.fileName,
+                info.mimeType,
+                info.description,
+                (info.sizeBytes ?: -1L).toString(),
+                info.sha256.orEmpty(),
+            ).joinToString("\u001f"),
+            ui = ContainerResourceUi(
+                rowKey = rowKey,
+                kind = kind,
+                title = info.fileName,
+                detail = detail,
+                attachmentTarget = info.uid?.toString()
+                    ?: info.fileName.takeIf { attachmentNameCounts[it] == 1 },
+            ),
+        )
+    }
+
+    if (chapterCount > 0) {
+        items += InventoryItem(
+            rowKey = "chapters",
+            kind = ContainerResourceKind.CHAPTERS,
+            matchKey = "chapters",
+            strongIdentity = true,
+            fingerprint = chapterCount.toString(),
+            ui = ContainerResourceUi(
+                rowKey = "chapters",
+                kind = ContainerResourceKind.CHAPTERS,
+                title = "章节",
+                detail = "$chapterCount chapters",
+            ),
+        )
+    }
+    return items
+}
+
+private fun formatBytes(bytes: Long): String = when {
+    bytes >= 1024L * 1024L -> "%.1f MiB".format(bytes.toDouble() / (1024.0 * 1024.0))
+    bytes >= 1024L -> "%.1f KiB".format(bytes.toDouble() / 1024.0)
+    else -> "$bytes B"
+}

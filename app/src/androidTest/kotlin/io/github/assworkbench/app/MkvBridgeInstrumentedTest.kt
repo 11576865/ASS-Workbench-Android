@@ -5,6 +5,7 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.assworkbench.container.MatroskaReader
+import io.github.assworkbench.container.MatroskaTrackKind
 import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -36,6 +37,10 @@ class MkvBridgeInstrumentedTest {
 
         val sourceScan = source.inputStream().use { MatroskaReader().scan(it) }
         assertEquals(1, sourceScan.subtitleTracks.size)
+        assertEquals(
+            listOf(MatroskaTrackKind.VIDEO, MatroskaTrackKind.SUBTITLE),
+            sourceScan.trackInfos.map { it.kind },
+        )
         assertEquals(2L, sourceScan.subtitleTracks.single().number)
         assertTrue(sourceScan.subtitleTracks.single().toAss().contains("Old line"))
         assertEquals(listOf("Fixture.ttf"), sourceScan.attachments.map { it.fileName })
@@ -49,6 +54,9 @@ class MkvBridgeInstrumentedTest {
         val addedFont = File(workDir, "AddedFont.otf").apply {
             writeBytes(byteArrayOf(0x4f, 0x54, 0x54, 0x4f) + ByteArray(128) { 0x42 })
         }
+        val cover = File(workDir, "cover.png").apply {
+            writeBytes(byteArrayOf(0x89.toByte(), 0x50, 0x4e, 0x47) + ByteArray(96) { 0x21 })
+        }
         val output = File(workDir, "updated.mkv")
 
         val tool = MkvGoTool(application)
@@ -59,6 +67,7 @@ class MkvBridgeInstrumentedTest {
             editedAss = edited,
             output = output,
             fonts = listOf(addedFont),
+            attachments = listOf(cover),
         )
 
         assertTrue(output.isFile)
@@ -75,6 +84,114 @@ class MkvBridgeInstrumentedTest {
         val attachmentNames = outputScan.attachments.map { it.fileName }.toSet()
         assertTrue("Fixture.ttf" in attachmentNames)
         assertTrue("AddedFont.otf" in attachmentNames)
-        assertEquals(2, outputScan.attachments.size)
+        assertTrue("cover.png" in attachmentNames)
+        assertEquals("image/png", outputScan.attachments.first { it.fileName == "cover.png" }.mimeType)
+        assertEquals(3, outputScan.attachments.size)
+
+        val inventoryDiff = diffContainerResources(sourceScan, outputScan)
+        assertTrue(
+            inventoryDiff.any {
+                it.trackNumber == 2L && it.change == ContainerResourceChange.MODIFIED
+            }
+        )
+        assertTrue(
+            inventoryDiff.any {
+                it.title == "AddedFont.otf" && it.change == ContainerResourceChange.ADDED
+            }
+        )
+        assertTrue(
+            inventoryDiff.any {
+                it.title == "cover.png" && it.change == ContainerResourceChange.ADDED
+            }
+        )
+        assertTrue(inventoryDiff.none { it.change == ContainerResourceChange.REMOVED })
+    }
+
+    @Test
+    fun nativeBridgeAddsGenericAttachmentWithoutEditingAss() {
+        val source = File(workDir, "attachment-only-source.mkv")
+        InstrumentationRegistry.getInstrumentation().context.assets
+            .open("mkv/source.mkv")
+            .use { input -> source.outputStream().use { output -> input.copyTo(output) } }
+        val before = source.inputStream().use { MatroskaReader().scan(it) }
+
+        val note = File(workDir, "notes.txt").apply {
+            writeText("ASS Workbench attachment-only fixture", Charsets.UTF_8)
+        }
+        val output = File(workDir, "attachment-only-updated.mkv")
+
+        val tool = MkvGoTool(application)
+        assertTrue("x86_64 emulator APK must package the mkvgo helper", tool.isAvailable())
+        tool.addAttachments(source, output, listOf(note))
+
+        val after = output.inputStream().use { MatroskaReader().scan(it) }
+        assertEquals(before.trackPreservationSignature(), after.trackPreservationSignature())
+        assertEquals(before.chapterCount, after.chapterCount)
+        assertEquals(
+            before.subtitleTracks.single().toAss(),
+            after.subtitleTracks.single().toAss(),
+        )
+        assertTrue(after.attachments.any { it.fileName == "notes.txt" && it.mimeType == "text/plain" })
+        assertEquals(before.attachments.size + 1, after.attachments.size)
+    }
+
+
+    @Test
+    fun nativeBridgeReplacesAndRemovesAttachmentsWithoutTouchingTracks() {
+        val source = File(workDir, "attachment-crud-source.mkv")
+        InstrumentationRegistry.getInstrumentation().context.assets
+            .open("mkv/source.mkv")
+            .use { input -> source.outputStream().use { output -> input.copyTo(output) } }
+        val before = source.inputStream().use { MatroskaReader().scan(it) }
+        val original = before.attachmentInfos.single()
+        val originalTarget = original.uid?.toString() ?: original.fileName
+
+        val cover = File(workDir, "cover.png").apply {
+            writeBytes(byteArrayOf(0x89.toByte(), 0x50, 0x4e, 0x47) + ByteArray(64) { 0x2a })
+        }
+        val note = File(workDir, "notes.txt").apply {
+            writeText("attachment CRUD regression", Charsets.UTF_8)
+        }
+        val replaced = File(workDir, "attachment-crud-replaced.mkv")
+
+        val tool = MkvGoTool(application)
+        assertTrue("x86_64 emulator APK must package the mkvgo helper", tool.isAvailable())
+        tool.editAttachments(
+            source = source,
+            output = replaced,
+            additions = listOf(note),
+            replacements = listOf(
+                AttachmentReplacementInput(
+                    target = originalTarget,
+                    file = cover,
+                )
+            ),
+        )
+
+        val middle = replaced.inputStream().use { MatroskaReader().scan(it) }
+        assertEquals(before.trackPreservationSignature(), middle.trackPreservationSignature())
+        assertEquals(before.chapterCount, middle.chapterCount)
+        assertEquals(before.attachmentInfos.size + 1, middle.attachmentInfos.size)
+        assertTrue(middle.attachmentInfos.none { it.fileName == original.fileName })
+        val replacedInfo = middle.attachmentInfos.first { it.fileName == "cover.png" }
+        if (original.uid != null) {
+            assertEquals(original.uid, replacedInfo.uid)
+        }
+        val noteInfo = middle.attachmentInfos.first { it.fileName == "notes.txt" }
+        val noteTarget = noteInfo.uid?.toString() ?: noteInfo.fileName
+
+        val removed = File(workDir, "attachment-crud-removed.mkv")
+        tool.editAttachments(
+            source = replaced,
+            output = removed,
+            removals = listOf(noteTarget),
+        )
+
+        val after = removed.inputStream().use { MatroskaReader().scan(it) }
+        assertEquals(middle.trackPreservationSignature(), after.trackPreservationSignature())
+        assertEquals(middle.chapterCount, after.chapterCount)
+        assertEquals(before.attachmentInfos.size, after.attachmentInfos.size)
+        assertTrue(after.attachmentInfos.any { it.fileName == "cover.png" })
+        assertTrue(after.attachmentInfos.none { it.fileName == "notes.txt" })
     }
 }
