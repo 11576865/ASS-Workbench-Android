@@ -23,6 +23,15 @@ data class TrackMetadataEditInput(
     val isForced: Boolean,
 )
 
+data class TrackImportInput(
+    val source: File,
+    val trackNumber: Long,
+    val name: String,
+    val language: String,
+    val isDefault: Boolean,
+    val isForced: Boolean,
+)
+
 class MkvGoTool(private val context: Context) {
     private val executable: File
         get() = File(context.applicationInfo.nativeLibraryDir, "libmkvgo.so")
@@ -46,6 +55,7 @@ class MkvGoTool(private val context: Context) {
         metadataEdits: List<AttachmentMetadataEditInput> = emptyList(),
         removeTracks: List<String> = emptyList(),
         trackMetadataEdits: List<TrackMetadataEditInput> = emptyList(),
+        trackImports: List<TrackImportInput> = emptyList(),
     ) {
         require(isAvailable()) { "MKV 写回工具在此 ABI 上不可用" }
         output.parentFile?.mkdirs() ?: error("输出目录不可用")
@@ -164,7 +174,8 @@ class MkvGoTool(private val context: Context) {
                 replacements.isNotEmpty() ||
                 metadataEdits.isNotEmpty() ||
                 removeTracks.isNotEmpty() ||
-                trackMetadataEdits.isNotEmpty()
+                trackMetadataEdits.isNotEmpty() ||
+                trackImports.isNotEmpty()
         ) { "没有待执行的容器修改" }
         output.parentFile?.mkdirs() ?: error("输出目录不可用")
         output.delete()
@@ -222,6 +233,21 @@ class MkvGoTool(private val context: Context) {
                 args += metadata.language
                 args += if (metadata.isDefault) "1" else "0"
                 args += if (metadata.isForced) "1" else "0"
+            }
+        trackImports
+            .distinctBy { it.source.absolutePath to it.trackNumber }
+            .forEach { import ->
+                require(import.source.isFile && import.source.length() > 0L) {
+                    "轨道来源文件不可用：" + import.source.name
+                }
+                require(import.trackNumber > 0L) { "来源 TrackNumber 必须大于 0" }
+                args += "--add-track"
+                args += import.source.absolutePath
+                args += import.trackNumber.toString()
+                args += import.name
+                args += import.language
+                args += if (import.isDefault) "1" else "0"
+                args += if (import.isForced) "1" else "0"
             }
         run(*args.toTypedArray())
         require(output.isFile && output.length() > 0L) { "MKV 写回未生成输出文件" }
