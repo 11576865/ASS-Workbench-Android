@@ -822,6 +822,7 @@ func TestEditContainerResourcesAddsExternalTrackWithFreshIdentity(t *testing.T) 
 		[]TrackAddition{{
 			SourcePath: external,
 			SourceTrackID: 2,
+			SourceTrackUID: 202,
 			Name: "Japanese commentary",
 			Language: "jpn",
 			IsDefault: false,
@@ -1007,6 +1008,7 @@ func TestReplaceASSCanAddExternalTrackInSameRemux(t *testing.T) {
 		[]TrackAddition{{
 			SourcePath: external,
 			SourceTrackID: 1,
+			SourceTrackUID: 901,
 			Name: "Imported audio",
 			Language: "jpn",
 			IsDefault: false,
@@ -1225,5 +1227,53 @@ func TestEditContainerResourcesCanReplaceEntireTrackSetWithImport(t *testing.T) 
 	}
 	if _, err := br.Next(); err != io.EOF {
 		t.Fatalf("expected exactly one imported block, got %v", err)
+	}
+}
+
+
+func TestPlanTrackAdditionsRejectsSourceUIDDrift(t *testing.T) {
+	dir := t.TempDir()
+	source := filepath.Join(dir, "source-uid-drift.mkv")
+	track := mkv.Track{ID: 2, UID: 222, Type: mkv.AudioTrack, Codec: "opus"}
+
+	out, err := os.Create(source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mw := writer.NewMKVWriter(out)
+	if err := mw.WriteStart(); err != nil {
+		t.Fatal(err)
+	}
+	if err := mw.WriteMetadata(
+		&mkv.Container{Info: mkv.SegmentInfo{TimecodeScale: 1_000_000}},
+		[]mkv.Track{track},
+		1000,
+	); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.WriteCluster(out, 0, 1_000_000, []mkv.Block{
+		{TrackNumber: 2, Timecode: 0, Keyframe: true, Data: []byte("payload")},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := mw.Finalize(); err != nil {
+		t.Fatal(err)
+	}
+	if err := out.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	_, _, _, _, err = planTrackAdditions(
+		context.Background(),
+		nil,
+		[]TrackAddition{{
+			SourcePath: source,
+			SourceTrackID: 2,
+			SourceTrackUID: 999,
+		}},
+		mkv.FSFrom(nil),
+	)
+	if err == nil || !strings.Contains(err.Error(), "changed identity") {
+		t.Fatalf("expected source TrackUID drift rejection, got %v", err)
 	}
 }
