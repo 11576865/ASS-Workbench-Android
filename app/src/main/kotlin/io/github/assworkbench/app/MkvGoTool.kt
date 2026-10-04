@@ -55,7 +55,6 @@ class MkvGoTool(private val context: Context) {
         metadataEdits: List<AttachmentMetadataEditInput> = emptyList(),
         removeTracks: List<String> = emptyList(),
         trackMetadataEdits: List<TrackMetadataEditInput> = emptyList(),
-        trackImports: List<TrackImportInput> = emptyList(),
     ) {
         require(isAvailable()) { "MKV 写回工具在此 ABI 上不可用" }
         output.parentFile?.mkdirs() ?: error("输出目录不可用")
@@ -166,6 +165,7 @@ class MkvGoTool(private val context: Context) {
         metadataEdits: List<AttachmentMetadataEditInput> = emptyList(),
         removeTracks: List<String> = emptyList(),
         trackMetadataEdits: List<TrackMetadataEditInput> = emptyList(),
+        trackImports: List<TrackImportInput> = emptyList(),
     ) {
         require(isAvailable()) { "MKV 写回工具在此 ABI 上不可用" }
         require(
