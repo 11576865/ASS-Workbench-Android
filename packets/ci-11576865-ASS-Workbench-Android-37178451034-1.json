@@ -1,0 +1,44 @@
+{
+  "packet_version": 1,
+  "packet_id": "ci-11576865-ASS-Workbench-Android-37178451034-1",
+  "status": "pending",
+  "record_type": "ci_failure",
+  "title": "Android CI: failure",
+  "summary": "Tracked CI workflow did not complete successfully. Source adapter captured failed job/step evidence when available.",
+  "source_repository": "11576865/ASS-Workbench-Android",
+  "source_event": "workflow_run",
+  "source_ref": "codex/infinite-workspace",
+  "source_sha": "a578cd80961f9c5193abcdcea16b69de1b292893",
+  "source_url": "https://github.com/11576865/ASS-Workbench-Android/actions/runs/37178451034",
+  "created_at": "2026-10-04T04:58:59+00:00",
+  "dedupe_key": "workflow_run:11576865/ASS-Workbench-Android:37178451034:1",
+  "routing_hints": [
+    "interface-grammar",
+    "operations",
+    "red-reason",
+    "reliability"
+  ],
+  "evidence": {
+    "workflow": "Android CI",
+    "run_id": "37178451034",
+    "run_attempt": "1",
+    "conclusion": "failure",
+    "trigger_event": "pull_request",
+    "failed_jobs": [
+      {
+        "id": 111365908592,
+        "name": "build",
+        "conclusion": "failure"
+      }
+    ],
+    "failed_steps": [
+      {
+        "job": "build",
+        "number": 13,
+        "name": "Unit tests",
+        "conclusion": "failure"
+      }
+    ],
+    "capture_error": ""
+  }
+}
