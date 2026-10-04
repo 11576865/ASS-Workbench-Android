@@ -94,12 +94,24 @@ internal fun WorkspaceParameterProjectionPane(
     var numberText by remember(projection.id, eventId) { mutableStateOf(angle.toString()) }
     var gestureActive by remember(projection.id, eventId) { mutableStateOf(false) }
     var revision by remember(projection.id, eventId) { mutableLongStateOf(0L) }
+    val sessionId = state.workspaceSessionId
     val ownerId = "geometry:$eventId:${projection.id}"
 
     fun dispatch(
         phase: WorkspaceParameterIntentPhase,
         value: Double? = null,
     ) {
+        val current = viewModel.state.value
+        if (current.workspaceSessionId != sessionId) return
+        if (phase != WorkspaceParameterIntentPhase.CANCEL) {
+            val target = projection.binding.resolve(
+                current.focusedEventId,
+                current.selectedEventIds,
+                current.document.events.mapTo(hashSetOf()) { it.id },
+            ) as? WorkspaceBindingResolution.Event
+            if (target?.eventId != eventId) return
+            if (current.previewOwnerId != null && current.previewOwnerId != ownerId) return
+        }
         revision += 1L
         WorkspaceParameterIntentRouter.dispatch(
             intent = WorkspaceParameterIntent(
