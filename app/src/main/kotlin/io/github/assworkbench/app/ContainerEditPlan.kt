@@ -189,7 +189,8 @@ internal fun buildContainerEditPlan(state: EditorState): ContainerEditPlanUi {
                 when (addition.sourceKind) {
                     ContainerTrackImportSourceKind.MATROSKA_TRACK ->
                         "${addition.codecId} · Track #${addition.sourceTrackNumber}"
-                    ContainerTrackImportSourceKind.STANDALONE_ASS ->
+                    ContainerTrackImportSourceKind.STANDALONE_ASS,
+                    ContainerTrackImportSourceKind.STANDALONE_SRT ->
                         addition.sourceName
                 }
             },
@@ -199,7 +200,9 @@ internal fun buildContainerEditPlan(state: EditorState): ContainerEditPlanUi {
                     ContainerTrackImportSourceKind.MATROSKA_TRACK ->
                         append(" · source Track #").append(addition.sourceTrackNumber)
                     ContainerTrackImportSourceKind.STANDALONE_ASS ->
-                        append(" · standalone ASS → S_TEXT/ASS · source SHA-256 pinned")
+                        append(" · standalone ASS → normalized ASS → S_TEXT/ASS · source SHA-256 pinned")
+                    ContainerTrackImportSourceKind.STANDALONE_SRT ->
+                        append(" · standalone SRT → normalized ASS → S_TEXT/ASS · source SHA-256 pinned")
                 }
                 append(" · ").append(addition.codecId)
                 if (addition.language.isNotBlank()) append(" · ").append(addition.language)
@@ -258,7 +261,8 @@ internal fun buildContainerEditPlan(state: EditorState): ContainerEditPlanUi {
         when (addition.sourceKind) {
             ContainerTrackImportSourceKind.MATROSKA_TRACK ->
                 addition.sourceTrackNumber == null || addition.sourceTrackNumber <= 0L
-            ContainerTrackImportSourceKind.STANDALONE_ASS ->
+            ContainerTrackImportSourceKind.STANDALONE_ASS,
+            ContainerTrackImportSourceKind.STANDALONE_SRT ->
                 addition.kind != ContainerResourceKind.SUBTITLE ||
                     addition.typeCode != 17L ||
                     addition.codecId != "S_TEXT/ASS" ||
@@ -344,8 +348,8 @@ internal fun buildContainerEditPlan(state: EditorState): ContainerEditPlanUi {
     val hasImportedSubtitleTrack = state.container.pendingTrackAdditions.any {
         it.kind == ContainerResourceKind.SUBTITLE
     }
-    val hasStandaloneAssImport = state.container.pendingTrackAdditions.any {
-        it.sourceKind == ContainerTrackImportSourceKind.STANDALONE_ASS
+    val hasStandaloneSubtitleImport = state.container.pendingTrackAdditions.any {
+        it.sourceKind.isStandaloneSubtitleSource()
     }
     val hasFontAttachment = mutations.any { it.source == ContainerMutationSource.FONT_PACKAGE }
     val hasAss = mutations.any { it.kind == ContainerMutationKind.REPLACE_ASS_TRACK }
@@ -360,8 +364,8 @@ internal fun buildContainerEditPlan(state: EditorState): ContainerEditPlanUi {
                 if (hasImportedSubtitleTrack) {
                     append(" 外部字幕轨不会自动携带字体/其他 Attachment。")
                 }
-                if (hasStandaloneAssImport) {
-                    append(" 独立 ASS 在保存前按 SHA-256 重新验证来源，再规范化为 UTF-8 并封装为 S_TEXT/ASS；这不是对原容器 Track 的字节复制。")
+                if (hasStandaloneSubtitleImport) {
+                    append(" 独立 ASS / SRT 会先规范化为确定性的 UTF-8 ASS execution representation；保存前按其 SHA-256 重新验证，再封装为 S_TEXT/ASS。这不是对原始字幕文件字节的直接复制。")
                 }
             },
         )
