@@ -240,4 +240,57 @@ class MkvBridgeInstrumentedTest {
             assertEquals(original.uid, renamed.uid)
         }
     }
+
+    @Test
+    fun nativeBridgeEditsTrackMetadataAndRemovesTrackWithoutRenumbering() {
+        val source = File(workDir, "track-mutation-source.mkv")
+        InstrumentationRegistry.getInstrumentation().context.assets
+            .open("mkv/source.mkv")
+            .use { input -> source.outputStream().use { output -> input.copyTo(output) } }
+
+        val before = source.inputStream().use { MatroskaReader().scan(it) }
+        assertEquals(2, before.trackInfos.size)
+        val video = before.trackInfos.single { it.kind == MatroskaTrackKind.VIDEO }
+        val subtitle = before.trackInfos.single { it.kind == MatroskaTrackKind.SUBTITLE }
+        val videoTarget = video.uid?.let { "uid:$it" } ?: "number:${video.number}"
+        val subtitleTarget = subtitle.uid?.let { "uid:$it" } ?: "number:${subtitle.number}"
+
+        val output = File(workDir, "track-mutation-updated.mkv")
+        val tool = MkvGoTool(application)
+        assertTrue("x86_64 emulator APK must package the mkvgo helper", tool.isAvailable())
+        tool.editContainer(
+            source = source,
+            output = output,
+            removeTracks = listOf(subtitleTarget),
+            trackMetadataEdits = listOf(
+                TrackMetadataEditInput(
+                    target = videoTarget,
+                    name = "Main picture",
+                    language = "und",
+                    isDefault = false,
+                    isForced = true,
+                )
+            ),
+        )
+
+        val after = output.inputStream().use { MatroskaReader().scan(it) }
+        assertEquals(1, after.trackInfos.size)
+        val remaining = after.trackInfos.single()
+        assertEquals(video.number, remaining.number)
+        assertEquals(video.uid, remaining.uid)
+        assertEquals(video.kind, remaining.kind)
+        assertEquals(video.codecId, remaining.codecId)
+        assertEquals("Main picture", remaining.name)
+        assertEquals("und", remaining.language)
+        assertFalse(remaining.isDefault)
+        assertTrue(remaining.isForced)
+        assertTrue(after.trackInfos.none { it.number == subtitle.number })
+        assertTrue(after.subtitleTracks.isEmpty())
+
+        assertEquals(before.chapterCount, after.chapterCount)
+        assertEquals(
+            before.attachmentInfos.map { listOf(it.uid, it.fileName, it.mimeType, it.sizeBytes) },
+            after.attachmentInfos.map { listOf(it.uid, it.fileName, it.mimeType, it.sizeBytes) },
+        )
+    }
 }
