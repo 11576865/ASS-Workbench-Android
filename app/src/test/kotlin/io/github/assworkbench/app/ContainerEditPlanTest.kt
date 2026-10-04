@@ -327,4 +327,186 @@ class ContainerEditPlanTest {
             plan.checks.single { it.dimension == ContainerCompatibilityDimension.CONTAINER_STRUCTURE }.status,
         )
     }
+
+    @Test
+    fun externalTrackAdditionIsExplicitMutation() {
+        val addition = PendingContainerTrackAdditionUi(
+            sourceUri = "content://external/source.mkv",
+            sourceName = "source.mkv",
+            sourceTrackNumber = 2L,
+            sourceTrackUid = 202L,
+            kind = ContainerResourceKind.AUDIO,
+            typeCode = 2L,
+            codecId = "A_OPUS",
+            name = "Japanese audio",
+            language = "jpn",
+            isDefault = false,
+            isForced = false,
+        )
+        val state = EditorState(
+            container = ContainerBridgeState(
+                uri = "fixture-source",
+                writeBackAvailable = true,
+                resources = listOf(
+                    ContainerResourceUi(
+                        rowKey = "track:uid:101",
+                        kind = ContainerResourceKind.VIDEO,
+                        title = "Video",
+                        detail = "V_VP9 · Track #1",
+                        trackNumber = 1L,
+                        trackTarget = "uid:101",
+                    )
+                ),
+                pendingTrackAdditions = listOf(addition),
+            ),
+        )
+
+        val plan = buildContainerEditPlan(state)
+
+        assertTrue(plan.executable)
+        assertEquals(ContainerMutationKind.ADD_TRACK, plan.mutations.single().kind)
+        assertEquals(ContainerMutationSource.EXTERNAL_TRACK, plan.mutations.single().source)
+        assertEquals(
+            ContainerCompatibilityStatus.WARNING,
+            plan.checks.single { it.dimension == ContainerCompatibilityDimension.DOWNSTREAM }.status,
+        )
+    }
+
+    @Test
+    fun duplicateExternalSourceTrackBlocksPreflight() {
+        val addition = PendingContainerTrackAdditionUi(
+            sourceUri = "content://external/source.mkv",
+            sourceName = "source.mkv",
+            sourceTrackNumber = 2L,
+            sourceTrackUid = 202L,
+            kind = ContainerResourceKind.AUDIO,
+            typeCode = 2L,
+            codecId = "A_OPUS",
+            name = "Audio",
+            language = "jpn",
+            isDefault = false,
+            isForced = false,
+        )
+        val state = EditorState(
+            container = ContainerBridgeState(
+                uri = "fixture-source",
+                writeBackAvailable = true,
+                resources = listOf(
+                    ContainerResourceUi(
+                        rowKey = "track:uid:101",
+                        kind = ContainerResourceKind.VIDEO,
+                        title = "Video",
+                        detail = "V_VP9 · Track #1",
+                        trackNumber = 1L,
+                        trackTarget = "uid:101",
+                    )
+                ),
+                pendingTrackAdditions = listOf(addition, addition),
+            ),
+        )
+
+        val plan = buildContainerEditPlan(state)
+
+        assertFalse(plan.executable)
+        assertEquals(
+            ContainerCompatibilityStatus.UNSUPPORTED,
+            plan.checks.single { it.dimension == ContainerCompatibilityDimension.CONTAINER_STRUCTURE }.status,
+        )
+    }
+
+    @Test
+    fun removeAllExistingTracksIsAllowedWhenExternalTrackReplacesStructure() {
+        val resources = listOf(
+            ContainerResourceUi(
+                rowKey = "track:uid:101",
+                kind = ContainerResourceKind.VIDEO,
+                title = "Video",
+                detail = "V_VP9 · Track #1",
+                trackNumber = 1L,
+                trackTarget = "uid:101",
+            ),
+            ContainerResourceUi(
+                rowKey = "track:uid:202",
+                kind = ContainerResourceKind.AUDIO,
+                title = "Audio",
+                detail = "A_OPUS · Track #2",
+                trackNumber = 2L,
+                trackTarget = "uid:202",
+            ),
+        )
+        val addition = PendingContainerTrackAdditionUi(
+            sourceUri = "content://external/source.mkv",
+            sourceName = "source.mkv",
+            sourceTrackNumber = 1L,
+            sourceTrackUid = 901L,
+            kind = ContainerResourceKind.VIDEO,
+            typeCode = 1L,
+            codecId = "V_VP9",
+            name = "Replacement video",
+            language = "und",
+            isDefault = true,
+            isForced = false,
+        )
+        val state = EditorState(
+            container = ContainerBridgeState(
+                uri = "fixture-source",
+                writeBackAvailable = true,
+                resources = resources,
+                pendingTrackRemovals = listOf(
+                    PendingContainerTrackRemovalUi("uid:101", 1L, "Video"),
+                    PendingContainerTrackRemovalUi("uid:202", 2L, "Audio"),
+                ),
+                pendingTrackAdditions = listOf(addition),
+            ),
+        )
+
+        val plan = buildContainerEditPlan(state)
+
+        assertTrue(plan.executable)
+        assertEquals(
+            setOf(ContainerMutationKind.REMOVE_TRACK, ContainerMutationKind.ADD_TRACK),
+            plan.mutations.map { it.kind }.toSet(),
+        )
+    }
+
+    @Test
+    fun importedSubtitleWarnsThatSourceAttachmentsDoNotFollowAutomatically() {
+        val addition = PendingContainerTrackAdditionUi(
+            sourceUri = "content://external/subs.mkv",
+            sourceName = "subs.mkv",
+            sourceTrackNumber = 3L,
+            sourceTrackUid = 303L,
+            kind = ContainerResourceKind.SUBTITLE,
+            typeCode = 17L,
+            codecId = "S_TEXT/ASS",
+            name = "Signs",
+            language = "eng",
+            isDefault = false,
+            isForced = false,
+        )
+        val state = EditorState(
+            container = ContainerBridgeState(
+                uri = "fixture-source",
+                writeBackAvailable = true,
+                resources = listOf(
+                    ContainerResourceUi(
+                        rowKey = "track:uid:101",
+                        kind = ContainerResourceKind.VIDEO,
+                        title = "Video",
+                        detail = "V_VP9 · Track #1",
+                        trackNumber = 1L,
+                        trackTarget = "uid:101",
+                    )
+                ),
+                pendingTrackAdditions = listOf(addition),
+            ),
+        )
+
+        val plan = buildContainerEditPlan(state)
+        val downstream = plan.checks.single { it.dimension == ContainerCompatibilityDimension.DOWNSTREAM }
+
+        assertTrue(plan.executable)
+        assertEquals(ContainerCompatibilityStatus.WARNING, downstream.status)
+        assertTrue(downstream.detail.contains("字体/其他 Attachment 不会自动随轨导入"))
+    }
 }
