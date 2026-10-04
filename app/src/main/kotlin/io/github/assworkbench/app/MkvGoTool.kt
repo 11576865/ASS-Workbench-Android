@@ -29,10 +29,20 @@ data class TrackAdditionInput(
     val sourceTrackNumber: Long? = null,
     val sourceTrackUid: Long? = null,
     val sourceSha256: String? = null,
+    val sourceCodecId: String? = null,
+    val sampleRate: Int? = null,
+    val channelCount: Int? = null,
     val name: String,
     val language: String,
     val isDefault: Boolean,
     val isForced: Boolean,
+)
+
+data class TrackContentDigest(
+    val sha256: String,
+    val packetCount: Long,
+    val firstTimecodeMs: Long?,
+    val lastTimecodeMs: Long?,
 )
 
 class MkvGoTool(private val context: Context) {
@@ -260,6 +270,37 @@ class MkvGoTool(private val context: Context) {
         metadataEdits = metadataEdits,
     )
 
+    fun digestTrackContent(
+        source: File,
+        trackNumber: Long,
+    ): TrackContentDigest {
+        require(isAvailable()) { "MKV 写回工具在此 ABI 上不可用" }
+        require(source.isFile && source.length() > 0L) { "待验证 MKV 不可用" }
+        require(trackNumber > 0L) { "待验证 TrackNumber 无效" }
+        val text = run(
+            "digest-track",
+            source.absolutePath,
+            "--track", trackNumber.toString(),
+        )
+        val values = text.lineSequence()
+            .mapNotNull { line ->
+                val index = line.indexOf('=')
+                if (index <= 0) null else line.substring(0, index) to line.substring(index + 1)
+            }
+            .toMap()
+        val sha = values["sha256"].orEmpty()
+        require(sha.matches(Regex("[0-9a-f]{64}"))) {
+            "mkvgo digest-track 未返回有效 SHA-256"
+        }
+        return TrackContentDigest(
+            sha256 = sha,
+            packetCount = values["count"]?.toLongOrNull()
+                ?: error("mkvgo digest-track 未返回 packet count"),
+            firstTimecodeMs = values["first_ms"]?.takeIf { it != "-" }?.toLongOrNull(),
+            lastTimecodeMs = values["last_ms"]?.takeIf { it != "-" }?.toLongOrNull(),
+        )
+    }
+
     fun extractAttachment(
         source: File,
         target: String,
@@ -318,6 +359,34 @@ class MkvGoTool(private val context: Context) {
                         args += "--add-ass-track"
                         args += addition.source.absolutePath
                         args += sha256.lowercase()
+                        args += addition.name
+                        args += addition.language
+                        args += if (addition.isDefault) "1" else "0"
+                        args += if (addition.isForced) "1" else "0"
+                    }
+                    ContainerTrackImportSourceKind.NORMALIZED_MEDIA_PACKETS -> {
+                        val sha256 = addition.sourceSha256.orEmpty()
+                        require(sha256.matches(Regex("[0-9a-fA-F]{64}"))) {
+                            "媒体 packet bundle 缺少有效 SHA-256 证据"
+                        }
+                        val codec = addition.sourceCodecId.orEmpty()
+                        require(codec == "A_MPEG/L3") {
+                            "当前 packet audio adapter 只允许 A_MPEG/L3"
+                        }
+                        val sampleRate = requireNotNull(addition.sampleRate) {
+                            "packet audio 缺少 sample rate"
+                        }
+                        val channels = requireNotNull(addition.channelCount) {
+                            "packet audio 缺少 channel count"
+                        }
+                        require(sampleRate > 0) { "packet audio sample rate 无效" }
+                        require(channels in 1..255) { "packet audio channel count 无效" }
+                        args += "--add-packet-audio"
+                        args += addition.source.absolutePath
+                        args += sha256.lowercase()
+                        args += codec
+                        args += sampleRate.toString()
+                        args += channels.toString()
                         args += addition.name
                         args += addition.language
                         args += if (addition.isDefault) "1" else "0"
