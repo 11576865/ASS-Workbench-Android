@@ -694,6 +694,7 @@ class ContainerEditPlanTest {
     @Test
     fun mediaCompatibilityAssessmentNeverCreatesMutation() {
         val assessment = MediaImportSourceAssessment(
+            sourceUri = "content://external/movie.mp4",
             sourceName = "movie.mp4",
             tracks = listOf(
                 MediaImportTrackAssessment(
@@ -723,5 +724,99 @@ class ContainerEditPlanTest {
 
         assertTrue(plan.mutations.isEmpty())
         assertFalse(plan.executable)
+    }
+
+    @Test
+    fun normalizedMp3PacketAdditionIsExecutable() {
+        val addition = PendingContainerTrackAdditionUi(
+            sourceKind = ContainerTrackImportSourceKind.NORMALIZED_MEDIA_PACKETS,
+            sourceUri = "content://external/audio.mp3",
+            sourceName = "audio.mp3",
+            sourceExtractorIndex = 0,
+            sourceSha256 = "a".repeat(64),
+            sourceContentSha256 = "b".repeat(64),
+            sampleRate = 48_000,
+            channelCount = 2,
+            packetCount = 120L,
+            kind = ContainerResourceKind.AUDIO,
+            typeCode = 2L,
+            codecId = "A_MPEG/L3",
+            name = "Imported MP3",
+            language = "und",
+            isDefault = false,
+            isForced = false,
+        )
+        val state = EditorState(
+            container = ContainerBridgeState(
+                uri = "fixture-source",
+                writeBackAvailable = true,
+                resources = listOf(
+                    ContainerResourceUi(
+                        rowKey = "track:uid:101",
+                        kind = ContainerResourceKind.VIDEO,
+                        title = "Video",
+                        detail = "V_VP9 · Track #1",
+                        trackNumber = 1L,
+                        trackTarget = "uid:101",
+                    )
+                ),
+                pendingTrackAdditions = listOf(addition),
+            ),
+        )
+
+        val plan = buildContainerEditPlan(state)
+
+        assertTrue(plan.executable)
+        assertEquals(ContainerMutationKind.ADD_TRACK, plan.mutations.single().kind)
+        assertTrue(plan.mutations.single().detail.contains("packet stream-copy"))
+        val downstream = plan.checks.single {
+            it.dimension == ContainerCompatibilityDimension.DOWNSTREAM
+        }
+        assertEquals(ContainerCompatibilityStatus.WARNING, downstream.status)
+        assertTrue(downstream.detail.contains("不经过 MediaCodec"))
+        assertTrue(
+            plan.checks.single {
+                it.dimension == ContainerCompatibilityDimension.OUTPUT_VERIFICATION
+            }.detail.contains("payload digest")
+        )
+    }
+
+    @Test
+    fun normalizedMp3PacketAdditionWithoutEvidenceBlocksPreflight() {
+        val addition = PendingContainerTrackAdditionUi(
+            sourceKind = ContainerTrackImportSourceKind.NORMALIZED_MEDIA_PACKETS,
+            sourceUri = "content://external/audio.mp3",
+            sourceName = "audio.mp3",
+            sourceExtractorIndex = 0,
+            sourceSha256 = null,
+            sourceContentSha256 = null,
+            sampleRate = 48_000,
+            channelCount = 2,
+            packetCount = 120L,
+            kind = ContainerResourceKind.AUDIO,
+            typeCode = 2L,
+            codecId = "A_MPEG/L3",
+            name = "Imported MP3",
+            language = "und",
+            isDefault = false,
+            isForced = false,
+        )
+        val state = EditorState(
+            container = ContainerBridgeState(
+                uri = "fixture-source",
+                writeBackAvailable = true,
+                pendingTrackAdditions = listOf(addition),
+            ),
+        )
+
+        val plan = buildContainerEditPlan(state)
+
+        assertFalse(plan.executable)
+        assertEquals(
+            ContainerCompatibilityStatus.UNSUPPORTED,
+            plan.checks.single {
+                it.dimension == ContainerCompatibilityDimension.CONTAINER_STRUCTURE
+            }.status,
+        )
     }
 }
