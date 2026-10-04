@@ -33,6 +33,7 @@ import io.github.assworkbench.domain.AssAnimationAuthoring
 import io.github.assworkbench.domain.AssTransformVisualProperty
 import io.github.assworkbench.domain.AssFxComposition
 import io.github.assworkbench.domain.AssReflectionFxSpec
+import io.github.assworkbench.domain.AssReflectionFadeSpec
 import io.github.assworkbench.domain.AssFlipEntranceSpec
 import io.github.assworkbench.domain.AssGlowFxSpec
 import io.github.assworkbench.domain.AssFxTemplate
@@ -1588,6 +1589,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         eventIds: Set<Long>,
         reflection: AssReflectionFxSpec,
         glow: AssGlowFxSpec?,
+        fade: AssReflectionFadeSpec?,
         entrance: AssFlipEntranceSpec?,
     ) {
         val snapshot = _state.value
@@ -1597,6 +1599,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 eventIds = eventIds,
                 reflection = reflection,
                 glow = glow,
+                fade = fade,
                 entrance = entrance,
             )
         }.getOrElse { error ->
@@ -1622,11 +1625,13 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         eventId: Long,
         reflection: AssReflectionFxSpec,
         glow: AssGlowFxSpec?,
+        fade: AssReflectionFadeSpec?,
         entrance: AssFlipEntranceSpec?,
     ) = createMirrorFxComposition(
         eventIds = setOf(eventId),
         reflection = reflection,
         glow = glow,
+        fade = fade,
         entrance = entrance,
     )
 
@@ -1634,6 +1639,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         eventIds: Set<Long>,
         reflection: AssReflectionFxSpec,
         glow: AssGlowFxSpec?,
+        fade: AssReflectionFadeSpec?,
         entrance: AssFlipEntranceSpec?,
     ) {
         val snapshot = _state.value
@@ -1643,6 +1649,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 eventIds = eventIds,
                 reflection = reflection,
                 glow = glow,
+                fade = fade,
                 entrance = entrance,
             )
         }.getOrElse { error ->
@@ -1655,7 +1662,9 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         val status = buildString {
             append("已为 ").append(result.sourceEventIds.size).append(" 条字幕生成 ")
             append(result.generatedEventIds.size).append(" 个 FX Event")
-            if (glow != null) append("（柔光 + 倒影）") else append("（倒影）")
+            if (glow != null) append("（柔光 + 倒影") else append("（倒影")
+            if (fade != null) append(" + 空间渐隐")
+            append("）")
             if (entrance != null) append("，并写入主体翻转入场")
             append("。")
         }
