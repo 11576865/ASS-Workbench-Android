@@ -87,6 +87,7 @@ class SpatialAudioEvidenceInstrumentedTest {
         assertEquals(0, lowerTaps.get())
         composeRule.onNodeWithTag("spatial-menu-audio").performClick()
         composeRule.onNodeWithText("穿透操作视频").performClick()
+        composeRule.onNodeWithTag("spatial-mode-spectrogram").assertDoesNotExist()
         waveform.performTouchInput { click(Offset(width * 0.25f, height * 0.5f)) }
         composeRule.waitForIdle()
         assertEquals(1, lowerTaps.get())

@@ -114,9 +114,10 @@ internal fun InfiniteCanvasHost(
             if (captured) return
             detailedId = node.id
             val scale = minOf(1f, (viewportW - 32f) / node.width, (viewportH - 96f) / node.height).coerceIn(0.25f, 2f)
+            val expanded = expandAudioCanvasForFocus(node, scale, viewportH)
             scene = InfiniteCanvasCamera(
                 (viewportW - node.width * scale) / 2f - node.x * scale,
-                64f - node.y * scale, scale) to scene.second.map { if (it.id == node.id) it.copy(hidden = false) else it }
+                64f - node.y * scale, scale) to scene.second.map { if (it.id == node.id) expanded.copy(hidden = false) else it }
         }
         fun overview() {
             detailedId = null

@@ -18,6 +18,14 @@ data class WaveformLiteState(
     val error: String? = null,
 )
 
+data class SpectrogramState(
+    val sourceUri: String? = null,
+    val audioTrackIndex: Int? = null,
+    val status: WaveformLiteStatus = WaveformLiteStatus.IDLE,
+    val data: io.github.assworkbench.domain.Spectrogram? = null,
+    val error: String? = null,
+)
+
 data class EditorState(
     val project: SubtitleProject = SubtitleProject(),
     val document: AssDocument = AssDocument(),
@@ -27,6 +35,7 @@ data class EditorState(
     /** Ephemeral namespace for UI bindings; increments whenever the document workspace is replaced. */
     val workspaceSessionId: Long = 1L,
     val waveform: WaveformLiteState = WaveformLiteState(),
+    val spectrogram: SpectrogramState = SpectrogramState(),
     val audioTracks: List<MediaAudioTrackInfo> = emptyList(),
     val selectedAudioTrackIndex: Int? = null,
     val sceneCutsMs: List<Long> = emptyList(),

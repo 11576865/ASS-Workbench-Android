@@ -7,6 +7,8 @@ import android.media.MediaExtractor
 import android.media.MediaFormat
 import android.net.Uri
 import io.github.assworkbench.domain.WaveformEnvelope
+import io.github.assworkbench.domain.Spectrogram
+import io.github.assworkbench.domain.StreamingSpectrogram
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -30,7 +32,19 @@ internal object WaveformLiteAnalyzer {
         return result
     }
 
-    private suspend fun analyze(context: Context, uri: Uri, audioTrackIndex: Int?): WaveformEnvelope {
+    suspend fun analyzeSpectrogram(context: Context, uri: Uri, audioTrackIndex: Int?): Spectrogram {
+        var builder: StreamingSpectrogram? = null
+        var rate = 0
+        analyze(context, uri, audioTrackIndex) { sample, timeUs, sampleRate ->
+            if (builder == null) { rate = sampleRate; builder = StreamingSpectrogram(sampleRate) }
+            check(rate == sampleRate) { "暂不支持音轨中途改变采样率" }
+            builder!!.add(sample, timeUs)
+        }
+        return builder?.finish()?.takeIf { it.frameCount > 0 } ?: error("音轨过短或没有可分析的 PCM")
+    }
+
+    private suspend fun analyze(context: Context, uri: Uri, audioTrackIndex: Int?,
+        onPcm: ((Float, Long, Int) -> Unit)? = null): WaveformEnvelope {
         val extractor = MediaExtractor()
         var codec: MediaCodec? = null
         try {
@@ -106,16 +120,19 @@ internal object WaveformLiteAnalyzer {
                                 }
                                 var low = Short.MAX_VALUE
                                 var high = Short.MIN_VALUE
+                                var mono = 0f
                                 repeat(channels.coerceAtLeast(1)) {
                                     val sample = if (encoding == AudioFormat.ENCODING_PCM_FLOAT) {
                                         (pcm.float.coerceIn(-1f, 1f) * Short.MAX_VALUE).toInt().toShort()
                                     } else pcm.short
                                     if (sample < low) low = sample
                                     if (sample > high) high = sample
+                                    mono += sample.toFloat() / Short.MAX_VALUE
                                 }
                                 val timeUs = info.presentationTimeUs.coerceAtLeast(0) +
                                     frame.toLong() * 1_000_000L / sampleRate.coerceAtLeast(1)
                                 peaks.add((timeUs / (BUCKET_MS * 1000L)).toInt(), low, high)
+                                onPcm?.invoke(mono / channels.coerceAtLeast(1), timeUs, sampleRate)
                             }
                         }
                         outputDone = info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0

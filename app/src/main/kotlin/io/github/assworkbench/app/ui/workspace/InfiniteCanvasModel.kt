@@ -32,6 +32,13 @@ internal data class InfiniteCanvasNode(
 internal fun showCanvasContent(scale: Float, id: String, detailedId: String?): Boolean =
     scale >= 0.55f || id == detailedId
 
+/** Approach/expand must leave space for signal below fixed-size touch controls. */
+internal fun expandAudioCanvasForFocus(node: InfiniteCanvasNode, scale: Float, viewportHeight: Float): InfiniteCanvasNode {
+    if (node.id != "audio" || !scale.isFinite() || scale <= 0f || !viewportHeight.isFinite()) return node
+    val screenHeight = minOf(240f, (viewportHeight - 96f).coerceAtLeast(0f))
+    return node.copy(height = maxOf(node.height, screenHeight / scale).coerceAtMost(1800f))
+}
+
 internal fun raiseCanvasNode(nodes: List<InfiniteCanvasNode>, id: String): List<InfiniteCanvasNode> {
     val normalized = if ((nodes.maxOfOrNull { it.z } ?: 0) >= 999_999)
         nodes.sortedBy { it.z }.mapIndexed { i, n -> n.copy(z = i + 1) } else nodes

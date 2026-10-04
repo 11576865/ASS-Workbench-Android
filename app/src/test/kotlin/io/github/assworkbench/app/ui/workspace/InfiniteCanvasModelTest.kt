@@ -4,6 +4,14 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class InfiniteCanvasModelTest {
+    @Test fun recalledAudioReservesUsableScreenHeightForSignalAndControls() {
+        val node = expandAudioCanvasForFocus(InfiniteCanvasNode("audio", width = 650f, height = 190f), 0.5f, 700f)
+        assertEquals(480f, node.height, 0f)
+        assertEquals(650f, node.width, 0f)
+        assertEquals(1, node.z)
+        val restored = InfiniteCanvasPersistence.decode(InfiniteCanvasPersistence.encode(InfiniteCanvasCamera(), listOf(node)))
+        assertEquals(480f, restored.second.single().height, 0f)
+    }
     @Test fun explicitFocusShowsContentAtPhoneFitScale() {
         assertTrue(showCanvasContent(0.43f, "preview", "preview"))
         assertFalse(showCanvasContent(0.43f, "preview", null))

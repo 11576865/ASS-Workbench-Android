@@ -2822,7 +2822,7 @@ private fun SpatialWorkspace(
     val entries = listOf(
         InfiniteCanvasEntry("preview", "视频", "实时视频 / ASS"),
         InfiniteCanvasEntry("subtitles", "字幕", "选择 / 文本"),
-        InfiniteCanvasEntry("audio", "波形", "真实音轨 · 与视频同步"),
+        InfiniteCanvasEntry("audio", "音频证据", "波形 / 声谱图 · 与视频同步"),
     ) + visibleTools.mapNotNull { toolInstance ->
         WorkbenchTool.entries.firstOrNull { it.name == toolInstance.toolKey }?.let { tool ->
             InfiniteCanvasEntry(toolInstance.id, tool.title,
