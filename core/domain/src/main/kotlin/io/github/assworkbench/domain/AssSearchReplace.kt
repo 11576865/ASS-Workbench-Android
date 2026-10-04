@@ -89,20 +89,19 @@ object AssSearchReplace {
         require(!analysis.hasErrors) {
             "可见文本替换不能安全处理损坏的 ASS override block。"
         }
-        val out = StringBuilder(text.length)
-        var cursor = 0
-        var plainStart = 0
-        while (cursor < text.length) {
-            if (text[cursor] != '{') { cursor++; continue }
-            if (plainStart < cursor) out.append(pattern.replace(text.substring(plainStart, cursor), replacement))
-            val close = text.indexOf('}', cursor + 1)
-            if (close < 0) { out.append(pattern.replace(text.substring(cursor), replacement)); return out.toString() }
-            out.append(text, cursor, close + 1)
-            cursor = close + 1
-            plainStart = cursor
-        }
-        if (plainStart < text.length) out.append(pattern.replace(text.substring(plainStart), replacement))
-        return out.toString()
+
+        var result = text
+        analysis.tokens
+            .asSequence()
+            .filter { it.kind == AssInlineTokenKind.TEXT }
+            .sortedByDescending { it.start }
+            .forEach { token ->
+                val replaced = pattern.replace(token.text, replacement)
+                if (replaced != token.text) {
+                    result = result.replaceRange(token.start, token.endExclusive, replaced)
+                }
+            }
+        return result
     }
 
     fun topLevelTagNames(text: String): Set<String> =
