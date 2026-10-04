@@ -2,6 +2,7 @@ package io.github.assworkbench.domain
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
@@ -58,6 +59,33 @@ class AuthoringEngineSuiteTest {
                 AssSearchQuery(requiredTags = setOf("t")),
             )
         )
+    }
+
+    @Test
+    fun semanticSearchRejectsMalformedTagNamesAndUnknownStyleTargets() {
+        assertFailsWith<IllegalArgumentException> {
+            AssSearchQuery(requiredTags = setOf("pos("))
+        }
+
+        val document = AssDocument(
+            styles = listOf(AssStyle(name = "Default")),
+            events = listOf(event(4, 0, 1000, "Text")),
+        )
+        val query = AssSearchQuery(stylePattern = Regex("Default"))
+        val error = assertFailsWith<IllegalArgumentException> {
+            AssSearchReplace.preview(
+                document = document,
+                query = query,
+                replacement = AssSearchReplacement(
+                    scope = AssReplaceScope.STYLE,
+                    pattern = Regex("Default"),
+                    replacement = "Missing",
+                ),
+            )
+        }
+
+        assertTrue(error.message.orEmpty().contains("Style"))
+        assertEquals("Default", document.events.single().style)
     }
 
     @Test
