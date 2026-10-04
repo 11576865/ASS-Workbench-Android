@@ -11,7 +11,18 @@ data class AssSearchQuery(
     val durationRangeMs: LongRange? = null,
     val timeRangeMs: LongRange? = null,
     val comment: Boolean? = null,
-)
+) {
+    init {
+        (requiredTags + forbiddenTags).forEach { raw ->
+            val name = raw.removePrefix("\\")
+            require(name.isNotBlank() && ASS_SEARCH_TAG_NAME.matches(name)) {
+                "搜索 Tag 名称无效：$raw"
+            }
+        }
+        durationRangeMs?.let { require(it.first >= 0L && it.last >= it.first) }
+        timeRangeMs?.let { require(it.first >= 0L && it.last >= it.first) }
+    }
+}
 
 enum class AssReplaceScope { VISIBLE_TEXT, RAW_EVENT_TEXT, STYLE, ACTOR }
 
@@ -47,7 +58,13 @@ object AssSearchReplace {
             val updated = when (replacement.scope) {
                 AssReplaceScope.VISIBLE_TEXT -> event.copy(text = replaceVisibleSegments(event.text, replacement.pattern, replacement.replacement))
                 AssReplaceScope.RAW_EVENT_TEXT -> event.copy(text = replacement.pattern.replace(event.text, replacement.replacement))
-                AssReplaceScope.STYLE -> event.copy(style = replacement.pattern.replace(event.style, replacement.replacement))
+                AssReplaceScope.STYLE -> {
+                    val targetStyle = replacement.pattern.replace(event.style, replacement.replacement)
+                    require(document.styles.any { it.name == targetStyle }) {
+                        "替换结果引用不存在的 Style：$targetStyle"
+                    }
+                    event.copy(style = targetStyle)
+                }
                 AssReplaceScope.ACTOR -> event.copy(name = replacement.pattern.replace(event.name, replacement.replacement))
             }
             if (updated != event) changed += event.id
@@ -73,31 +90,10 @@ object AssSearchReplace {
         return out.toString()
     }
 
-    fun topLevelTagNames(text: String): Set<String> {
-        val names = linkedSetOf<String>()
-        var cursor = 0
-        while (cursor < text.length && text[cursor] == '{') {
-            val close = text.indexOf('}', cursor + 1)
-            if (close < 0) break
-            val block = text.substring(cursor + 1, close)
-            var i = 0
-            var depth = 0
-            while (i < block.length) {
-                when (block[i]) {
-                    '(' -> { depth++; i++ }
-                    ')' -> { if (depth > 0) depth--; i++ }
-                    '\\' -> if (depth == 0) {
-                        i++
-                        val start = i
-                        if (i < block.length && block[i].isDigit()) i++
-                        while (i < block.length && block[i].isLetter()) i++
-                        if (i > start) names += block.substring(start, i)
-                    } else i++
-                    else -> i++
-                }
-            }
-            cursor = close + 1
-        }
-        return names
-    }
+    fun topLevelTagNames(text: String): Set<String> =
+        AssTopLevelOverrideSyntax.tags(text)
+            .mapTo(linkedSetOf()) { it.name }
 }
+
+
+private val ASS_SEARCH_TAG_NAME = Regex("""[A-Za-z0-9_-]+""")
