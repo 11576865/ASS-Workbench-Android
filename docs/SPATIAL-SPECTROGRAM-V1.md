@@ -34,3 +34,11 @@ Android compilation, WAV decoder availability and connected tests require CI. Pr
 This v1 analyzes on demand and retains one result in memory. It does not yet provide a spectrogram disk cache, tiled/incremental results, partial-range analysis, adjustable FFT/band settings or independent clocks. Switching away from spectrogram keeps the analysis running for reuse; switching source or track cancels it. Long-media analysis speed, playback synchronization against moving video, light/dark scene readability, device memory behavior and the complete tablet subtitle workflow remain unvalidated.
 
 UIGS intake belongs to the existing native workspace Observation/Test family (#6) and the transparent spectrum acceptance family (#5); no Canonical promotion.
+
+## CI test-platform correction (2026-10-04)
+
+Revision a578cd80 failed `:core:domain:compileTestKotlin`: SpectrogramTest imported JUnit 4, while the domain module declares kotlin-test and JUnit Jupiter and runs useJUnitPlatform(). The earlier supplemental JUnit 4 harness supplied an extra dependency, masking the mismatch. Android CI and the production release gate stopped at this same test-compilation boundary; native libraries had built, while emulator execution was cancelled. These results do not establish a production spectrogram defect or Android rendering success.
+
+SpectrogramTest now uses the same kotlin.test imports as the other domain tests. The original source reproduced the unresolved JUnit 4 imports with a Jupiter-only compile classpath. After correction, the entire domain main/test source set compiled with kotlin-test-junit5 and Jupiter API (no JUnit 4 compile dependency); JUnit Jupiter executed all 168 domain tests with zero failures or skips. Artifact policy and whitespace checks passed. This is targeted JVM compilation/execution evidence; Android app compilation and connected decode/display tests remain Pending CI on the correction revision.
+
+Reusable observation: supplemental runners must preserve the target module's test dependencies and execution engine; adding convenience dependencies can hide compilation defects. Do not replace actual CI validation with a broader standalone classpath. Recorded under UIGS #6, without Canonical promotion.

@@ -2,8 +2,9 @@ package io.github.assworkbench.domain
 
 import kotlin.math.PI
 import kotlin.math.sin
-import org.junit.Assert.*
-import org.junit.Test
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 class SpectrogramTest {
     @Test fun realToneHasAnEnergyPeakAtItsFrequency() {
