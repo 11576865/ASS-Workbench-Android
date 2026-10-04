@@ -3,6 +3,7 @@ package ops
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/hex"
 	"fmt"
 	"hash"
@@ -125,8 +126,9 @@ type TrackMetadataEdit struct {
 }
 
 const (
-	trackAdditionSourceMatroska = "matroska"
-	trackAdditionSourceASS      = "ass"
+	trackAdditionSourceMatroska    = "matroska"
+	trackAdditionSourceASS         = "ass"
+	trackAdditionSourcePacketAudio = "packet-audio"
 )
 
 type TrackAddition struct {
@@ -135,6 +137,9 @@ type TrackAddition struct {
 	SourceTrackID  uint64
 	SourceTrackUID uint64
 	SourceSHA256   string
+	SourceCodec    string
+	SampleRate     uint32
+	Channels       uint8
 	Name           string
 	Language       string
 	IsDefault      bool
@@ -188,7 +193,7 @@ func ReplaceASSWithAttachmentEdits(
 	if err != nil {
 		return err
 	}
-	addedTracks, addedSources, addedExtraBlocks, addedTags, addedDurationMs, err := planTrackAdditions(
+	addedTracks, addedSources, addedPacketSources, addedExtraBlocks, addedTags, addedDurationMs, err := planTrackAdditions(
 		ctx,
 		baseSourceTracks,
 		trackAdditions,
@@ -294,6 +299,7 @@ func ReplaceASSWithAttachmentEdits(
 		c.Info.TimecodeScale,
 		fs,
 		sources,
+		addedPacketSources,
 		allExtraBlocks,
 		mkv.ProgressFrom(opts),
 		plan.wantHashes,
@@ -379,7 +385,7 @@ func EditContainerResources(
 	if err != nil {
 		return err
 	}
-	addedTracks, addedSources, addedExtraBlocks, addedTags, addedDurationMs, err := planTrackAdditions(
+	addedTracks, addedSources, addedPacketSources, addedExtraBlocks, addedTags, addedDurationMs, err := planTrackAdditions(
 		ctx,
 		probe.Tracks,
 		trackAdditions,
@@ -444,13 +450,14 @@ func EditContainerResources(
 		remap: remap,
 	}}
 	sources = append(sources, addedSources...)
-	if len(addedExtraBlocks) > 0 {
+	if len(addedExtraBlocks) > 0 || len(addedPacketSources) > 0 {
 		if _, _, err := streamMergeWithExtraBlocks(
 			ctx,
 			mw,
 			probe.Info.TimecodeScale,
 			fs,
 			sources,
+			addedPacketSources,
 			addedExtraBlocks,
 			mkv.ProgressFrom(opts),
 			false,
@@ -629,9 +636,9 @@ func planTrackAdditions(
 	existing []mkv.Track,
 	additions []TrackAddition,
 	fs *mkv.FS,
-) ([]mkv.Track, []mergeSource, []mkv.Block, []mkv.Tag, int64, error) {
+) ([]mkv.Track, []mergeSource, []packetMergeSource, []mkv.Block, []mkv.Tag, int64, error) {
 	if len(additions) == 0 {
-		return nil, nil, nil, nil, 0, nil
+		return nil, nil, nil, nil, nil, 0, nil
 	}
 
 	var nextID uint64 = 1
@@ -639,7 +646,7 @@ func planTrackAdditions(
 	for _, track := range existing {
 		if track.ID >= nextID {
 			if track.ID == ^uint64(0) {
-				return nil, nil, nil, nil, 0, fmt.Errorf("cannot allocate a new TrackNumber")
+				return nil, nil, nil, nil, nil, 0, fmt.Errorf("cannot allocate a new TrackNumber")
 			}
 			nextID = track.ID + 1
 		}
@@ -649,7 +656,7 @@ func planTrackAdditions(
 		}
 		if uid >= nextUID {
 			if uid == ^uint64(0) {
-				return nil, nil, nil, nil, 0, fmt.Errorf("cannot allocate a new TrackUID")
+				return nil, nil, nil, nil, nil, 0, fmt.Errorf("cannot allocate a new TrackUID")
 			}
 			nextUID = uid + 1
 		}
@@ -658,6 +665,7 @@ func planTrackAdditions(
 	out := make([]mkv.Track, 0, len(additions))
 	sourcesByPath := make(map[string]*mergeSource)
 	order := make([]string, 0, len(additions))
+	var packetSources []packetMergeSource
 	var extraBlocks []mkv.Block
 	var tags []mkv.Tag
 	var durationMs int64
@@ -665,7 +673,7 @@ func planTrackAdditions(
 
 	for _, addition := range additions {
 		if addition.SourcePath == "" {
-			return nil, nil, nil, nil, 0, fmt.Errorf("invalid track addition source")
+			return nil, nil, nil, nil, nil, 0, fmt.Errorf("invalid track addition source")
 		}
 		kind := addition.SourceKind
 		if kind == "" {
@@ -675,16 +683,16 @@ func planTrackAdditions(
 		switch kind {
 		case trackAdditionSourceMatroska:
 			if addition.SourceTrackID == 0 {
-				return nil, nil, nil, nil, 0, fmt.Errorf("invalid Matroska track addition source")
+				return nil, nil, nil, nil, nil, 0, fmt.Errorf("invalid Matroska track addition source")
 			}
 			key = kind + "\x00" + addition.SourcePath + "\x00" + strconv.FormatUint(addition.SourceTrackID, 10)
-		case trackAdditionSourceASS:
+		case trackAdditionSourceASS, trackAdditionSourcePacketAudio:
 			key = kind + "\x00" + addition.SourcePath
 		default:
-			return nil, nil, nil, nil, 0, fmt.Errorf("unsupported track addition source kind %q", kind)
+			return nil, nil, nil, nil, nil, 0, fmt.Errorf("unsupported track addition source kind %q", kind)
 		}
 		if _, duplicate := seen[key]; duplicate {
-			return nil, nil, nil, nil, 0, fmt.Errorf(
+			return nil, nil, nil, nil, nil, 0, fmt.Errorf(
 				"track source %s was added more than once",
 				filepath.Base(addition.SourcePath),
 			)
@@ -695,7 +703,7 @@ func planTrackAdditions(
 		case trackAdditionSourceMatroska:
 			source, err := reader.OpenWithFS(ctx, addition.SourcePath, fs, reader.WithoutAttachmentData())
 			if err != nil {
-				return nil, nil, nil, nil, 0, fmt.Errorf("open track source %s: %w", filepath.Base(addition.SourcePath), err)
+				return nil, nil, nil, nil, nil, 0, fmt.Errorf("open track source %s: %w", filepath.Base(addition.SourcePath), err)
 			}
 			var srcTrack *mkv.Track
 			for i := range source.Tracks {
@@ -705,14 +713,14 @@ func planTrackAdditions(
 				}
 			}
 			if srcTrack == nil {
-				return nil, nil, nil, nil, 0, fmt.Errorf(
+				return nil, nil, nil, nil, nil, 0, fmt.Errorf(
 					"track %d not found in %s",
 					addition.SourceTrackID,
 					filepath.Base(addition.SourcePath),
 				)
 			}
 			if addition.SourceTrackUID != 0 && srcTrack.UID != addition.SourceTrackUID {
-				return nil, nil, nil, nil, 0, fmt.Errorf(
+				return nil, nil, nil, nil, nil, 0, fmt.Errorf(
 					"track %d in %s changed identity: expected TrackUID %d, got %d",
 					addition.SourceTrackID,
 					filepath.Base(addition.SourcePath),
@@ -723,7 +731,7 @@ func planTrackAdditions(
 			if srcTrack.Type != mkv.VideoTrack &&
 				srcTrack.Type != mkv.AudioTrack &&
 				srcTrack.Type != mkv.SubtitleTrack {
-				return nil, nil, nil, nil, 0, fmt.Errorf(
+				return nil, nil, nil, nil, nil, 0, fmt.Errorf(
 					"track %d in %s has unsupported type %s",
 					addition.SourceTrackID,
 					filepath.Base(addition.SourcePath),
@@ -770,13 +778,13 @@ func planTrackAdditions(
 		case trackAdditionSourceASS:
 			raw, err := os.ReadFile(addition.SourcePath)
 			if err != nil {
-				return nil, nil, nil, nil, 0, fmt.Errorf("read ASS source %s: %w", filepath.Base(addition.SourcePath), err)
+				return nil, nil, nil, nil, nil, 0, fmt.Errorf("read ASS source %s: %w", filepath.Base(addition.SourcePath), err)
 			}
 			if addition.SourceSHA256 != "" {
 				sum := sha256.Sum256(raw)
 				actual := hex.EncodeToString(sum[:])
 				if !strings.EqualFold(actual, addition.SourceSHA256) {
-					return nil, nil, nil, nil, 0, fmt.Errorf(
+					return nil, nil, nil, nil, nil, 0, fmt.Errorf(
 						"ASS source %s changed identity: expected sha256 %s, got %s",
 						filepath.Base(addition.SourcePath),
 						addition.SourceSHA256,
@@ -786,10 +794,10 @@ func planTrackAdditions(
 			}
 			ass, err := subtitle.ParseASS(addition.SourcePath)
 			if err != nil {
-				return nil, nil, nil, nil, 0, fmt.Errorf("parse ASS source %s: %w", filepath.Base(addition.SourcePath), err)
+				return nil, nil, nil, nil, nil, 0, fmt.Errorf("parse ASS source %s: %w", filepath.Base(addition.SourcePath), err)
 			}
 			if len(ass.Events) == 0 {
-				return nil, nil, nil, nil, 0, fmt.Errorf("ASS source %s has no dialogue events", filepath.Base(addition.SourcePath))
+				return nil, nil, nil, nil, nil, 0, fmt.Errorf("ASS source %s has no dialogue events", filepath.Base(addition.SourcePath))
 			}
 			track := mkv.Track{
 				ID: nextID,
@@ -818,11 +826,57 @@ func planTrackAdditions(
 					durationMs = ev.EndMs
 				}
 			}
+
+		case trackAdditionSourcePacketAudio:
+			if !strings.EqualFold(addition.SourceCodec, "A_MPEG/L3") {
+				return nil, nil, nil, nil, nil, 0, fmt.Errorf(
+					"packet audio source %s has unsupported codec %q",
+					filepath.Base(addition.SourcePath),
+					addition.SourceCodec,
+				)
+			}
+			if addition.SampleRate == 0 || addition.Channels == 0 {
+				return nil, nil, nil, nil, nil, 0, fmt.Errorf("packet audio source has invalid audio metadata")
+			}
+			if addition.SourceSHA256 == "" {
+				return nil, nil, nil, nil, nil, 0, fmt.Errorf("packet audio source is missing sha256 evidence")
+			}
+			if err := verifyFileSHA256(fs, addition.SourcePath, addition.SourceSHA256); err != nil {
+				return nil, nil, nil, nil, nil, 0, err
+			}
+			header, err := readPacketBundleHeader(fs, addition.SourcePath)
+			if err != nil {
+				return nil, nil, nil, nil, nil, 0, err
+			}
+			sampleRate := float64(addition.SampleRate)
+			channels := addition.Channels
+			track := mkv.Track{
+				ID: nextID,
+				UID: nextUID,
+				Type: mkv.AudioTrack,
+				Codec: "A_MPEG/L3",
+				SampleRate: &sampleRate,
+				Channels: &channels,
+				Name: addition.Name,
+				Language: addition.Language,
+				IsDefault: addition.IsDefault,
+				IsForced: addition.IsForced,
+			}
+			out = append(out, track)
+			packetSources = append(packetSources, packetMergeSource{
+				path: addition.SourcePath,
+				trackID: nextID,
+				expectedPackets: header.packetCount,
+			})
+			packetDurationMs := (header.durationUs + 999) / 1000
+			if packetDurationMs > durationMs {
+				durationMs = packetDurationMs
+			}
 		}
 
 		if nextID == ^uint64(0) || nextUID == ^uint64(0) {
 			if len(out) < len(additions) {
-				return nil, nil, nil, nil, 0, fmt.Errorf("cannot allocate another track identity")
+				return nil, nil, nil, nil, nil, 0, fmt.Errorf("cannot allocate another track identity")
 			}
 		} else {
 			nextID++
@@ -837,7 +891,249 @@ func planTrackAdditions(
 	sort.SliceStable(extraBlocks, func(i, j int) bool {
 		return extraBlocks[i].Timecode < extraBlocks[j].Timecode
 	})
-	return out, sources, extraBlocks, tags, durationMs, nil
+	return out, sources, packetSources, extraBlocks, tags, durationMs, nil
+}
+
+const (
+	packetBundleMagic      = "AWPKT001"
+	packetBundleHeaderSize = int64(24)
+	maxPacketPayloadBytes  = uint32(4 * 1024 * 1024)
+	maxPacketCount         = uint64(100_000_000)
+)
+
+type packetBundleHeader struct {
+	durationUs  int64
+	packetCount uint64
+}
+
+type packetMergeSource struct {
+	path            string
+	trackID         uint64
+	expectedPackets uint64
+}
+
+type packetBundleReader struct {
+	r         io.Reader
+	trackID   uint64
+	remaining uint64
+	position  int64
+	previous  int64
+	started   bool
+	checkedEnd bool
+}
+
+func readPacketBundleHeaderFrom(r io.Reader) (packetBundleHeader, error) {
+	magic := make([]byte, len(packetBundleMagic))
+	if _, err := io.ReadFull(r, magic); err != nil {
+		return packetBundleHeader{}, fmt.Errorf("read packet bundle magic: %w", err)
+	}
+	if string(magic) != packetBundleMagic {
+		return packetBundleHeader{}, fmt.Errorf("invalid packet bundle magic %q", string(magic))
+	}
+	var durationUs int64
+	if err := binary.Read(r, binary.BigEndian, &durationUs); err != nil {
+		return packetBundleHeader{}, fmt.Errorf("read packet bundle duration: %w", err)
+	}
+	var packetCount uint64
+	if err := binary.Read(r, binary.BigEndian, &packetCount); err != nil {
+		return packetBundleHeader{}, fmt.Errorf("read packet bundle count: %w", err)
+	}
+	if durationUs <= 0 {
+		return packetBundleHeader{}, fmt.Errorf("packet bundle duration must be positive")
+	}
+	if packetCount == 0 || packetCount > maxPacketCount {
+		return packetBundleHeader{}, fmt.Errorf("packet bundle count %d is out of bounds", packetCount)
+	}
+	return packetBundleHeader{durationUs: durationUs, packetCount: packetCount}, nil
+}
+
+func readPacketBundleHeader(fs *mkv.FS, path string) (packetBundleHeader, error) {
+	f, err := fs.DoOpen(path)
+	if err != nil {
+		return packetBundleHeader{}, err
+	}
+	defer f.Close()
+	return readPacketBundleHeaderFrom(f)
+}
+
+func verifyFileSHA256(fs *mkv.FS, path, expected string) error {
+	f, err := fs.DoOpen(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return fmt.Errorf("hash packet source %s: %w", filepath.Base(path), err)
+	}
+	actual := hex.EncodeToString(h.Sum(nil))
+	if !strings.EqualFold(actual, expected) {
+		return fmt.Errorf(
+			"packet source %s changed identity: expected sha256 %s, got %s",
+			filepath.Base(path),
+			expected,
+			actual,
+		)
+	}
+	return nil
+}
+
+func newPacketBundleReader(r io.Reader, trackID uint64, expectedPackets uint64) (*packetBundleReader, error) {
+	header, err := readPacketBundleHeaderFrom(r)
+	if err != nil {
+		return nil, err
+	}
+	if expectedPackets != 0 && header.packetCount != expectedPackets {
+		return nil, fmt.Errorf(
+			"packet bundle count changed: expected %d, got %d",
+			expectedPackets,
+			header.packetCount,
+		)
+	}
+	return &packetBundleReader{
+		r: r,
+		trackID: trackID,
+		remaining: header.packetCount,
+		position: packetBundleHeaderSize,
+	}, nil
+}
+
+func (p *packetBundleReader) Next() (mkv.Block, error) {
+	if p.remaining == 0 {
+		if !p.checkedEnd {
+			p.checkedEnd = true
+			var one [1]byte
+			n, err := p.r.Read(one[:])
+			if n != 0 || (err != nil && err != io.EOF) {
+				if err != nil {
+					return mkv.Block{}, err
+				}
+				return mkv.Block{}, fmt.Errorf("packet bundle has trailing bytes")
+			}
+		}
+		return mkv.Block{}, io.EOF
+	}
+
+	var ptsUs int64
+	if err := binary.Read(p.r, binary.BigEndian, &ptsUs); err != nil {
+		return mkv.Block{}, fmt.Errorf("read packet timestamp: %w", err)
+	}
+	var flags uint32
+	if err := binary.Read(p.r, binary.BigEndian, &flags); err != nil {
+		return mkv.Block{}, fmt.Errorf("read packet flags: %w", err)
+	}
+	var size uint32
+	if err := binary.Read(p.r, binary.BigEndian, &size); err != nil {
+		return mkv.Block{}, fmt.Errorf("read packet size: %w", err)
+	}
+	if ptsUs < 0 {
+		return mkv.Block{}, fmt.Errorf("packet timestamp is negative")
+	}
+	if p.started && ptsUs < p.previous {
+		return mkv.Block{}, fmt.Errorf("packet timestamps are not monotonic")
+	}
+	if size == 0 || size > maxPacketPayloadBytes {
+		return mkv.Block{}, fmt.Errorf("packet payload size %d is out of bounds", size)
+	}
+	data := make([]byte, int(size))
+	if _, err := io.ReadFull(p.r, data); err != nil {
+		return mkv.Block{}, fmt.Errorf("read packet payload: %w", err)
+	}
+	p.position += 16 + int64(size)
+	p.previous = ptsUs
+	p.started = true
+	p.remaining--
+	_ = flags // reserved for future video adapters; MP3 audio blocks are seekable.
+	return mkv.Block{
+		TrackNumber: p.trackID,
+		Timecode: ptsUs / 1000,
+		Keyframe: true,
+		Data: data,
+	}, nil
+}
+
+type TrackContentDigest struct {
+	SHA256      string
+	PacketCount uint64
+	FirstMs     int64
+	LastMs      int64
+	Seen        bool
+}
+
+func DigestTrackContent(
+	ctx context.Context,
+	srcPath string,
+	trackID uint64,
+	opts ...mkv.Options,
+) (TrackContentDigest, error) {
+	fs := mkv.FSFrom(opts)
+	probe, err := reader.OpenWithFS(ctx, srcPath, fs, reader.WithoutAttachmentData())
+	if err != nil {
+		return TrackContentDigest{}, err
+	}
+	var exists bool
+	for _, track := range probe.Tracks {
+		if track.ID == trackID {
+			exists = true
+			break
+		}
+	}
+	if !exists {
+		return TrackContentDigest{}, fmt.Errorf("track %d not found", trackID)
+	}
+
+	f, err := fs.DoOpen(srcPath)
+	if err != nil {
+		return TrackContentDigest{}, err
+	}
+	defer f.Close()
+	br, err := reader.NewBlockReader(f, probe.Info.TimecodeScale)
+	if err != nil {
+		return TrackContentDigest{}, err
+	}
+	h := sha256.New()
+	var count uint64
+	var firstMs, lastMs int64
+	var seen bool
+	var header [12]byte
+	for {
+		if ctx.Err() != nil {
+			return TrackContentDigest{}, ctx.Err()
+		}
+		block, err := br.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return TrackContentDigest{}, err
+		}
+		if block.TrackNumber != trackID {
+			continue
+		}
+		if block.Timecode < 0 {
+			return TrackContentDigest{}, fmt.Errorf("track %d has negative timecode", trackID)
+		}
+		binary.BigEndian.PutUint64(header[:8], uint64(block.Timecode))
+		binary.BigEndian.PutUint32(header[8:], uint32(len(block.Data)))
+		_, _ = h.Write(header[:])
+		_, _ = h.Write(block.Data)
+		if !seen {
+			firstMs = block.Timecode
+			seen = true
+		}
+		lastMs = block.Timecode
+		count++
+	}
+	if !seen {
+		return TrackContentDigest{}, fmt.Errorf("track %d has no blocks", trackID)
+	}
+	return TrackContentDigest{
+		SHA256: hex.EncodeToString(h.Sum(nil)),
+		PacketCount: count,
+		FirstMs: firstMs,
+		LastMs: lastMs,
+		Seen: true,
+	}, nil
 }
 
 func maxInt64(a, b int64) int64 {
@@ -857,55 +1153,54 @@ func streamMergeWithExtraBlocks(
 	outScale int64,
 	fs *mkv.FS,
 	sources []mergeSource,
+	packetSources []packetMergeSource,
 	extra []mkv.Block,
 	progress mkv.ProgressFunc,
 	wantHashes bool,
 ) (map[uint64]*trackStats, map[uint64]hash.Hash, error) {
 	type state struct {
-		br   *reader.BlockReader
-		f    mkv.ReadSeekCloser
-		head mkv.Block
-		ok   bool
+		next  func() (mkv.Block, error)
+		close func() error
+		head  mkv.Block
+		ok    bool
 	}
-	states := make([]*state, len(sources))
+	states := make([]*state, 0, len(sources)+len(packetSources))
 	defer func() {
 		for _, state := range states {
-			if state != nil && state.f != nil {
-				state.f.Close()
+			if state != nil && state.close != nil {
+				_ = state.close()
 			}
 		}
 	}()
 
+	allPaths := make([]string, 0, len(sources)+len(packetSources))
+	for _, source := range sources {
+		allPaths = append(allPaths, source.path)
+	}
+	for _, source := range packetSources {
+		allPaths = append(allPaths, source.path)
+	}
+
 	var progTotal int64
 	var progPositions []int64
 	if progress != nil {
-		progPositions = make([]int64, len(sources))
-		for _, source := range sources {
-			if stat, _ := fs.DoStat(source.path); stat != nil {
+		progPositions = make([]int64, len(allPaths))
+		for _, path := range allPaths {
+			if stat, _ := fs.DoStat(path); stat != nil {
 				progTotal += stat.Size()
 			}
 		}
 	}
-
-	advance := func(index int) error {
-		state := states[index]
-		for {
-			block, err := state.br.Next()
-			if err == io.EOF {
-				state.ok = false
-				return nil
-			}
-			if err != nil {
-				return err
-			}
-			newID, ok := sources[index].remap[block.TrackNumber]
-			if !ok {
-				continue
-			}
-			block.TrackNumber = newID
-			state.head, state.ok = block, true
-			return nil
+	reportProgress := func(index int, position int64) {
+		if progress == nil || index < 0 || index >= len(progPositions) {
+			return
 		}
+		progPositions[index] = position
+		var sum int64
+		for _, value := range progPositions {
+			sum += value
+		}
+		progress(sum, progTotal)
 	}
 
 	for index, source := range sources {
@@ -913,23 +1208,72 @@ func streamMergeWithExtraBlocks(
 		if err != nil {
 			return nil, nil, err
 		}
-		readerForSource, err := reader.NewBlockReader(file, source.scale)
+		br, err := reader.NewBlockReader(file, source.scale)
 		if err != nil {
 			file.Close()
 			return nil, nil, err
 		}
 		if progress != nil {
 			i := index
-			readerForSource.SetProgress(func(position, _ int64) {
-				progPositions[i] = position
-				var sum int64
-				for _, value := range progPositions {
-					sum += value
-				}
-				progress(sum, progTotal)
+			br.SetProgress(func(position, _ int64) {
+				reportProgress(i, position)
 			}, progTotal)
 		}
-		states[index] = &state{br: readerForSource, f: file}
+		remap := source.remap
+		states = append(states, &state{
+			close: file.Close,
+			next: func() (mkv.Block, error) {
+				for {
+					block, err := br.Next()
+					if err != nil {
+						return mkv.Block{}, err
+					}
+					newID, ok := remap[block.TrackNumber]
+					if !ok {
+						continue
+					}
+					block.TrackNumber = newID
+					return block, nil
+				}
+			},
+		})
+	}
+
+	for packetIndex, source := range packetSources {
+		file, err := fs.DoOpen(source.path)
+		if err != nil {
+			return nil, nil, err
+		}
+		pr, err := newPacketBundleReader(file, source.trackID, source.expectedPackets)
+		if err != nil {
+			file.Close()
+			return nil, nil, err
+		}
+		progressIndex := len(sources) + packetIndex
+		states = append(states, &state{
+			close: file.Close,
+			next: func() (mkv.Block, error) {
+				block, err := pr.Next()
+				reportProgress(progressIndex, pr.position)
+				return block, err
+			},
+		})
+	}
+
+	advance := func(index int) error {
+		state := states[index]
+		block, err := state.next()
+		if err == io.EOF {
+			state.ok = false
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		state.head, state.ok = block, true
+		return nil
+	}
+	for index := range states {
 		if err := advance(index); err != nil {
 			return nil, nil, err
 		}
