@@ -101,6 +101,7 @@ data class PendingContainerTrackMetadataUi(
 enum class ContainerTrackImportSourceKind {
     MATROSKA_TRACK,
     STANDALONE_ASS,
+    STANDALONE_SRT,
 }
 
 data class PendingContainerTrackAdditionUi(
