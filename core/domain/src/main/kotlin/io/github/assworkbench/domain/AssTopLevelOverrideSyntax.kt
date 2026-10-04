@@ -44,6 +44,19 @@ object AssTopLevelOverrideSyntax {
         return tags(text).filter { it.start < end }
     }
 
+    fun removeTags(text: String, names: Set<String>): String {
+        if (names.isEmpty()) return text
+        val normalized = names.mapTo(linkedSetOf()) { it.lowercase() }
+        val targets = tags(text).filter { it.name.lowercase() in normalized }
+        if (targets.isEmpty()) return text
+
+        var result = text
+        targets.sortedByDescending { it.start }.forEach { tag ->
+            result = result.removeRange(tag.start, tag.endExclusive)
+        }
+        return removeEmptyOverrideBlocks(result)
+    }
+
     fun leadingPrefixLength(text: String): Int {
         var cursor = 0
         while (cursor < text.length && text[cursor] == '{') {
@@ -52,5 +65,27 @@ object AssTopLevelOverrideSyntax {
             cursor = close + 1
         }
         return cursor
+    }
+
+    private fun removeEmptyOverrideBlocks(text: String): String {
+        val result = StringBuilder(text.length)
+        var cursor = 0
+        while (cursor < text.length) {
+            if (text[cursor] != '{') {
+                result.append(text[cursor++])
+                continue
+            }
+            val close = text.indexOf('}', cursor + 1)
+            if (close < 0) {
+                result.append(text.substring(cursor))
+                break
+            }
+            val inner = text.substring(cursor + 1, close)
+            if (inner.isNotBlank()) {
+                result.append(text, cursor, close + 1)
+            }
+            cursor = close + 1
+        }
+        return result.toString()
     }
 }
