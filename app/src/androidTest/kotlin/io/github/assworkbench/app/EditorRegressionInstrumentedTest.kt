@@ -1,5 +1,8 @@
 package io.github.assworkbench.app
 
+import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
 import android.content.pm.ActivityInfo
 import android.content.res.Configuration
 import android.graphics.Bitmap
@@ -14,6 +17,7 @@ import androidx.compose.ui.test.onRoot
 import androidx.test.platform.app.InstrumentationRegistry
 import android.app.Application
 import android.net.Uri
+import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -157,12 +161,9 @@ class EditorRegressionInstrumentedTest {
         composeRule.onNodeWithTag("spatial-overview").performClick()
         composeRule.onNodeWithTag("spatial-node-preview").assertIsDisplayed()
         composeRule.onNodeWithTag("spatial-node-subtitles").assertIsDisplayed()
-        composeRule.onNodeWithTag("spatial-node-tool").assertIsDisplayed()
-        composeRule.onNodeWithTag("spatial-navigation-mode").performClick()
-        composeRule.onNodeWithTag("spatial-navigation-overlay").assertIsDisplayed()
-
-        composeRule.onNodeWithTag("spatial-navigation-mode").performClick()
-        composeRule.onNodeWithTag("spatial-focus-subtitles").performClick()
+        composeRule.onNodeWithTag("spatial-node-audio").assertIsDisplayed()
+        composeRule.onNodeWithText("召回").performClick()
+        composeRule.onNodeWithTag("spatial-recall-subtitles").performClick()
         composeRule.onNodeWithTag("spatial-node-subtitles").assertIsDisplayed()
     }
 
@@ -431,6 +432,183 @@ class EditorRegressionInstrumentedTest {
             composeRule.onNodeWithTag("event-raw-1").assertIsDisplayed()
         }
         assertEquals(before, viewModel.state.value.document)
+    }
+
+    @Test fun positionFieldsFollowTransientPreviewAndCancelRestoresTypedDraft() {
+        restoreRecovery()
+        viewModel.focusEvent(1L, seek = false)
+        viewModel.setEventPosition(1L, 100.0, 200.0)
+        openTool("POSITION")
+        val before = viewModel.state.value.document
+        composeRule.onNodeWithTag("position-value-x-1").performScrollTo().performTextReplacement("333")
+        composeRule.runOnIdle { viewModel.previewEventPosition(1L, 125.0, 240.0) }
+        composeRule.onNodeWithTag("position-value-x-1").assertTextContains("125.0")
+        composeRule.onNodeWithTag("position-value-y-1").assertTextContains("240.0")
+        assertEquals(before, viewModel.state.value.document)
+        composeRule.runOnIdle { viewModel.clearTransientPreview("geometry:1") }
+        composeRule.onNodeWithTag("position-value-x-1").assertTextContains("333")
+        composeRule.onNodeWithTag("position-value-y-1").assertTextContains("200.0")
+        composeRule.runOnIdle { viewModel.undo() }
+        composeRule.waitUntil(5_000) { eventText(1L) == "Recovered line" }
+    }
+
+    @Test fun equalGeometryPublicationStillAdvancesWriterRevision() {
+        restoreRecovery()
+        val vm = viewModel
+        composeRule.runOnIdle {
+            vm.previewEventRotationX(1L, 12.5)
+            val first = vm.state.value
+            vm.previewEventRotationX(1L, 12.5)
+            val second = vm.state.value
+            assertEquals(first.previewDocument, second.previewDocument)
+            assertEquals(first.geometryPreviewRevision + 1L, second.geometryPreviewRevision)
+            vm.clearTransientPreview("geometry:1")
+        }
+    }
+
+    @Test fun transformFieldsProjectExternalPreviewAndRestoreDrafts() {
+        restoreRecovery()
+        viewModel.focusEvent(1L, seek = false)
+        openTool("POSITION")
+        composeRule.onNodeWithTag("position-section-TRANSFORM").performScrollTo().performClick()
+        val before = viewModel.state.value.document
+        val cases = listOf<Triple<String, String, () -> Unit>>(
+            Triple("rotation-x", "12.5") { viewModel.previewEventRotationX(1L, 12.5) },
+            Triple("rotation-y", "23.5") { viewModel.previewEventRotationY(1L, 23.5) },
+            Triple("rotation-z", "34.5") { viewModel.previewEventRotationZ(1L, 34.5) },
+            Triple("scale-x", "125.0") { viewModel.previewEventScale(1L, 125.0, 175.0) },
+            Triple("scale-y", "175.0") { viewModel.previewEventScale(1L, 125.0, 175.0) },
+            Triple("shear-x", "0.25") { viewModel.previewEventShear(1L, 0.25, -0.5) },
+            Triple("shear-y", "-0.5") { viewModel.previewEventShear(1L, 0.25, -0.5) },
+        )
+        for ((parameter, value, preview) in cases) {
+            val field = composeRule.onNodeWithTag("geometry-$parameter-1-value")
+            field.performScrollTo().performTextReplacement("unfinished")
+            composeRule.runOnIdle(preview)
+            field.assertTextContains(value)
+            composeRule.onNodeWithTag("geometry-$parameter-1-slider").assertIsNotEnabled()
+            assertEquals(before, viewModel.state.value.document)
+            composeRule.runOnIdle { viewModel.clearTransientPreview("geometry:1") }
+            field.assertTextContains("unfinished")
+            composeRule.onNodeWithTag("geometry-$parameter-1-slider").assertIsEnabled()
+        }
+        assertEquals(before, viewModel.state.value.document)
+        assertFalse(viewModel.state.value.canUndo)
+    }
+
+    @Test fun equalExternalTakeoverCancelsPendingNumericCommit() {
+        restoreRecovery()
+        viewModel.focusEvent(1L, seek = false)
+        openTool("POSITION")
+        composeRule.onNodeWithTag("position-section-TRANSFORM").performScrollTo().performClick()
+        val before = viewModel.state.value.document
+        val field = composeRule.onNodeWithTag("geometry-rotation-x-1-value")
+        field.performScrollTo().performTextReplacement("12.5")
+        composeRule.waitUntil(5_000) { viewModel.state.value.previewDocument != null }
+        composeRule.runOnIdle { viewModel.previewEventRotationX(1L, 12.5) }
+        composeRule.onNodeWithTag("geometry-rotation-x-1-slider").assertIsNotEnabled()
+        var deadline = android.os.SystemClock.uptimeMillis() + 400L
+        composeRule.waitUntil(2_000) { android.os.SystemClock.uptimeMillis() >= deadline }
+        assertEquals(before, viewModel.state.value.document)
+        composeRule.runOnIdle { viewModel.clearTransientPreview("geometry:1") }
+        field.assertTextContains("12.5")
+        composeRule.onNodeWithTag("geometry-rotation-x-1-slider").assertIsEnabled()
+        deadline = android.os.SystemClock.uptimeMillis() + 400L
+        composeRule.waitUntil(2_000) { android.os.SystemClock.uptimeMillis() >= deadline }
+        assertEquals(before, viewModel.state.value.document)
+        assertFalse(viewModel.state.value.canUndo)
+    }
+
+    @Test fun transformSliderStillOwnsItsPreviewAndCommitsOneUndoStep() {
+        restoreRecovery()
+        viewModel.focusEvent(1L, seek = false)
+        openTool("POSITION")
+        composeRule.onNodeWithTag("position-section-TRANSFORM").performScrollTo().performClick()
+        val before = viewModel.state.value.document
+        composeRule.onNodeWithTag("geometry-rotation-x-1-slider").performScrollTo().performTouchInput {
+            swipe(start = center, end = androidx.compose.ui.geometry.Offset(width * 0.75f, center.y), durationMillis = 700)
+        }
+        composeRule.waitUntil(5_000) { viewModel.state.value.document != before }
+        composeRule.onNodeWithTag("geometry-rotation-x-1-slider").assertIsEnabled()
+        composeRule.runOnIdle { viewModel.undo() }
+        composeRule.waitUntil(5_000) { viewModel.state.value.document == before }
+        assertFalse(viewModel.state.value.canUndo)
+    }
+
+    @Test fun moveEndpointFieldsProjectPreviewAndRestoreDrafts() {
+        restoreRecovery()
+        composeRule.runOnIdle {
+            viewModel.updateEventText(1L, "{\\move(100,200,300,400,50,1500)}Recovered line")
+            viewModel.focusEvent(1L, seek = false)
+        }
+        openTool("POSITION")
+        val before = viewModel.state.value.document
+        val values = listOf("start-x" to "125.0", "start-y" to "240.0", "end-x" to "350.0", "end-y" to "460.0")
+        for ((name, value) in values) {
+            val field = composeRule.onNodeWithTag("geometry-move-$name-1-value")
+            field.performScrollTo().performTextReplacement("unfinished")
+            composeRule.runOnIdle { viewModel.previewEventMove(1L, 125.0, 240.0, 350.0, 460.0) }
+            field.assertTextContains(value)
+            composeRule.onNodeWithTag("geometry-move-1-apply").performScrollTo().assertIsNotEnabled()
+            assertEquals(before, viewModel.state.value.document)
+            composeRule.runOnIdle { viewModel.clearTransientPreview("geometry:1") }
+            field.performScrollTo().assertTextContains("unfinished")
+        }
+        assertEquals(before, viewModel.state.value.document)
+    }
+
+    @Test fun originFieldsProjectPreviewAndRestoreDrafts() {
+        restoreRecovery()
+        composeRule.runOnIdle {
+            viewModel.setEventOrigin(1L, 100.0, 200.0)
+            viewModel.focusEvent(1L, seek = false)
+        }
+        openTool("POSITION")
+        composeRule.onNodeWithTag("position-section-TRANSFORM").performScrollTo().performClick()
+        val before = viewModel.state.value.document
+        for ((axis, value) in listOf("x" to "125.0", "y" to "240.0")) {
+            val field = composeRule.onNodeWithTag("geometry-origin-$axis-1-value")
+            field.performScrollTo().performTextReplacement("unfinished")
+            composeRule.runOnIdle { viewModel.previewEventOrigin(1L, 125.0, 240.0) }
+            field.assertTextContains(value)
+            composeRule.onNodeWithTag("geometry-origin-1-apply").assertIsNotEnabled()
+            composeRule.runOnIdle { viewModel.clearTransientPreview("geometry:1") }
+            field.assertTextContains("unfinished")
+        }
+        assertEquals(before, viewModel.state.value.document)
+    }
+
+    @Test fun rectClipExternalTakeoverCancelsPendingDraftAndRestoresAllCoordinates() {
+        restoreRecovery()
+        composeRule.runOnIdle {
+            viewModel.setEventRectClip(1L, 100.0, 200.0, 300.0, 400.0, true)
+            viewModel.focusEvent(1L, seek = false)
+        }
+        openTool("POSITION")
+        composeRule.onNodeWithTag("position-section-CLIP").performScrollTo().performClick()
+        val before = viewModel.state.value.document
+        val field = composeRule.onNodeWithTag("geometry-clip-left-1-value")
+        field.performScrollTo().performTextReplacement("120")
+        composeRule.waitUntil(5_000) { viewModel.state.value.previewDocument != null }
+        composeRule.runOnIdle { viewModel.previewEventRectClip(1L, 125.0, 240.0, 350.0, 460.0, false) }
+        for ((edge, value) in listOf("left" to "125.0", "top" to "240.0", "right" to "350.0", "bottom" to "460.0")) {
+            composeRule.onNodeWithTag("geometry-clip-$edge-1-value").performScrollTo().assertTextContains(value)
+        }
+        composeRule.onNodeWithTag("geometry-clip-normal-1").performScrollTo().assertIsSelected().assertIsNotEnabled()
+        composeRule.onNodeWithTag("geometry-clip-1-apply").performScrollTo().assertIsNotEnabled()
+        var deadline = android.os.SystemClock.uptimeMillis() + 400L
+        composeRule.waitUntil(2_000) { android.os.SystemClock.uptimeMillis() >= deadline }
+        assertEquals(before, viewModel.state.value.document)
+        composeRule.runOnIdle { viewModel.clearTransientPreview("geometry:1") }
+        field.performScrollTo().assertTextContains("120")
+        composeRule.onNodeWithTag("geometry-clip-inverted-1").performScrollTo().assertIsSelected()
+        deadline = android.os.SystemClock.uptimeMillis() + 400L
+        composeRule.waitUntil(2_000) { android.os.SystemClock.uptimeMillis() >= deadline }
+        assertEquals(before, viewModel.state.value.document)
+        composeRule.onNodeWithTag("geometry-clip-1-apply").performScrollTo().performClick()
+        composeRule.waitUntil(5_000) { viewModel.state.value.document != before }
+        composeRule.runOnIdle { viewModel.undo() }
+        composeRule.waitUntil(5_000) { viewModel.state.value.document == before }
     }
 
     private fun captureLayout(name: String) {
