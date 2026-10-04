@@ -611,6 +611,7 @@ func TestEditContainerResourcesPreservesSurvivingTrackIdentity(t *testing.T) {
 			IsDefault: false,
 			IsForced: false,
 		}},
+		nil,
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -705,5 +706,196 @@ func TestPlanTrackEditsRejectsRemovingAllTracks(t *testing.T) {
 	)
 	if err == nil || !strings.Contains(err.Error(), "cannot remove all tracks") {
 		t.Fatalf("expected remove-all rejection, got %v", err)
+	}
+}
+
+
+func TestEditContainerResourcesImportsExternalTrackWithFreshIdentity(t *testing.T) {
+	dir := t.TempDir()
+	targetPath := filepath.Join(dir, "target.mkv")
+	importPath := filepath.Join(dir, "external.mkv")
+	dst := filepath.Join(dir, "imported.mkv")
+
+	targetAttachment := []byte("target-only attachment")
+	targetContainer := &mkv.Container{
+		Info: mkv.SegmentInfo{TimecodeScale: 1_000_000, Title: "Target"},
+		Attachments: []mkv.Attachment{{
+			ID: 31,
+			Name: "target-note.txt",
+			MIMEType: "text/plain",
+			Data: targetAttachment,
+			Size: int64(len(targetAttachment)),
+		}},
+		Chapters: []mkv.Chapter{{ID: 9, Title: "Target chapter", StartMs: 0, EndMs: 1500}},
+	}
+	targetVideo := mkv.Track{
+		ID: 1, UID: 101, Type: mkv.VideoTrack, Codec: "vp9",
+		Name: "Main", Language: "und", IsDefault: true,
+	}
+	targetSub := mkv.Track{
+		ID: 5, UID: 505, Type: mkv.SubtitleTrack, Codec: "ass",
+		Name: "Signs", Language: "eng", IsForced: true,
+		CodecPrivate: []byte("[Script Info]\nScriptType: v4.00+\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text"),
+	}
+	targetFile, err := os.Create(targetPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	targetWriter := writer.NewMKVWriter(targetFile)
+	if err := targetWriter.WriteStart(); err != nil {
+		t.Fatal(err)
+	}
+	if err := targetWriter.WriteMetadata(targetContainer, []mkv.Track{targetVideo, targetSub}, 1500); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.WriteCluster(targetFile, 0, 1_000_000, []mkv.Block{
+		{TrackNumber: 1, Timecode: 0, Keyframe: true, Data: []byte{0x11}},
+		{TrackNumber: 5, Timecode: 200, Duration: 800, Data: []byte("0,0,Default,,0,0,0,,Target subtitle")},
+		{TrackNumber: 1, Timecode: 1000, Keyframe: true, Data: []byte{0x12}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := targetWriter.Finalize(); err != nil {
+		t.Fatal(err)
+	}
+	if err := targetFile.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	externalAttachment := []byte("must not be copied")
+	externalContainer := &mkv.Container{
+		Info: mkv.SegmentInfo{TimecodeScale: 1_000_000, Title: "External"},
+		Attachments: []mkv.Attachment{{
+			ID: 41,
+			Name: "external-only.txt",
+			MIMEType: "text/plain",
+			Data: externalAttachment,
+			Size: int64(len(externalAttachment)),
+		}},
+	}
+	// The source UID intentionally collides with the target video. Import must
+	// allocate destination identity rather than carrying source identity across.
+	externalAudio := mkv.Track{
+		ID: 2, UID: 101, Type: mkv.AudioTrack, Codec: "opus",
+		Name: "Source commentary", Language: "jpn", IsDefault: true,
+		CodecPrivate: []byte("OpusHead\x01\x02"),
+	}
+	externalFile, err := os.Create(importPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	externalWriter := writer.NewMKVWriter(externalFile)
+	if err := externalWriter.WriteStart(); err != nil {
+		t.Fatal(err)
+	}
+	if err := externalWriter.WriteMetadata(externalContainer, []mkv.Track{externalAudio}, 2200); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.WriteCluster(externalFile, 0, 1_000_000, []mkv.Block{
+		{TrackNumber: 2, Timecode: 0, Keyframe: true, Data: []byte{0x21}},
+		{TrackNumber: 2, Timecode: 1000, Keyframe: true, Data: []byte{0x22}},
+		{TrackNumber: 2, Timecode: 2000, Keyframe: true, Data: []byte{0x23}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := externalWriter.Finalize(); err != nil {
+		t.Fatal(err)
+	}
+	if err := externalFile.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := EditContainerResources(
+		context.Background(),
+		targetPath,
+		dst,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		[]TrackImport{{
+			SourcePath: importPath,
+			TrackID: 2,
+			Name: "Commentary",
+			Language: "eng",
+			IsDefault: false,
+			IsForced: true,
+		}},
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := reader.Open(context.Background(), dst)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Tracks) != 3 {
+		t.Fatalf("track count = %d, want 3: %+v", len(got.Tracks), got.Tracks)
+	}
+	if got.Tracks[0].ID != 1 || got.Tracks[0].UID != 101 ||
+		got.Tracks[1].ID != 5 || got.Tracks[1].UID != 505 {
+		t.Fatalf("destination survivor identity changed: %+v", got.Tracks)
+	}
+	imported := got.Tracks[2]
+	if imported.ID != 6 {
+		t.Fatalf("imported TrackNumber = %d, want 6 (append after max destination ID)", imported.ID)
+	}
+	if imported.UID == 0 || imported.UID == 101 || imported.UID == 505 {
+		t.Fatalf("imported track did not get fresh destination UID: %+v", imported)
+	}
+	if imported.Type != mkv.AudioTrack || imported.Codec != "opus" ||
+		imported.Name != "Commentary" || imported.Language != "eng" ||
+		imported.IsDefault || !imported.IsForced {
+		t.Fatalf("imported track metadata/codec wrong: %+v", imported)
+	}
+	if len(got.Attachments) != 1 || got.Attachments[0].Name != "target-note.txt" ||
+		!bytes.Equal(got.Attachments[0].Data, targetAttachment) {
+		t.Fatalf("target attachments changed or source attachment leaked in: %+v", got.Attachments)
+	}
+	if len(got.Chapters) != 1 || got.Chapters[0].ID != 9 {
+		t.Fatalf("target chapters changed: %+v", got.Chapters)
+	}
+	if got.DurationMs < 2000 {
+		t.Fatalf("output duration = %dms, want imported longer timeline reflected", got.DurationMs)
+	}
+
+	blockFile, err := os.Open(dst)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer blockFile.Close()
+	br, err := reader.NewBlockReader(blockFile, got.Info.TimecodeScale)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var seenTargetVideo, seenTargetSub, seenImportedAudio bool
+	for {
+		block, err := br.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		switch block.TrackNumber {
+		case 1:
+			seenTargetVideo = true
+		case 5:
+			seenTargetSub = true
+		case 6:
+			seenImportedAudio = true
+		case 2:
+			t.Fatalf("source TrackNumber leaked instead of destination remap: %+v", block)
+		}
+	}
+	if !seenTargetVideo || !seenTargetSub || !seenImportedAudio {
+		t.Fatalf(
+			"payload missing: video=%v subtitle=%v importedAudio=%v",
+			seenTargetVideo,
+			seenTargetSub,
+			seenImportedAudio,
+		)
 	}
 }
