@@ -114,20 +114,32 @@ type AttachmentMetadataEdit struct {
 }
 
 type TrackMetadataEdit struct {
-	Target    string
-	Name      string
-	Language  string
-	IsDefault bool
-	IsForced  bool
+	Target           string
+	Name             string
+	Language         string
+	LanguageBCP47    string
+	IsDefault        bool
+	IsForced         bool
+	HearingImpaired  bool
+	VisualImpaired   bool
+	TextDescriptions bool
+	Original         bool
+	Commentary       bool
 }
 
 type TrackImport struct {
-	SourcePath string
-	TrackID    uint64
-	Name       string
-	Language   string
-	IsDefault  bool
-	IsForced   bool
+	SourcePath       string
+	TrackID          uint64
+	Name             string
+	Language         string
+	LanguageBCP47    string
+	IsDefault        bool
+	IsForced         bool
+	HearingImpaired  bool
+	VisualImpaired   bool
+	TextDescriptions bool
+	Original         bool
+	Commentary       bool
 }
 
 func ReplaceASSWithAttachmentEdits(
@@ -656,8 +668,14 @@ func planTrackEdits(
 		track := existing[index]
 		track.Name = edit.Name
 		track.Language = edit.Language
+		track.LanguageBCP47 = edit.LanguageBCP47
 		track.IsDefault = edit.IsDefault
 		track.IsForced = edit.IsForced
+		track.HearingImpaired = edit.HearingImpaired
+		track.VisualImpaired = edit.VisualImpaired
+		track.TextDescriptions = edit.TextDescriptions
+		track.Original = edit.Original
+		track.Commentary = edit.Commentary
 		metadataByIndex[index] = track
 	}
 
@@ -788,8 +806,14 @@ func planTrackImports(
 		track.UID = nextUID
 		track.Name = input.Name
 		track.Language = input.Language
+		track.LanguageBCP47 = input.LanguageBCP47
 		track.IsDefault = input.IsDefault
 		track.IsForced = input.IsForced
+		track.HearingImpaired = input.HearingImpaired
+		track.VisualImpaired = input.VisualImpaired
+		track.TextDescriptions = input.TextDescriptions
+		track.Original = input.Original
+		track.Commentary = input.Commentary
 		out = append(out, track)
 		sources = append(sources, mergeSource{
 			path: input.SourcePath,
