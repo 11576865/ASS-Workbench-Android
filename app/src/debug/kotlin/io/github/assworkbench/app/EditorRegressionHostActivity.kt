@@ -37,6 +37,7 @@ class EditorRegressionHostActivity : ComponentActivity() {
             MaterialTheme(colorScheme = darkColorScheme()) {
                 val state by editorViewModel.state.collectAsState()
                 ModernEditorScreen(
+                    initialWorkspaceModeName = "FIXED",
                     state = state,
                     viewModel = editorViewModel,
                     onOpenReferenceVideo = {},

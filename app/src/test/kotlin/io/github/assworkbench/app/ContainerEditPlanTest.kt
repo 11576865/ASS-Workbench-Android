@@ -196,4 +196,239 @@ class ContainerEditPlanTest {
             }.status,
         )
     }
+
+    @Test
+    fun trackMetadataEditIsExplicitMutation() {
+        val resource = ContainerResourceUi(
+            rowKey = "track:uid:101",
+            kind = ContainerResourceKind.VIDEO,
+            title = "Video",
+            detail = "V_VP9 · Track #1",
+            trackNumber = 1L,
+            trackTarget = "uid:101",
+            trackUid = 101L,
+            trackCodecId = "V_VP9",
+            trackName = "Video",
+            trackLanguage = "und",
+            trackIsDefault = true,
+            trackIsForced = false,
+        )
+        val state = EditorState(
+            container = ContainerBridgeState(
+                uri = "fixture-source",
+                writeBackAvailable = true,
+                resources = listOf(resource),
+                pendingTrackMetadataEdits = listOf(
+                    PendingContainerTrackMetadataUi(
+                        target = "uid:101",
+                        number = 1L,
+                        originalName = "Video",
+                        name = "Main picture",
+                        language = "jpn",
+                        isDefault = false,
+                        isForced = true,
+                    )
+                ),
+            ),
+        )
+
+        val plan = buildContainerEditPlan(state)
+
+        assertTrue(plan.executable)
+        assertEquals(ContainerMutationKind.EDIT_TRACK_METADATA, plan.mutations.single().kind)
+        assertEquals(ContainerMutationSource.EXISTING_TRACK, plan.mutations.single().source)
+        assertEquals(
+            ContainerCompatibilityStatus.WARNING,
+            plan.checks.single { it.dimension == ContainerCompatibilityDimension.DOWNSTREAM }.status,
+        )
+    }
+
+    @Test
+    fun removingAllTracksBlocksPreflight() {
+        val resources = listOf(
+            ContainerResourceUi(
+                rowKey = "track:uid:101",
+                kind = ContainerResourceKind.VIDEO,
+                title = "Video",
+                detail = "V_VP9 · Track #1",
+                trackNumber = 1L,
+                trackTarget = "uid:101",
+            ),
+            ContainerResourceUi(
+                rowKey = "track:uid:202",
+                kind = ContainerResourceKind.AUDIO,
+                title = "Audio",
+                detail = "A_OPUS · Track #2",
+                trackNumber = 2L,
+                trackTarget = "uid:202",
+            ),
+        )
+        val state = EditorState(
+            container = ContainerBridgeState(
+                uri = "fixture-source",
+                writeBackAvailable = true,
+                resources = resources,
+                pendingTrackRemovals = listOf(
+                    PendingContainerTrackRemovalUi("uid:101", 1L, "Video"),
+                    PendingContainerTrackRemovalUi("uid:202", 2L, "Audio"),
+                ),
+            ),
+        )
+
+        val plan = buildContainerEditPlan(state)
+
+        assertFalse(plan.executable)
+        assertEquals(
+            ContainerCompatibilityStatus.UNSUPPORTED,
+            plan.checks.single { it.dimension == ContainerCompatibilityDimension.CONTAINER_STRUCTURE }.status,
+        )
+    }
+
+    @Test
+    fun removingDirtySelectedAssBlocksPreflight() {
+        val resources = listOf(
+            ContainerResourceUi(
+                rowKey = "track:uid:101",
+                kind = ContainerResourceKind.VIDEO,
+                title = "Video",
+                detail = "V_VP9 · Track #1",
+                trackNumber = 1L,
+                trackTarget = "uid:101",
+            ),
+            ContainerResourceUi(
+                rowKey = "track:uid:202",
+                kind = ContainerResourceKind.SUBTITLE,
+                title = "ASS",
+                detail = "S_TEXT/ASS · Track #2",
+                trackNumber = 2L,
+                trackTarget = "uid:202",
+                editableAss = true,
+            ),
+        )
+        val state = EditorState(
+            subtitleLoaded = true,
+            dirty = true,
+            container = ContainerBridgeState(
+                uri = "fixture-source",
+                writeBackAvailable = true,
+                resources = resources,
+                selectedTrackNumber = 2L,
+                pendingTrackRemovals = listOf(
+                    PendingContainerTrackRemovalUi("uid:202", 2L, "ASS")
+                ),
+            ),
+        )
+
+        val plan = buildContainerEditPlan(state)
+
+        assertFalse(plan.executable)
+        assertEquals(
+            ContainerCompatibilityStatus.UNSUPPORTED,
+            plan.checks.single { it.dimension == ContainerCompatibilityDimension.CONTAINER_STRUCTURE }.status,
+        )
+    }
+
+    @Test
+    fun externalTrackImportIsExplicitMutation() {
+        val state = EditorState(
+            container = ContainerBridgeState(
+                uri = "fixture-source",
+                writeBackAvailable = true,
+                pendingTrackImports = listOf(
+                    PendingContainerTrackImportUi(
+                        sourceUri = "content://fixture/external.mkv",
+                        sourceName = "external.mkv",
+                        sourceTrackNumber = 3L,
+                        sourceTrackUid = 303L,
+                        kind = ContainerResourceKind.AUDIO,
+                        codecId = "A_OPUS",
+                        name = "Commentary",
+                        language = "eng",
+                        isDefault = false,
+                        isForced = false,
+                        sourceAttachmentCount = 0,
+                    )
+                ),
+            ),
+        )
+
+        val plan = buildContainerEditPlan(state)
+
+        assertTrue(plan.executable)
+        assertEquals(ContainerMutationKind.ADD_TRACK, plan.mutations.single().kind)
+        assertEquals(ContainerMutationSource.EXTERNAL_TRACK, plan.mutations.single().source)
+        assertTrue(plan.mutations.single().detail.contains("external.mkv"))
+        assertEquals(
+            ContainerCompatibilityStatus.WARNING,
+            plan.checks.single { it.dimension == ContainerCompatibilityDimension.DOWNSTREAM }.status,
+        )
+    }
+
+    @Test
+    fun duplicateTrackImportBlocksPreflight() {
+        val imported = PendingContainerTrackImportUi(
+            sourceUri = "content://fixture/external.mkv",
+            sourceName = "external.mkv",
+            sourceTrackNumber = 3L,
+            sourceTrackUid = 303L,
+            kind = ContainerResourceKind.AUDIO,
+            codecId = "A_OPUS",
+            name = "Commentary",
+            language = "eng",
+            isDefault = false,
+            isForced = false,
+            sourceAttachmentCount = 0,
+        )
+        val state = EditorState(
+            container = ContainerBridgeState(
+                uri = "fixture-source",
+                writeBackAvailable = true,
+                pendingTrackImports = listOf(imported, imported.copy(name = "Duplicate")),
+            ),
+        )
+
+        val plan = buildContainerEditPlan(state)
+
+        assertFalse(plan.executable)
+        assertEquals(
+            ContainerCompatibilityStatus.UNSUPPORTED,
+            plan.checks.single { it.dimension == ContainerCompatibilityDimension.CONTAINER_STRUCTURE }.status,
+        )
+    }
+
+    @Test
+    fun subtitleTrackImportWithSourceAttachmentsProducesExplicitWarning() {
+        val state = EditorState(
+            container = ContainerBridgeState(
+                uri = "fixture-source",
+                writeBackAvailable = true,
+                pendingTrackImports = listOf(
+                    PendingContainerTrackImportUi(
+                        sourceUri = "content://fixture/subtitles.mkv",
+                        sourceName = "subtitles.mkv",
+                        sourceTrackNumber = 4L,
+                        sourceTrackUid = 404L,
+                        kind = ContainerResourceKind.SUBTITLE,
+                        codecId = "S_TEXT/ASS",
+                        name = "Signs",
+                        language = "eng",
+                        isDefault = false,
+                        isForced = false,
+                        sourceAttachmentCount = 6,
+                    )
+                ),
+            ),
+        )
+
+        val plan = buildContainerEditPlan(state)
+
+        assertTrue(plan.executable)
+        assertTrue(
+            plan.checks.any {
+                it.dimension == ContainerCompatibilityDimension.SOURCE_INVENTORY &&
+                    it.status == ContainerCompatibilityStatus.WARNING &&
+                    it.title.contains("不自动复制来源附件")
+            }
+        )
+    }
 }

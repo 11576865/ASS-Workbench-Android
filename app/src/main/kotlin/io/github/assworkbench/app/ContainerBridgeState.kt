@@ -30,6 +30,13 @@ data class ContainerResourceUi(
     val title: String,
     val detail: String,
     val trackNumber: Long? = null,
+    val trackTarget: String? = null,
+    val trackUid: Long? = null,
+    val trackCodecId: String = "",
+    val trackName: String = "",
+    val trackLanguage: String = "",
+    val trackIsDefault: Boolean = false,
+    val trackIsForced: Boolean = false,
     val editableAss: Boolean = false,
     /** Stable mkvgo mutation/extraction target: FileUID when available, otherwise a unique filename. */
     val attachmentTarget: String? = null,
@@ -75,6 +82,50 @@ data class PendingContainerAttachmentMetadataUi(
     val description: String,
 )
 
+data class PendingContainerTrackRemovalUi(
+    val target: String,
+    val number: Long,
+    val name: String,
+)
+
+data class PendingContainerTrackMetadataUi(
+    val target: String,
+    val number: Long,
+    val originalName: String,
+    val name: String,
+    val language: String,
+    val isDefault: Boolean,
+    val isForced: Boolean,
+)
+
+data class ContainerTrackImportCandidateUi(
+    val sourceUri: String,
+    val sourceName: String,
+    val sourceTrackNumber: Long,
+    val sourceTrackUid: Long?,
+    val kind: ContainerResourceKind,
+    val codecId: String,
+    val name: String,
+    val language: String,
+    val isDefault: Boolean,
+    val isForced: Boolean,
+    val sourceAttachmentCount: Int,
+)
+
+data class PendingContainerTrackImportUi(
+    val sourceUri: String,
+    val sourceName: String,
+    val sourceTrackNumber: Long,
+    val sourceTrackUid: Long?,
+    val kind: ContainerResourceKind,
+    val codecId: String,
+    val name: String,
+    val language: String,
+    val isDefault: Boolean,
+    val isForced: Boolean,
+    val sourceAttachmentCount: Int,
+)
+
 data class ContainerBridgeState(
     val uri: String? = null,
     val name: String = "",
@@ -87,6 +138,12 @@ data class ContainerBridgeState(
     val pendingAttachmentRemovals: List<PendingContainerAttachmentRemovalUi> = emptyList(),
     val pendingAttachmentReplacements: List<PendingContainerAttachmentReplacementUi> = emptyList(),
     val pendingAttachmentMetadataEdits: List<PendingContainerAttachmentMetadataUi> = emptyList(),
+    val pendingTrackRemovals: List<PendingContainerTrackRemovalUi> = emptyList(),
+    val pendingTrackMetadataEdits: List<PendingContainerTrackMetadataUi> = emptyList(),
+    val pendingTrackImports: List<PendingContainerTrackImportUi> = emptyList(),
+    val trackImportBusy: Boolean = false,
+    val trackImportSourceName: String = "",
+    val trackImportCandidates: List<ContainerTrackImportCandidateUi> = emptyList(),
     val extractedFontCount: Int = 0,
     val skippedAttachmentCount: Int = 0,
     val writeBackAvailable: Boolean = false,

@@ -2,7 +2,6 @@ package io.github.assworkbench.app
 
 import android.app.Application
 import android.graphics.Bitmap
-import android.graphics.Color
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -23,6 +22,10 @@ import io.github.assworkbench.app.ui.interaction.rememberInteractionOverlayRegis
 import io.github.assworkbench.domain.AssDocument
 import io.github.assworkbench.domain.AssEvent
 import io.github.assworkbench.domain.AssStyle
+import io.github.assworkbench.domain.AssReflectionFadeDirection
+import io.github.assworkbench.domain.AssReflectionFadeSpec
+import io.github.assworkbench.domain.AssReflectionFxSpec
+import io.github.assworkbench.domain.AssFxComposition
 import io.github.assworkbench.domain.SubTime
 import java.io.File
 import java.io.FileOutputStream
@@ -54,17 +57,7 @@ class UigsRendererVisualCaptureInstrumentedTest {
     @Before
     fun setUp() {
         application = ApplicationProvider.getApplicationContext()
-        media = File(application.filesDir, "uigs-runtime-fixture.png")
-        val bitmap = Bitmap.createBitmap(1280, 720, Bitmap.Config.ARGB_8888)
-        bitmap.eraseColor(Color.rgb(24, 32, 48))
-        FileOutputStream(media).use { stream ->
-            assertTrue(
-                "Deterministic renderer fixture must encode as PNG",
-                bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream),
-            )
-        }
-        bitmap.recycle()
-        assertTrue(media.isFile && media.length() > 0L)
+        media = NativePreviewFixture.create(application.filesDir, "uigs-runtime-fixture.png")
         configDir = File(application.filesDir, "uigs-runtime-renderer/config").apply {
             deleteRecursively()
             mkdirs()
@@ -155,6 +148,110 @@ class UigsRendererVisualCaptureInstrumentedTest {
             .assertIsDisplayed()
         Thread.sleep(800)
         captureDisplay("ASS.RENDERER_POSITION.RUNTIME_LANDSCAPE.png")
+    }
+
+    @Test
+    fun captureSpatialReflectionFadeRuntimeLandscape() {
+        val source = AssDocument(
+            scriptInfo = linkedMapOf(
+                "ScriptType" to "v4.00+",
+                "PlayResX" to "1920",
+                "PlayResY" to "1080",
+                "ScaledBorderAndShadow" to "yes",
+            ),
+            styles = listOf(
+                AssStyle(
+                    fontName = "sans-serif",
+                    fontSize = 82.0,
+                    outline = 3.0,
+                    shadow = 0.0,
+                    alignment = 5,
+                )
+            ),
+            events = listOf(
+                AssEvent(
+                    id = 1L,
+                    layer = 4,
+                    start = SubTime(0),
+                    end = SubTime(30_000),
+                    text = "{\\pos(960,430)}Spatial reflection",
+                )
+            ),
+        )
+        val compiled = AssFxComposition.composeMirrorStack(
+            document = source,
+            eventId = 1L,
+            reflection = AssReflectionFxSpec(
+                offsetY = 82.0,
+                verticalScalePercent = 44.0,
+                opacityPercent = 52.0,
+                blur = 1.2,
+            ),
+            glow = null,
+            fade = AssReflectionFadeSpec(
+                bands = 6,
+                depthPx = 190.0,
+                farOpacityPercent = 0.0,
+                direction = AssReflectionFadeDirection.DOWN,
+            ),
+            entrance = null,
+        )
+        val document = compiled.document
+        assertTrue(compiled.generatedEventIds.size == 6)
+
+        composeRule.setContent {
+            MaterialTheme(colorScheme = darkColorScheme()) {
+                val registry = rememberInteractionOverlayRegistry()
+                SideEffect { interactionRegistry.set(registry) }
+                Box(Modifier.fillMaxSize()) {
+                    VideoPreview(
+                        videoUri = media.absolutePath,
+                        document = document,
+                        renderDocument = document,
+                        seekRequestMs = null,
+                        seekRequestNonce = 0L,
+                        onPosition = {},
+                        onRendererDiagnostics = { diagnostics.set(it) },
+                        configDir = configDir,
+                        fontsDir = fontsDir,
+                        fontRevision = 0L,
+                        initialPositionMs = 0L,
+                        focusedEventId = 1L,
+                        positionEditEventId = null,
+                        onPreviewEventPosition = { _, _ -> },
+                        onSetEventPosition = { _, _ -> },
+                        onPreviewEventMove = { _, _, _, _ -> },
+                        onSetEventMove = { _, _, _, _ -> },
+                        onPreviewEventOrigin = { _, _ -> },
+                        onSetEventOrigin = { _, _ -> },
+                        onPreviewEventRotation = {},
+                        onSetEventRotation = {},
+                        scaleLocked = true,
+                        onPreviewEventScale = { _, _ -> },
+                        onSetEventScale = { _, _ -> },
+                        onPreviewEventShear = { _, _ -> },
+                        onSetEventShear = { _, _ -> },
+                        onPreviewEventClip = { _, _, _, _, _ -> },
+                        onSetEventClip = { _, _, _, _, _ -> },
+                        onCancelEventPositionPreview = {},
+                        onFocusEvent = {},
+                        onSetEventTiming = { _, _, _ -> },
+                        onOpenVideo = {},
+                        rendererEnabled = true,
+                        interactionRegistry = registry,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                    WindowInteractionOverlay(registry = registry)
+                }
+            }
+        }
+
+        composeRule.waitUntil(timeoutMillis = 30_000) {
+            diagnostics.get().any { it.contains("Preview subtitle") }
+        }
+        composeRule.waitForIdle()
+        Thread.sleep(800)
+        captureDisplay("ASS.RENDERER_SPATIAL_FADE.RUNTIME_LANDSCAPE.png")
     }
 
     private fun captureDisplay(fileName: String) {

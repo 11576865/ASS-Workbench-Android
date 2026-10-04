@@ -4,12 +4,15 @@ import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddCircle
 import androidx.compose.material.icons.filled.AttachFile
@@ -20,12 +23,16 @@ import androidx.compose.material.icons.filled.FontDownload
 import androidx.compose.material.icons.filled.HelpOutline
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Movie
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.RemoveCircle
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Subtitles
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -56,6 +63,7 @@ import io.github.assworkbench.app.ContainerInventoryEvidence
 import io.github.assworkbench.app.ContainerResourceChange
 import io.github.assworkbench.app.ContainerResourceKind
 import io.github.assworkbench.app.ContainerResourceUi
+import io.github.assworkbench.app.ContainerTrackImportCandidateUi
 import io.github.assworkbench.app.EditorViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -75,6 +83,16 @@ fun ContainerBridgePanel(
     var metadataName by remember { mutableStateOf("") }
     var metadataDescription by remember { mutableStateOf("") }
     var extractTarget by remember { mutableStateOf<ContainerResourceUi?>(null) }
+    var trackMetadataTarget by remember { mutableStateOf<ContainerResourceUi?>(null) }
+    var trackMetadataName by remember { mutableStateOf("") }
+    var trackMetadataLanguage by remember { mutableStateOf("") }
+    var trackMetadataDefault by remember { mutableStateOf(false) }
+    var trackMetadataForced by remember { mutableStateOf(false) }
+    var trackImportCandidate by remember { mutableStateOf<ContainerTrackImportCandidateUi?>(null) }
+    var trackImportName by remember { mutableStateOf("") }
+    var trackImportLanguage by remember { mutableStateOf("") }
+    var trackImportDefault by remember { mutableStateOf(false) }
+    var trackImportForced by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val attachmentPicker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenMultipleDocuments()
@@ -108,6 +126,18 @@ fun ContainerBridgePanel(
             originalName = target.title,
             uri = uri,
         )
+    }
+    val trackImportPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        runCatching {
+            context.contentResolver.takePersistableUriPermission(
+                uri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION,
+            )
+        }
+        viewModel.scanContainerTrackImportSource(uri)
     }
     val extractPicker = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("*/*")
@@ -158,39 +188,86 @@ fun ContainerBridgePanel(
                             append(" · 待替换 ").append(state.pendingAttachmentReplacements.size)
                         }
                         if (state.pendingAttachmentMetadataEdits.isNotEmpty()) {
-                            append(" · 待改信息 ").append(state.pendingAttachmentMetadataEdits.size)
+                            append(" · 待改附件信息 ").append(state.pendingAttachmentMetadataEdits.size)
+                        }
+                        if (state.pendingTrackRemovals.isNotEmpty()) {
+                            append(" · 待删轨 ").append(state.pendingTrackRemovals.size)
+                        }
+                        if (state.pendingTrackMetadataEdits.isNotEmpty()) {
+                            append(" · 待改轨道信息 ").append(state.pendingTrackMetadataEdits.size)
+                        }
+                        if (state.pendingTrackImports.isNotEmpty()) {
+                            append(" · 待导入轨道 ").append(state.pendingTrackImports.size)
                         }
                     },
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            if (state.loading || state.attachmentExtractBusy) {
+            if (state.loading || state.attachmentExtractBusy || state.trackImportBusy) {
                 CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
             }
             ContainerIconButton(
                 label = "重新检测容器内容",
-                enabled = !state.loading && !state.writeBackBusy && !state.attachmentExtractBusy,
+                enabled = !state.loading &&
+                    !state.writeBackBusy &&
+                    !state.attachmentExtractBusy &&
+                    !state.trackImportBusy,
                 onClick = viewModel::rescanContainer,
             ) {
                 Icon(Icons.Filled.Refresh, contentDescription = "重新检测容器内容")
             }
-            ContainerIconButton(
-                label = "添加附件",
-                enabled = !state.loading && !state.writeBackBusy && !state.attachmentExtractBusy,
+        }
+
+        Row(
+            Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro),
+        ) {
+            TextButton(
+                modifier = Modifier.testTag("container-add-track"),
+                enabled = !state.loading &&
+                    !state.writeBackBusy &&
+                    !state.attachmentExtractBusy &&
+                    !state.trackImportBusy &&
+                    state.inventoryEvidence != ContainerInventoryEvidence.VERIFIED_OUTPUT,
+                onClick = {
+                    trackImportPicker.launch(
+                        arrayOf(
+                            "video/x-matroska",
+                            "video/webm",
+                            "application/x-matroska",
+                            "application/octet-stream",
+                        )
+                    )
+                },
+            ) {
+                Icon(Icons.Filled.AddCircle, contentDescription = null)
+                Text("添加轨道")
+            }
+            TextButton(
+                modifier = Modifier.testTag("container-add-attachment"),
+                enabled = !state.loading &&
+                    !state.writeBackBusy &&
+                    !state.attachmentExtractBusy &&
+                    !state.trackImportBusy &&
+                    state.inventoryEvidence != ContainerInventoryEvidence.VERIFIED_OUTPUT,
                 onClick = { attachmentPicker.launch(arrayOf("*/*")) },
             ) {
-                Icon(Icons.Filled.AttachFile, contentDescription = "添加附件")
+                Icon(Icons.Filled.AttachFile, contentDescription = null)
+                Text("添加附件")
             }
-            ContainerIconButton(
-                label = "保存为新 MKV；验证通过后写入，源文件不原地修改",
+            TextButton(
+                modifier = Modifier.testTag("container-save-mkv"),
                 enabled = editPlan.executable &&
                     !state.loading &&
                     !state.writeBackBusy &&
-                    !state.attachmentExtractBusy,
+                    !state.attachmentExtractBusy &&
+                    !state.trackImportBusy,
                 onClick = onSaveMkv,
             ) {
-                Icon(Icons.Filled.Save, contentDescription = "保存为新 MKV")
+                Icon(Icons.Filled.Save, contentDescription = null)
+                Text("保存新 MKV")
             }
         }
 
@@ -236,13 +313,27 @@ fun ContainerBridgePanel(
             val pendingMetadata = attachmentTarget?.let { target ->
                 state.pendingAttachmentMetadataEdits.firstOrNull { it.target == target }
             }
+            val trackTarget = resource.trackTarget
+            val pendingTrackRemoval = trackTarget?.let { target ->
+                state.pendingTrackRemovals.any { it.target == target }
+            } == true
+            val pendingTrackMetadata = trackTarget?.let { target ->
+                state.pendingTrackMetadataEdits.firstOrNull { it.target == target }
+            }
             ContainerResourceRow(
                 resource = resource,
                 selected = resource.editableAss && resource.trackNumber == state.selectedTrackNumber,
                 enabled = resource.editableAss &&
                     resource.change != ContainerResourceChange.REMOVED &&
-                    !state.writeBackBusy,
+                    !pendingTrackRemoval &&
+                    !state.writeBackBusy &&
+                    state.inventoryEvidence != ContainerInventoryEvidence.VERIFIED_OUTPUT,
                 attachmentActionsEnabled = attachmentTarget != null &&
+                    resource.change != ContainerResourceChange.REMOVED &&
+                    !state.writeBackBusy &&
+                    !state.attachmentExtractBusy &&
+                    state.inventoryEvidence != ContainerInventoryEvidence.VERIFIED_OUTPUT,
+                trackActionsEnabled = trackTarget != null &&
                     resource.change != ContainerResourceChange.REMOVED &&
                     !state.writeBackBusy &&
                     !state.attachmentExtractBusy &&
@@ -250,6 +341,8 @@ fun ContainerBridgePanel(
                 pendingRemoval = pendingRemoval,
                 pendingReplacementName = pendingReplacement?.name,
                 pendingMetadataName = pendingMetadata?.name,
+                pendingTrackRemoval = pendingTrackRemoval,
+                pendingTrackMetadataName = pendingTrackMetadata?.name,
                 onClick = {
                     val trackNumber = resource.trackNumber ?: return@ContainerResourceRow
                     if (trackNumber == state.selectedTrackNumber) return@ContainerResourceRow
@@ -293,7 +386,91 @@ fun ContainerBridgePanel(
                         viewModel.cancelExistingAttachmentMetadata(target)
                     }
                 },
+                onRemoveTrack = resource.trackNumber?.let { number ->
+                    trackTarget?.let { target ->
+                        {
+                            viewModel.planExistingTrackRemoval(
+                                target = target,
+                                number = number,
+                                name = resource.title,
+                            )
+                        }
+                    }
+                },
+                onEditTrackMetadata = trackTarget?.let {
+                    {
+                        trackMetadataTarget = resource
+                        trackMetadataName = pendingTrackMetadata?.name ?: resource.trackName
+                        trackMetadataLanguage = pendingTrackMetadata?.language ?: resource.trackLanguage
+                        trackMetadataDefault = pendingTrackMetadata?.isDefault ?: resource.trackIsDefault
+                        trackMetadataForced = pendingTrackMetadata?.isForced ?: resource.trackIsForced
+                    }
+                },
+                onCancelTrackEdit = trackTarget?.let { target ->
+                    {
+                        viewModel.cancelExistingTrackRemoval(target)
+                        viewModel.cancelExistingTrackMetadata(target)
+                    }
+                },
             )
+        }
+
+        if (state.pendingTrackImports.isNotEmpty()) {
+            HorizontalDivider()
+            Text(
+                "待导入轨道 · ${state.pendingTrackImports.size}",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            state.pendingTrackImports.forEach { track ->
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 6.dp, horizontal = 4.dp)
+                        .testTag("container-pending-track-import-${track.sourceTrackNumber}"),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Icon(
+                        imageVector = when (track.kind) {
+                            ContainerResourceKind.VIDEO -> Icons.Filled.Movie
+                            ContainerResourceKind.AUDIO -> Icons.Filled.Audiotrack
+                            ContainerResourceKind.SUBTITLE -> Icons.Filled.Subtitles
+                            else -> Icons.Filled.HelpOutline
+                        },
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp),
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            track.name.ifBlank { track.codecId.ifBlank { "Track #${track.sourceTrackNumber}" } },
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        Text(
+                            buildString {
+                                append(track.sourceName)
+                                append(" · Track #").append(track.sourceTrackNumber)
+                                if (track.codecId.isNotBlank()) append(" · ").append(track.codecId)
+                                if (track.language.isNotBlank()) append(" · ").append(track.language)
+                                if (track.isDefault) append(" · Default")
+                                if (track.isForced) append(" · Forced")
+                            },
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    TextButton(
+                        enabled = !state.writeBackBusy,
+                        onClick = {
+                            viewModel.cancelContainerTrackImport(
+                                track.sourceUri,
+                                track.sourceTrackNumber,
+                            )
+                        },
+                    ) { Text("取消") }
+                }
+            }
         }
 
         if (state.pendingAttachments.isNotEmpty()) {
@@ -380,6 +557,169 @@ fun ContainerBridgePanel(
             )
         }
 
+        if (state.trackImportCandidates.isNotEmpty() && trackImportCandidate == null) {
+            AlertDialog(
+                onDismissRequest = viewModel::dismissContainerTrackImportCandidates,
+                title = { Text("选择要导入的轨道") },
+                text = {
+                    Column(
+                        Modifier
+                            .heightIn(max = 420.dp)
+                            .verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text(
+                            state.trackImportSourceName,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        state.trackImportCandidates.forEach { candidate ->
+                            val alreadyPlanned = state.pendingTrackImports.any {
+                                it.sourceUri == candidate.sourceUri &&
+                                    it.sourceTrackNumber == candidate.sourceTrackNumber
+                            }
+                            Surface(
+                                tonalElevation = 1.dp,
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Row(
+                                    Modifier.fillMaxWidth().padding(10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                ) {
+                                    Icon(
+                                        imageVector = when (candidate.kind) {
+                                            ContainerResourceKind.VIDEO -> Icons.Filled.Movie
+                                            ContainerResourceKind.AUDIO -> Icons.Filled.Audiotrack
+                                            ContainerResourceKind.SUBTITLE -> Icons.Filled.Subtitles
+                                            else -> Icons.Filled.HelpOutline
+                                        },
+                                        contentDescription = null,
+                                        modifier = Modifier.size(20.dp),
+                                    )
+                                    Column(Modifier.weight(1f)) {
+                                        Text(
+                                            candidate.name.ifBlank {
+                                                candidate.codecId.ifBlank { "Track #${candidate.sourceTrackNumber}" }
+                                            },
+                                            style = MaterialTheme.typography.bodyMedium,
+                                        )
+                                        Text(
+                                            buildString {
+                                                append("Track #").append(candidate.sourceTrackNumber)
+                                                if (candidate.codecId.isNotBlank()) append(" · ").append(candidate.codecId)
+                                                if (candidate.language.isNotBlank()) append(" · ").append(candidate.language)
+                                                if (candidate.isDefault) append(" · Default")
+                                                if (candidate.isForced) append(" · Forced")
+                                            },
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                    TextButton(
+                                        enabled = !alreadyPlanned,
+                                        onClick = {
+                                            trackImportCandidate = candidate
+                                            trackImportName = candidate.name
+                                            trackImportLanguage = candidate.language
+                                            // A foreign source's Default flag is a source
+                                            // selection preference, not a destination intent.
+                                            // Start disabled so import cannot silently change
+                                            // the destination player's automatic track choice.
+                                            trackImportDefault = false
+                                            trackImportForced = candidate.isForced
+                                        },
+                                    ) {
+                                        Text(if (alreadyPlanned) "已加入" else "设置")
+                                    }
+                                }
+                            }
+                        }
+                        Text(
+                            "这里只选择来源 Track；不会把来源 MKV 的其他轨道或附件一起复制。",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = viewModel::dismissContainerTrackImportCandidates) {
+                        Text("完成")
+                    }
+                },
+            )
+        }
+
+        trackImportCandidate?.let { candidate ->
+            AlertDialog(
+                onDismissRequest = { trackImportCandidate = null },
+                title = { Text("导入 Track #${candidate.sourceTrackNumber}") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            buildString {
+                                append(candidate.sourceName)
+                                append(" · ").append(candidate.kind.name.lowercase())
+                                if (candidate.codecId.isNotBlank()) append(" · ").append(candidate.codecId)
+                            },
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        OutlinedTextField(
+                            value = trackImportName,
+                            onValueChange = { trackImportName = it },
+                            label = { Text("目标轨道名称") },
+                            singleLine = true,
+                        )
+                        OutlinedTextField(
+                            value = trackImportLanguage,
+                            onValueChange = { trackImportLanguage = it },
+                            label = { Text("Language（ISO 639-2）") },
+                            supportingText = { Text("3 字母 legacy language，例如 jpn / eng / und；可留空") },
+                            singleLine = true,
+                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            Checkbox(
+                                checked = trackImportDefault,
+                                onCheckedChange = { trackImportDefault = it },
+                            )
+                            Text("Default")
+                            Checkbox(
+                                checked = trackImportForced,
+                                onCheckedChange = { trackImportForced = it },
+                            )
+                            Text("Forced")
+                        }
+                        Text(
+                            "保存时将分配新的 TrackNumber / TrackUID。Default 对新导入轨默认关闭；来源附件不会自动复制，字幕依赖字体时请另外加入附件计划。",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            viewModel.planContainerTrackImport(
+                                candidate = candidate,
+                                name = trackImportName,
+                                language = trackImportLanguage,
+                                isDefault = trackImportDefault,
+                                isForced = trackImportForced,
+                            )
+                            trackImportCandidate = null
+                        },
+                    ) { Text("加入计划") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { trackImportCandidate = null }) { Text("取消") }
+                },
+            )
+        }
+
         metadataTarget?.let { resource ->
             val target = resource.attachmentTarget
             AlertDialog(
@@ -423,6 +763,73 @@ fun ContainerBridgePanel(
                 },
                 dismissButton = {
                     TextButton(onClick = { metadataTarget = null }) { Text("取消") }
+                },
+            )
+        }
+
+        trackMetadataTarget?.let { resource ->
+            val target = resource.trackTarget
+            AlertDialog(
+                onDismissRequest = { trackMetadataTarget = null },
+                title = { Text("Track #${resource.trackNumber} 信息") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value = trackMetadataName,
+                            onValueChange = { trackMetadataName = it },
+                            label = { Text("轨道名称") },
+                            singleLine = true,
+                        )
+                        OutlinedTextField(
+                            value = trackMetadataLanguage,
+                            onValueChange = { trackMetadataLanguage = it },
+                            label = { Text("Language（ISO 639-2）") },
+                            supportingText = { Text("3 字母 legacy language，例如 jpn / eng / und；BCP 47 另行建模") },
+                            singleLine = true,
+                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            Checkbox(
+                                checked = trackMetadataDefault,
+                                onCheckedChange = { trackMetadataDefault = it },
+                            )
+                            Text("Default")
+                            Checkbox(
+                                checked = trackMetadataForced,
+                                onCheckedChange = { trackMetadataForced = it },
+                            )
+                            Text("Forced")
+                        }
+                        Text(
+                            "只修改轨道元数据；TrackNumber、TrackUID、codec 与 payload 保持。",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                },
+                confirmButton = {
+                    TextButton(
+                        enabled = target != null,
+                        onClick = {
+                            val resolved = target ?: return@TextButton
+                            val number = resource.trackNumber ?: return@TextButton
+                            viewModel.planExistingTrackMetadata(
+                                target = resolved,
+                                number = number,
+                                originalName = resource.trackName,
+                                name = trackMetadataName,
+                                language = trackMetadataLanguage,
+                                isDefault = trackMetadataDefault,
+                                isForced = trackMetadataForced,
+                            )
+                            trackMetadataTarget = null
+                        },
+                    ) { Text("加入计划") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { trackMetadataTarget = null }) { Text("取消") }
                 },
             )
         }
@@ -521,16 +928,23 @@ private fun ContainerResourceRow(
     selected: Boolean,
     enabled: Boolean,
     attachmentActionsEnabled: Boolean,
+    trackActionsEnabled: Boolean,
     pendingRemoval: Boolean,
     pendingReplacementName: String?,
     pendingMetadataName: String?,
+    pendingTrackRemoval: Boolean,
+    pendingTrackMetadataName: String?,
     onClick: () -> Unit,
     onRemoveAttachment: (() -> Unit)?,
     onReplaceAttachment: (() -> Unit)?,
     onEditAttachmentMetadata: (() -> Unit)?,
     onExtractAttachment: (() -> Unit)?,
     onCancelAttachmentEdit: (() -> Unit)?,
+    onRemoveTrack: (() -> Unit)?,
+    onEditTrackMetadata: (() -> Unit)?,
+    onCancelTrackEdit: (() -> Unit)?,
 ) {
+    var actionsExpanded by remember { mutableStateOf(false) }
     val background = if (selected) {
         MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.45f)
     } else {
@@ -581,6 +995,18 @@ private fun ContainerResourceRow(
                 )
             }
             when {
+                pendingTrackRemoval -> {
+                    Text("待删轨", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+                    TextButton(onClick = { onCancelTrackEdit?.invoke() }) { Text("取消") }
+                }
+                pendingTrackMetadataName != null -> {
+                    Text(
+                        "轨道信息 → " + pendingTrackMetadataName.ifBlank { "未命名" },
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    TextButton(onClick = { onCancelTrackEdit?.invoke() }) { Text("取消") }
+                }
                 pendingRemoval -> {
                     Text("待删除", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
                     TextButton(onClick = { onCancelAttachmentEdit?.invoke() }) { Text("取消") }
@@ -601,26 +1027,63 @@ private fun ContainerResourceRow(
                     )
                     TextButton(onClick = { onCancelAttachmentEdit?.invoke() }) { Text("取消") }
                 }
-                attachmentActionsEnabled -> {
-                    TextButton(
-                        onClick = { onExtractAttachment?.invoke() },
-                        enabled = onExtractAttachment != null,
-                    ) { Text("提取") }
-                    TextButton(
-                        onClick = { onEditAttachmentMetadata?.invoke() },
-                        enabled = onEditAttachmentMetadata != null,
-                    ) { Text("信息") }
+                trackActionsEnabled || attachmentActionsEnabled -> {
                     IconButton(
-                        onClick = { onReplaceAttachment?.invoke() },
-                        enabled = onReplaceAttachment != null,
+                        onClick = { actionsExpanded = true },
+                        modifier = Modifier.testTag("container-resource-actions-" + resource.rowKey),
                     ) {
-                        Icon(Icons.Filled.Edit, contentDescription = "替换附件")
+                        Icon(Icons.Filled.MoreVert, contentDescription = "资源操作")
                     }
-                    IconButton(
-                        onClick = { onRemoveAttachment?.invoke() },
-                        enabled = onRemoveAttachment != null,
+                    DropdownMenu(
+                        expanded = actionsExpanded,
+                        onDismissRequest = { actionsExpanded = false },
                     ) {
-                        Icon(Icons.Filled.RemoveCircle, contentDescription = "删除附件")
+                        if (trackActionsEnabled) {
+                            DropdownMenuItem(
+                                text = { Text("轨道信息") },
+                                onClick = {
+                                    actionsExpanded = false
+                                    onEditTrackMetadata?.invoke()
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("删除轨道") },
+                                onClick = {
+                                    actionsExpanded = false
+                                    onRemoveTrack?.invoke()
+                                },
+                            )
+                        }
+                        if (attachmentActionsEnabled) {
+                            DropdownMenuItem(
+                                text = { Text("提取附件") },
+                                onClick = {
+                                    actionsExpanded = false
+                                    onExtractAttachment?.invoke()
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("附件信息") },
+                                onClick = {
+                                    actionsExpanded = false
+                                    onEditAttachmentMetadata?.invoke()
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("替换附件") },
+                                onClick = {
+                                    actionsExpanded = false
+                                    onReplaceAttachment?.invoke()
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("删除附件") },
+                                onClick = {
+                                    actionsExpanded = false
+                                    onRemoveAttachment?.invoke()
+                                },
+                            )
+                        }
                     }
                 }
             }

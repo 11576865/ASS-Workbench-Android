@@ -1,5 +1,7 @@
 package io.github.assworkbench.app.ui.workspace
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.Stable
@@ -14,6 +16,19 @@ internal class WorkbenchSurfaceController(restored: List<WorkspaceSurfaceState> 
     private val surfaces = mutableStateMapOf<String, WorkspaceSurfaceState>().apply {
         restored.forEach { put(it.instanceId, it) }
     }
+    var infiniteScene by androidx.compose.runtime.mutableStateOf(emptyList<String>())
+        private set
+
+    private var infiniteSceneSessionId: Long? = null
+
+    fun infiniteSceneForSession(sessionId: Long): List<String> =
+        if (infiniteSceneSessionId == null || infiniteSceneSessionId == sessionId) infiniteScene else emptyList()
+
+    fun saveInfiniteScene(sessionId: Long, encoded: List<String>) {
+        infiniteSceneSessionId = sessionId
+        infiniteScene = encoded
+    }
+
     private val resizeGestures = mutableSetOf<String>()
     private val candidates = mutableMapOf<String, MutableState<SurfaceGeometry?>>()
 
@@ -148,7 +163,11 @@ internal class WorkbenchSurfaceController(restored: List<WorkspaceSurfaceState> 
         candidates.values.forEach { it.value = null }
         resizeGestures.clear()
         surfaces.clear()
-        WorkspaceSurfacePersistence.decode(encoded).forEach { surfaces[it.instanceId] = it }
+        infiniteSceneSessionId = null
+        val boundary = encoded.indexOf("infinite-scene")
+        val surfaceRows = if (boundary < 0) encoded else encoded.take(boundary)
+        infiniteScene = if (boundary < 0) emptyList() else encoded.drop(boundary + 1)
+        WorkspaceSurfacePersistence.decode(surfaceRows).forEach { surfaces[it.instanceId] = it }
     }
 
     fun z(id: String): Float = (surfaces[id]?.zOrder ?: 1).toFloat()
@@ -164,13 +183,14 @@ internal class WorkbenchSurfaceController(restored: List<WorkspaceSurfaceState> 
         surfaces[id] = old.copy(zOrder = next)
     }
 
-    fun save(): List<String> = WorkspaceSurfacePersistence.encode(surfaces.values)
+    fun save(): List<String> = WorkspaceSurfacePersistence.encode(surfaces.values) +
+        if (infiniteScene.isEmpty()) emptyList() else listOf("infinite-scene") + infiniteScene
 }
 
 @Composable
 internal fun rememberWorkbenchSurfaceController(): WorkbenchSurfaceController = rememberSaveable(
     saver = listSaver(
         save = { it.save() },
-        restore = { WorkbenchSurfaceController(WorkspaceSurfacePersistence.decode(it)) },
+        restore = { WorkbenchSurfaceController().apply { restore(it) } },
     ),
 ) { WorkbenchSurfaceController() }
