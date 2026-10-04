@@ -2326,7 +2326,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
 
     fun clearEventStyleOverrides(id: Long) {
         if (_state.value.document.events.none { it.id == id }) return
-        editDocument("已清除字幕 #$id 的样式/位置覆盖；该字幕现在继承 Style。") { doc ->
+        editDocument("已清除字幕 #$id 的直接样式/位置覆盖；Transform 动画等嵌套语义保持不变。") { doc ->
             doc.copy(events = doc.events.map { event ->
                 if (event.id == id) event.inheritStyle() else event
             })
@@ -2336,7 +2336,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     fun clearSelectedStyleOverrides() {
         val ids = _state.value.selectedEventIds
         if (ids.isEmpty()) return
-        editDocument("已让 " + ids.size + " 条选中字幕完全继承各自 Style。") { doc ->
+        editDocument("已清除 " + ids.size + " 条选中字幕的直接 Style 覆盖；Transform 动画等嵌套语义保持不变。") { doc ->
             doc.copy(events = doc.events.map { event ->
                 if (event.id in ids) event.inheritStyle() else event
             })
