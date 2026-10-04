@@ -153,6 +153,12 @@ private fun MatroskaScanResult.inventoryItems(): List<InventoryItem> {
                 title = title,
                 detail = detail,
                 trackNumber = info.number,
+                trackTarget = info.uid?.let { "uid:$it" } ?: "number:${info.number}",
+                trackUid = info.uid,
+                trackCodecId = info.codecId,
+                trackLanguage = info.language,
+                trackIsDefault = info.isDefault,
+                trackIsForced = info.isForced,
                 editableAss = info.kind == MatroskaTrackKind.SUBTITLE && info.codecId == "S_TEXT/ASS",
             ),
         )
