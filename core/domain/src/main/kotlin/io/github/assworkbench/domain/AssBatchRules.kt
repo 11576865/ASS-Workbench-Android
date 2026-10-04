@@ -46,7 +46,7 @@ sealed interface AssBatchFilter {
     data class HasTag(val tag: String) : AssBatchFilter {
         init {
             require(tag.isNotBlank()) { "Tag Filter 不能为空。" }
-            require(ASS_TAG_NAME.matches(tag)) { "Tag Filter 标签名无效：$tag" }
+            require(AssTopLevelOverrideSyntax.isValidTagName(tag)) { "Tag Filter 标签名无效：$tag" }
         }
         override fun matches(event: AssEvent, document: AssDocument): Boolean =
             AssTopLevelOverrideSyntax.tags(event.text)
@@ -222,7 +222,6 @@ data class AssBatchPreview(val document: AssDocument, val affectedEventIds: List
 
 private val LONG_MAX_BIG_INTEGER: BigInteger = BigInteger.valueOf(Long.MAX_VALUE)
 private val LEADING_OVERRIDE_BLOCKS = Regex("""^(?:\{[^}]*\})*""")
-private val ASS_TAG_NAME = Regex("""[A-Za-z0-9_-]+""")
 
 object AssBatchEngine {
     fun preview(document: AssDocument, recipe: AssBatchRecipe): AssBatchPreview {
