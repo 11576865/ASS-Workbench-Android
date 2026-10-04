@@ -32,6 +32,7 @@ data class TrackMetadataEditInput(
 data class TrackImportInput(
     val source: File,
     val trackNumber: Long,
+    val sourceTrackUid: Long?,
     val name: String,
     val language: String,
     val isDefault: Boolean,
@@ -265,9 +266,10 @@ class MkvGoTool(private val context: Context) {
                     "轨道来源文件不可用：" + import.source.name
                 }
                 require(import.trackNumber > 0L) { "来源 TrackNumber 必须大于 0" }
-                args += "--add-track-v2"
+                args += "--add-track-v3"
                 args += import.source.absolutePath
                 args += import.trackNumber.toString()
+                args += (import.sourceTrackUid ?: 0L).toString()
                 args += import.name
                 args += import.language
                 args += import.languageBcp47
