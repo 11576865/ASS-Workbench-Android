@@ -3,6 +3,7 @@ package ops
 import (
 	"bytes"
 	"context"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -224,5 +225,485 @@ func TestReplaceASSWithFontsRenamesAttachmentNameCollision(t *testing.T) {
 	}
 	if !bytes.Equal(added.Data, newFont) {
 		t.Fatalf("renamed attachment payload changed: %+v", added)
+	}
+}
+
+
+func TestAddAttachmentsSupportsCoverAndArbitraryFiles(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "source.mkv")
+	dst := filepath.Join(dir, "updated.mkv")
+	coverPath := filepath.Join(dir, "cover.png")
+	notePath := filepath.Join(dir, "notes.xyz")
+
+	cover := append([]byte{0x89, 0x50, 0x4e, 0x47}, bytes.Repeat([]byte{0x11}, 64)...)
+	note := []byte("arbitrary attachment payload")
+	if err := os.WriteFile(coverPath, cover, 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(notePath, note, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	existing := []byte("source attachment")
+	container := &mkv.Container{
+		Info: mkv.SegmentInfo{TimecodeScale: 1_000_000, Title: "Attachment fixture"},
+		Attachments: []mkv.Attachment{{
+			ID: 4, Name: "Fixture.ttf", MIMEType: "font/ttf",
+			Data: existing, Size: int64(len(existing)),
+		}},
+		Chapters: []mkv.Chapter{{ID: 1, Title: "Intro", StartMs: 0, EndMs: 1000}},
+	}
+	video := mkv.Track{ID: 1, UID: 101, Type: mkv.VideoTrack, Codec: "vp9", IsDefault: true}
+
+	f, err := os.Create(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mw := writer.NewMKVWriter(f)
+	if err := mw.WriteStart(); err != nil {
+		t.Fatal(err)
+	}
+	if err := mw.WriteMetadata(container, []mkv.Track{video}, 1000); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.WriteCluster(f, 0, 1_000_000, []mkv.Block{
+		{TrackNumber: 1, Timecode: 0, Keyframe: true, Data: []byte{0x01}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := mw.Finalize(); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := AddAttachments(context.Background(), src, dst, []string{coverPath, notePath, coverPath}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := reader.Open(context.Background(), dst)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Tracks) != 1 || got.Tracks[0].ID != 1 || got.Tracks[0].UID != 101 {
+		t.Fatalf("track identity changed: %+v", got.Tracks)
+	}
+	if len(got.Attachments) != 3 {
+		t.Fatalf("attachment count = %d, want 3: %+v", len(got.Attachments), got.Attachments)
+	}
+	byName := make(map[string]mkv.Attachment)
+	for _, att := range got.Attachments {
+		byName[att.Name] = att
+	}
+	if att := byName["Fixture.ttf"]; !bytes.Equal(att.Data, existing) {
+		t.Fatalf("source attachment changed: %+v", att)
+	}
+	if att := byName["cover.png"]; att.MIMEType != "image/png" || !bytes.Equal(att.Data, cover) {
+		t.Fatalf("cover attachment = %+v", att)
+	}
+	if att := byName["notes.xyz"]; att.MIMEType != "application/octet-stream" || !bytes.Equal(att.Data, note) {
+		t.Fatalf("unknown attachment = %+v", att)
+	}
+	if len(got.Chapters) != 1 || got.Chapters[0].Title != "Intro" {
+		t.Fatalf("chapters changed: %+v", got.Chapters)
+	}
+}
+
+
+func TestEditAttachmentsRemovesAndReplacesInOneRemux(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "source.mkv")
+	dst := filepath.Join(dir, "updated.mkv")
+	replacePath := filepath.Join(dir, "cover.png")
+	addPath := filepath.Join(dir, "notes.txt")
+
+	replacementData := append([]byte{0x89, 0x50, 0x4e, 0x47}, bytes.Repeat([]byte{0x33}, 48)...)
+	addedData := []byte("container note")
+	if err := os.WriteFile(replacePath, replacementData, 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(addPath, addedData, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	keepData := []byte("keep")
+	removeData := []byte("remove")
+	replaceOldData := []byte("old-cover")
+	container := &mkv.Container{
+		Info: mkv.SegmentInfo{TimecodeScale: 1_000_000, Title: "CRUD fixture"},
+		Attachments: []mkv.Attachment{
+			{ID: 7, Name: "keep.bin", MIMEType: "application/octet-stream", Data: keepData, Size: int64(len(keepData))},
+			{ID: 8, Name: "remove.txt", MIMEType: "text/plain", Data: removeData, Size: int64(len(removeData))},
+			{ID: 9, Name: "old-cover.jpg", MIMEType: "image/jpeg", Data: replaceOldData, Size: int64(len(replaceOldData))},
+		},
+		Chapters: []mkv.Chapter{{ID: 2, Title: "Chapter", StartMs: 0, EndMs: 1000}},
+	}
+	video := mkv.Track{ID: 1, UID: 101, Type: mkv.VideoTrack, Codec: "vp9", IsDefault: true}
+
+	out, err := os.Create(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mw := writer.NewMKVWriter(out)
+	if err := mw.WriteStart(); err != nil {
+		t.Fatal(err)
+	}
+	if err := mw.WriteMetadata(container, []mkv.Track{video}, 1000); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.WriteCluster(out, 0, 1_000_000, []mkv.Block{
+		{TrackNumber: 1, Timecode: 0, Keyframe: true, Data: []byte{0x01}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := mw.Finalize(); err != nil {
+		t.Fatal(err)
+	}
+	if err := out.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := EditAttachments(
+		context.Background(),
+		src,
+		dst,
+		[]string{addPath},
+		[]string{"8"},
+		[]AttachmentReplacement{{Target: "9", Path: replacePath}},
+		nil,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := reader.Open(context.Background(), dst)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Tracks) != 1 || got.Tracks[0].ID != 1 || got.Tracks[0].UID != 101 {
+		t.Fatalf("track identity changed: %+v", got.Tracks)
+	}
+	if len(got.Chapters) != 1 || got.Chapters[0].Title != "Chapter" {
+		t.Fatalf("chapters changed: %+v", got.Chapters)
+	}
+	if len(got.Attachments) != 3 {
+		t.Fatalf("attachment count = %d, want 3: %+v", len(got.Attachments), got.Attachments)
+	}
+	byID := make(map[uint64]mkv.Attachment)
+	byName := make(map[string]mkv.Attachment)
+	for _, att := range got.Attachments {
+		byID[att.ID] = att
+		byName[att.Name] = att
+	}
+	if att := byID[7]; att.Name != "keep.bin" || !bytes.Equal(att.Data, keepData) {
+		t.Fatalf("untouched attachment changed: %+v", att)
+	}
+	if _, exists := byID[8]; exists {
+		t.Fatalf("removed attachment UID 8 still exists: %+v", got.Attachments)
+	}
+	replaced := byID[9]
+	if replaced.Name != "cover.png" || replaced.MIMEType != "image/png" ||
+		!bytes.Equal(replaced.Data, replacementData) {
+		t.Fatalf("replacement did not preserve identity/content: %+v", replaced)
+	}
+	added, ok := byName["notes.txt"]
+	if !ok || added.MIMEType != "text/plain" || !bytes.Equal(added.Data, addedData) {
+		t.Fatalf("added attachment missing or changed: %+v", added)
+	}
+	if added.ID == 7 || added.ID == 9 {
+		t.Fatalf("added attachment reused surviving UID: %+v", added)
+	}
+}
+
+
+func TestAttachmentMetadataEditAndExtractPreservePayloadIdentity(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "source.mkv")
+	dst := filepath.Join(dir, "renamed.mkv")
+	extracted := filepath.Join(dir, "extracted.bin")
+
+	payload := []byte("attachment payload must survive metadata-only edits")
+	container := &mkv.Container{
+		Info: mkv.SegmentInfo{TimecodeScale: 1_000_000},
+		Attachments: []mkv.Attachment{{
+			ID: 12,
+			Name: "notes.txt",
+			MIMEType: "text/plain",
+			Description: "old description",
+			Data: payload,
+			Size: int64(len(payload)),
+		}},
+	}
+	video := mkv.Track{ID: 1, UID: 101, Type: mkv.VideoTrack, Codec: "vp9"}
+
+	out, err := os.Create(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mw := writer.NewMKVWriter(out)
+	if err := mw.WriteStart(); err != nil {
+		t.Fatal(err)
+	}
+	if err := mw.WriteMetadata(container, []mkv.Track{video}, 1000); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.WriteCluster(out, 0, 1_000_000, []mkv.Block{
+		{TrackNumber: 1, Timecode: 0, Keyframe: true, Data: []byte{0x01}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := mw.Finalize(); err != nil {
+		t.Fatal(err)
+	}
+	if err := out.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := ExtractAttachmentTarget(context.Background(), src, "12", extracted); err != nil {
+		t.Fatal(err)
+	}
+	gotExtracted, err := os.ReadFile(extracted)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(gotExtracted, payload) {
+		t.Fatalf("extracted payload changed: %q", string(gotExtracted))
+	}
+
+	if err := EditAttachments(
+		context.Background(),
+		src,
+		dst,
+		nil,
+		nil,
+		nil,
+		[]AttachmentMetadataEdit{{
+			Target: "12",
+			Name: "translator-notes.txt",
+			Description: "translation notes",
+		}},
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := reader.Open(context.Background(), dst)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Attachments) != 1 {
+		t.Fatalf("attachment count = %d, want 1", len(got.Attachments))
+	}
+	att := got.Attachments[0]
+	if att.ID != 12 || att.Name != "translator-notes.txt" ||
+		att.Description != "translation notes" || att.MIMEType != "text/plain" {
+		t.Fatalf("metadata edit changed identity or unexpected fields: %+v", att)
+	}
+	if !bytes.Equal(att.Data, payload) {
+		t.Fatalf("metadata edit changed payload: %q", string(att.Data))
+	}
+	if len(got.Tracks) != 1 || got.Tracks[0].UID != 101 {
+		t.Fatalf("track identity changed: %+v", got.Tracks)
+	}
+}
+
+func TestAttachmentMetadataEditRejectsNameCollision(t *testing.T) {
+	existing := []mkv.Attachment{
+		{ID: 1, Name: "a.txt", MIMEType: "text/plain"},
+		{ID: 2, Name: "b.txt", MIMEType: "text/plain"},
+	}
+	_, err := planAttachmentEdits(
+		existing,
+		nil,
+		nil,
+		nil,
+		[]AttachmentMetadataEdit{{
+			Target: "2",
+			Name: "a.txt",
+			Description: "",
+		}},
+	)
+	if err == nil || !strings.Contains(err.Error(), "conflicts") {
+		t.Fatalf("expected name collision error, got %v", err)
+	}
+}
+
+
+func TestEditContainerResourcesPreservesSurvivingTrackIdentity(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "track-source.mkv")
+	dst := filepath.Join(dir, "track-updated.mkv")
+
+	attachmentData := []byte("keep attachment")
+	container := &mkv.Container{
+		Info: mkv.SegmentInfo{
+			TimecodeScale: 1_000_000,
+			Title: "Track mutation fixture",
+			SegmentUID: []byte("track-fixture-001"),
+		},
+		Chapters: []mkv.Chapter{{ID: 5, Title: "Keep chapter", StartMs: 0, EndMs: 2000}},
+		Attachments: []mkv.Attachment{{
+			ID: 11,
+			Name: "keep.txt",
+			MIMEType: "text/plain",
+			Data: attachmentData,
+			Size: int64(len(attachmentData)),
+		}},
+		Tags: []mkv.Tag{
+			{TargetType: "MOVIE", SimpleTags: []mkv.SimpleTag{{Name: "GLOBAL", Value: "keep"}}},
+			{TargetID: 202, SimpleTags: []mkv.SimpleTag{{Name: "AUDIO_ONLY", Value: "drop"}}},
+			{TargetID: 505, SimpleTags: []mkv.SimpleTag{{Name: "SUB_KEEP", Value: "yes"}}},
+		},
+	}
+	video := mkv.Track{
+		ID: 1, UID: 101, Type: mkv.VideoTrack, Codec: "vp9",
+		Name: "Video", Language: "und", IsDefault: true,
+	}
+	audio := mkv.Track{
+		ID: 2, UID: 202, Type: mkv.AudioTrack, Codec: "opus",
+		Name: "Audio", Language: "jpn", IsDefault: true,
+	}
+	sub := mkv.Track{
+		ID: 5, UID: 505, Type: mkv.SubtitleTrack, Codec: "ass",
+		Name: "Signs", Language: "eng", IsDefault: false, IsForced: true,
+		CodecPrivate: []byte("[Script Info]\nScriptType: v4.00+\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text"),
+	}
+
+	out, err := os.Create(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mw := writer.NewMKVWriter(out)
+	if err := mw.WriteStart(); err != nil {
+		t.Fatal(err)
+	}
+	if err := mw.WriteMetadata(container, []mkv.Track{video, audio, sub}, 2000); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.WriteCluster(out, 0, 1_000_000, []mkv.Block{
+		{TrackNumber: 1, Timecode: 0, Keyframe: true, Data: []byte{0x01}},
+		{TrackNumber: 2, Timecode: 0, Keyframe: true, Data: []byte{0x02}},
+		{TrackNumber: 5, Timecode: 100, Duration: 900, Data: []byte("0,0,Default,,0,0,0,,Keep subtitle")},
+		{TrackNumber: 1, Timecode: 1000, Keyframe: true, Data: []byte{0x03}},
+		{TrackNumber: 2, Timecode: 1000, Keyframe: true, Data: []byte{0x04}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := mw.Finalize(); err != nil {
+		t.Fatal(err)
+	}
+	if err := out.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := EditContainerResources(
+		context.Background(),
+		src,
+		dst,
+		nil,
+		nil,
+		nil,
+		nil,
+		[]string{"uid:202"},
+		[]TrackMetadataEdit{{
+			Target: "uid:101",
+			Name: "Main picture",
+			Language: "und",
+			IsDefault: false,
+			IsForced: false,
+		}},
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := reader.Open(context.Background(), dst)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Tracks) != 2 {
+		t.Fatalf("track count = %d, want 2: %+v", len(got.Tracks), got.Tracks)
+	}
+	if got.Tracks[0].ID != 1 || got.Tracks[0].UID != 101 {
+		t.Fatalf("video identity changed: %+v", got.Tracks[0])
+	}
+	if got.Tracks[0].Name != "Main picture" || got.Tracks[0].Language != "und" ||
+		got.Tracks[0].IsDefault || got.Tracks[0].IsForced {
+		t.Fatalf("video metadata edit not applied: %+v", got.Tracks[0])
+	}
+	if got.Tracks[1].ID != 5 || got.Tracks[1].UID != 505 ||
+		got.Tracks[1].Name != "Signs" || got.Tracks[1].Language != "eng" ||
+		got.Tracks[1].IsDefault || !got.Tracks[1].IsForced {
+		t.Fatalf("surviving subtitle identity/metadata changed: %+v", got.Tracks[1])
+	}
+	if len(got.Attachments) != 1 || got.Attachments[0].ID != 11 ||
+		!bytes.Equal(got.Attachments[0].Data, attachmentData) {
+		t.Fatalf("attachment changed: %+v", got.Attachments)
+	}
+	if len(got.Chapters) != 1 || got.Chapters[0].ID != 5 || got.Chapters[0].Title != "Keep chapter" {
+		t.Fatalf("chapter changed: %+v", got.Chapters)
+	}
+
+	var globalKept, removedAudioTag, subtitleTagKept bool
+	for _, tag := range got.Tags {
+		for _, st := range tag.SimpleTags {
+			if tag.TargetID == 0 && st.Name == "GLOBAL" && st.Value == "keep" {
+				globalKept = true
+			}
+			if tag.TargetID == 202 && st.Name == "AUDIO_ONLY" {
+				removedAudioTag = true
+			}
+			if tag.TargetID == 505 && st.Name == "SUB_KEEP" && st.Value == "yes" {
+				subtitleTagKept = true
+			}
+		}
+	}
+	if !globalKept || removedAudioTag || !subtitleTagKept {
+		t.Fatalf("track-targeted tag filtering wrong: %+v", got.Tags)
+	}
+
+	blockFile, err := os.Open(dst)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer blockFile.Close()
+	br, err := reader.NewBlockReader(blockFile, got.Info.TimecodeScale)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var seenVideo, seenSubtitle bool
+	for {
+		block, err := br.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		if block.TrackNumber == 2 {
+			t.Fatalf("removed track payload survived: %+v", block)
+		}
+		if block.TrackNumber == 1 {
+			seenVideo = true
+		}
+		if block.TrackNumber == 5 {
+			seenSubtitle = true
+		}
+	}
+	if !seenVideo || !seenSubtitle {
+		t.Fatalf("surviving payload missing: video=%v subtitle=%v", seenVideo, seenSubtitle)
+	}
+}
+
+func TestPlanTrackEditsRejectsRemovingAllTracks(t *testing.T) {
+	tracks := []mkv.Track{
+		{ID: 1, UID: 101, Type: mkv.VideoTrack, Codec: "vp9"},
+		{ID: 2, UID: 202, Type: mkv.AudioTrack, Codec: "opus"},
+	}
+	_, _, _, err := planTrackEdits(
+		tracks,
+		[]string{"uid:101", "uid:202"},
+		nil,
+	)
+	if err == nil || !strings.Contains(err.Error(), "cannot remove all tracks") {
+		t.Fatalf("expected remove-all rejection, got %v", err)
 	}
 }

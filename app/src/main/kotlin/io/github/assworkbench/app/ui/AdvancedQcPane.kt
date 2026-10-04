@@ -15,6 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import io.github.assworkbench.app.EditorState
 import io.github.assworkbench.app.EditorViewModel
+import io.github.assworkbench.app.buildContainerEditPlan
 import io.github.assworkbench.domain.*
 import io.github.assworkbench.fonts.FontMatchStatus
 import kotlinx.coroutines.Dispatchers
@@ -135,9 +136,36 @@ internal fun CompatibilityPane(
     var profileName by rememberSaveable { mutableStateOf(AssCompatibilityProfile.PORTABLE_CONSERVATIVE.name) }
     val profile = AssCompatibilityProfile.valueOf(profileName)
     val issues = remember(state.document, profile) { AssCompatibilityAnalyzer.inspect(state.document, profile) }
+    val containerPlan = remember(
+        state.container,
+        state.subtitleLoaded,
+        state.dirty,
+        state.importedFonts,
+        state.fontPackagingSelection,
+    ) { buildContainerEditPlan(state) }
     Column(modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("兼容性检查", style = MaterialTheme.typography.titleMedium)
         Text("libass 仍是预览权威；这里做规则分析，不伪装成第二套渲染器。", style = MaterialTheme.typography.bodySmall)
+        if (state.container.uri != null) {
+            Surface(
+                tonalElevation = 1.dp,
+                shape = MaterialTheme.shapes.medium,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Column(
+                    Modifier.fillMaxWidth().padding(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Text("容器修改预检", style = MaterialTheme.typography.titleSmall)
+                    Text(
+                        "检测事实、写入能力、输出验证与下游兼容性分开报告。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    ContainerPreflightSummary(containerPlan)
+                }
+            }
+        }
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             AssCompatibilityProfile.entries.forEach { entry ->
                 FilterChip(selected = profile == entry, onClick = { profileName = entry.name }, label = { Text(entry.name) })

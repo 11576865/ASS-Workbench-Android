@@ -4,6 +4,7 @@ import java.io.ByteArrayInputStream
 import java.io.EOFException
 import java.io.InputStream
 import java.nio.charset.StandardCharsets
+import java.security.MessageDigest
 
 class MatroskaReader(
     private val maxAttachmentBytes: Int = 64 * 1024 * 1024,
@@ -18,8 +19,10 @@ class MatroskaReader(
         var timecodeScaleNs = 1_000_000L
         val trackBuilders = linkedMapOf<Long, TrackBuilder>()
         val attachments = mutableListOf<MatroskaAttachment>()
+        val attachmentInfos = mutableListOf<MatroskaAttachmentInfo>()
         var totalAttachmentBytes = 0
         var skippedAttachmentCount = 0
+        var chapterCount = 0
 
         while (true) {
             val h = reader.headerOrNull() ?: break
@@ -65,9 +68,15 @@ class MatroskaReader(
                                             maxDataBytes = maxAttachmentBytes.coerceAtMost(maxRemaining),
                                         )
                                         if (parsed != null) {
-                                            totalAttachmentBytes += parsed.data.size
-                                            onAttachment?.invoke(parsed)
-                                            if (retainAttachments) attachments += parsed
+                                            attachmentInfos += parsed.info
+                                            val attachment = parsed.attachment
+                                            if (attachment != null) {
+                                                totalAttachmentBytes += attachment.data.size
+                                                onAttachment?.invoke(attachment)
+                                                if (retainAttachments) attachments += attachment
+                                            } else {
+                                                skippedAttachmentCount++
+                                            }
                                         } else {
                                             skippedAttachmentCount++
                                         }
@@ -82,6 +91,7 @@ class MatroskaReader(
                                 scaleNs = timecodeScaleNs,
                                 tracks = trackBuilders,
                             )
+                            ID_CHAPTERS -> chapterCount += countChapterAtoms(reader, child.size)
                             else -> reader.skipFully(child.size)
                         }
                     }
@@ -96,6 +106,9 @@ class MatroskaReader(
                 .map { it.build() },
             attachments = attachments,
             timecodeScaleNs = timecodeScaleNs,
+            trackInfos = trackBuilders.values.map { it.info() },
+            attachmentInfos = attachmentInfos,
+            chapterCount = chapterCount,
             skippedAttachmentCount = skippedAttachmentCount,
         )
     }
@@ -109,6 +122,8 @@ class MatroskaReader(
         var language = ""
         var codecId = ""
         var codecPrivate = ""
+        var isDefault = true
+        var isForced = false
         while (true) {
             val h = r.headerOrNull() ?: break
             when (h.id) {
@@ -119,25 +134,38 @@ class MatroskaReader(
                 ID_LANGUAGE -> language = r.readString(h.size)
                 ID_CODEC_ID -> codecId = r.readString(h.size)
                 ID_CODEC_PRIVATE -> codecPrivate = r.readString(h.size)
+                ID_FLAG_DEFAULT -> isDefault = r.readUnsigned(h.size) != 0L
+                ID_FLAG_FORCED -> isForced = r.readUnsigned(h.size) != 0L
                 else -> r.skipFully(h.size)
             }
         }
         val n = number ?: return null
-        if (type != TRACK_TYPE_SUBTITLE) return TrackBuilder(n, uid, name, language, codecId, codecPrivate)
-        return TrackBuilder(n, uid, name, language, codecId, codecPrivate)
+        val resolvedType = type ?: TRACK_TYPE_UNKNOWN
+        return TrackBuilder(
+            number = n,
+            uid = uid,
+            typeCode = resolvedType,
+            name = name,
+            language = language,
+            codecId = codecId,
+            codecPrivate = codecPrivate,
+            isDefault = isDefault,
+            isForced = isForced,
+        )
     }
 
     private fun parseAttachment(
         reader: EbmlReader,
         size: Long,
         maxDataBytes: Int,
-    ): MatroskaAttachment? {
+    ): ParsedAttachment? {
         val end = ElementHeader.end(size, reader.position)
         var uid: Long? = null
         var fileName = ""
         var mime = ""
         var description = ""
         var data = ByteArray(0)
+        var dataSize: Long? = null
         var dataSkipped = false
 
         while (!reader.atEnd(end)) {
@@ -148,6 +176,7 @@ class MatroskaReader(
                 ID_FILE_MIME -> mime = reader.readString(h.size)
                 ID_FILE_DESCRIPTION -> description = reader.readString(h.size)
                 ID_FILE_DATA -> {
+                    dataSize = h.size.takeIf { it >= 0 }
                     if (maxDataBytes <= 0 || h.size < 0 || h.size > maxDataBytes.toLong() || h.size > Int.MAX_VALUE) {
                         reader.skipFully(h.size)
                         dataSkipped = true
@@ -159,8 +188,38 @@ class MatroskaReader(
             }
         }
 
-        if (dataSkipped || fileName.isBlank() || data.isEmpty()) return null
-        return MatroskaAttachment(uid, fileName, mime, description, data)
+        if (fileName.isBlank()) return null
+        val available = !dataSkipped && data.isNotEmpty()
+        val info = MatroskaAttachmentInfo(
+            uid = uid,
+            fileName = fileName,
+            mimeType = mime,
+            description = description,
+            sizeBytes = dataSize,
+            sha256 = data.takeIf { available }?.let(::sha256),
+            dataAvailable = available,
+        )
+        val attachment = data.takeIf { available }?.let {
+            MatroskaAttachment(uid, fileName, mime, description, it)
+        }
+        return ParsedAttachment(info, attachment)
+    }
+
+    private fun countChapterAtoms(reader: EbmlReader, size: Long): Int {
+        val end = ElementHeader.end(size, reader.position)
+        var count = 0
+        while (!reader.atEnd(end)) {
+            val h = reader.headerOrNull() ?: break
+            when (h.id) {
+                ID_EDITION_ENTRY -> count += countChapterAtoms(reader, h.size)
+                ID_CHAPTER_ATOM -> {
+                    count++
+                    count += countChapterAtoms(reader, h.size)
+                }
+                else -> reader.skipFully(h.size)
+            }
+        }
+        return count
     }
 
     private fun parseCluster(
@@ -252,16 +311,49 @@ class MatroskaReader(
 
     private data class PendingBlock(val trackNumber: Long, val startMs: Long, val payload: String)
 
+    private data class ParsedAttachment(
+        val info: MatroskaAttachmentInfo,
+        val attachment: MatroskaAttachment?,
+    )
+
     private data class TrackBuilder(
         val number: Long,
         val uid: Long?,
+        val typeCode: Long,
         val name: String,
         val language: String,
         val codecId: String,
         val codecPrivate: String,
+        val isDefault: Boolean,
+        val isForced: Boolean,
         val packets: MutableList<MatroskaSubtitlePacket> = mutableListOf(),
     ) {
         fun build() = MatroskaSubtitleTrack(number, uid, name, language, codecId, codecPrivate, packets.toList())
+
+        fun info() = MatroskaTrackInfo(
+            number = number,
+            uid = uid,
+            typeCode = typeCode,
+            kind = trackKind(typeCode),
+            name = name,
+            language = language,
+            codecId = codecId,
+            isDefault = isDefault,
+            isForced = isForced,
+            contentHash = if (codecId == "S_TEXT/ASS") {
+                val bytes = buildString {
+                    append(codecPrivate)
+                    packets.forEach { packet ->
+                        append('\u0000').append(packet.startMs)
+                        append(':').append(packet.durationMs ?: -1L)
+                        append(':').append(packet.payload)
+                    }
+                }.toByteArray(StandardCharsets.UTF_8)
+                sha256(bytes)
+            } else {
+                null
+            },
+        )
     }
 
     private data class ElementHeader(val id: Long, val size: Long) {
@@ -371,7 +463,24 @@ class MatroskaReader(
 
     companion object {
         private const val UNKNOWN_SIZE = -1L
-        private const val TRACK_TYPE_SUBTITLE = 0x11L
+        private const val TRACK_TYPE_UNKNOWN = -1L
+
+        private fun trackKind(typeCode: Long): MatroskaTrackKind = when (typeCode) {
+            0x01L -> MatroskaTrackKind.VIDEO
+            0x02L -> MatroskaTrackKind.AUDIO
+            0x03L -> MatroskaTrackKind.COMPLEX
+            0x10L -> MatroskaTrackKind.LOGO
+            0x11L -> MatroskaTrackKind.SUBTITLE
+            0x12L -> MatroskaTrackKind.BUTTONS
+            0x20L -> MatroskaTrackKind.CONTROL
+            0x21L -> MatroskaTrackKind.METADATA
+            else -> MatroskaTrackKind.OTHER
+        }
+
+        private fun sha256(bytes: ByteArray): String =
+            MessageDigest.getInstance("SHA-256")
+                .digest(bytes)
+                .joinToString("") { "%02x".format(it) }
 
         private const val ID_SEGMENT = 0x18538067L
         private const val ID_INFO = 0x1549A966L
@@ -385,6 +494,8 @@ class MatroskaReader(
         private const val ID_LANGUAGE = 0x22B59CL
         private const val ID_CODEC_ID = 0x86L
         private const val ID_CODEC_PRIVATE = 0x63A2L
+        private const val ID_FLAG_DEFAULT = 0x88L
+        private const val ID_FLAG_FORCED = 0x55AAL
         private const val ID_ATTACHMENTS = 0x1941A469L
         private const val ID_ATTACHED_FILE = 0x61A7L
         private const val ID_FILE_DESCRIPTION = 0x467EL
@@ -392,6 +503,9 @@ class MatroskaReader(
         private const val ID_FILE_MIME = 0x4660L
         private const val ID_FILE_DATA = 0x465CL
         private const val ID_FILE_UID = 0x46AEL
+        private const val ID_CHAPTERS = 0x1043A770L
+        private const val ID_EDITION_ENTRY = 0x45B9L
+        private const val ID_CHAPTER_ATOM = 0xB6L
         private const val ID_CLUSTER = 0x1F43B675L
         private const val ID_CLUSTER_TIMECODE = 0xE7L
         private const val ID_SIMPLE_BLOCK = 0xA3L
