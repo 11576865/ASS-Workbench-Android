@@ -37,6 +37,83 @@ class AuthoringEngineSuiteTest {
     }
 
     @Test
+    fun semanticSearchUsesSharedTopLevelTagSemanticsAcrossLaterSpans() {
+        val directLater = event(30, 0, 1000, "A{\\pos(20,30)}B")
+        val nestedOnly = event(31, 0, 1000, "{\\t(0,500,\\pos(20,30))}Animated")
+        val query = AssSearchQuery(requiredTags = setOf("pos"))
+
+        assertTrue(AssSearchReplace.matches(directLater, query))
+        assertTrue(!AssSearchReplace.matches(nestedOnly, query))
+        assertEquals(
+            setOf("pos"),
+            AssSearchReplace.topLevelTagNames(directLater.text).map { it.lowercase() }.toSet(),
+        )
+        assertTrue("pos" !in AssSearchReplace.topLevelTagNames(nestedOnly.text).map { it.lowercase() })
+    }
+
+    @Test
+    fun semanticSearchRejectsMalformedTagNamesAndInvalidRanges() {
+        assertFailsWith<IllegalArgumentException> {
+            AssSearchQuery(requiredTags = setOf("pos("))
+        }
+        assertFailsWith<IllegalArgumentException> {
+            AssSearchQuery(forbiddenTags = setOf("\\"))
+        }
+        assertFailsWith<IllegalArgumentException> {
+            AssSearchQuery(durationRangeMs = 500L..100L)
+        }
+        assertFailsWith<IllegalArgumentException> {
+            AssSearchQuery(timeRangeMs = -1L..100L)
+        }
+    }
+
+    @Test
+    fun semanticStyleReplacementCannotCreateMissingStyleReference() {
+        val document = AssDocument(
+            styles = listOf(
+                AssStyle(name = "Default"),
+                AssStyle(name = "Alt"),
+            ),
+            events = listOf(
+                AssEvent(
+                    id = 32,
+                    start = SubTime(0),
+                    end = SubTime(1000),
+                    style = "Default",
+                    text = "Text",
+                )
+            ),
+        )
+
+        val error = assertFailsWith<IllegalArgumentException> {
+            AssSearchReplace.preview(
+                document = document,
+                query = AssSearchQuery(stylePattern = Regex("Default")),
+                replacement = AssSearchReplacement(
+                    scope = AssReplaceScope.STYLE,
+                    pattern = Regex("Default"),
+                    replacement = "Missing",
+                ),
+            )
+        }
+
+        assertTrue(error.message.orEmpty().contains("Style"))
+        assertEquals("Default", document.events.single().style)
+    }
+
+    @Test
+    fun visibleReplacementFailsClosedOnMalformedOverrideBlock() {
+        val source = "{\\bord2 broken"
+
+        val error = assertFailsWith<IllegalArgumentException> {
+            AssSearchReplace.replaceVisibleSegments(source, Regex("broken"), "changed")
+        }
+
+        assertTrue(error.message.orEmpty().contains("损坏"))
+        assertEquals("{\\bord2 broken", source)
+    }
+
+    @Test
     fun keyframesCompileIntoChainedTransforms() {
         val plan = AssAnimationAuthoring.planNumericTrack(
             AssTransformVisualProperty.SCALE_X,
