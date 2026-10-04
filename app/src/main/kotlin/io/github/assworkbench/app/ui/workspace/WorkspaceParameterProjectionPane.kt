@@ -1,17 +1,12 @@
 package io.github.assworkbench.app.ui.workspace
 
-import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
@@ -25,17 +20,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import io.github.assworkbench.app.EditorState
 import io.github.assworkbench.app.EditorViewModel
 import io.github.assworkbench.app.ui.preview.GeometryParameterDisplay
 import io.github.assworkbench.domain.AssGeometrySemantic
-import kotlin.math.cos
-import kotlin.math.sin
 
 @Composable
 internal fun WorkspaceParameterProjectionPane(
@@ -104,6 +94,7 @@ internal fun WorkspaceParameterProjectionPane(
     var numberText by remember(projection.id, eventId) { mutableStateOf(angle.toString()) }
     var gestureActive by remember(projection.id, eventId) { mutableStateOf(false) }
     var revision by remember(projection.id, eventId) { mutableLongStateOf(0L) }
+    val ownerId = "geometry:$eventId:${projection.id}"
 
     fun dispatch(
         phase: WorkspaceParameterIntentPhase,
@@ -166,7 +157,7 @@ internal fun WorkspaceParameterProjectionPane(
             listOf(
                 WorkspaceParameterPresentation.SLIDER to "Slider",
                 WorkspaceParameterPresentation.NUMBER to "数值",
-                WorkspaceParameterPresentation.ANGLE_DIAL to "角度盘",
+                WorkspaceParameterPresentation.ANGLE_DIAL to "转盘",
             ).forEach { (presentation, label) ->
                 FilterChip(
                     selected = projection.presentation == presentation,
@@ -177,14 +168,50 @@ internal fun WorkspaceParameterProjectionPane(
                     label = { Text(label) },
                 )
             }
-            AssistChip(
-                onClick = {},
-                enabled = false,
-                label = { Text("${formatAngle(angle)}°") },
-            )
         }
+        Text("${angle}°")
 
         when (projection.presentation) {
+            WorkspaceParameterPresentation.ANGLE_DIAL -> {
+                val enabled = state.previewOwnerId == null || state.previewOwnerId == ownerId
+                val sessionId = state.workspaceSessionId
+                fun mayWrite(): Boolean {
+                    val current = viewModel.state.value
+                    val target = projection.binding.resolve(
+                        current.focusedEventId, current.selectedEventIds,
+                        current.document.events.mapTo(hashSetOf()) { it.id },
+                    ) as? WorkspaceBindingResolution.Event
+                    return current.workspaceSessionId == sessionId && target?.eventId == eventId &&
+                        (current.previewOwnerId == null || current.previewOwnerId == ownerId)
+                }
+                WorkspaceAngleDialControl(
+                    angle = angle,
+                    gestureKey = "$sessionId:$ownerId",
+                    enabled = enabled,
+                    onPreview = { value ->
+                        if (mayWrite()) {
+                            gestureActive = true
+                            dispatch(WorkspaceParameterIntentPhase.PREVIEW, value)
+                            true
+                        } else false
+                    },
+                    onCommit = { value ->
+                        if (mayWrite()) {
+                            dispatch(WorkspaceParameterIntentPhase.COMMIT, value)
+                        }
+                        gestureActive = false
+                    },
+                    onCancel = {
+                        if (viewModel.state.value.workspaceSessionId == sessionId) {
+                            dispatch(WorkspaceParameterIntentPhase.CANCEL)
+                        }
+                        gestureActive = false
+                    },
+                    modifier = Modifier.testTag("parameter-projection-dial-${projection.id.replace(':', '-')}"),
+                )
+                Text("拖动转盘调整角度，松手应用；逆时针增加。")
+            }
+
             WorkspaceParameterPresentation.SLIDER -> {
                 Slider(
                     value = sliderValue.coerceIn(-180f, 180f),
@@ -235,24 +262,6 @@ internal fun WorkspaceParameterProjectionPane(
                 }
             }
 
-            WorkspaceParameterPresentation.ANGLE_DIAL -> {
-                RotationAngleDial(
-                    angle = angle.toFloat(),
-                    onPreview = { value ->
-                        gestureActive = true
-                        sliderValue = value
-                        dispatch(WorkspaceParameterIntentPhase.PREVIEW, value.toDouble())
-                    },
-                    onCommit = { value ->
-                        dispatch(WorkspaceParameterIntentPhase.COMMIT, value.toDouble())
-                        gestureActive = false
-                    },
-                    modifier = Modifier.testTag(
-                        "parameter-projection-dial-${projection.id.replace(':', '-')}"
-                    ),
-                )
-            }
-
             else -> {
                 Text("此显示方式已在 descriptor 中声明，但 live renderer 尚未接通。")
             }
@@ -269,88 +278,3 @@ internal fun WorkspaceParameterProjectionPane(
         }
     }
 }
-
-@Composable
-private fun RotationAngleDial(
-    angle: Float,
-    onPreview: (Float) -> Unit,
-    onCommit: (Float) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val outline = MaterialTheme.colorScheme.outlineVariant
-    val active = MaterialTheme.colorScheme.primary
-    var draft by remember { mutableFloatStateOf(angle) }
-    var dragging by remember { mutableStateOf(false) }
-
-    LaunchedEffect(angle, dragging) {
-        if (!dragging) draft = angle
-    }
-
-    Canvas(
-        modifier = modifier
-            .size(168.dp)
-            .pointerInput(Unit) {
-                detectDragGestures(
-                    onDragStart = { position ->
-                        dragging = true
-                        draft = rotationDialAngle(position, size.width.toFloat(), size.height.toFloat())
-                        onPreview(draft)
-                    },
-                    onDrag = { change, _ ->
-                        change.consume()
-                        draft = rotationDialAngle(
-                            change.position,
-                            size.width.toFloat(),
-                            size.height.toFloat(),
-                        )
-                        onPreview(draft)
-                    },
-                    onDragEnd = {
-                        if (dragging) onCommit(draft)
-                        dragging = false
-                    },
-                    onDragCancel = {
-                        dragging = false
-                    },
-                )
-            },
-    ) {
-        val center = Offset(size.width / 2f, size.height / 2f)
-        val radius = size.minDimension * 0.38f
-        val radians = Math.toRadians(draft.toDouble())
-        val hand = Offset(
-            x = center.x + sin(radians).toFloat() * radius,
-            y = center.y - cos(radians).toFloat() * radius,
-        )
-        drawCircle(
-            color = outline,
-            radius = radius,
-            center = center,
-            style = androidx.compose.ui.graphics.drawscope.Stroke(width = 3.dp.toPx()),
-        )
-        drawLine(
-            color = active,
-            start = center,
-            end = hand,
-            strokeWidth = 5.dp.toPx(),
-            cap = StrokeCap.Round,
-        )
-        drawCircle(color = active, radius = 7.dp.toPx(), center = hand)
-        drawCircle(color = active, radius = 5.dp.toPx(), center = center)
-    }
-}
-
-internal fun rotationDialAngle(
-    position: Offset,
-    width: Float,
-    height: Float,
-): Float {
-    require(width > 0f && height > 0f) { "Dial dimensions must be positive." }
-    val dx = position.x - width / 2f
-    val dy = position.y - height / 2f
-    return Math.toDegrees(kotlin.math.atan2(dx.toDouble(), -dy.toDouble())).toFloat()
-}
-
-private fun formatAngle(value: Double): String =
-    if (value % 1.0 == 0.0) value.toInt().toString()
-    else "%.1f".format(value)

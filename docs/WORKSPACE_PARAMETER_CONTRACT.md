@@ -45,7 +45,7 @@ The first consumer is Rotation Z:
 - projections are persisted in WorkspaceState schema v4 and coexist with v1-v3
   restoration;
 - one descriptor can have multiple independent projection instances;
-- live NUMBER and SLIDER presentations read the same effective Rotation Z;
+- live NUMBER, SLIDER and ANGLE_DIAL presentations read the same effective Rotation Z;
 - preview ownership is extended with the projection id
   (`geometry:<event>:<projection>`) so an extracted control is observable as an
   external preview by the original Position pane instead of impersonating its local draft;
@@ -53,30 +53,32 @@ The first consumer is Rotation Z:
   creates normal ASS Undo history.
 
 The extraction affordance is currently explicit ("拆出旋转控件"), not drag-to-extract.
-Angle Dial remains declared by the descriptor but does not yet have a live renderer.
+Angle Dial now has a live renderer: relative counterclockwise motion preserves complete
+turns and unwraps the ±180° boundary. Release commits once; cancellation clears only
+the projection-owned preview. Entering the center dead zone cancels the drag instead of publishing an unstable direction.
+Accessibility actions adjust one degree through the same document authority.
+Android dial drag/Undo and cancellation regressions remain Pending CI.
+XY Pad and broader parameter families remain separate follow-ups.
 Items 109/110 therefore remain Partial.
 
 
-## Drag extraction and Angle Dial slice
+## Angle Dial validation slice
 
-The second live slice exercises the contract rather than bypassing it:
+Supplemental Kotlin/JUnit execution: 209 domain tests and 14 parameter/model
+tests passed. The ±180° regression fails if angle unwrapping is removed
+(expected 42°, incorrect −318°), and passes in the production implementation.
+Two connected regressions cover drag preview/release/one Undo and cancellation.
+They are Pending CI; no local Android compile or user-device acceptance is claimed.
+Gesture callbacks retain their starting session/Event, and cancellation only
+clears that session's matching owner. Source artifact/whitespace checks passed.
 
-- Rotation Z now has a long-press drag extraction gesture in the Position tool.
-  Releasing the drag creates a workspace projection; a normal click remains an
-  accessibility-compatible fallback.
-- Extracting the projection changes only WorkspaceState. It does not mutate the
-  ASS document or create an ASS Undo entry.
-- ANGLE_DIAL is now a live presentation. Its convention is 0° at the top and
-  positive rotation clockwise, matching the visual editing convention used by
-  the geometry surface.
-- NUMBER, SLIDER and ANGLE_DIAL all dispatch typed WorkspaceParameterIntent
-  values through WorkspaceParameterIntentRouter.
-- The router validates the descriptor/binding/arity/revision contract first,
-  then delegates preview/commit/cancel to the existing EditorViewModel geometry
-  mutation boundary.
-- Connected tests cover long-press drag extraction and Angle Dial
-  preview → commit → Undo; pure tests cover dial coordinate semantics.
 
-This still does not claim arbitrary drag-to-extract for every parameter family.
-Position XY, Scale XY and Shear XY remain descriptor-only until their live
-projections are connected.
+## Drag extraction and typed intent routing follow-up
+
+- Rotation Z supports long-press drag extraction from the Position tool; release creates the persisted workspace projection while a normal click remains a fallback.
+- Extraction changes WorkspaceState only and must not create an ASS document Undo entry.
+- NUMBER, SLIDER and the current-main ANGLE_DIAL all dispatch typed `WorkspaceParameterIntent` values through `WorkspaceParameterIntentRouter`.
+- The router validates descriptor/binding/value/revision semantics first, then delegates PREVIEW / COMMIT / CANCEL to the existing EditorViewModel geometry mutation boundary.
+- The current-main Angle Dial implementation remains authoritative for dial motion, multi-turn behavior, cancellation and accessibility semantics; this follow-up does not replace it with a second dial implementation.
+
+Items 109/110 remain Partial because arbitrary parameter families and XY-pad/vector projections are not yet connected.
