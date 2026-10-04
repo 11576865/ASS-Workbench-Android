@@ -210,7 +210,7 @@ fun ContainerBridgePanel(
                 Icon(Icons.Filled.Refresh, contentDescription = "重新检测容器内容")
             }
             ContainerIconButton(
-                label = "从 Matroska 或独立 ASS 导入轨道",
+                label = "从 Matroska / ASS / SRT 导入轨道",
                 enabled = !state.loading &&
                     !state.writeBackBusy &&
                     !state.attachmentExtractBusy &&
@@ -224,6 +224,8 @@ fun ContainerBridgePanel(
                             "application/x-matroska",
                             "text/x-ass",
                             "text/x-ssa",
+                            "application/x-subrip",
+                            "text/srt",
                             "text/plain",
                             "application/octet-stream",
                         )
@@ -414,7 +416,7 @@ fun ContainerBridgePanel(
                         color = MaterialTheme.colorScheme.primary,
                     )
                     Text(
-                        "Matroska 只导入所选 Track；独立 ASS 会规范化为新的 S_TEXT/ASS Track。两种来源都不会自动带入外部 Chapters / Attachments / 全局 Tags；新轨默认 non-Default。",
+                        "Matroska 只导入所选 Track；独立 ASS / SRT 会先规范化为 ASS，再作为新的 S_TEXT/ASS Track 加入。外部 Chapters / Attachments / 全局 Tags 不会自动带入；新轨默认 non-Default。",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -453,7 +455,8 @@ fun ContainerBridgePanel(
                                 when (candidate.sourceKind) {
                                     ContainerTrackImportSourceKind.MATROSKA_TRACK ->
                                         candidate.codecId.ifBlank { "Track #${candidate.sourceTrackNumber}" }
-                                    ContainerTrackImportSourceKind.STANDALONE_ASS ->
+                                    ContainerTrackImportSourceKind.STANDALONE_ASS,
+                                    ContainerTrackImportSourceKind.STANDALONE_SRT ->
                                         candidate.sourceName
                                 }
                             },
@@ -468,7 +471,11 @@ fun ContainerBridgePanel(
                                         if (candidate.sourceIsDefault) append(" · 源 Default")
                                     }
                                     ContainerTrackImportSourceKind.STANDALONE_ASS -> {
-                                        append(" · 独立 ASS → S_TEXT/ASS")
+                                        append(" · 独立 ASS → normalized ASS → S_TEXT/ASS")
+                                        append(" · SHA-256 已固定")
+                                    }
+                                    ContainerTrackImportSourceKind.STANDALONE_SRT -> {
+                                        append(" · 独立 SRT → normalized ASS → S_TEXT/ASS")
                                         append(" · SHA-256 已固定")
                                     }
                                 }
@@ -533,6 +540,8 @@ fun ContainerBridgePanel(
                                         append(" · source Track #").append(addition.sourceTrackNumber)
                                     ContainerTrackImportSourceKind.STANDALONE_ASS ->
                                         append(" · 独立 ASS 规范化")
+                                    ContainerTrackImportSourceKind.STANDALONE_SRT ->
+                                        append(" · 独立 SRT → ASS 规范化")
                                 }
                                 append(" · 输出分配新的 TrackNumber / TrackUID")
                             },
