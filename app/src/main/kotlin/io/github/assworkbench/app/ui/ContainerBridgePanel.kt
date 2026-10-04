@@ -472,11 +472,11 @@ fun ContainerBridgePanel(
                                     }
                                     ContainerTrackImportSourceKind.STANDALONE_ASS -> {
                                         append(" · 独立 ASS → normalized ASS → S_TEXT/ASS")
-                                        append(" · SHA-256 已固定")
+                                        append(" · normalized SHA-256 已固定")
                                     }
                                     ContainerTrackImportSourceKind.STANDALONE_SRT -> {
                                         append(" · 独立 SRT → normalized ASS → S_TEXT/ASS")
-                                        append(" · SHA-256 已固定")
+                                        append(" · normalized SHA-256 已固定")
                                     }
                                 }
                                 if (candidate.codecId.isNotBlank()) append(" · ").append(candidate.codecId)
