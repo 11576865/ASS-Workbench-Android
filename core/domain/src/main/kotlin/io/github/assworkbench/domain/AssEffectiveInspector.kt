@@ -33,9 +33,10 @@ object AssEffectiveInspector {
         val analysis = AssInlineSyntax.analyze(event.text)
         require(!analysis.hasErrors) { "Event 包含损坏的 ASS override block，无法可靠解析有效值。" }
 
-        val leadingEnd = leadingOverridePrefixLength(event.text)
-        val leadingTags = analysis.tags.filter { it.start < leadingEnd }
-        val laterTags = analysis.tags.filter { it.start >= leadingEnd }
+        val leadingEnd = AssTopLevelOverrideSyntax.leadingPrefixLength(event.text)
+        val topLevelTags = AssTopLevelOverrideSyntax.tags(event.text)
+        val leadingTags = topLevelTags.filter { it.start < leadingEnd }
+        val laterTags = topLevelTags.filter { it.start >= leadingEnd }
 
         var activeStyle = eventStyle
         val values = styleValues(activeStyle).toMutableMap()
@@ -263,16 +264,6 @@ object AssEffectiveInspector {
         val formatted = (parsed != 0).toString()
         values[property] = formatted
         overrides[property] = formatted
-    }
-
-    private fun leadingOverridePrefixLength(text: String): Int {
-        var cursor = 0
-        while (cursor < text.length && text[cursor] == '{') {
-            val close = text.indexOf('}', cursor + 1)
-            if (close < 0) return cursor
-            cursor = close + 1
-        }
-        return cursor
     }
 
     private fun format(value: Double): String {
