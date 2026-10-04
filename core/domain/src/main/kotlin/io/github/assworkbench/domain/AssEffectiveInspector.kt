@@ -29,7 +29,7 @@ object AssEffectiveInspector {
 
     fun inspect(document: AssDocument, event: AssEvent): List<AssEffectiveValue> {
         val eventStyle = document.styles.firstOrNull { it.name == event.style }
-            ?: error("Event 引用不存在的 Style：\${event.style}")
+            ?: error("Event 引用不存在的 Style：${event.style}")
         val analysis = AssInlineSyntax.analyze(event.text)
         require(!analysis.hasErrors) { "Event 包含损坏的 ASS override block，无法可靠解析有效值。" }
 
@@ -56,7 +56,7 @@ object AssEffectiveInspector {
                         eventStyle
                     } else {
                         document.styles.firstOrNull { it.name == requested }
-                            ?: error("前导 \\r 引用不存在的 Style：\$requested")
+                            ?: error("前导 \\r 引用不存在的 Style：$requested")
                     }
                     resetTo(target)
                 }
@@ -93,10 +93,11 @@ object AssEffectiveInspector {
 
         val laterReset = laterTags.any { it.name.equals("r", ignoreCase = true) }
         val leadingTransform = leadingTags.any { it.name.equals("t", ignoreCase = true) }
+        val laterTransform = laterTags.any { it.name.equals("t", ignoreCase = true) }
         fun changesLater(property: String, vararg tagNames: String): Boolean =
             laterReset ||
                 laterTags.any { tag -> tagNames.any { it.equals(tag.name, ignoreCase = true) } } ||
-                (leadingTransform && property in animatedStyleProperties)
+                ((leadingTransform || laterTransform) && property in animatedStyleProperties)
 
         val leadingAlignmentTags = leadingTags.filter { it.name.equals("an", ignoreCase = true) }
         val laterAlignment = laterTags.any { it.name.equals("an", ignoreCase = true) }
@@ -113,7 +114,7 @@ object AssEffectiveInspector {
             geometry.clipRect != null -> {
                 val rect = geometry.clipRect
                 val name = if (geometry.clipInverted) "iclip" else "clip"
-                "\$name \${format(rect.left)},\${format(rect.top)} → \${format(rect.right)},\${format(rect.bottom)}"
+                "$name ${format(rect.left)},${format(rect.top)} → ${format(rect.right)},${format(rect.bottom)}"
             }
             geometry.clipNonRectangular -> if (geometry.clipInverted) "iclip vector/raw" else "clip vector/raw"
             else -> null
@@ -191,17 +192,17 @@ object AssEffectiveInspector {
                 "Position",
                 "alignment anchor",
                 overrideValue = when (geometry.positionMode) {
-                    AssPositionMode.POSITION -> geometry.position?.let { "\${format(it.x)}, \${format(it.y)}" }
+                    AssPositionMode.POSITION -> geometry.position?.let { "${format(it.x)}, ${format(it.y)}" }
                     AssPositionMode.MOVE -> geometry.move?.let {
-                        "move \${format(it.start.x)},\${format(it.start.y)} → \${format(it.end.x)},\${format(it.end.y)}"
+                        "move ${format(it.start.x)},${format(it.start.y)} → ${format(it.end.x)},${format(it.end.y)}"
                     }
                     AssPositionMode.CONFLICT -> "conflict: pos + move"
                     AssPositionMode.INHERITED -> null
                 },
                 effectiveValue = when (geometry.positionMode) {
-                    AssPositionMode.POSITION -> geometry.position?.let { "\${format(it.x)}, \${format(it.y)}" } ?: "alignment anchor"
+                    AssPositionMode.POSITION -> geometry.position?.let { "${format(it.x)}, ${format(it.y)}" } ?: "alignment anchor"
                     AssPositionMode.MOVE -> geometry.move?.let {
-                        "move \${format(it.start.x)},\${format(it.start.y)} → \${format(it.end.x)},\${format(it.end.y)}"
+                        "move ${format(it.start.x)},${format(it.start.y)} → ${format(it.end.x)},${format(it.end.y)}"
                     } ?: "alignment anchor"
                     AssPositionMode.CONFLICT -> "conflict: pos + move"
                     AssPositionMode.INHERITED -> "alignment anchor"
@@ -242,7 +243,7 @@ object AssEffectiveInspector {
         tag: String,
     ) {
         val parsed = raw.toDoubleOrNull()
-        require(parsed?.isFinite() == true) { "\$tag 必须是有限数字。" }
+        require(parsed?.isFinite() == true) { "$tag 必须是有限数字。" }
         val formatted = format(parsed)
         values[property] = formatted
         overrides[property] = formatted
@@ -256,7 +257,7 @@ object AssEffectiveInspector {
         tag: String,
     ) {
         val parsed = raw.toIntOrNull()
-        require(parsed != null) { "\$tag 必须是整数。" }
+        require(parsed != null) { "$tag 必须是整数。" }
         val formatted = (parsed != 0).toString()
         values[property] = formatted
         overrides[property] = formatted
