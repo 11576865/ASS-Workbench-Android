@@ -16,6 +16,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
@@ -663,6 +664,15 @@ fun ModernEditorScreen(
                     onEnableRenderer = onEnableRenderer,
                     modifier = Modifier.weight(1f).fillMaxWidth().testTag("edge-bookmark-workspace"),
                 )
+            } else if (workspaceMode == WorkspacePresentationMode.TIMELINE_DOCK_EXPERIMENTAL) {
+                TimelineDockWorkspace(
+                    state = state,
+                    viewModel = viewModel,
+                    onOpenVideo = onOpenReferenceVideo,
+                    rendererEnabled = rendererEnabled,
+                    onEnableRenderer = onEnableRenderer,
+                    modifier = Modifier.weight(1f).fillMaxWidth().testTag("timeline-dock-workspace"),
+                )
             } else if (workspaceMode == WorkspacePresentationMode.SUBTITLE_OBJECT_EXPERIMENTAL) {
                 SubtitleObjectWorkspace(
                     state = state,
@@ -853,6 +863,7 @@ fun ModernEditorScreen(
                 WorkspacePresentationMode.GLASS_LAYERED_EXPERIMENTAL -> false
                 WorkspacePresentationMode.SUBTITLE_OBJECT_EXPERIMENTAL -> false
                 WorkspacePresentationMode.EDGE_BOOKMARK_EXPERIMENTAL -> false
+                WorkspacePresentationMode.TIMELINE_DOCK_EXPERIMENTAL -> false
             },
             modifier = Modifier.fillMaxSize().testTag("interaction-overlay"),
         )
@@ -1578,6 +1589,128 @@ private fun PrecisionLensWorkspace(
                         label = { Text("保持对象焦点") },
                     )
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TimelineDockWorkspace(
+    state: EditorState,
+    viewModel: EditorViewModel,
+    onOpenVideo: () -> Unit,
+    rendererEnabled: Boolean,
+    onEnableRenderer: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var expanded by rememberSaveable { mutableStateOf(false) }
+    var extentFraction by rememberSaveable {
+        mutableFloatStateOf(TimelineDockPolicy.DEFAULT_EXTENT_FRACTION)
+    }
+    val expandedState = rememberUpdatedState(expanded)
+    val extentState = rememberUpdatedState(extentFraction)
+
+    BoxWithConstraints(modifier.background(MaterialTheme.colorScheme.surfaceContainerLowest)) {
+        val viewportHeightPx = with(LocalDensity.current) { maxHeight.toPx() }.coerceAtLeast(1f)
+        val compactHeight = minOf(124.dp, maxHeight * 0.28f)
+        val timelineHeight = if (expanded) {
+            maxOf(compactHeight, maxHeight * extentFraction)
+        } else {
+            compactHeight
+        }
+
+        Column(Modifier.fillMaxSize()) {
+            WorkbenchPreview(
+                state = state,
+                viewModel = viewModel,
+                positionEditEventId = null,
+                onOpenVideo = onOpenVideo,
+                onOpenTimeline = { expanded = true },
+                rendererEnabled = rendererEnabled,
+                onEnableRenderer = onEnableRenderer,
+                viewportGesturesEnabled = true,
+                modifier = Modifier.weight(1f).fillMaxWidth().testTag("timeline-dock-preview"),
+            )
+
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(36.dp)
+                    .pointerInput(viewportHeightPx) {
+                        var dragTravelPx = 0f
+                        var dragExtent = TimelineDockPolicy.DEFAULT_EXTENT_FRACTION
+                        var dragStartedExpanded = false
+                        detectVerticalDragGestures(
+                            onDragStart = {
+                                dragTravelPx = 0f
+                                dragExtent = extentState.value
+                                dragStartedExpanded = expandedState.value
+                            },
+                            onVerticalDrag = { change, dragAmount ->
+                                change.consume()
+                                dragTravelPx += dragAmount
+                                if (dragAmount < 0f) expanded = true
+                                dragExtent = TimelineDockPolicy.resize(
+                                    current = dragExtent,
+                                    deltaFraction = -dragAmount / viewportHeightPx,
+                                )
+                                extentFraction = dragExtent
+                            },
+                            onDragEnd = {
+                                expanded = TimelineDockPolicy.expansionAfterDrag(
+                                    current = dragStartedExpanded,
+                                    dragFractionY = dragTravelPx / viewportHeightPx,
+                                )
+                                if (expanded) {
+                                    extentFraction = TimelineDockPolicy.snap(dragExtent)
+                                }
+                            },
+                        )
+                    }
+                    .testTag("timeline-dock-handle"),
+                tonalElevation = 3.dp,
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            ) {
+                Row(
+                    Modifier.fillMaxSize().padding(horizontal = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Icon(Icons.Filled.DragHandle, null, Modifier.size(18.dp))
+                    Text(
+                        if (expanded) "时间轴 · 展开" else "时间轴 · 紧凑常驻",
+                        style = MaterialTheme.typography.labelLarge,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text(
+                        "${(extentFraction * 100).roundToInt()}%",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    IconButton(
+                        onClick = { expanded = !expanded },
+                        modifier = Modifier.testTag("timeline-dock-toggle"),
+                    ) {
+                        Icon(
+                            if (expanded) Icons.Filled.ExpandMore else Icons.Filled.ExpandLess,
+                            if (expanded) "收拢时间轴" else "展开时间轴",
+                        )
+                    }
+                }
+            }
+
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(timelineHeight)
+                    .testTag("timeline-dock-pane")
+            ) {
+                ModernTimelinePane(
+                    state = state,
+                    viewModel = viewModel,
+                    modifier = Modifier.fillMaxSize(),
+                    compact = !expanded,
+                )
             }
         }
     }
