@@ -67,11 +67,13 @@ internal object PreviewTargetResolver {
                 ?.takeIf(::isFinitePoint)
                 ?.let { it to PreviewTargetConfidence.EXACT_ANCHOR }
                 ?: (null to PreviewTargetConfidence.UNRESOLVED)
-            AssPositionMode.MOVE -> geometry.move?.let {
-                movePoint(event, it, positionMs)
-                    .takeIf(::isFinitePoint)
-                    ?.let { point -> point to PreviewTargetConfidence.EXACT_ANCHOR }
-            } ?: (null to PreviewTargetConfidence.UNRESOLVED)
+            AssPositionMode.MOVE -> geometry.move
+                ?.takeIf(::isValidMove)
+                ?.let {
+                    movePoint(event, it, positionMs)
+                        .takeIf(::isFinitePoint)
+                        ?.let { point -> point to PreviewTargetConfidence.EXACT_ANCHOR }
+                } ?: (null to PreviewTargetConfidence.UNRESOLVED)
             AssPositionMode.INHERITED -> inheritedAnchor(document, event)
                 ?.let { it to PreviewTargetConfidence.APPROXIMATE_ANCHOR }
                 ?: (null to PreviewTargetConfidence.UNRESOLVED)
@@ -157,4 +159,13 @@ internal object PreviewTargetResolver {
 
     private fun isFinitePoint(point: AssPoint): Boolean =
         point.x.isFinite() && point.y.isFinite()
+
+    private fun isValidMove(move: io.github.assworkbench.domain.AssMove): Boolean {
+        if (!isFinitePoint(move.start) || !isFinitePoint(move.end)) return false
+        val start = move.startMs
+        val end = move.endMs
+        if ((start == null) != (end == null)) return false
+        if (start == null || end == null) return true
+        return start.isFinite() && end.isFinite() && start >= 0.0 && end >= start
+    }
 }
