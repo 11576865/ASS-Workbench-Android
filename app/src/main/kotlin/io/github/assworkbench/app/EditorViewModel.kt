@@ -1118,6 +1118,10 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             _state.update { it.copy(status = "附件提取进行中；完成后再保存 MKV。") }
             return
         }
+        if (snapshot.container.trackImportBusy) {
+            _state.update { it.copy(status = "外部轨道检测进行中；完成后再保存 MKV。") }
+            return
+        }
         val saveEpoch = workspaceEpoch.get()
         val sourceScanSnapshot = containerScan
         val baselineScanSnapshot = containerBaselineScan ?: sourceScanSnapshot
@@ -1168,6 +1172,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         val plannedMetadataEdits = snapshot.container.pendingAttachmentMetadataEdits
         val plannedTrackRemovals = snapshot.container.pendingTrackRemovals
         val plannedTrackMetadataEdits = snapshot.container.pendingTrackMetadataEdits
+        val plannedTrackImports = snapshot.container.pendingTrackImports
 
         val plannedAttachmentCount = editPlan.mutations.count {
             it.kind == ContainerMutationKind.ADD_ATTACHMENT
@@ -1188,6 +1193,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                     if (plannedMetadataEdits.isNotEmpty()) append(" · 附件信息 ").append(plannedMetadataEdits.size)
                     if (plannedTrackRemovals.isNotEmpty()) append(" · 删轨 ").append(plannedTrackRemovals.size)
                     if (plannedTrackMetadataEdits.isNotEmpty()) append(" · 轨道信息 ").append(plannedTrackMetadataEdits.size)
+                    if (plannedTrackImports.isNotEmpty()) append(" · 导入轨道 ").append(plannedTrackImports.size)
                     append("；大文件可能需要一些时间……")
                 },
             )
@@ -1262,15 +1268,38 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                                 isForced = metadata.isForced,
                             )
                         }
+                        val importSourceFiles = linkedMapOf<String, File>()
+                        val trackImportInputs = plannedTrackImports.map { planned ->
+                            val sourceFile = importSourceFiles.getOrPut(planned.sourceUri) {
+                                val dir = File(work, "track-source-" + importSourceFiles.size).apply { mkdirs() }
+                                val target = File(dir, "source.mkv")
+                                app.contentResolver.openInputStream(Uri.parse(planned.sourceUri))?.use { input ->
+                                    target.outputStream().buffered().use { output ->
+                                        input.copyTo(output, 1024 * 1024)
+                                    }
+                                } ?: error("无法读取待导入轨道来源：" + planned.sourceName)
+                                require(target.length() > 0L) { "待导入轨道来源为空：" + planned.sourceName }
+                                target
+                            }
+                            TrackImportInput(
+                                source = sourceFile,
+                                trackNumber = planned.sourceTrackNumber,
+                                name = planned.name,
+                                language = planned.language,
+                                isDefault = planned.isDefault,
+                                isForced = planned.isForced,
+                            )
+                        }
 
                         if (replaceAss) {
                             val editedAss = File(work, "edited.ass")
                             editedAss.writeText(AssCodec.write(snapshot.document), Charsets.UTF_8)
+                            val assStage = if (trackImportInputs.isEmpty()) result else File(work, "ass-stage.mkv")
                             mkvGoTool.replaceAss(
                                 source = source,
                                 trackNumber = requireNotNull(trackNumber),
                                 editedAss = editedAss,
-                                output = result,
+                                output = assStage,
                                 fonts = packageFiles,
                                 attachments = attachmentFiles,
                                 removeAttachments = plannedRemovals.map { it.target },
@@ -1279,6 +1308,16 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                                 removeTracks = plannedTrackRemovals.map { it.target },
                                 trackMetadataEdits = trackMetadataInputs,
                             )
+                            if (trackImportInputs.isNotEmpty()) {
+                                // ASS replacement has a specialised subtitle injection path.
+                                // Import tracks in a second cache-local remux stage; only the
+                                // fully verified final file is ever published to the user URI.
+                                mkvGoTool.editContainer(
+                                    source = assStage,
+                                    output = result,
+                                    trackImports = trackImportInputs,
+                                )
+                            }
                         } else {
                             mkvGoTool.editContainer(
                                 source = source,
@@ -1289,6 +1328,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                                 metadataEdits = metadataInputs,
                                 removeTracks = plannedTrackRemovals.map { it.target },
                                 trackMetadataEdits = trackMetadataInputs,
+                                trackImports = trackImportInputs,
                             )
                         }
 
@@ -1317,6 +1357,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                                 output = verifiedScan,
                                 removals = plannedTrackRemovals,
                                 metadataEdits = plannedTrackMetadataEdits,
+                                imports = plannedTrackImports,
                             )
                             require(verifiedScan.chapterCount == sourceScan.chapterCount) {
                                 "写回验证失败：章节数量发生意外变化"
@@ -1427,6 +1468,9 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 val savedMetadataTargets = plannedMetadataEdits.mapTo(hashSetOf()) { it.target }
                 val savedTrackRemovalTargets = plannedTrackRemovals.mapTo(hashSetOf()) { it.target }
                 val savedTrackMetadataTargets = plannedTrackMetadataEdits.mapTo(hashSetOf()) { it.target }
+                val savedTrackImportKeys = plannedTrackImports.mapTo(hashSetOf()) {
+                    it.sourceUri to it.sourceTrackNumber
+                }
                 _state.update { state ->
                     state.copy(
                         dirty = if (documentSaved) false else state.dirty,
@@ -1444,6 +1488,10 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                                 .filterNot { it.target in savedTrackRemovalTargets },
                             pendingTrackMetadataEdits = state.container.pendingTrackMetadataEdits
                                 .filterNot { it.target in savedTrackMetadataTargets },
+                            pendingTrackImports = state.container.pendingTrackImports
+                                .filterNot { (it.sourceUri to it.sourceTrackNumber) in savedTrackImportKeys },
+                            trackImportSourceName = "",
+                            trackImportCandidates = emptyList(),
                             resources = baselineScanSnapshot?.let { baseline ->
                                 diffContainerResources(baseline, verifiedScan)
                             } ?: baselineContainerResources(verifiedScan),
@@ -1461,6 +1509,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                             if (plannedMetadataEdits.isNotEmpty()) append(" 修改附件信息 ").append(plannedMetadataEdits.size).append(" 个。")
                             if (plannedTrackRemovals.isNotEmpty()) append(" 删除轨道 ").append(plannedTrackRemovals.size).append(" 个。")
                             if (plannedTrackMetadataEdits.isNotEmpty()) append(" 修改轨道信息 ").append(plannedTrackMetadataEdits.size).append(" 个。")
+                            if (plannedTrackImports.isNotEmpty()) append(" 导入轨道 ").append(plannedTrackImports.size).append(" 个。")
                             if (replaceAss && !documentSaved) append(" · 保存期间出现新字幕编辑，当前工程仍未保存。")
                         },
                     )
