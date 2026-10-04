@@ -1111,3 +1111,119 @@ func TestPlanTrackAdditionsRejectsDuplicateSourceTrack(t *testing.T) {
 		t.Fatalf("expected duplicate source-track rejection, got %v", err)
 	}
 }
+
+
+func TestEditContainerResourcesCanReplaceEntireTrackSetWithImport(t *testing.T) {
+	dir := t.TempDir()
+	base := filepath.Join(dir, "base-one-track.mkv")
+	external := filepath.Join(dir, "external-one-track.mkv")
+	dst := filepath.Join(dir, "replaced-track-set.mkv")
+
+	baseTrack := mkv.Track{ID: 4, UID: 404, Type: mkv.VideoTrack, Codec: "vp9"}
+	out, err := os.Create(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mw := writer.NewMKVWriter(out)
+	if err := mw.WriteStart(); err != nil {
+		t.Fatal(err)
+	}
+	if err := mw.WriteMetadata(
+		&mkv.Container{Info: mkv.SegmentInfo{TimecodeScale: 1_000_000}},
+		[]mkv.Track{baseTrack},
+		1000,
+	); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.WriteCluster(out, 0, 1_000_000, []mkv.Block{
+		{TrackNumber: 4, Timecode: 0, Keyframe: true, Data: []byte("old-video")},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := mw.Finalize(); err != nil {
+		t.Fatal(err)
+	}
+	if err := out.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	newTrack := mkv.Track{ID: 2, UID: 22, Type: mkv.AudioTrack, Codec: "opus"}
+	out, err = os.Create(external)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mw = writer.NewMKVWriter(out)
+	if err := mw.WriteStart(); err != nil {
+		t.Fatal(err)
+	}
+	if err := mw.WriteMetadata(
+		&mkv.Container{Info: mkv.SegmentInfo{TimecodeScale: 1_000_000}},
+		[]mkv.Track{newTrack},
+		1200,
+	); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.WriteCluster(out, 0, 1_000_000, []mkv.Block{
+		{TrackNumber: 2, Timecode: 0, Keyframe: true, Data: []byte("new-audio")},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := mw.Finalize(); err != nil {
+		t.Fatal(err)
+	}
+	if err := out.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := EditContainerResources(
+		context.Background(),
+		base,
+		dst,
+		nil,
+		nil,
+		nil,
+		nil,
+		[]string{"uid:404"},
+		nil,
+		[]TrackAddition{{
+			SourcePath: external,
+			SourceTrackID: 2,
+			Name: "Only audio",
+			Language: "und",
+		}},
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := reader.Open(context.Background(), dst)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Tracks) != 1 {
+		t.Fatalf("track count = %d, want 1: %+v", len(got.Tracks), got.Tracks)
+	}
+	if got.Tracks[0].ID != 5 || got.Tracks[0].UID <= 404 ||
+		got.Tracks[0].Type != mkv.AudioTrack || got.Tracks[0].Codec != "opus" {
+		t.Fatalf("replacement track set identity/type wrong: %+v", got.Tracks[0])
+	}
+
+	blockFile, err := os.Open(dst)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer blockFile.Close()
+	br, err := reader.NewBlockReader(blockFile, got.Info.TimecodeScale)
+	if err != nil {
+		t.Fatal(err)
+	}
+	block, err := br.Next()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if block.TrackNumber != 5 || string(block.Data) != "new-audio" {
+		t.Fatalf("replacement track payload = track %d %q", block.TrackNumber, string(block.Data))
+	}
+	if _, err := br.Next(); err != io.EOF {
+		t.Fatalf("expected exactly one imported block, got %v", err)
+	}
+}
