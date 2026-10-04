@@ -301,118 +301,155 @@ fun ContainerBridgePanel(
             )
         }
 
-        state.resources.forEachIndexed { index, resource ->
-            if (index > 0) HorizontalDivider()
-            val attachmentTarget = resource.attachmentTarget
-            val pendingRemoval = attachmentTarget?.let { target ->
-                state.pendingAttachmentRemovals.any { it.target == target }
-            } == true
-            val pendingReplacement = attachmentTarget?.let { target ->
-                state.pendingAttachmentReplacements.firstOrNull { it.target == target }
+        val resourceGroups = listOf(
+            "轨道" to state.resources.filter {
+                it.kind == ContainerResourceKind.VIDEO ||
+                    it.kind == ContainerResourceKind.AUDIO ||
+                    it.kind == ContainerResourceKind.SUBTITLE
+            },
+            "附件" to state.resources.filter {
+                it.kind == ContainerResourceKind.FONT ||
+                    it.kind == ContainerResourceKind.ATTACHMENT
+            },
+            "容器信息" to state.resources.filter {
+                it.kind != ContainerResourceKind.VIDEO &&
+                    it.kind != ContainerResourceKind.AUDIO &&
+                    it.kind != ContainerResourceKind.SUBTITLE &&
+                    it.kind != ContainerResourceKind.FONT &&
+                    it.kind != ContainerResourceKind.ATTACHMENT
+            },
+        ).filter { (_, resources) -> resources.isNotEmpty() }
+
+        resourceGroups.forEachIndexed { groupIndex, (label, resources) ->
+            if (groupIndex > 0) HorizontalDivider()
+            Row(
+                Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 2.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    label,
+                    style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier.weight(1f),
+                )
+                Text(
+                    resources.size.toString(),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
-            val pendingMetadata = attachmentTarget?.let { target ->
-                state.pendingAttachmentMetadataEdits.firstOrNull { it.target == target }
-            }
-            val trackTarget = resource.trackTarget
-            val pendingTrackRemoval = trackTarget?.let { target ->
-                state.pendingTrackRemovals.any { it.target == target }
-            } == true
-            val pendingTrackMetadata = trackTarget?.let { target ->
-                state.pendingTrackMetadataEdits.firstOrNull { it.target == target }
-            }
-            ContainerResourceRow(
-                resource = resource,
-                selected = resource.editableAss && resource.trackNumber == state.selectedTrackNumber,
-                enabled = resource.editableAss &&
-                    resource.change != ContainerResourceChange.REMOVED &&
-                    !pendingTrackRemoval &&
-                    !state.writeBackBusy &&
-                    state.inventoryEvidence != ContainerInventoryEvidence.VERIFIED_OUTPUT,
-                attachmentActionsEnabled = attachmentTarget != null &&
-                    resource.change != ContainerResourceChange.REMOVED &&
-                    !state.writeBackBusy &&
-                    !state.attachmentExtractBusy &&
-                    state.inventoryEvidence != ContainerInventoryEvidence.VERIFIED_OUTPUT,
-                trackActionsEnabled = trackTarget != null &&
-                    resource.change != ContainerResourceChange.REMOVED &&
-                    !state.writeBackBusy &&
-                    !state.attachmentExtractBusy &&
-                    state.inventoryEvidence != ContainerInventoryEvidence.VERIFIED_OUTPUT,
-                pendingRemoval = pendingRemoval,
-                pendingReplacementName = pendingReplacement?.name,
-                pendingMetadataName = pendingMetadata?.name,
-                pendingTrackRemoval = pendingTrackRemoval,
-                pendingTrackMetadataName = pendingTrackMetadata?.name,
-                onClick = {
-                    val trackNumber = resource.trackNumber ?: return@ContainerResourceRow
-                    if (trackNumber == state.selectedTrackNumber) return@ContainerResourceRow
-                    if (dirty) {
-                        pendingTrackNumber = trackNumber
-                    } else {
-                        viewModel.selectContainerTrack(trackNumber)
-                    }
-                },
-                onRemoveAttachment = attachmentTarget?.let { target ->
-                    {
-                        viewModel.planExistingAttachmentRemoval(
-                            target = target,
-                            name = resource.title,
-                        )
-                    }
-                },
-                onReplaceAttachment = attachmentTarget?.let {
-                    {
-                        replacementTarget = resource
-                        replacementPicker.launch(arrayOf("*/*"))
-                    }
-                },
-                onEditAttachmentMetadata = attachmentTarget?.let {
-                    {
-                        metadataTarget = resource
-                        metadataName = pendingMetadata?.name ?: resource.title
-                        metadataDescription = pendingMetadata?.description ?: resource.attachmentDescription
-                    }
-                },
-                onExtractAttachment = attachmentTarget?.let {
-                    {
-                        extractTarget = resource
-                        extractPicker.launch(resource.title)
-                    }
-                },
-                onCancelAttachmentEdit = attachmentTarget?.let { target ->
-                    {
-                        viewModel.cancelExistingAttachmentRemoval(target)
-                        viewModel.cancelExistingAttachmentReplacement(target)
-                        viewModel.cancelExistingAttachmentMetadata(target)
-                    }
-                },
-                onRemoveTrack = resource.trackNumber?.let { number ->
-                    trackTarget?.let { target ->
+            resources.forEachIndexed { index, resource ->
+                if (index > 0) HorizontalDivider()
+                val attachmentTarget = resource.attachmentTarget
+                val pendingRemoval = attachmentTarget?.let { target ->
+                    state.pendingAttachmentRemovals.any { it.target == target }
+                } == true
+                val pendingReplacement = attachmentTarget?.let { target ->
+                    state.pendingAttachmentReplacements.firstOrNull { it.target == target }
+                }
+                val pendingMetadata = attachmentTarget?.let { target ->
+                    state.pendingAttachmentMetadataEdits.firstOrNull { it.target == target }
+                }
+                val trackTarget = resource.trackTarget
+                val pendingTrackRemoval = trackTarget?.let { target ->
+                    state.pendingTrackRemovals.any { it.target == target }
+                } == true
+                val pendingTrackMetadata = trackTarget?.let { target ->
+                    state.pendingTrackMetadataEdits.firstOrNull { it.target == target }
+                }
+                ContainerResourceRow(
+                    resource = resource,
+                    selected = resource.editableAss && resource.trackNumber == state.selectedTrackNumber,
+                    enabled = resource.editableAss &&
+                        resource.change != ContainerResourceChange.REMOVED &&
+                        !pendingTrackRemoval &&
+                        !state.writeBackBusy &&
+                        state.inventoryEvidence != ContainerInventoryEvidence.VERIFIED_OUTPUT,
+                    attachmentActionsEnabled = attachmentTarget != null &&
+                        resource.change != ContainerResourceChange.REMOVED &&
+                        !state.writeBackBusy &&
+                        !state.attachmentExtractBusy &&
+                        state.inventoryEvidence != ContainerInventoryEvidence.VERIFIED_OUTPUT,
+                    trackActionsEnabled = trackTarget != null &&
+                        resource.change != ContainerResourceChange.REMOVED &&
+                        !state.writeBackBusy &&
+                        !state.attachmentExtractBusy &&
+                        state.inventoryEvidence != ContainerInventoryEvidence.VERIFIED_OUTPUT,
+                    pendingRemoval = pendingRemoval,
+                    pendingReplacementName = pendingReplacement?.name,
+                    pendingMetadataName = pendingMetadata?.name,
+                    pendingTrackRemoval = pendingTrackRemoval,
+                    pendingTrackMetadataName = pendingTrackMetadata?.name,
+                    onClick = {
+                        val trackNumber = resource.trackNumber ?: return@ContainerResourceRow
+                        if (trackNumber == state.selectedTrackNumber) return@ContainerResourceRow
+                        if (dirty) {
+                            pendingTrackNumber = trackNumber
+                        } else {
+                            viewModel.selectContainerTrack(trackNumber)
+                        }
+                    },
+                    onRemoveAttachment = attachmentTarget?.let { target ->
                         {
-                            viewModel.planExistingTrackRemoval(
+                            viewModel.planExistingAttachmentRemoval(
                                 target = target,
-                                number = number,
                                 name = resource.title,
                             )
                         }
-                    }
-                },
-                onEditTrackMetadata = trackTarget?.let {
-                    {
-                        trackMetadataTarget = resource
-                        trackMetadataName = pendingTrackMetadata?.name ?: resource.trackName
-                        trackMetadataLanguage = pendingTrackMetadata?.language ?: resource.trackLanguage
-                        trackMetadataDefault = pendingTrackMetadata?.isDefault ?: resource.trackIsDefault
-                        trackMetadataForced = pendingTrackMetadata?.isForced ?: resource.trackIsForced
-                    }
-                },
-                onCancelTrackEdit = trackTarget?.let { target ->
-                    {
-                        viewModel.cancelExistingTrackRemoval(target)
-                        viewModel.cancelExistingTrackMetadata(target)
-                    }
-                },
-            )
+                    },
+                    onReplaceAttachment = attachmentTarget?.let {
+                        {
+                            replacementTarget = resource
+                            replacementPicker.launch(arrayOf("*/*"))
+                        }
+                    },
+                    onEditAttachmentMetadata = attachmentTarget?.let {
+                        {
+                            metadataTarget = resource
+                            metadataName = pendingMetadata?.name ?: resource.title
+                            metadataDescription = pendingMetadata?.description ?: resource.attachmentDescription
+                        }
+                    },
+                    onExtractAttachment = attachmentTarget?.let {
+                        {
+                            extractTarget = resource
+                            extractPicker.launch(resource.title)
+                        }
+                    },
+                    onCancelAttachmentEdit = attachmentTarget?.let { target ->
+                        {
+                            viewModel.cancelExistingAttachmentRemoval(target)
+                            viewModel.cancelExistingAttachmentReplacement(target)
+                            viewModel.cancelExistingAttachmentMetadata(target)
+                        }
+                    },
+                    onRemoveTrack = resource.trackNumber?.let { number ->
+                        trackTarget?.let { target ->
+                            {
+                                viewModel.planExistingTrackRemoval(
+                                    target = target,
+                                    number = number,
+                                    name = resource.title,
+                                )
+                            }
+                        }
+                    },
+                    onEditTrackMetadata = trackTarget?.let {
+                        {
+                            trackMetadataTarget = resource
+                            trackMetadataName = pendingTrackMetadata?.name ?: resource.trackName
+                            trackMetadataLanguage = pendingTrackMetadata?.language ?: resource.trackLanguage
+                            trackMetadataDefault = pendingTrackMetadata?.isDefault ?: resource.trackIsDefault
+                            trackMetadataForced = pendingTrackMetadata?.isForced ?: resource.trackIsForced
+                        }
+                    },
+                    onCancelTrackEdit = trackTarget?.let { target ->
+                        {
+                            viewModel.cancelExistingTrackRemoval(target)
+                            viewModel.cancelExistingTrackMetadata(target)
+                        }
+                    },
+                )
+            }
         }
 
         if (state.pendingTrackImports.isNotEmpty()) {
@@ -694,10 +731,20 @@ fun ContainerBridgePanel(
                             Text("Forced")
                         }
                         Text(
-                            "保存时将分配新的 TrackNumber / TrackUID。Default 对新导入轨默认关闭；来源附件不会自动复制，字幕依赖字体时请另外加入附件计划。",
+                            "保存时将分配新的 TrackNumber / TrackUID。Default 对新导入轨默认关闭；来源附件不会自动复制。",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
+                        if (
+                            candidate.kind == ContainerResourceKind.SUBTITLE &&
+                            candidate.sourceAttachmentCount > 0
+                        ) {
+                            Text(
+                                "该字幕来源包含 ${candidate.sourceAttachmentCount} 个附件；若它依赖字体或其他资源，请另外加入附件计划。",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.tertiary,
+                            )
+                        }
                     }
                 },
                 confirmButton = {
@@ -842,6 +889,12 @@ internal fun ContainerPreflightSummary(
     plan: ContainerEditPlanUi,
     modifier: Modifier = Modifier,
 ) {
+    var showAllChecks by remember { mutableStateOf(false) }
+    val notableChecks = plan.checks.filter {
+        it.status != ContainerCompatibilityStatus.SUPPORTED
+    }
+    val visibleChecks = if (showAllChecks) plan.checks else notableChecks
+
     Column(
         modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -886,8 +939,31 @@ internal fun ContainerPreflightSummary(
             }
         }
 
-        Text("兼容性 / 能力预检", style = MaterialTheme.typography.labelLarge)
-        plan.checks.forEach { check ->
+        Row(
+            Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                "兼容性 / 能力预检",
+                style = MaterialTheme.typography.labelLarge,
+                modifier = Modifier.weight(1f),
+            )
+            if (plan.checks.size > notableChecks.size) {
+                TextButton(onClick = { showAllChecks = !showAllChecks }) {
+                    Text(if (showAllChecks) "收起已通过项" else "全部 ${plan.checks.size} 项")
+                }
+            }
+        }
+
+        if (!showAllChecks && notableChecks.isEmpty()) {
+            Text(
+                "全部预检通过",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.primary,
+            )
+        }
+
+        visibleChecks.forEach { check ->
             Row(
                 Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
