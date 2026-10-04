@@ -809,6 +809,31 @@ class EditorRegressionInstrumentedTest {
         assertEquals(before, viewModel.state.value.document)
     }
 
+    @Test
+    fun effectsPaneExposesSpatialFadeAuthoringWithoutMutatingDocument() {
+        restoreRecovery()
+        eventRow(1L).performClick()
+        val before = viewModel.state.value.document
+
+        openTool("EFFECTS")
+        composeRule.onNodeWithTag("fx-composition-pane")
+            .performScrollTo()
+            .assertIsDisplayed()
+        composeRule.onNodeWithTag("fx-reflection-with-fade")
+            .performScrollTo()
+            .assertIsDisplayed()
+            .performClick()
+        composeRule.onNodeWithTag("fx-fade-bands")
+            .performScrollTo()
+            .assertIsDisplayed()
+        composeRule.onNodeWithTag("fx-fade-depth")
+            .assertIsDisplayed()
+        composeRule.onNodeWithTag("fx-fade-far-opacity")
+            .assertIsDisplayed()
+
+        assertEquals(before, viewModel.state.value.document)
+    }
+
     private fun restoreRecovery() {
         composeRule.onNodeWithTag("recovery-restore")
             .assertIsDisplayed()
