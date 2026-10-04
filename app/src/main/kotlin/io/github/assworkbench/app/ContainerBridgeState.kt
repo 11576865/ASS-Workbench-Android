@@ -98,6 +98,34 @@ data class PendingContainerTrackMetadataUi(
     val isForced: Boolean,
 )
 
+data class ContainerTrackImportCandidateUi(
+    val sourceUri: String,
+    val sourceName: String,
+    val sourceTrackNumber: Long,
+    val sourceTrackUid: Long?,
+    val kind: ContainerResourceKind,
+    val codecId: String,
+    val name: String,
+    val language: String,
+    val isDefault: Boolean,
+    val isForced: Boolean,
+    val sourceAttachmentCount: Int,
+)
+
+data class PendingContainerTrackImportUi(
+    val sourceUri: String,
+    val sourceName: String,
+    val sourceTrackNumber: Long,
+    val sourceTrackUid: Long?,
+    val kind: ContainerResourceKind,
+    val codecId: String,
+    val name: String,
+    val language: String,
+    val isDefault: Boolean,
+    val isForced: Boolean,
+    val sourceAttachmentCount: Int,
+)
+
 data class ContainerBridgeState(
     val uri: String? = null,
     val name: String = "",
@@ -112,6 +140,10 @@ data class ContainerBridgeState(
     val pendingAttachmentMetadataEdits: List<PendingContainerAttachmentMetadataUi> = emptyList(),
     val pendingTrackRemovals: List<PendingContainerTrackRemovalUi> = emptyList(),
     val pendingTrackMetadataEdits: List<PendingContainerTrackMetadataUi> = emptyList(),
+    val pendingTrackImports: List<PendingContainerTrackImportUi> = emptyList(),
+    val trackImportBusy: Boolean = false,
+    val trackImportSourceName: String = "",
+    val trackImportCandidates: List<ContainerTrackImportCandidateUi> = emptyList(),
     val extractedFontCount: Int = 0,
     val skippedAttachmentCount: Int = 0,
     val writeBackAvailable: Boolean = false,
