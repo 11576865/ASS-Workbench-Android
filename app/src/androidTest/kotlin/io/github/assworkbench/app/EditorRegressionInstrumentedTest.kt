@@ -698,6 +698,117 @@ class EditorRegressionInstrumentedTest {
         }
     }
 
+    @Test
+    fun batchUnknownStyleAndNegativeMarginFailBeforePreview() {
+        restoreRecovery()
+        val before = viewModel.state.value.document
+
+        openTool("BATCH")
+        composeRule.onNodeWithTag("batch-style-action")
+            .performScrollTo()
+            .assertIsDisplayed()
+            .performTextReplacement("Missing")
+        composeRule.onNodeWithTag("batch-preview-error")
+            .performScrollTo()
+            .assertIsDisplayed()
+        assertEquals(before, viewModel.state.value.document)
+
+        composeRule.onNodeWithTag("batch-style-action")
+            .performTextReplacement("")
+        composeRule.onNodeWithTag("batch-margin-l")
+            .performScrollTo()
+            .assertIsDisplayed()
+            .performTextReplacement("-1")
+        composeRule.onNodeWithTag("batch-preview-error")
+            .performScrollTo()
+            .assertIsDisplayed()
+        assertEquals(before, viewModel.state.value.document)
+    }
+
+    @Test
+    fun batchInvalidRegexFailsClosedInsteadOfDroppingTheFilter() {
+        restoreRecovery()
+        val before = viewModel.state.value.document
+
+        openTool("BATCH")
+        composeRule.onNodeWithTag("batch-preview-pending")
+            .performScrollTo()
+            .assertIsDisplayed()
+        composeRule.onNodeWithTag("batch-raw-regex-filter")
+            .performScrollTo()
+            .assertIsDisplayed()
+            .performTextReplacement("[")
+        composeRule.onNodeWithTag("batch-preview-error")
+            .performScrollTo()
+            .assertIsDisplayed()
+
+        assertEquals(before, viewModel.state.value.document)
+    }
+
+    @Test
+    fun semanticSearchInvalidAuxiliaryFiltersFailClosedInUi() {
+        restoreRecovery()
+        val before = viewModel.state.value.document
+
+        openTool("BATCH")
+        composeRule.onNodeWithTag("search-style-regex")
+            .performScrollTo()
+            .assertIsDisplayed()
+            .performTextReplacement("[")
+        composeRule.onNodeWithTag("search-replace-error")
+            .performScrollTo()
+            .assertIsDisplayed()
+        assertEquals(before, viewModel.state.value.document)
+
+        composeRule.onNodeWithTag("search-style-regex")
+            .performTextReplacement("")
+        composeRule.onNodeWithTag("search-forbidden-tag")
+            .performScrollTo()
+            .assertIsDisplayed()
+            .performTextReplacement("pos(")
+        composeRule.onNodeWithTag("search-replace-error")
+            .performScrollTo()
+            .assertIsDisplayed()
+        assertEquals(before, viewModel.state.value.document)
+    }
+
+    @Test
+    fun batchKaraokeRevealControlsStayPreviewOnlyUntilCommit() {
+        restoreRecovery()
+        val before = viewModel.state.value.document
+
+        openTool("BATCH")
+        composeRule.onNodeWithTag("batch-karaoke-reveal")
+            .performScrollTo()
+            .assertIsDisplayed()
+        composeRule.onNodeWithTag("batch-karaoke-reveal-enabled")
+            .performScrollTo()
+            .assertIsDisplayed()
+            .performClick()
+        composeRule.onNodeWithTag("batch-karaoke-reveal-ms")
+            .performScrollTo()
+            .assertIsDisplayed()
+        composeRule.onNodeWithTag("batch-karaoke-reveal-blur")
+            .assertIsDisplayed()
+        composeRule.onNodeWithTag("batch-karaoke-reveal-accel")
+            .assertIsDisplayed()
+        composeRule.onNodeWithTag("batch-preview-explicit")
+            .performScrollTo()
+            .assertIsDisplayed()
+        composeRule.onNodeWithTag("batch-preview-pending")
+            .performScrollTo()
+            .assertIsDisplayed()
+
+        assertEquals(before, viewModel.state.value.document)
+
+        composeRule.onNodeWithTag("batch-karaoke-reveal-ms")
+            .performTextReplacement("-1")
+        composeRule.onNodeWithTag("batch-preview-error")
+            .performScrollTo()
+            .assertIsDisplayed()
+        assertEquals(before, viewModel.state.value.document)
+    }
+
     private fun restoreRecovery() {
         composeRule.onNodeWithTag("recovery-restore")
             .assertIsDisplayed()
