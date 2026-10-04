@@ -15,12 +15,20 @@ data class AssSearchQuery(
     init {
         (requiredTags + forbiddenTags).forEach { raw ->
             val name = raw.removePrefix("\\")
-            require(name.isNotBlank() && ASS_SEARCH_TAG_NAME.matches(name)) {
+            require(AssTopLevelOverrideSyntax.isValidTagName(name)) {
                 "搜索 Tag 名称无效：$raw"
             }
         }
-        durationRangeMs?.let { require(it.first >= 0L && it.last >= it.first) }
-        timeRangeMs?.let { require(it.first >= 0L && it.last >= it.first) }
+        durationRangeMs?.let {
+            require(it.first >= 0L && it.last >= it.first) {
+                "字幕时长搜索范围必须非负且按升序排列。"
+            }
+        }
+        timeRangeMs?.let {
+            require(it.first >= 0L && it.last >= it.first) {
+                "时间搜索范围必须非负且按升序排列。"
+            }
+        }
     }
 }
 
@@ -74,26 +82,26 @@ object AssSearchReplace {
     }
 
     fun replaceVisibleSegments(text: String, pattern: Regex, replacement: String): String {
-        val out = StringBuilder(text.length)
-        var cursor = 0
-        var plainStart = 0
-        while (cursor < text.length) {
-            if (text[cursor] != '{') { cursor++; continue }
-            if (plainStart < cursor) out.append(pattern.replace(text.substring(plainStart, cursor), replacement))
-            val close = text.indexOf('}', cursor + 1)
-            if (close < 0) { out.append(pattern.replace(text.substring(cursor), replacement)); return out.toString() }
-            out.append(text, cursor, close + 1)
-            cursor = close + 1
-            plainStart = cursor
+        val analysis = AssInlineSyntax.analyze(text)
+        require(!analysis.hasErrors) {
+            "可见文本替换不能安全处理损坏的 ASS override block。"
         }
-        if (plainStart < text.length) out.append(pattern.replace(text.substring(plainStart), replacement))
-        return out.toString()
+
+        var result = text
+        analysis.tokens
+            .asSequence()
+            .filter { it.kind == AssInlineTokenKind.TEXT }
+            .sortedByDescending { it.start }
+            .forEach { token ->
+                val replaced = pattern.replace(token.text, replacement)
+                if (replaced != token.text) {
+                    result = result.replaceRange(token.start, token.endExclusive, replaced)
+                }
+            }
+        return result
     }
 
     fun topLevelTagNames(text: String): Set<String> =
         AssTopLevelOverrideSyntax.tags(text)
             .mapTo(linkedSetOf()) { it.name }
 }
-
-
-private val ASS_SEARCH_TAG_NAME = Regex("""[A-Za-z0-9_-]+""")
