@@ -365,19 +365,20 @@ func EditContainerResources(
 	if err != nil {
 		return err
 	}
-	updatedTracks, removedTrackIDs, removedTrackUIDs, err := planTrackEdits(
-		probe.Tracks,
-		removeTrackTargets,
-		trackMetadataEdits,
-	)
-	if err != nil {
-		return err
-	}
 	addedTracks, addedSources, addedTags, addedDurationMs, err := planTrackAdditions(
 		ctx,
 		probe.Tracks,
 		trackAdditions,
 		fs,
+	)
+	if err != nil {
+		return err
+	}
+	updatedTracks, removedTrackIDs, removedTrackUIDs, err := planTrackEditsInternal(
+		probe.Tracks,
+		removeTrackTargets,
+		trackMetadataEdits,
+		len(addedTracks) > 0,
 	)
 	if err != nil {
 		return err
@@ -400,7 +401,7 @@ func EditContainerResources(
 	meta.Tags = append(filterTagsForRemovedTrackUIDs(probe.Tags, removedTrackUIDs), addedTags...)
 	if addedDurationMs > meta.DurationMs {
 		meta.DurationMs = addedDurationMs
-		meta = *metaForNewDuration(&meta)
+		meta = metaForNewDuration(&meta)
 		meta.DurationMs = addedDurationMs
 	}
 	meta.Info.SegmentUID = derivedSegmentUID(&probe.Info, srcPath, "edit-container-tracks")
@@ -714,8 +715,14 @@ func planTrackAdditions(
 		}
 		state.remap[addition.SourceTrackID] = nextID
 
-		nextID++
-		nextUID++
+		if nextID == ^uint64(0) || nextUID == ^uint64(0) {
+			if len(out) < len(additions) {
+				return nil, nil, nil, 0, fmt.Errorf("cannot allocate another track identity")
+			}
+		} else {
+			nextID++
+			nextUID++
+		}
 	}
 
 	sources := make([]mergeSource, 0, len(order))
@@ -907,6 +914,15 @@ func planTrackEdits(
 	removeTargets []string,
 	metadataEdits []TrackMetadataEdit,
 ) ([]mkv.Track, map[uint64]struct{}, map[uint64]struct{}, error) {
+	return planTrackEditsInternal(existing, removeTargets, metadataEdits, false)
+}
+
+func planTrackEditsInternal(
+	existing []mkv.Track,
+	removeTargets []string,
+	metadataEdits []TrackMetadataEdit,
+	allowEmpty bool,
+) ([]mkv.Track, map[uint64]struct{}, map[uint64]struct{}, error) {
 	removeIndexes := make(map[int]struct{}, len(removeTargets))
 	metadataByIndex := make(map[int]mkv.Track, len(metadataEdits))
 
@@ -917,7 +933,7 @@ func planTrackEdits(
 		}
 		removeIndexes[index] = struct{}{}
 	}
-	if len(removeIndexes) >= len(existing) {
+	if len(removeIndexes) >= len(existing) && !allowEmpty {
 		return nil, nil, nil, fmt.Errorf("cannot remove all tracks")
 	}
 
