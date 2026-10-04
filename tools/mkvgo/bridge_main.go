@@ -114,6 +114,24 @@ func runReplaceASS(args []string) {
 				IsForced: parseBoolFlag(args[i+5], "--edit-track-meta forced"),
 			})
 			i += 5
+		case "--edit-track-meta-v2":
+			if i+11 >= len(args) {
+				fatal("--edit-track-meta-v2 needs <target> <name> <language> <bcp47> <default> <forced> <hearing> <visual> <descriptions> <original> <commentary>")
+			}
+			trackMetadataEdits = append(trackMetadataEdits, ops.TrackMetadataEdit{
+				Target: args[i+1],
+				Name: args[i+2],
+				Language: args[i+3],
+				LanguageBCP47: args[i+4],
+				IsDefault: parseBoolFlag(args[i+5], "--edit-track-meta-v2 default"),
+				IsForced: parseBoolFlag(args[i+6], "--edit-track-meta-v2 forced"),
+				HearingImpaired: parseBoolFlag(args[i+7], "--edit-track-meta-v2 hearing"),
+				VisualImpaired: parseBoolFlag(args[i+8], "--edit-track-meta-v2 visual"),
+				TextDescriptions: parseBoolFlag(args[i+9], "--edit-track-meta-v2 descriptions"),
+				Original: parseBoolFlag(args[i+10], "--edit-track-meta-v2 original"),
+				Commentary: parseBoolFlag(args[i+11], "--edit-track-meta-v2 commentary"),
+			})
+			i += 11
 		default:
 			if len(args[i]) > 0 && args[i][0] == '-' {
 				fatal("unknown flag: " + args[i])
@@ -316,6 +334,24 @@ func runEditContainer(args []string) {
 				IsForced: parseBoolFlag(args[i+5], "--edit-track-meta forced"),
 			})
 			i += 5
+		case "--edit-track-meta-v2":
+			if i+11 >= len(args) {
+				fatal("--edit-track-meta-v2 needs <target> <name> <language> <bcp47> <default> <forced> <hearing> <visual> <descriptions> <original> <commentary>")
+			}
+			trackMetadataEdits = append(trackMetadataEdits, ops.TrackMetadataEdit{
+				Target: args[i+1],
+				Name: args[i+2],
+				Language: args[i+3],
+				LanguageBCP47: args[i+4],
+				IsDefault: parseBoolFlag(args[i+5], "--edit-track-meta-v2 default"),
+				IsForced: parseBoolFlag(args[i+6], "--edit-track-meta-v2 forced"),
+				HearingImpaired: parseBoolFlag(args[i+7], "--edit-track-meta-v2 hearing"),
+				VisualImpaired: parseBoolFlag(args[i+8], "--edit-track-meta-v2 visual"),
+				TextDescriptions: parseBoolFlag(args[i+9], "--edit-track-meta-v2 descriptions"),
+				Original: parseBoolFlag(args[i+10], "--edit-track-meta-v2 original"),
+				Commentary: parseBoolFlag(args[i+11], "--edit-track-meta-v2 commentary"),
+			})
+			i += 11
 		case "--add-track":
 			if i+6 >= len(args) {
 				fatal("--add-track needs <file> <trackID> <name> <language> <default> <forced>")
@@ -333,6 +369,29 @@ func runEditContainer(args []string) {
 				IsForced: parseBoolFlag(args[i+6], "--add-track forced"),
 			})
 			i += 6
+		case "--add-track-v2":
+			if i+12 >= len(args) {
+				fatal("--add-track-v2 needs <file> <trackID> <name> <language> <bcp47> <default> <forced> <hearing> <visual> <descriptions> <original> <commentary>")
+			}
+			id, err := strconv.ParseUint(args[i+2], 10, 64)
+			if err != nil || id == 0 {
+				fatal("--add-track-v2 trackID must be a non-zero integer")
+			}
+			trackImports = append(trackImports, ops.TrackImport{
+				SourcePath: args[i+1],
+				TrackID: id,
+				Name: args[i+3],
+				Language: args[i+4],
+				LanguageBCP47: args[i+5],
+				IsDefault: parseBoolFlag(args[i+6], "--add-track-v2 default"),
+				IsForced: parseBoolFlag(args[i+7], "--add-track-v2 forced"),
+				HearingImpaired: parseBoolFlag(args[i+8], "--add-track-v2 hearing"),
+				VisualImpaired: parseBoolFlag(args[i+9], "--add-track-v2 visual"),
+				TextDescriptions: parseBoolFlag(args[i+10], "--add-track-v2 descriptions"),
+				Original: parseBoolFlag(args[i+11], "--add-track-v2 original"),
+				Commentary: parseBoolFlag(args[i+12], "--add-track-v2 commentary"),
+			})
+			i += 12
 		default:
 			fatal("unknown argument: " + args[i])
 		}
@@ -422,10 +481,10 @@ func ensureOutputAbsent(path string) {
 
 func usage() string {
 	return "usage:\n" +
-		"  asswb-mkvgo replace-ass <file.mkv> -o <out.mkv> -t <trackID> [--font <font.ttf>]... [--attachment <file>]... [--remove-attachment <uid-or-name>]... [--replace-attachment <uid-or-name> <file>]... [--edit-attachment-meta <uid-or-name> <name> <description>]... [--remove-track <uid:id|number:id>]... [--edit-track-meta <uid:id|number:id> <name> <language> <default> <forced>]... <edited.ass>\n" +
+		"  asswb-mkvgo replace-ass <file.mkv> -o <out.mkv> -t <trackID> [--font <font.ttf>]... [--attachment <file>]... [--remove-attachment <uid-or-name>]... [--replace-attachment <uid-or-name> <file>]... [--edit-attachment-meta <uid-or-name> <name> <description>]... [--remove-track <uid:id|number:id>]... [--edit-track-meta <uid:id|number:id> <name> <language> <default> <forced>]... [--edit-track-meta-v2 <uid:id|number:id> <name> <language> <bcp47> <default> <forced> <hearing> <visual> <descriptions> <original> <commentary>]... <edited.ass>\n" +
 		"  asswb-mkvgo add-attachments <file.mkv> -o <out.mkv> --attachment <file> [--attachment <file>]...\n" +
 		"  asswb-mkvgo edit-attachments <file.mkv> -o <out.mkv> [--attachment <file>]... [--remove-attachment <uid-or-name>]... [--replace-attachment <uid-or-name> <file>]... [--edit-attachment-meta <uid-or-name> <name> <description>]...\n" +
-		"  asswb-mkvgo edit-container <file.mkv> -o <out.mkv> [attachment edits] [--remove-track <uid:id|number:id>]... [--edit-track-meta <uid:id|number:id> <name> <language> <default> <forced>]... [--add-track <source.mkv> <trackID> <name> <language> <default> <forced>]...\n" +
+		"  asswb-mkvgo edit-container <file.mkv> -o <out.mkv> [attachment edits] [--remove-track <uid:id|number:id>]... [--edit-track-meta <uid:id|number:id> <name> <language> <default> <forced>]... [--edit-track-meta-v2 <uid:id|number:id> <name> <language> <bcp47> <default> <forced> <hearing> <visual> <descriptions> <original> <commentary>]... [--add-track <source.mkv> <trackID> <name> <language> <default> <forced>]... [--add-track-v2 <source.mkv> <trackID> <name> <language> <bcp47> <default> <forced> <hearing> <visual> <descriptions> <original> <commentary>]...\n" +
 		"  asswb-mkvgo extract-attachment <file.mkv> -o <file> --target <uid-or-name>"
 }
 
