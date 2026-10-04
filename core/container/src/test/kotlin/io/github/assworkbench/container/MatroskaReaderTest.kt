@@ -148,6 +148,42 @@ class MatroskaReaderTest {
     }
 
     @Test
+    fun readsBcp47AndExtendedDispositionFlags() {
+        val trackEntry = master(
+            0xAE,
+            uint(0xD7, 4) +
+                uint(0x73C5, 404) +
+                uint(0x83, 0x02) +
+                text(0x22B59C, "jpn") +
+                text(0x22B59D, "ja-JP") +
+                text(0x86, "A_OPUS") +
+                uint(0x88, 0) +
+                uint(0x55AA, 1) +
+                uint(0x55AB, 1) +
+                uint(0x55AC, 1) +
+                uint(0x55AD, 1) +
+                uint(0x55AE, 1) +
+                uint(0x55AF, 1),
+        )
+        val segment = master(0x18538067, master(0x1654AE6B, trackEntry))
+
+        val track = MatroskaReader()
+            .scan(ByteArrayInputStream(segment))
+            .trackInfos
+            .single()
+
+        assertEquals("jpn", track.language)
+        assertEquals("ja-JP", track.languageBcp47)
+        assertEquals(false, track.isDefault)
+        assertTrue(track.isForced)
+        assertTrue(track.hearingImpaired)
+        assertTrue(track.visualImpaired)
+        assertTrue(track.textDescriptions)
+        assertTrue(track.original)
+        assertTrue(track.commentary)
+    }
+
+    @Test
     fun recognizesRfcSfntAttachmentMediaType() {
         val attachment = MatroskaAttachment(
             uid = 1,
