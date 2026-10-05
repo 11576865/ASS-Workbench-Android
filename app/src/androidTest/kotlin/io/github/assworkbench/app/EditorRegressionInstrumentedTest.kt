@@ -411,14 +411,10 @@ class EditorRegressionInstrumentedTest {
             composeRule.activity.resources.configuration.screenWidthDp < 1200
         }
 
-        // Responsive relayout can leave the compact workspace on either the list
-        // page or the inspector page after wm reset. Navigate by stable semantics first,
-        // then wait for the Event row itself instead of assuming the row is already composed.
-        val listPageAfterReset = composeRule.onAllNodesWithTag("fixed-page-list", useUnmergedTree = true)
-            .fetchSemanticsNodes(atLeastOneRootRequired = false)
-        if (listPageAfterReset.isNotEmpty()) {
-            composeRule.onNodeWithTag("fixed-page-list").performClick()
-        }
+        // wm size/density reset can recreate the responsive host while preserving the
+        // inspector page. Request the navigation domain through the persistent FIXED
+        // workspace semantics instead of relying on a transient compact-page chip.
+        showFixedSubtitleList()
         composeRule.waitUntil(10_000) {
             composeRule.onAllNodesWithTag("event-row-1", useUnmergedTree = true)
                 .fetchSemanticsNodes(atLeastOneRootRequired = false)
@@ -1066,10 +1062,35 @@ class EditorRegressionInstrumentedTest {
     }
 
     private fun eventRow(id: Long): SemanticsNodeInteraction {
-        hideKeyboard()
-        val pages = composeRule.onAllNodesWithTag("fixed-page-list").fetchSemanticsNodes(atLeastOneRootRequired = false)
-        if (pages.isNotEmpty()) composeRule.onNodeWithTag("fixed-page-list").performClick()
+        showFixedSubtitleList()
         return composeRule.onNodeWithTag("event-row-$id")
+    }
+
+    private fun showFixedSubtitleList() {
+        hideKeyboard()
+        val fixedWorkspace = composeRule.onAllNodesWithTag("fixed-workspace", useUnmergedTree = true)
+            .fetchSemanticsNodes(atLeastOneRootRequired = false)
+        if (fixedWorkspace.isEmpty()) return
+
+        // The navigation-group chip exists in every FIXED layout profile. Clicking it
+        // sets the production compactPage state to LIST even if a size/density change
+        // has just rebuilt the responsive host. The compact-page chip is then only a
+        // secondary confirmation path, not the sole state transition.
+        val navigationGroups = composeRule.onAllNodesWithTag("fixed-group-NAVIGATION", useUnmergedTree = true)
+            .fetchSemanticsNodes(atLeastOneRootRequired = false)
+        if (navigationGroups.isNotEmpty()) {
+            composeRule.onNodeWithTag("fixed-group-NAVIGATION").performScrollTo().performClick()
+        }
+        val pages = composeRule.onAllNodesWithTag("fixed-page-list", useUnmergedTree = true)
+            .fetchSemanticsNodes(atLeastOneRootRequired = false)
+        if (pages.isNotEmpty()) {
+            composeRule.onNodeWithTag("fixed-page-list").performClick()
+        }
+        composeRule.waitUntil(10_000) {
+            composeRule.onAllNodesWithTag("subtitle-navigation", useUnmergedTree = true)
+                .fetchSemanticsNodes(atLeastOneRootRequired = false)
+                .isNotEmpty()
+        }
     }
 
     private fun hideKeyboard() {
@@ -1104,8 +1125,7 @@ class EditorRegressionInstrumentedTest {
             .isNotEmpty()
         if (fixedWorkspace) {
             if (name == "SUBTITLES") {
-                val pages = composeRule.onAllNodesWithTag("fixed-page-list").fetchSemanticsNodes(atLeastOneRootRequired = false)
-                if (pages.isNotEmpty()) composeRule.onNodeWithTag("fixed-page-list").performClick()
+                showFixedSubtitleList()
                 return
             }
             val group = WorkbenchTool.valueOf(name).group
