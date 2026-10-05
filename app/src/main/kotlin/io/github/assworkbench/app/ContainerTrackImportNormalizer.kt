@@ -39,6 +39,8 @@ internal fun normalizeStandaloneSubtitleTrackSource(
         ContainerTrackImportSourceKind.STANDALONE_SRT -> SrtCodec.parse(decoded)
         ContainerTrackImportSourceKind.MATROSKA_TRACK ->
             error("Matroska Track 不经过独立字幕规范化器")
+        ContainerTrackImportSourceKind.NORMALIZED_MEDIA_PACKETS ->
+            error("规范化媒体 packet 不经过字幕规范化器")
     }
     require(document.events.isNotEmpty()) { "独立字幕来源没有可导入的 Events" }
 
