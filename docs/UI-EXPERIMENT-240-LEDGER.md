@@ -385,3 +385,22 @@
 当前顺序保持：Presentation invariant gate（#61 + #69，已合入）→ UI Contract Slice A（#62，已合入）→ Binding/current object Slice B（#72，已合入）→ Preview/Commit → fonts/container/diagnostics → Write Target/batch intent → Timeline Dock（#98 current-main re-land）→ 后续 240 实验。
 
 因此，在 Preview/Commit 等 UI Contract 后续切片尚未稳定前，本账本继续作为追踪基线，不把 073+ 的新 presentation 大块并行塞进高冲突热点文件。
+
+## 2026-10-05 · parameter projection closure (PR #127)
+
+Position XY, Scale XY and Shear XY extend the merged Rotation Z projection. All
+four catalog descriptor families now have live controls and persisted identities.
+Scale/Shear support paired numbers, paired sliders and XY pads with independent
+X/Y, signed shear bounds, preview ownership and canonical Undo. Explicit extraction
+buttons are provided; arbitrary drag extraction/composition, nested regions and
+relations remain deferred, so 109/110 retain Partial.
+
+Supplemental 241 JVM tests passed (209 domain + 32 parameter/anchor). The emulator
+runner retains the complete suite gate and now runs the projection regressions
+first, reporting both attempts even if one fails; three gate-status scenarios
+passed. Android compilation and the new connected regressions are Pending CI.
+The previous empty failure in inspectorDraftSurvivesToolSwitchAndRotation is
+unresolved; the projection tests were not executed by that aborted full-suite run.
+Independent review identified a Slider handoff across targets/sessions; keyed
+pointer nodes and a focus-switch regression were added. No real-device or stable
+release promotion claim is made.

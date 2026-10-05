@@ -58,7 +58,7 @@ turns and unwraps the ±180° boundary. Release commits once; cancellation clear
 the projection-owned preview. Entering the center dead zone cancels the drag instead of publishing an unstable direction.
 Accessibility actions adjust one degree through the same document authority.
 Android dial drag/Undo and cancellation regressions remain Pending CI.
-XY Pad and broader parameter families remain separate follow-ups.
+Position XY, Scale XY and Shear XY are implemented in the subsequent slices below.
 Items 109/110 therefore remain Partial.
 
 
@@ -98,5 +98,49 @@ Supplemental validation: 209 domain Jupiter and 29 parameter/anchor Vintage test
 passed (238 total). Three connected tests cover pinned paired-number editing and
 one Undo, pad cancel/release/Undo, and foreign preview takeover. Android compile and
 connected/native validation are Pending CI. Real-device acceptance belongs to the
-user. UI-240 109/110 remain Partial: Scale/Shear projections and arbitrary drag
-extraction are not claimed complete.
+user. UI-240 109/110 remain Partial: arbitrary drag extraction and composition are
+not claimed complete. Scale/Shear are implemented in the next slice.
+
+
+## Scale / Shear live projection closure
+
+The Position tool now exposes “拆出缩放 X/Y” and “拆出错切 X/Y”. Both retain
+WorkspaceState v4 instance identity and FollowFocus/PinnedEvent binding, and switch
+between NUMBER_PAIR, SLIDER_PAIR and XY_PAD without changing parameter identity.
+X/Y are independent in the extracted control. Canonical bounds are Scale 1..1000%
+and Shear -10..10. Shear pad coordinates are translated from that signed domain,
+so zero is at the center and negative values remain valid. Accessibility exposes
+actual parameter values, with 1% scale and 0.05 shear increments.
+
+Preview uses geometry:<Event>:<projection>. Input and commit are gated by the
+starting workspace session, resolved target and matching preview owner. Numeric
+Apply and pad/slider release use existing canonical setters; Cancel, disposal and
+presentation switching clear only the projection-owned preview. Material Slider
+nodes are keyed by session/owner/presentation to prevent an old drag continuing
+against a replacement Event or project. DragInteraction.Cancel clears the draft
+and preview without applying. Foreign preview takeover cannot be cleared by this
+projection's Cancel.
+
+Validation in this slice: supplemental Kotlin/JUnit execution passed all 241 tests
+(209 domain plus 32 parameter/anchor tests). The scale range mutation 1..1000 →
+0..1000 failed two assertions (invalid zero draft accepted and shifted pad
+coordinates); the production range passed the same tests. Seven connected
+regressions are added for scale/shear paired Apply and Undo, negative shear pad
+cancel/release, scale slider release, foreign takeover, focus switch mid-drag and
+slider cancellation. They have not run locally: Android SDK/Gradle is unavailable.
+Exact-revision Android compilation and connected validation remain Pending CI.
+
+The emulator runner executes the projection classes independently before the full
+suite and prints each run's XML, logcat tails and crash buffer immediately. Both
+runs remain mandatory gates; three runner status-propagation scenarios passed.
+Previous revision 8095cea Android/native checks passed, but emulator run
+37232386964 stopped at EditorRegressionInstrumentedTest.
+inspectorDraftSurvivesToolSwitchAndRotation with an empty failure before the
+projection classes ran. This slice improves evidence collection; it does not
+claim that unresolved failure has been fixed.
+
+The four declared descriptor families now have live renderers. Arbitrary
+drag-to-extract, user-defined composition, graph relations and nested regions
+remain outside this approved slice. UI-240 109/110 remain Partial. Real-device
+acceptance belongs to the user; these changes do not promote the prerelease to a
+stable official release.

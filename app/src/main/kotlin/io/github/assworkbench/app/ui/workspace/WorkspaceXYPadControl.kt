@@ -24,6 +24,8 @@ internal fun WorkspaceXYPadControl(
     point: AssPoint, scriptWidth: Double, scriptHeight: Double, gestureKey: String,
     enabled: Boolean, onPreview: (AssPoint) -> Boolean, onCommit: (AssPoint) -> Unit,
     onCancel: () -> Unit, modifier: Modifier = Modifier,
+    semanticPoint: AssPoint = point, semanticLabel: String = "字幕位置二维板",
+    accessibilityStep: Double = 1.0,
 ) {
     val latestPoint by rememberUpdatedState(point)
     val latestCommit by rememberUpdatedState(onCommit)
@@ -31,13 +33,13 @@ internal fun WorkspaceXYPadControl(
     val cursor = MaterialTheme.colorScheme.primary
     Canvas(modifier.fillMaxWidth().aspectRatio((scriptWidth / scriptHeight).toFloat().coerceIn(0.25f, 4f))
         .semantics {
-            contentDescription = "字幕位置二维板；向右增加 X，向下增加 Y"
-            stateDescription = "X ${point.x}, Y ${point.y}"
+            contentDescription = "$semanticLabel；向右增加 X，向下增加 Y"
+            stateDescription = "X ${semanticPoint.x}, Y ${semanticPoint.y}"
             if (enabled) customActions = listOf(
-                CustomAccessibilityAction("向左 1 单位") { latestCommit(latestPoint.copy(x = (latestPoint.x - 1).coerceIn(0.0, scriptWidth))); true },
-                CustomAccessibilityAction("向右 1 单位") { latestCommit(latestPoint.copy(x = (latestPoint.x + 1).coerceIn(0.0, scriptWidth))); true },
-                CustomAccessibilityAction("向上 1 单位") { latestCommit(latestPoint.copy(y = (latestPoint.y - 1).coerceIn(0.0, scriptHeight))); true },
-                CustomAccessibilityAction("向下 1 单位") { latestCommit(latestPoint.copy(y = (latestPoint.y + 1).coerceIn(0.0, scriptHeight))); true },
+                CustomAccessibilityAction("向左 ${accessibilityStep} 单位") { latestCommit(latestPoint.copy(x = (latestPoint.x - accessibilityStep).coerceIn(0.0, scriptWidth))); true },
+                CustomAccessibilityAction("向右 ${accessibilityStep} 单位") { latestCommit(latestPoint.copy(x = (latestPoint.x + accessibilityStep).coerceIn(0.0, scriptWidth))); true },
+                CustomAccessibilityAction("向上 ${accessibilityStep} 单位") { latestCommit(latestPoint.copy(y = (latestPoint.y - accessibilityStep).coerceIn(0.0, scriptHeight))); true },
+                CustomAccessibilityAction("向下 ${accessibilityStep} 单位") { latestCommit(latestPoint.copy(y = (latestPoint.y + accessibilityStep).coerceIn(0.0, scriptHeight))); true },
             )
         }
         .pointerInput(gestureKey, enabled, scriptWidth, scriptHeight) {

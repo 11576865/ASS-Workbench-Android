@@ -6833,6 +6833,11 @@ private fun PositionPane(
                     label = { Text(if (state.geometryScaleLocked) "比例锁定" else "独立 X/Y") },
                 )
             }
+            if (onExtractParameter != null) {
+                OutlinedButton(onClick = {
+                    onExtractParameter(WorkspaceParameterCatalog.scaleXY, WorkspaceParameterPresentation.SLIDER_PAIR, parameterBinding)
+                }, modifier = Modifier.testTag("extract-scale-xy-${event.id}")) { Text("拆出缩放 X/Y") }
+            }
             ContinuousParameterControl(
                 label = "Scale X",
                 valueText = if (externalParameterPreview) (displayGeometry.scaleX ?: style?.scaleX ?: 100.0).toString() else scaleXText,
@@ -6928,6 +6933,11 @@ private fun PositionPane(
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            if (onExtractParameter != null) {
+                OutlinedButton(onClick = {
+                    onExtractParameter(WorkspaceParameterCatalog.shearXY, WorkspaceParameterPresentation.XY_PAD, parameterBinding)
+                }, modifier = Modifier.testTag("extract-shear-xy-${event.id}")) { Text("拆出错切 X/Y") }
+            }
             ContinuousParameterControl(
                 label = "Shear X · \\fax",
                 valueText = if (externalParameterPreview) (displayGeometry.shearX ?: 0.0).toString() else shearXText,
