@@ -1,5 +1,9 @@
 package io.github.assworkbench.app.ui.workspace
 
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.interaction.DragInteraction
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -17,6 +21,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -26,6 +31,7 @@ import io.github.assworkbench.app.EditorState
 import io.github.assworkbench.app.EditorViewModel
 import io.github.assworkbench.app.ui.preview.GeometryParameterDisplay
 import io.github.assworkbench.domain.AssGeometrySemantic
+import kotlinx.coroutines.flow.collect
 
 @Composable
 internal fun WorkspaceParameterProjectionPane(
@@ -70,16 +76,20 @@ internal fun WorkspaceParameterProjectionPane(
         return
     }
 
+    // Canvas nodes can be shorter than the parameter form; preserve access to
+    // Apply/Cancel/Remove without requiring users to resize the world surface.
+    val contentModifier = modifier.verticalScroll(rememberScrollState())
+
     if (projection.descriptorKey == WorkspaceParameterCatalog.positionXY.key) {
         WorkspacePositionProjectionPane(projection, state, viewModel, eventId,
-            onRemove, onPresentationChange, modifier)
+            onRemove, onPresentationChange, contentModifier)
         return
     }
 
     if (projection.descriptorKey == WorkspaceParameterCatalog.scaleXY.key ||
         projection.descriptorKey == WorkspaceParameterCatalog.shearXY.key) {
         WorkspaceTransformProjectionPane(projection, state, viewModel, eventId,
-            onRemove, onPresentationChange, modifier)
+            onRemove, onPresentationChange, contentModifier)
         return
     }
 
@@ -103,67 +113,52 @@ internal fun WorkspaceParameterProjectionPane(
     val angle = remember(displayEvent.text, style?.angle) {
         AssGeometrySemantic.inspect(displayEvent.text).rotationZ ?: style?.angle ?: 0.0
     }
-    var sliderValue by remember(projection.id, eventId) { mutableFloatStateOf(angle.toFloat()) }
-    var numberText by remember(projection.id, eventId) { mutableStateOf(angle.toString()) }
-    var gestureActive by remember(projection.id, eventId) { mutableStateOf(false) }
-    var revision by remember(projection.id, eventId) { mutableLongStateOf(0L) }
     val sessionId = state.workspaceSessionId
     val ownerId = "geometry:$eventId:${projection.id}"
+    val guard = WorkspaceProjectionGuard(sessionId, eventId, ownerId)
+    val enabled = state.previewOwnerId == null || state.previewOwnerId == ownerId
+    val committedAngle = AssGeometrySemantic.inspect(committedEvent.text).rotationZ ?: style?.angle ?: 0.0
+    var sliderValue by remember(sessionId, projection.id, eventId, projection.presentation) { mutableFloatStateOf(angle.toFloat()) }
+    var numberText by remember(sessionId, projection.id, eventId, committedEvent.text, style?.angle, projection.presentation) {
+        mutableStateOf(committedAngle.toString())
+    }
+    var gestureActive by remember(sessionId, projection.id, eventId, projection.presentation) { mutableStateOf(false) }
+    var revision by remember(sessionId, projection.id, eventId) { mutableLongStateOf(0L) }
 
-    fun dispatch(
-        phase: WorkspaceParameterIntentPhase,
-        value: Double? = null,
-    ) {
+    var sliderGeneration by remember(sessionId, ownerId, projection.presentation) { mutableLongStateOf(0L) }
+    var ownedPreviewRevision by remember(sessionId, projection.id, eventId, projection.presentation) { mutableStateOf<Long?>(null) }
+    fun dispatch(phase: WorkspaceParameterIntentPhase, value: Double? = null, requireOwnedPreview: Boolean = false): Boolean {
         val current = viewModel.state.value
-        if (current.workspaceSessionId != sessionId) return
-        if (phase != WorkspaceParameterIntentPhase.CANCEL) {
-            val target = projection.binding.resolve(
-                current.focusedEventId,
-                current.selectedEventIds,
-                current.document.events.mapTo(hashSetOf()) { it.id },
-            ) as? WorkspaceBindingResolution.Event
-            if (target?.eventId != eventId) return
-            if (current.previewOwnerId != null && current.previewOwnerId != ownerId) return
+        if (phase == WorkspaceParameterIntentPhase.CANCEL) {
+            if (!guard.mayClear(current.workspaceSessionId)) return false
+        } else {
+            val target = projection.binding.resolve(current.focusedEventId, current.selectedEventIds,
+                current.document.events.mapTo(hashSetOf()) { it.id }) as? WorkspaceBindingResolution.Event
+            if (!guard.mayWrite(current.workspaceSessionId, target?.eventId, current.previewOwnerId)) return false
+            if (requireOwnedPreview && !guard.mayFinish(current.workspaceSessionId, target?.eventId,
+                    current.previewOwnerId, current.geometryPreviewRevision, ownedPreviewRevision)) return false
         }
         revision += 1L
         WorkspaceParameterIntentRouter.dispatch(
-            intent = WorkspaceParameterIntent(
-                address = projection.address,
-                phase = phase,
-                values = if (phase == WorkspaceParameterIntentPhase.CANCEL) {
-                    emptyList()
-                } else {
-                    listOf(requireNotNull(value))
-                },
-                revision = revision,
-            ),
-            resolvedEventId = eventId,
-            viewModel = viewModel,
+            intent = WorkspaceParameterIntent(projection.address, phase,
+                if (phase == WorkspaceParameterIntentPhase.CANCEL) emptyList() else listOf(requireNotNull(value)), revision),
+            resolvedEventId = eventId, viewModel = viewModel,
         )
+        if (phase == WorkspaceParameterIntentPhase.PREVIEW) ownedPreviewRevision = viewModel.state.value.geometryPreviewRevision
+        else ownedPreviewRevision = null
+        return true
     }
 
-    LaunchedEffect(angle, projection.presentation, gestureActive) {
-        if (!gestureActive) {
-            sliderValue = angle.toFloat()
-            numberText = angle.toString()
-        }
+    LaunchedEffect(angle, gestureActive, enabled) {
+        if (!enabled) gestureActive = false
+        if (!gestureActive) sliderValue = angle.toFloat()
     }
-    DisposableEffect(projection.id, eventId) {
-        onDispose {
-            WorkspaceParameterIntentRouter.dispatch(
-                intent = WorkspaceParameterIntent(
-                    address = projection.address,
-                    phase = WorkspaceParameterIntentPhase.CANCEL,
-                    revision = revision + 1L,
-                ),
-                resolvedEventId = eventId,
-                viewModel = viewModel,
-            )
-        }
+    DisposableEffect(sessionId, ownerId, projection.presentation) {
+        onDispose { dispatch(WorkspaceParameterIntentPhase.CANCEL) }
     }
 
     Column(
-        modifier.padding(12.dp).testTag("parameter-projection-${projection.id.replace(':', '-')}"),
+        contentModifier.padding(12.dp).testTag("parameter-projection-${projection.id.replace(':', '-')}"),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Text("${descriptor.title} · Event #$eventId")
@@ -198,32 +193,17 @@ internal fun WorkspaceParameterProjectionPane(
 
         when (projection.presentation) {
             WorkspaceParameterPresentation.ANGLE_DIAL -> {
-                val enabled = state.previewOwnerId == null || state.previewOwnerId == ownerId
-                val sessionId = state.workspaceSessionId
-                fun mayWrite(): Boolean {
-                    val current = viewModel.state.value
-                    val target = projection.binding.resolve(
-                        current.focusedEventId, current.selectedEventIds,
-                        current.document.events.mapTo(hashSetOf()) { it.id },
-                    ) as? WorkspaceBindingResolution.Event
-                    return current.workspaceSessionId == sessionId && target?.eventId == eventId &&
-                        (current.previewOwnerId == null || current.previewOwnerId == ownerId)
-                }
                 WorkspaceAngleDialControl(
                     angle = angle,
                     gestureKey = "$sessionId:$ownerId",
                     enabled = enabled,
                     onPreview = { value ->
-                        if (mayWrite()) {
-                            gestureActive = true
-                            dispatch(WorkspaceParameterIntentPhase.PREVIEW, value)
-                            true
-                        } else false
+                        val accepted = dispatch(WorkspaceParameterIntentPhase.PREVIEW, value, requireOwnedPreview = gestureActive)
+                        gestureActive = accepted
+                        accepted
                     },
                     onCommit = { value ->
-                        if (mayWrite()) {
-                            dispatch(WorkspaceParameterIntentPhase.COMMIT, value)
-                        }
+                        dispatch(WorkspaceParameterIntentPhase.COMMIT, value, requireOwnedPreview = gestureActive)
                         gestureActive = false
                     },
                     onCancel = {
@@ -238,33 +218,51 @@ internal fun WorkspaceParameterProjectionPane(
             }
 
             WorkspaceParameterPresentation.SLIDER -> {
-                Slider(
-                    value = sliderValue.coerceIn(-180f, 180f),
-                    onValueChange = { value ->
-                        gestureActive = true
-                        sliderValue = value
-                        dispatch(WorkspaceParameterIntentPhase.PREVIEW, value.toDouble())
-                    },
-                    onValueChangeFinished = {
-                        if (gestureActive) {
-                            dispatch(WorkspaceParameterIntentPhase.COMMIT, sliderValue.toDouble())
-                            gestureActive = false
+                key(sessionId, ownerId, projection.presentation, sliderGeneration) {
+                    var invalidated by remember { mutableStateOf(false) }
+                    val interactions = remember { MutableInteractionSource() }
+                    LaunchedEffect(interactions) {
+                        interactions.interactions.collect { interaction ->
+                            if (interaction is DragInteraction.Cancel) {
+                                gestureActive = false
+                                dispatch(WorkspaceParameterIntentPhase.CANCEL)
+                            }
                         }
-                    },
-                    valueRange = -180f..180f,
-                    modifier = Modifier.fillMaxWidth()
-                        .testTag("parameter-projection-slider-${projection.id.replace(':', '-')}"),
-                )
+                    }
+                    Slider(
+                        value = sliderValue.coerceIn(-180f, 180f), enabled = enabled,
+                        interactionSource = interactions,
+                        onValueChange = { value ->
+                            if (invalidated) return@Slider
+                            if (dispatch(WorkspaceParameterIntentPhase.PREVIEW, value.toDouble(), requireOwnedPreview = gestureActive)) {
+                                gestureActive = true
+                                sliderValue = value
+                            } else {
+                                invalidated = true
+                                gestureActive = false
+                                sliderGeneration += 1L
+                            }
+                        },
+                        onValueChangeFinished = {
+                            if (!invalidated && gestureActive) dispatch(WorkspaceParameterIntentPhase.COMMIT, sliderValue.toDouble(), requireOwnedPreview = true)
+                            gestureActive = false
+                        },
+                        valueRange = -180f..180f,
+                        modifier = Modifier.fillMaxWidth()
+                            .testTag("parameter-projection-slider-${projection.id.replace(':', '-')}"),
+                    )
+                }
             }
 
             WorkspaceParameterPresentation.NUMBER -> {
                 OutlinedTextField(
-                    value = numberText,
+                    value = if (enabled) numberText else angle.toString(),
+                    readOnly = !enabled,
                     onValueChange = { raw ->
                         numberText = raw
                         raw.toDoubleOrNull()?.takeIf(Double::isFinite)?.let { value ->
                             dispatch(WorkspaceParameterIntentPhase.PREVIEW, value)
-                        }
+                        } ?: dispatch(WorkspaceParameterIntentPhase.CANCEL)
                     },
                     label = { Text("角度") },
                     suffix = { Text("°") },
@@ -278,7 +276,7 @@ internal fun WorkspaceParameterProjectionPane(
                             dispatch(WorkspaceParameterIntentPhase.COMMIT, value)
                         }
                     },
-                    enabled = numberText.toDoubleOrNull()?.isFinite() == true,
+                    enabled = enabled && numberText.toDoubleOrNull()?.isFinite() == true,
                     modifier = Modifier.testTag(
                         "parameter-projection-apply-${projection.id.replace(':', '-')}"
                     ),
@@ -291,6 +289,13 @@ internal fun WorkspaceParameterProjectionPane(
                 Text("此显示方式已在 descriptor 中声明，但 live renderer 尚未接通。")
             }
         }
+
+        Button(onClick = {
+            dispatch(WorkspaceParameterIntentPhase.CANCEL)
+            gestureActive = false
+            numberText = committedAngle.toString()
+            sliderValue = committedAngle.toFloat()
+        }, modifier = Modifier.testTag("parameter-projection-cancel-${projection.id.replace(':', '-')}")) { Text("取消") }
 
         Button(
             onClick = {

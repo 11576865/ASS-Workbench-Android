@@ -204,3 +204,51 @@ finish with failure status and retain all remaining attempts. Shell syntax,
 artifact policy and whitespace checks passed. Current Android execution remains
 Pending CI. This is a diagnostic containment change, not a proven fix of the
 rotation hang or a stable-release promotion.
+
+## Four-family drag extraction and Rotation Z ownership hardening
+
+PR #127 merged as main 554100f. The next slice, branch
+`feat/workspace-vector-drag-guards`, gives Position XY, Rotation Z, Scale XY and
+Shear XY the same long-press drag extraction control, with normal click fallback.
+The control retains the starting session/Event/binding key, cancels when that key
+or enabled state changes, and uses the latest workspace mutation callback at
+release. This preserves earlier extractions/layout changes instead of replaying
+a closure over an old WorkspaceState. PositionPane additionally validates current
+session and resolved Event immediately before publishing extraction.
+
+Rotation Z now resets local state at session/target/presentation boundaries.
+Disposal cannot clear an identically named preview in a replacement session.
+Numeric input is read-only during foreign previews, invalid numeric drafts cancel
+only this projection's preview, and explicit Cancel restores committed text.
+Slider cancellation clears preview without Undo; session/target changes dispose
+its pointer node. Continuous Slider/Dial previews and commits retain the owned
+geometry publication revision. A foreign takeover followed by immediate clear
+still invalidates the old gesture. A rejected Slider gesture retires its pointer
+node rather than reacquiring ownership on another move. Accessibility remains a
+separate explicit edit through the canonical setter.
+
+Parameter forms scroll inside short canvas surfaces so Apply/Cancel/Remove remain
+reachable. This does not change world geometry or ASS document history.
+
+Validation: 245 supplemental JVM tests passed (209 domain + 36 parameter/anchor),
+zero failures/skips. Removing session-aware cleanup and the revision fence fails
+two guard assertions; production passes. Three SDK-free runner tests pass across
+nine scenarios with four focused classes plus the full suite. The test-only short
+process deadline was raised from 0.3s to 2s because CPU contention could expire
+before the fake Gradle process started; production minute-scale bounds are unchanged.
+
+Twelve connected regressions are added: three actual vector extractions without
+ASS edits; three extraction-fixture tests for sequential extraction, cancellation
+and key change; six Rotation tests for invalid draft, replacement-session cleanup,
+Slider cancel, target handoff, foreign takeover + clear + continued moves, and
+compact scrolling. They are Pending CI and have not run locally (no Android SDK).
+The extraction fixture is included as an independent focused class before the
+mandatory full suite. Baseline fcec1b4 passed Android/native and 85 full emulator
+tests; those results are not attributed to this new source tree.
+
+Independent static review identified stale extraction callbacks and gesture
+ownership reacquisition after a quick takeover. Both are addressed above, with
+connected coverage Pending CI. UI-240 109/110 remain Partial because user-defined
+arbitrary extraction/composition is not covered by four predefined families.
+Nested regions, relation graphs and broader custom tools remain separate work.
+No stable-release or real-device acceptance is claimed.
