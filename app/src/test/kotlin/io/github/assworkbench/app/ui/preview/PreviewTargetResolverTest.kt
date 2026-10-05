@@ -159,4 +159,14 @@ class PreviewTargetResolverTest {
         assertEquals(PreviewTargetConfidence.UNRESOLVED, candidate.confidence)
         assertTrue(candidate.distance.isInfinite())
     }
+    @Test fun staticParameterAnchorUsesExplicitOrInheritedButRejectsMotionAndLateTags() {
+        val document = AssDocument(styles = listOf(AssStyle(name = "Default", alignment = 5)))
+        assertEquals(960.0, PreviewTargetResolver.staticAnchor(document, event(1L, "A"))!!.x, 0.001)
+        assertEquals(540.0, PreviewTargetResolver.staticAnchor(document, event(1L, "A"))!!.y, 0.001)
+        assertEquals(100.0, PreviewTargetResolver.staticAnchor(document, event(1L, "{\\pos(100,200)}A"))!!.x, 0.001)
+        org.junit.Assert.assertNull(PreviewTargetResolver.staticAnchor(document, event(1L, "{\\move(0,0,100,100)}A")))
+        org.junit.Assert.assertNull(PreviewTargetResolver.staticAnchor(document, event(1L, "A{\\pos(100,200)}B")))
+        org.junit.Assert.assertNull(PreviewTargetResolver.staticAnchor(document, event(1L, "{\\pos(1,2)\\move(0,0,1,2)}A")))
+    }
+
 }

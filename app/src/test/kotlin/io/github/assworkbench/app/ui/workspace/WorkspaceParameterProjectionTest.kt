@@ -93,4 +93,15 @@ class WorkspaceParameterProjectionTest {
         assertTrue(restored.parameterProjections.isEmpty())
         assertEquals("POSITION", restored.tools.single().toolKey)
     }
+    @Test fun positionPadSwitchToNumbersRetainsPinnedBindingAcrossRestore() {
+        val initial = WorkspaceState(sessionId = 12L).addParameterProjection(
+            WorkspaceParameterCatalog.positionXY.key, WorkspaceParameterPresentation.XY_PAD,
+            WorkspaceBinding.PinnedEvent(7L),
+        )
+        val before = initial.parameterProjections.single()
+        val numbers = initial.updateParameterPresentation(before.id, WorkspaceParameterPresentation.NUMBER_PAIR)
+        val restored = WorkspaceState.fromSaveableList(numbers.toSaveableList()).parameterProjections.single()
+        assertEquals(before.copy(presentation = WorkspaceParameterPresentation.NUMBER_PAIR), restored)
+    }
+
 }

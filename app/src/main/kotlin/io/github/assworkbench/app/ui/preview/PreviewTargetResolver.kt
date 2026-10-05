@@ -34,6 +34,17 @@ internal data class PreviewTargetCandidate(
 )
 
 internal object PreviewTargetResolver {
+    /** Static parameter editing never silently replaces motion/conflicting/late anchors. */
+    fun staticAnchor(document: AssDocument, event: AssEvent): AssPoint? {
+        if (hasLateAnchorTag(event.text)) return null
+        val geometry = AssGeometrySemantic.inspect(event.text)
+        return when (geometry.positionMode) {
+            AssPositionMode.POSITION -> geometry.position?.takeIf(::isFinitePoint)
+            AssPositionMode.INHERITED -> inheritedAnchor(document, event)
+            else -> null
+        }
+    }
+
     fun candidates(
         document: AssDocument,
         positionMs: Long,

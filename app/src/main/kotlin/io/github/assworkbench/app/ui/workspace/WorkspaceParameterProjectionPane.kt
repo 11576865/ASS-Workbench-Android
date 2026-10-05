@@ -70,6 +70,19 @@ internal fun WorkspaceParameterProjectionPane(
         return
     }
 
+    if (projection.descriptorKey == WorkspaceParameterCatalog.positionXY.key) {
+        WorkspacePositionProjectionPane(projection, state, viewModel, eventId,
+            onRemove, onPresentationChange, modifier)
+        return
+    }
+
+    if (projection.descriptorKey == WorkspaceParameterCatalog.scaleXY.key ||
+        projection.descriptorKey == WorkspaceParameterCatalog.shearXY.key) {
+        WorkspaceTransformProjectionPane(projection, state, viewModel, eventId,
+            onRemove, onPresentationChange, modifier)
+        return
+    }
+
     if (projection.descriptorKey != WorkspaceParameterCatalog.rotationZ.key) {
         Column(modifier.padding(12.dp)) {
             Text(descriptor.title)

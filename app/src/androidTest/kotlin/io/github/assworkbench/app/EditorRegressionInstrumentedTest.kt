@@ -424,37 +424,52 @@ class EditorRegressionInstrumentedTest {
 
     @Test
     fun inspectorDraftSurvivesToolSwitchAndRotation() {
+        Log.i("AsswbRegression", "rotation:restore-recovery")
         restoreRecovery()
+        Log.i("AsswbRegression", "rotation:open-event")
         eventRow(1L).performClick()
+        Log.i("AsswbRegression", "rotation:type-draft")
         composeRule.onNodeWithTag("event-raw-1").performTextInput(" WORKBENCH")
+        Log.i("AsswbRegression", "rotation:switch-effects")
         openTool("EFFECTS")
         composeRule.onNodeWithTag("fixed-inspector").assertIsDisplayed()
+        Log.i("AsswbRegression", "rotation:switch-text")
         openTool("TEXT")
         composeRule.onNodeWithTag("event-raw-1").assertIsDisplayed()
+        Log.i("AsswbRegression", "rotation:request-landscape")
         composeRule.activityRule.scenario.onActivity {
             it.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
         }
+        Log.i("AsswbRegression", "rotation:wait-landscape")
         composeRule.waitUntil(10_000) {
             composeRule.activity.resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
         }
+        Log.i("AsswbRegression", "rotation:check-landscape")
         val previewNodes = composeRule.onAllNodesWithTag("preview-workspace").fetchSemanticsNodes(atLeastOneRootRequired = false)
         if (previewNodes.isNotEmpty()) composeRule.onNodeWithTag("preview-workspace").assertIsDisplayed()
         val listNodes = composeRule.onAllNodesWithTag("subtitle-navigation").fetchSemanticsNodes(atLeastOneRootRequired = false)
         if (listNodes.isNotEmpty()) composeRule.onNodeWithTag("subtitle-navigation").assertIsDisplayed()
         composeRule.onNodeWithTag("event-inspector").assertIsDisplayed()
+        Log.i("AsswbRegression", "rotation:capture-landscape")
         captureLayout("landscape")
         val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
         try {
+            Log.i("AsswbRegression", "rotation:resize-tablet")
             automation.executeShellCommand("wm size 1920x1200").close()
+            Log.i("AsswbRegression", "rotation:set-tablet-density")
             automation.executeShellCommand("wm density 160").close()
+            Log.i("AsswbRegression", "rotation:request-tablet-landscape")
             composeRule.activityRule.scenario.onActivity {
                 it.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
             }
+            Log.i("AsswbRegression", "rotation:wait-tablet-config")
             composeRule.waitUntil(10_000) {
                 val configuration = composeRule.activity.resources.configuration
                 configuration.screenWidthDp >= 1600 && configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
             }
+            Log.i("AsswbRegression", "rotation:wait-tablet-idle")
             composeRule.waitForIdle()
+            Log.i("AsswbRegression", "rotation:check-tablet-bounds")
             val preview = composeRule.onNodeWithTag("preview-workspace").fetchSemanticsNode().boundsInRoot
             val navigation = composeRule.onNodeWithTag("subtitle-navigation").fetchSemanticsNode().boundsInRoot
             val inspector = composeRule.onNodeWithTag("fixed-inspector").fetchSemanticsNode().boundsInRoot
@@ -463,9 +478,12 @@ class EditorRegressionInstrumentedTest {
             assertTrue("Navigation and inspector must not overlap", navigation.right <= inspector.left || navigation.bottom <= inspector.top)
             composeRule.onNodeWithTag("canvas-workspace").assertDoesNotExist()
             composeRule.onNodeWithTag("preview-divider").assertDoesNotExist()
+            Log.i("AsswbRegression", "rotation:capture-tablet")
             captureLayout("tablet-landscape")
         } finally {
+            Log.i("AsswbRegression", "rotation:reset-display-size")
             automation.executeShellCommand("wm size reset").close()
+            Log.i("AsswbRegression", "rotation:reset-display-density")
             automation.executeShellCommand("wm density reset").close()
         }
         composeRule.waitUntil(10_000) {
@@ -475,6 +493,7 @@ class EditorRegressionInstrumentedTest {
         // Responsive relayout can leave the compact workspace on either the list
         // page or the inspector page after wm reset. Navigate by stable semantics first,
         // then wait for the Event row itself instead of assuming the row is already composed.
+        Log.i("AsswbRegression", "rotation:find-list-page")
         val listPageAfterReset = composeRule.onAllNodesWithTag("fixed-page-list", useUnmergedTree = true)
             .fetchSemanticsNodes(atLeastOneRootRequired = false)
         if (listPageAfterReset.isNotEmpty()) {
@@ -485,6 +504,7 @@ class EditorRegressionInstrumentedTest {
                 .fetchSemanticsNodes(atLeastOneRootRequired = false)
                 .isNotEmpty()
         }
+        Log.i("AsswbRegression", "rotation:select-event")
         eventRow(1L)
             .performScrollTo()
             .assertIsDisplayed()
@@ -495,6 +515,7 @@ class EditorRegressionInstrumentedTest {
                 .isNotEmpty()
         }
 
+        Log.i("AsswbRegression", "rotation:apply-draft")
         composeRule.onNodeWithTag("event-apply-text-1").performScrollTo().performClick()
         composeRule.waitUntil(5_000) { eventText(1L) == "Recovered line WORKBENCH" }
         composeRule.activityRule.scenario.onActivity {
