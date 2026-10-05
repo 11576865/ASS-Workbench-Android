@@ -2,6 +2,7 @@
 import os
 from pathlib import Path
 import subprocess
+import signal
 import tempfile
 import unittest
 
@@ -14,7 +15,7 @@ SCRIPT = Path(__file__).with_name("run_emulator_regression.sh").resolve()
 
 
 class EmulatorRegressionRunnerTest(unittest.TestCase):
-    def run_gate(self, failure):
+    def run_gate(self, failure, hang=False):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / "gradle").write_text('''#!/usr/bin/env python3
@@ -23,6 +24,9 @@ from pathlib import Path
 arg = next((x for x in sys.argv if x.startswith("-Pandroid.testInstrumentationRunnerArguments.class=")), "suite")
 with Path(os.environ["TEST_RUN_LOG"]).open("a") as log:
     log.write(arg + "\\n")
+if os.environ.get("TEST_HANG") == arg:
+    import time
+    time.sleep(30)
 sys.exit(7 if os.environ.get("TEST_FAILURE") == arg else 0)
 ''')
             (root / "adb").write_text("#!/bin/sh\nexit 0\n")
@@ -30,9 +34,20 @@ sys.exit(7 if os.environ.get("TEST_FAILURE") == arg else 0)
                 (root / name).chmod(0o755)
             log = root / "calls"
             env = dict(os.environ, PATH=str(root) + os.pathsep + os.environ["PATH"],
-                       TEST_RUN_LOG=str(log), TEST_FAILURE=failure)
-            result = subprocess.run(["bash", str(SCRIPT)], cwd=root, env=env, capture_output=True)
-            return result.returncode, log.read_text().splitlines()
+                       TEST_RUN_LOG=str(log), TEST_FAILURE="" if hang else failure,
+                       TEST_HANG=failure if hang else "",
+                       ASSWB_INITIAL_TEST_TIMEOUT="0.3s", ASSWB_FOCUSED_TEST_TIMEOUT="0.3s",
+                       ASSWB_SUITE_TEST_TIMEOUT="0.3s")
+            process = subprocess.Popen(["bash", str(SCRIPT)], cwd=root, env=env,
+                                       stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True)
+            try:
+                process.communicate(timeout=3)
+                status = process.returncode
+            except subprocess.TimeoutExpired:
+                os.killpg(process.pid, signal.SIGKILL)
+                process.communicate()
+                status = None
+            return status, log.read_text().splitlines()
 
     def test_each_projection_class_has_an_independent_run_before_full_suite(self):
         status, calls = self.run_gate("")
@@ -46,6 +61,14 @@ sys.exit(7 if os.environ.get("TEST_FAILURE") == arg else 0)
                 status, calls = self.run_gate(failure)
                 self.assertEqual(expected, calls)
                 self.assertEqual(7, status)
+
+    def test_hung_attempt_is_bounded_and_all_remaining_attempts_run(self):
+        expected = ["-Pandroid.testInstrumentationRunnerArguments.class=" + c for c in CLASSES] + ["suite"]
+        for failure in [expected[0], expected[2], "suite"]:
+            with self.subTest(hang=failure):
+                status, calls = self.run_gate(failure, hang=True)
+                self.assertEqual(124, status)
+                self.assertEqual(expected, calls)
 
 
 if __name__ == "__main__":

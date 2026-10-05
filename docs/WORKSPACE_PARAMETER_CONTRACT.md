@@ -178,3 +178,29 @@ all three classes separately, reporting each immediately, then always executes
 the full suite. The runner regression first failed with five assertions and now
 passes both tests across five execution scenarios. Exact-revision Android evidence
 for the new sequence remains Pending CI.
+
+## 2026-10-05 bounded regression diagnostics
+
+Exact ec587b8 Android CI (37284603961) and native probe (37284603993) passed.
+Emulator run 37284603984 independently completed Rotation, Position and Transform
+with 3, 3 and 7 passing tests, validating the separate-class correction. The full
+suite then stalled with inspectorDraftSurvivesToolSwitchAndRotation active and
+was cancelled at the outer 35-minute job deadline. It did not produce a complete
+suite result and is not a passing gate. The root cause is still unconfirmed.
+
+The runner now bounds cold-build/first focused execution to 8 minutes, subsequent
+focused executions to 3 minutes each and the full suite to 12 minutes. Timeouts
+remain failed gates (124, or signal termination 137). They trigger best-effort
+app thread/Activity diagnostics and force-stop stale instrumentation before the
+next attempt. XML, crash buffer and TestRunner/AsswbRegression progress are emitted
+between attempts. The rotation regression logs checkpoints around recovery,
+tool switches, orientation, display metrics, idle/semantic queries and captures.
+Assertions and the complete-suite gate are retained; no retry hides a failure.
+
+SDK-free orchestration validation: three tests passed across eight scenarios
+(success, four nonzero exit placements and three real process hangs). The hanging
+cases first failed because the old runner had no bound; with the watchdog they
+finish with failure status and retain all remaining attempts. Shell syntax,
+artifact policy and whitespace checks passed. Current Android execution remains
+Pending CI. This is a diagnostic containment change, not a proven fix of the
+rotation hang or a stable-release promotion.

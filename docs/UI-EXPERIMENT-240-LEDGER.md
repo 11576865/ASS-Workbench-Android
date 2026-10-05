@@ -421,3 +421,13 @@ but were not independently protected from an early full-suite abort. The runner
 now launches Rotation, Position and Transform classes separately and always
 continues to the full suite. SDK-free orchestration regressions failed before the
 fix and pass after it (success plus four separate failure-placement scenarios).
+
+### Rotation stall evidence and containment
+
+ec587b8 build/native passed; focused emulator classes passed 3+3+7. The complete
+suite then stalled at inspectorDraftSurvivesToolSwitchAndRotation and hit the
+35-minute job deadline (run 37284603984). Complete validation remains incomplete.
+Added finite per-attempt deadlines, app/Activity diagnostics and step checkpoints
+without removing assertions or weakening the gate. Three SDK-free orchestration
+tests passed across eight scenarios, including real hangs; no root-cause fix or
+user acceptance is inferred. Exact new revision Android validation is Pending CI.
