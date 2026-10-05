@@ -252,3 +252,13 @@ connected coverage Pending CI. UI-240 109/110 remain Partial because user-define
 arbitrary extraction/composition is not covered by four predefined families.
 Nested regions, relation graphs and broader custom tools remain separate work.
 No stable-release or real-device acceptance is claimed.
+
+## Exact drag/guard revision validation and integration
+
+Revision d5524abfc115eba87b5f75a09f4dbcbdd746e8bb passed Android CI
+37294144536, Fontconfig native probe 37294144547 and Emulator Regression
+37294144527. Complete XML reports 97 tests with zero failures/errors/skips,
+including all twelve new connected regressions. PR #130 merged as
+f75272ab3336646ad00f37cd16f9d73e3db966bc under the user's integration instruction.
+This establishes automated validation for that revision; real-device acceptance
+and a stable release remain separate.
