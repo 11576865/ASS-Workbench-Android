@@ -2713,14 +2713,18 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
 
     // Workspace-bound geometry mutations use explicit Event identity.
     // A pinned ToolInstance must never mutate global focus only to reach its target.
-    fun previewEventPosition(id: Long, x: Double, y: Double) {
+    fun previewEventPosition(id: Long, x: Double, y: Double, ownerId: String = "geometry:$id") {
         val state = _state.value
         if (state.document.events.none { it.id == id }) return
+        val baseOwner = "geometry:$id"
+        require(ownerId == baseOwner || ownerId.startsWith("$baseOwner:")) {
+            "Position preview owner must belong to Event #$id."
+        }
         val preview = withEventPosition(state.document, id, x, y)
         _state.update { current ->
             current.copy(
                 previewDocument = if (preview == state.document) null else preview,
-                previewOwnerId = if (preview == state.document) null else "geometry:$id",
+                previewOwnerId = if (preview == state.document) null else ownerId,
                 geometryPreviewRevision = state.geometryPreviewRevision + 1L,
             )
         }
@@ -2877,14 +2881,15 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    fun previewEventScale(id: Long, scaleX: Double, scaleY: Double) {
+    fun previewEventScale(id: Long, scaleX: Double, scaleY: Double, ownerId: String = "geometry:$id") {
+        require(ownerId == "geometry:$id" || ownerId.startsWith("geometry:$id:"))
         val state = _state.value
         if (state.document.events.none { it.id == id }) return
         val preview = withEventScale(state.document, id, scaleX, scaleY)
         _state.update { current ->
             current.copy(
                 previewDocument = if (preview == state.document) null else preview,
-                previewOwnerId = if (preview == state.document) null else "geometry:$id",
+                previewOwnerId = if (preview == state.document) null else ownerId,
                 geometryPreviewRevision = state.geometryPreviewRevision + 1L,
             )
         }
@@ -2906,14 +2911,15 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    fun previewEventShear(id: Long, shearX: Double, shearY: Double) {
+    fun previewEventShear(id: Long, shearX: Double, shearY: Double, ownerId: String = "geometry:$id") {
+        require(ownerId == "geometry:$id" || ownerId.startsWith("geometry:$id:"))
         val state = _state.value
         if (state.document.events.none { it.id == id }) return
         val preview = withEventShear(state.document, id, shearX, shearY)
         _state.update { current ->
             current.copy(
                 previewDocument = if (preview == state.document) null else preview,
-                previewOwnerId = if (preview == state.document) null else "geometry:$id",
+                previewOwnerId = if (preview == state.document) null else ownerId,
                 geometryPreviewRevision = state.geometryPreviewRevision + 1L,
             )
         }

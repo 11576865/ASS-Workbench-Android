@@ -188,8 +188,8 @@
 
 | ID | 原始要求 | 状态 | Authority | Surface / code | 自动证据 | Visual | DEVICE / 阻塞 |
 |---|---|---|---|---|---|---|---|
-| 109 | 将任意参数从原工具拖到工作区，生成独立参数工具。 | **Partial** | `feat/workspace-parameter-drag-angle` | Rotation Z supports long-press drag extraction from Position into a persisted Infinite Canvas parameter node; normal click remains fallback | `WorkspaceParameterContractTest` + `WorkspaceParameterProjectionTest` + connected long-press extraction regression | Not 240-ID mapped | One parameter family now has a real drag gesture；arbitrary parameter drag-to-extract remains pending. |
-| 110 | 同一参数可同时以滑块、角度盘、数值或二维板呈现，全部连接同一正式状态。 | **Partial** | `feat/workspace-parameter-drag-angle` | Rotation Z NUMBER/SLIDER/ANGLE_DIAL share one descriptor/binding and route typed PREVIEW/COMMIT/CANCEL intents into the canonical EditorViewModel authority | Angle Dial unit/connected regressions + parameter projection preview→commit→Undo coverage | Not 240-ID mapped | Rotation Z covers three presentations；XY Pad and broader parameter families remain pending. |
+| 109 | 将任意参数从原工具拖到工作区，生成独立参数工具。 | **Partial** | main #118 + PR #127 | Rotation Z supports long-press drag extraction; Position XY / Scale XY / Shear XY have explicit extraction and persisted schema-v4 identity/binding/presentation | Model/contract tests + connected extraction/projection regressions | Not 240-ID mapped | All four declared families have extraction entry points; arbitrary parameter drag-to-extract remains pending. |
+| 110 | 同一参数可同时以滑块、角度盘、数值或二维板呈现，全部连接同一正式状态。 | **Partial** | main #118 + PR #127 | Rotation Z NUMBER/SLIDER/ANGLE_DIAL via typed intents; Position XY NUMBER_PAIR/XY_PAD and Scale/Shear NUMBER_PAIR/SLIDER_PAIR/XY_PAD use canonical EditorViewModel mutation authority | Persistence/identity/range tests + connected preview/commit/cancel/Undo regressions | Not 240-ID mapped | 6b33ee5 Android/native and 84 connected tests passed; integrated ce0d905 tree Pending CI. Arbitrary composition remains pending. |
 | 111 | 把字号、字距和描边拼成一个“排版手柄”，用户自定控件顺序。 | **Planned** | main · no dedicated 240 slice | No dedicated custom-tool-construction surface | No 240-ID automated mapping | Not 240-ID mapped | Not item-mapped |
 | 112 | 把 X、Y、角度和旋转中心组合成几何控制台。 | **Planned** | main · no dedicated 240 slice | No dedicated custom-tool-construction surface | No 240-ID automated mapping | Not 240-ID mapped | Not item-mapped |
 | 113 | 为多个事件建立比较工具，同屏显示差异与来源。 | **Planned** | main · no dedicated 240 slice | No dedicated custom-tool-construction surface | No 240-ID automated mapping | Not 240-ID mapped | Not item-mapped |
@@ -385,3 +385,49 @@
 当前顺序保持：Presentation invariant gate（#61 + #69，已合入）→ UI Contract Slice A（#62，已合入）→ Binding/current object Slice B（#72，已合入）→ Preview/Commit → fonts/container/diagnostics → Write Target/batch intent → Timeline Dock（#98 current-main re-land）→ 后续 240 实验。
 
 因此，在 Preview/Commit 等 UI Contract 后续切片尚未稳定前，本账本继续作为追踪基线，不把 073+ 的新 presentation 大块并行塞进高冲突热点文件。
+
+## 2026-10-05 · parameter projection closure (PR #127)
+
+Position XY, Scale XY and Shear XY extend the merged Rotation Z projection. All
+four catalog descriptor families now have live controls and persisted identities.
+Scale/Shear support paired numbers, paired sliders and XY pads with independent
+X/Y, signed shear bounds, preview ownership and canonical Undo. Explicit extraction
+buttons are provided; arbitrary drag extraction/composition, nested regions and
+relations remain deferred, so 109/110 retain Partial.
+
+Supplemental 241 JVM tests passed (209 domain + 32 parameter/anchor). The emulator
+runner retains the complete suite gate and now runs the projection regressions
+first, reporting both attempts even if one fails; three gate-status scenarios
+passed. Android compilation and the new connected regressions are Pending CI.
+The previous empty failure in inspectorDraftSurvivesToolSwitchAndRotation is
+unresolved; the projection tests were not executed by that aborted full-suite run.
+Independent review identified a Slider handoff across targets/sessions; keyed
+pointer nodes and a focus-switch regression were added. No real-device or stable
+release promotion claim is made.
+
+
+### Integration follow-up
+
+6b33ee5 Android/native and complete 84-test emulator validation passed, including
+all parameter projections and the previously empty-failure rotation test. That
+failure did not recur; its cause is not established. Main ce0d905 (#118) now adds
+Rotation Z long-press extraction and typed routing. This integration preserves
+that implementation plus all vector renderers; its own Android checks are Pending
+CI. Items 109/110 remain Partial and user-device acceptance is separate.
+
+CI orchestration correction: the 6b33ee5 comma-separated focused filter produced
+only three Rotation tests. All vector tests did run in the successful full suite,
+but were not independently protected from an early full-suite abort. The runner
+now launches Rotation, Position and Transform classes separately and always
+continues to the full suite. SDK-free orchestration regressions failed before the
+fix and pass after it (success plus four separate failure-placement scenarios).
+
+### Rotation stall evidence and containment
+
+ec587b8 build/native passed; focused emulator classes passed 3+3+7. The complete
+suite then stalled at inspectorDraftSurvivesToolSwitchAndRotation and hit the
+35-minute job deadline (run 37284603984). Complete validation remains incomplete.
+Added finite per-attempt deadlines, app/Activity diagnostics and step checkpoints
+without removing assertions or weakening the gate. Three SDK-free orchestration
+tests passed across eight scenarios, including real hangs; no root-cause fix or
+user acceptance is inferred. Exact new revision Android validation is Pending CI.
