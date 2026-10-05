@@ -25,7 +25,36 @@ internal object WorkspaceParameterIntentRouter {
                 viewModel = viewModel,
             )
 
+            WorkspaceParameterCatalog.positionXY.key -> dispatchPositionXY(
+                intent = intent,
+                eventId = resolvedEventId,
+                viewModel = viewModel,
+            )
+
             else -> error("No live parameter router for ${descriptor.key}")
+        }
+    }
+
+    private fun dispatchPositionXY(
+        intent: WorkspaceParameterIntent,
+        eventId: Long,
+        viewModel: EditorViewModel,
+    ) {
+        val ownerId = "geometry:$eventId:${intent.address.projectionId}"
+        when (intent.phase) {
+            WorkspaceParameterIntentPhase.PREVIEW ->
+                viewModel.previewEventPosition(
+                    id = eventId,
+                    x = intent.values[0],
+                    y = intent.values[1],
+                    ownerId = ownerId,
+                )
+
+            WorkspaceParameterIntentPhase.COMMIT ->
+                viewModel.setEventPosition(eventId, intent.values[0], intent.values[1])
+
+            WorkspaceParameterIntentPhase.CANCEL ->
+                viewModel.clearTransientPreview(ownerId)
         }
     }
 
