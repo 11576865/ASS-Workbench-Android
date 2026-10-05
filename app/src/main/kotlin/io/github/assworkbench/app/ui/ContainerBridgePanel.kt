@@ -266,7 +266,7 @@ fun ContainerBridgePanel(
                 },
             ) {
                 Icon(Icons.Filled.AddCircle, contentDescription = null)
-                Text("导入 / 检测轨道")
+                Text("添加轨道")
             }
             TextButton(
                 modifier = Modifier.testTag("container-add-attachment"),
