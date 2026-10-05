@@ -15,6 +15,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -72,7 +73,7 @@ internal fun WorkspaceParameterProjectionPane(
     if (projection.descriptorKey != WorkspaceParameterCatalog.rotationZ.key) {
         Column(modifier.padding(12.dp)) {
             Text(descriptor.title)
-            Text("这个参数已有持久化投影，但首个 live renderer 目前只接通 Rotation Z。")
+            Text("这个参数已有持久化投影，但当前 live router 只接通 Rotation Z。")
             Button(onClick = onRemove) { Text("移除参数控件") }
         }
         return
@@ -91,17 +92,61 @@ internal fun WorkspaceParameterProjectionPane(
     }
     var sliderValue by remember(projection.id, eventId) { mutableFloatStateOf(angle.toFloat()) }
     var numberText by remember(projection.id, eventId) { mutableStateOf(angle.toString()) }
-    var sliderActive by remember(projection.id, eventId) { mutableStateOf(false) }
+    var gestureActive by remember(projection.id, eventId) { mutableStateOf(false) }
+    var revision by remember(projection.id, eventId) { mutableLongStateOf(0L) }
+    val sessionId = state.workspaceSessionId
     val ownerId = "geometry:$eventId:${projection.id}"
 
-    LaunchedEffect(angle, projection.presentation, sliderActive) {
-        if (!sliderActive) {
+    fun dispatch(
+        phase: WorkspaceParameterIntentPhase,
+        value: Double? = null,
+    ) {
+        val current = viewModel.state.value
+        if (current.workspaceSessionId != sessionId) return
+        if (phase != WorkspaceParameterIntentPhase.CANCEL) {
+            val target = projection.binding.resolve(
+                current.focusedEventId,
+                current.selectedEventIds,
+                current.document.events.mapTo(hashSetOf()) { it.id },
+            ) as? WorkspaceBindingResolution.Event
+            if (target?.eventId != eventId) return
+            if (current.previewOwnerId != null && current.previewOwnerId != ownerId) return
+        }
+        revision += 1L
+        WorkspaceParameterIntentRouter.dispatch(
+            intent = WorkspaceParameterIntent(
+                address = projection.address,
+                phase = phase,
+                values = if (phase == WorkspaceParameterIntentPhase.CANCEL) {
+                    emptyList()
+                } else {
+                    listOf(requireNotNull(value))
+                },
+                revision = revision,
+            ),
+            resolvedEventId = eventId,
+            viewModel = viewModel,
+        )
+    }
+
+    LaunchedEffect(angle, projection.presentation, gestureActive) {
+        if (!gestureActive) {
             sliderValue = angle.toFloat()
             numberText = angle.toString()
         }
     }
-    DisposableEffect(ownerId) {
-        onDispose { viewModel.clearTransientPreview(ownerId) }
+    DisposableEffect(projection.id, eventId) {
+        onDispose {
+            WorkspaceParameterIntentRouter.dispatch(
+                intent = WorkspaceParameterIntent(
+                    address = projection.address,
+                    phase = WorkspaceParameterIntentPhase.CANCEL,
+                    revision = revision + 1L,
+                ),
+                resolvedEventId = eventId,
+                viewModel = viewModel,
+            )
+        }
     }
 
     Column(
@@ -128,7 +173,10 @@ internal fun WorkspaceParameterProjectionPane(
             ).forEach { (presentation, label) ->
                 FilterChip(
                     selected = projection.presentation == presentation,
-                    onClick = { onPresentationChange(presentation) },
+                    onClick = {
+                        dispatch(WorkspaceParameterIntentPhase.CANCEL)
+                        onPresentationChange(presentation)
+                    },
                     label = { Text(label) },
                 )
             }
@@ -154,17 +202,22 @@ internal fun WorkspaceParameterProjectionPane(
                     enabled = enabled,
                     onPreview = { value ->
                         if (mayWrite()) {
-                            viewModel.previewEventRotationZ(eventId, value, ownerId = ownerId)
+                            gestureActive = true
+                            dispatch(WorkspaceParameterIntentPhase.PREVIEW, value)
                             true
                         } else false
                     },
                     onCommit = { value ->
-                        if (mayWrite()) viewModel.setEventRotationZ(eventId, value)
+                        if (mayWrite()) {
+                            dispatch(WorkspaceParameterIntentPhase.COMMIT, value)
+                        }
+                        gestureActive = false
                     },
                     onCancel = {
                         if (viewModel.state.value.workspaceSessionId == sessionId) {
-                            viewModel.clearTransientPreview(ownerId)
+                            dispatch(WorkspaceParameterIntentPhase.CANCEL)
                         }
+                        gestureActive = false
                     },
                     modifier = Modifier.testTag("parameter-projection-dial-${projection.id.replace(':', '-')}"),
                 )
@@ -175,18 +228,14 @@ internal fun WorkspaceParameterProjectionPane(
                 Slider(
                     value = sliderValue.coerceIn(-180f, 180f),
                     onValueChange = { value ->
-                        sliderActive = true
+                        gestureActive = true
                         sliderValue = value
-                        viewModel.previewEventRotationZ(
-                            eventId,
-                            value.toDouble(),
-                            ownerId = ownerId,
-                        )
+                        dispatch(WorkspaceParameterIntentPhase.PREVIEW, value.toDouble())
                     },
                     onValueChangeFinished = {
-                        if (sliderActive) {
-                            viewModel.setEventRotationZ(eventId, sliderValue.toDouble())
-                            sliderActive = false
+                        if (gestureActive) {
+                            dispatch(WorkspaceParameterIntentPhase.COMMIT, sliderValue.toDouble())
+                            gestureActive = false
                         }
                     },
                     valueRange = -180f..180f,
@@ -201,7 +250,7 @@ internal fun WorkspaceParameterProjectionPane(
                     onValueChange = { raw ->
                         numberText = raw
                         raw.toDoubleOrNull()?.takeIf(Double::isFinite)?.let { value ->
-                            viewModel.previewEventRotationZ(eventId, value, ownerId = ownerId)
+                            dispatch(WorkspaceParameterIntentPhase.PREVIEW, value)
                         }
                     },
                     label = { Text("角度") },
@@ -213,7 +262,7 @@ internal fun WorkspaceParameterProjectionPane(
                 Button(
                     onClick = {
                         numberText.toDoubleOrNull()?.takeIf(Double::isFinite)?.let { value ->
-                            viewModel.setEventRotationZ(eventId, value)
+                            dispatch(WorkspaceParameterIntentPhase.COMMIT, value)
                         }
                     },
                     enabled = numberText.toDoubleOrNull()?.isFinite() == true,
@@ -232,7 +281,7 @@ internal fun WorkspaceParameterProjectionPane(
 
         Button(
             onClick = {
-                viewModel.clearTransientPreview(ownerId)
+                dispatch(WorkspaceParameterIntentPhase.CANCEL)
                 onRemove()
             },
             modifier = Modifier.testTag("parameter-projection-remove-${projection.id.replace(':', '-')}"),

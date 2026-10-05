@@ -71,3 +71,14 @@ Two connected regressions cover drag preview/release/one Undo and cancellation.
 They are Pending CI; no local Android compile or user-device acceptance is claimed.
 Gesture callbacks retain their starting session/Event, and cancellation only
 clears that session's matching owner. Source artifact/whitespace checks passed.
+
+
+## Drag extraction and typed intent routing follow-up
+
+- Rotation Z supports long-press drag extraction from the Position tool; release creates the persisted workspace projection while a normal click remains a fallback.
+- Extraction changes WorkspaceState only and must not create an ASS document Undo entry.
+- NUMBER, SLIDER and the current-main ANGLE_DIAL all dispatch typed `WorkspaceParameterIntent` values through `WorkspaceParameterIntentRouter`.
+- The router validates descriptor/binding/value/revision semantics first, then delegates PREVIEW / COMMIT / CANCEL to the existing EditorViewModel geometry mutation boundary.
+- The current-main Angle Dial implementation remains authoritative for dial motion, multi-turn behavior, cancellation and accessibility semantics; this follow-up does not replace it with a second dial implementation.
+
+Items 109/110 remain Partial because arbitrary parameter families and XY-pad/vector projections are not yet connected.
