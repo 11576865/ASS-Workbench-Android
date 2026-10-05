@@ -574,4 +574,177 @@ class ContainerEditPlanTest {
             }
         )
     }
+
+    @Test
+    fun standaloneSrtNormalizedImportIsExecutable() {
+        val import = PendingContainerTrackImportUi(
+            sourceKind = ContainerTrackImportSourceKind.STANDALONE_SRT,
+            sourceUri = "content://external/subtitles.srt",
+            sourceName = "subtitles.srt",
+            sourceSha256 = "a".repeat(64),
+            kind = ContainerResourceKind.SUBTITLE,
+            codecId = "S_TEXT/ASS",
+            name = "Imported subtitles",
+            language = "eng",
+            languageBcp47 = "en-US",
+            isDefault = false,
+            isForced = false,
+        )
+        val state = EditorState(
+            container = ContainerBridgeState(
+                uri = "fixture-source",
+                writeBackAvailable = true,
+                resources = listOf(
+                    ContainerResourceUi(
+                        rowKey = "track:uid:101",
+                        kind = ContainerResourceKind.VIDEO,
+                        title = "Video",
+                        detail = "V_VP9 · Track #1",
+                        trackNumber = 1L,
+                        trackTarget = "uid:101",
+                    )
+                ),
+                pendingTrackImports = listOf(import),
+            ),
+        )
+
+        val plan = buildContainerEditPlan(state)
+
+        assertTrue(plan.executable)
+        assertEquals(ContainerMutationKind.ADD_TRACK, plan.mutations.single().kind)
+        assertTrue(plan.mutations.single().detail.contains("standalone SRT"))
+        assertTrue(
+            plan.checks.any {
+                it.dimension == ContainerCompatibilityDimension.SOURCE_INVENTORY &&
+                    it.title.contains("独立字幕规范化证据")
+            }
+        )
+    }
+
+    @Test
+    fun standaloneSubtitleWithoutNormalizedShaBlocksPreflight() {
+        val import = PendingContainerTrackImportUi(
+            sourceKind = ContainerTrackImportSourceKind.STANDALONE_ASS,
+            sourceUri = "content://external/subtitles.ass",
+            sourceName = "subtitles.ass",
+            sourceSha256 = null,
+            kind = ContainerResourceKind.SUBTITLE,
+            codecId = "S_TEXT/ASS",
+            name = "Imported ASS",
+            language = "und",
+            isDefault = false,
+            isForced = false,
+        )
+        val state = EditorState(
+            container = ContainerBridgeState(
+                uri = "fixture-source",
+                writeBackAvailable = true,
+                pendingTrackImports = listOf(import),
+            ),
+        )
+
+        val plan = buildContainerEditPlan(state)
+
+        assertFalse(plan.executable)
+        assertEquals(
+            ContainerCompatibilityStatus.UNSUPPORTED,
+            plan.checks.single {
+                it.dimension == ContainerCompatibilityDimension.CONTAINER_STRUCTURE
+            }.status,
+        )
+    }
+
+    @Test
+    fun normalizedMp3ImportIsExecutableAndKeepsCurrentMetadataPolicy() {
+        val import = PendingContainerTrackImportUi(
+            sourceKind = ContainerTrackImportSourceKind.NORMALIZED_MEDIA_PACKETS,
+            sourceUri = "content://external/audio.mp3",
+            sourceName = "audio.mp3",
+            sourceExtractorIndex = 0,
+            sourceSha256 = "b".repeat(64),
+            sourceContentSha256 = "c".repeat(64),
+            sampleRate = 44_100,
+            channelCount = 2,
+            packetCount = 42L,
+            kind = ContainerResourceKind.AUDIO,
+            codecId = "A_MPEG/L3",
+            name = "Commentary",
+            language = "eng",
+            languageBcp47 = "en-GB",
+            isDefault = false,
+            isForced = false,
+            hearingImpaired = true,
+            commentary = true,
+        )
+        val state = EditorState(
+            container = ContainerBridgeState(
+                uri = "fixture-source",
+                writeBackAvailable = true,
+                resources = listOf(
+                    ContainerResourceUi(
+                        rowKey = "track:uid:101",
+                        kind = ContainerResourceKind.VIDEO,
+                        title = "Video",
+                        detail = "V_VP9 · Track #1",
+                        trackNumber = 1L,
+                        trackTarget = "uid:101",
+                    )
+                ),
+                pendingTrackImports = listOf(import),
+            ),
+        )
+
+        val plan = buildContainerEditPlan(state)
+
+        assertTrue(plan.executable)
+        val mutation = plan.mutations.single()
+        assertEquals(ContainerMutationSource.EXTERNAL_TRACK, mutation.source)
+        assertTrue(mutation.detail.contains("packet stream-copy"))
+        assertTrue(mutation.detail.contains("BCP 47 en-GB"))
+        assertTrue(mutation.detail.contains("Hearing impaired"))
+        assertTrue(mutation.detail.contains("Commentary"))
+        assertTrue(
+            plan.checks.single {
+                it.dimension == ContainerCompatibilityDimension.OUTPUT_VERIFICATION
+            }.detail.contains("payload digest")
+        )
+    }
+
+    @Test
+    fun normalizedMp3WithoutLogicalContentEvidenceBlocksPreflight() {
+        val import = PendingContainerTrackImportUi(
+            sourceKind = ContainerTrackImportSourceKind.NORMALIZED_MEDIA_PACKETS,
+            sourceUri = "content://external/audio.mp3",
+            sourceName = "audio.mp3",
+            sourceExtractorIndex = 0,
+            sourceSha256 = "b".repeat(64),
+            sourceContentSha256 = null,
+            sampleRate = 44_100,
+            channelCount = 2,
+            packetCount = 42L,
+            kind = ContainerResourceKind.AUDIO,
+            codecId = "A_MPEG/L3",
+            name = "Audio",
+            language = "und",
+            isDefault = false,
+            isForced = false,
+        )
+        val state = EditorState(
+            container = ContainerBridgeState(
+                uri = "fixture-source",
+                writeBackAvailable = true,
+                pendingTrackImports = listOf(import),
+            ),
+        )
+
+        val plan = buildContainerEditPlan(state)
+
+        assertFalse(plan.executable)
+        assertEquals(
+            ContainerCompatibilityStatus.UNSUPPORTED,
+            plan.checks.single {
+                it.dimension == ContainerCompatibilityDimension.CONTAINER_STRUCTURE
+            }.status,
+        )
+    }
 }

@@ -3,6 +3,9 @@ package ops
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/binary"
+	"encoding/hex"
 	"io"
 	"os"
 	"path/filepath"
@@ -1191,7 +1194,7 @@ func TestPlanTrackImportsRejectsSourceUIDDrift(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, _, _, _, err = planTrackImports(
+	_, _, _, _, _, _, err = planTrackImports(
 		context.Background(),
 		mkv.FSFrom(nil),
 		nil,
@@ -1236,7 +1239,7 @@ func TestPlanTrackImportsRejectsIdentityOverflowBeforeSecondImport(t *testing.T)
 	}
 
 	maxMinusOne := ^uint64(0) - 1
-	_, _, _, _, err = planTrackImports(
+	_, _, _, _, _, _, err = planTrackImports(
 		context.Background(),
 		mkv.FSFrom(nil),
 		nil,
@@ -1256,3 +1259,255 @@ func TestPlanTrackImportsRejectsIdentityOverflowBeforeSecondImport(t *testing.T)
 	}
 }
 
+
+
+func writeNormalizedPacketFixture(
+	t *testing.T,
+	path string,
+	durationUs int64,
+	packets []struct {
+		ptsUs int64
+		data  []byte
+	},
+) (bundleSHA string, contentSHA string) {
+	t.Helper()
+	out, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := out.Write([]byte(packetBundleMagic)); err != nil {
+		t.Fatal(err)
+	}
+	if err := binary.Write(out, binary.BigEndian, durationUs); err != nil {
+		t.Fatal(err)
+	}
+	if err := binary.Write(out, binary.BigEndian, uint64(len(packets))); err != nil {
+		t.Fatal(err)
+	}
+	content := sha256.New()
+	var header [12]byte
+	for _, packet := range packets {
+		if err := binary.Write(out, binary.BigEndian, packet.ptsUs); err != nil {
+			t.Fatal(err)
+		}
+		if err := binary.Write(out, binary.BigEndian, uint32(0)); err != nil {
+			t.Fatal(err)
+		}
+		if err := binary.Write(out, binary.BigEndian, uint32(len(packet.data))); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := out.Write(packet.data); err != nil {
+			t.Fatal(err)
+		}
+		binary.BigEndian.PutUint64(header[:8], uint64(packet.ptsUs/1000))
+		binary.BigEndian.PutUint32(header[8:], uint32(len(packet.data)))
+		_, _ = content.Write(header[:])
+		_, _ = content.Write(packet.data)
+	}
+	if err := out.Close(); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sum := sha256.Sum256(raw)
+	return hex.EncodeToString(sum[:]), hex.EncodeToString(content.Sum(nil))
+}
+
+func TestTrackImportAddsNormalizedASSWithFreshIdentity(t *testing.T) {
+	dir := t.TempDir()
+	base := filepath.Join(dir, "base.mkv")
+	assPath := filepath.Join(dir, "normalized.ass")
+	dst := filepath.Join(dir, "out.mkv")
+
+	out, err := os.Create(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mw := writer.NewMKVWriter(out)
+	if err := mw.WriteStart(); err != nil {
+		t.Fatal(err)
+	}
+	baseTrack := mkv.Track{ID: 4, UID: 404, Type: mkv.VideoTrack, Codec: "vp9"}
+	if err := mw.WriteMetadata(
+		&mkv.Container{Info: mkv.SegmentInfo{TimecodeScale: 1_000_000}},
+		[]mkv.Track{baseTrack},
+		1000,
+	); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.WriteCluster(out, 0, 1_000_000, []mkv.Block{
+		{TrackNumber: 4, Timecode: 0, Keyframe: true, Data: []byte("video")},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := mw.Finalize(); err != nil {
+		t.Fatal(err)
+	}
+	if err := out.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	ass := []byte("[Script Info]\nScriptType: v4.00+\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\nDialogue: 0,0:00:00.25,0:00:02.25,Default,,0,0,0,,Normalized import")
+	if err := os.WriteFile(assPath, ass, 0644); err != nil {
+		t.Fatal(err)
+	}
+	sum := sha256.Sum256(ass)
+
+	if err := EditContainerResourcesWithTrackImports(
+		context.Background(),
+		base,
+		dst,
+		nil, nil, nil, nil, nil, nil,
+		[]TrackImport{{
+			SourceKind: trackImportSourceASS,
+			SourcePath: assPath,
+			SourceSHA256: hex.EncodeToString(sum[:]),
+			Name: "Imported ASS",
+			Language: "eng",
+			LanguageBCP47: "en-US",
+			IsDefault: false,
+			IsForced: true,
+			HearingImpaired: true,
+		}},
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := reader.Open(context.Background(), dst)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Tracks) != 2 {
+		t.Fatalf("track count = %d, want 2: %+v", len(got.Tracks), got.Tracks)
+	}
+	added := got.Tracks[1]
+	if added.ID == 4 || added.UID == 0 || added.UID == 404 {
+		t.Fatalf("normalized ASS did not receive fresh identity: %+v", added)
+	}
+	if added.Type != mkv.SubtitleTrack || added.Codec != "ass" ||
+		added.Name != "Imported ASS" || added.Language != "eng" ||
+		added.LanguageBCP47 != "en-US" || !added.IsForced || !added.HearingImpaired {
+		t.Fatalf("normalized ASS metadata wrong: %+v", added)
+	}
+
+	file, err := os.Open(dst)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+	br, err := reader.NewBlockReader(file, got.Info.TimecodeScale)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var seen bool
+	for {
+		block, err := br.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		if block.TrackNumber == added.ID && bytes.Contains(block.Data, []byte("Normalized import")) {
+			seen = true
+		}
+	}
+	if !seen {
+		t.Fatal("normalized ASS payload missing from destination Track")
+	}
+}
+
+func TestTrackImportAddsPacketAudioAndDigestMatches(t *testing.T) {
+	dir := t.TempDir()
+	base := filepath.Join(dir, "base.mkv")
+	packetPath := filepath.Join(dir, "audio.awpkt")
+	dst := filepath.Join(dir, "out.mkv")
+
+	out, err := os.Create(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mw := writer.NewMKVWriter(out)
+	if err := mw.WriteStart(); err != nil {
+		t.Fatal(err)
+	}
+	baseTrack := mkv.Track{ID: 4, UID: 404, Type: mkv.VideoTrack, Codec: "vp9"}
+	if err := mw.WriteMetadata(
+		&mkv.Container{Info: mkv.SegmentInfo{TimecodeScale: 1_000_000}},
+		[]mkv.Track{baseTrack},
+		1000,
+	); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.WriteCluster(out, 0, 1_000_000, []mkv.Block{
+		{TrackNumber: 4, Timecode: 0, Keyframe: true, Data: []byte("video")},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := mw.Finalize(); err != nil {
+		t.Fatal(err)
+	}
+	if err := out.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	packets := []struct {
+		ptsUs int64
+		data  []byte
+	}{
+		{0, []byte{0xff, 0xfb, 0x10, 0x01}},
+		{26_000, []byte{0xff, 0xfb, 0x10, 0x02}},
+		{52_000, []byte{0xff, 0xfb, 0x10, 0x03}},
+	}
+	bundleSHA, contentSHA := writeNormalizedPacketFixture(t, packetPath, 80_000, packets)
+
+	if err := EditContainerResourcesWithTrackImports(
+		context.Background(),
+		base,
+		dst,
+		nil, nil, nil, nil, nil, nil,
+		[]TrackImport{{
+			SourceKind: trackImportSourcePacketAudio,
+			SourcePath: packetPath,
+			SourceSHA256: bundleSHA,
+			SourceCodec: "A_MPEG/L3",
+			SampleRate: 44_100,
+			Channels: 2,
+			Name: "Imported MP3",
+			Language: "und",
+			LanguageBCP47: "en",
+			Commentary: true,
+		}},
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := reader.Open(context.Background(), dst)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Tracks) != 2 {
+		t.Fatalf("track count = %d, want 2: %+v", len(got.Tracks), got.Tracks)
+	}
+	added := got.Tracks[1]
+	if added.ID == 4 || added.UID == 0 || added.UID == 404 {
+		t.Fatalf("packet audio did not receive fresh identity: %+v", added)
+	}
+	if added.Type != mkv.AudioTrack || added.Codec != "A_MPEG/L3" ||
+		added.Name != "Imported MP3" || added.LanguageBCP47 != "en" ||
+		!added.Commentary {
+		t.Fatalf("packet audio metadata wrong: %+v", added)
+	}
+	digest, err := DigestTrackContent(context.Background(), dst, added.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if digest.SHA256 != contentSHA {
+		t.Fatalf("output digest = %s, want %s", digest.SHA256, contentSHA)
+	}
+	if digest.PacketCount != uint64(len(packets)) || digest.FirstMs != 0 || digest.LastMs != 52 {
+		t.Fatalf("output packet evidence wrong: %+v", digest)
+	}
+}

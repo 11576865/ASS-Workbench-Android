@@ -885,7 +885,10 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         }
 
         val sourceUri = uri.toString()
-        val sourceName = displayName(uri) ?: "external.mkv"
+        val sourceName = displayName(uri) ?: "external.bin"
+        val sourceMime = runCatching { app.contentResolver.getType(uri) }.getOrNull()
+        val standaloneKind = detectStandaloneSubtitleTrackSourceKind(sourceName)
+        val matroskaFamily = isMatroskaFamilySource(sourceName, sourceMime)
         val epoch = workspaceEpoch.get()
         val targetContainerUri = snapshot.container.uri
         trackImportScanJob?.cancel()
@@ -895,47 +898,130 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                     trackImportBusy = true,
                     trackImportSourceName = sourceName,
                     trackImportCandidates = emptyList(),
+                    mediaImportAssessment = null,
                 ),
-                status = "正在检测外部 Matroska 轨道：$sourceName……",
+                status = when {
+                    standaloneKind != null -> "正在验证独立字幕并建立规范化导入证据：$sourceName……"
+                    matroskaFamily -> "正在检测外部 Matroska 轨道：$sourceName……"
+                    else -> "正在检测外部媒体 Track 与导入兼容性：$sourceName……"
+                },
             )
         }
         trackImportScanJob = viewModelScope.launch {
             runCatching {
                 withContext(Dispatchers.IO) {
-                    app.contentResolver.openInputStream(uri)?.buffered()?.use { input ->
-                        MatroskaReader().scan(input, retainAttachments = false)
-                    } ?: error("无法读取轨道来源文件")
+                    when {
+                        standaloneKind != null -> {
+                            val raw = app.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                                ?: error("无法读取独立字幕来源")
+                            val normalized = normalizeStandaloneSubtitleTrackSource(
+                                sourceKind = standaloneKind,
+                                raw = raw,
+                            )
+                            listOf(
+                                ContainerTrackImportCandidateUi(
+                                    sourceKind = standaloneKind,
+                                    sourceUri = sourceUri,
+                                    sourceName = sourceName,
+                                    sourceSha256 = normalized.normalizedSha256,
+                                    kind = ContainerResourceKind.SUBTITLE,
+                                    codecId = "S_TEXT/ASS",
+                                    name = sourceName.substringBeforeLast('.').ifBlank { "Imported subtitle" },
+                                    language = "und",
+                                    isDefault = false,
+                                    isForced = false,
+                                    sourceAttachmentCount = 0,
+                                )
+                            ) to null
+                        }
+
+                        matroskaFamily -> {
+                            val scan = app.contentResolver.openInputStream(uri)?.buffered()?.use { input ->
+                                MatroskaReader().scan(input, retainAttachments = false)
+                            } ?: error("无法读取 Matroska 轨道来源")
+                            val candidates = scan.trackInfos.mapNotNull { info ->
+                                val kind = when (info.kind) {
+                                    MatroskaTrackKind.VIDEO -> ContainerResourceKind.VIDEO
+                                    MatroskaTrackKind.AUDIO -> ContainerResourceKind.AUDIO
+                                    MatroskaTrackKind.SUBTITLE -> ContainerResourceKind.SUBTITLE
+                                    else -> null
+                                } ?: return@mapNotNull null
+                                ContainerTrackImportCandidateUi(
+                                    sourceKind = ContainerTrackImportSourceKind.MATROSKA_TRACK,
+                                    sourceUri = sourceUri,
+                                    sourceName = sourceName,
+                                    sourceTrackNumber = info.number,
+                                    sourceTrackUid = info.uid,
+                                    kind = kind,
+                                    codecId = info.codecId,
+                                    name = info.name,
+                                    language = info.language,
+                                    isDefault = info.isDefault,
+                                    isForced = info.isForced,
+                                    sourceAttachmentCount = scan.attachmentInfos.size,
+                                    languageBcp47 = info.languageBcp47,
+                                    hearingImpaired = info.hearingImpaired,
+                                    visualImpaired = info.visualImpaired,
+                                    textDescriptions = info.textDescriptions,
+                                    original = info.original,
+                                    commentary = info.commentary,
+                                )
+                            }
+                            candidates to null
+                        }
+
+                        else -> {
+                            val assessment = AndroidMediaImportProbe.probe(
+                                context = app,
+                                uri = uri,
+                                sourceName = sourceName,
+                            )
+                            val executableCandidates = assessment.tracks.mapNotNull { result ->
+                                if (
+                                    !result.executionImplemented ||
+                                    result.disposition != MediaImportDisposition.STREAM_COPY_COMPATIBLE ||
+                                    !result.descriptor.mime.equals("audio/mpeg", ignoreCase = true) ||
+                                    result.matroskaCodecId != "A_MPEG/L3"
+                                ) {
+                                    return@mapNotNull null
+                                }
+                                val temp = File.createTempFile("media-import-probe-", ".awpkt", app.cacheDir)
+                                try {
+                                    val normalized = AndroidMediaPacketNormalizer.normalizeMp3Track(
+                                        context = app,
+                                        uri = uri,
+                                        extractorIndex = result.descriptor.extractorIndex,
+                                        output = temp,
+                                    )
+                                    ContainerTrackImportCandidateUi(
+                                        sourceKind = ContainerTrackImportSourceKind.NORMALIZED_MEDIA_PACKETS,
+                                        sourceUri = sourceUri,
+                                        sourceName = sourceName,
+                                        sourceExtractorIndex = result.descriptor.extractorIndex,
+                                        sourceSha256 = normalized.bundleSha256,
+                                        sourceContentSha256 = normalized.contentSha256,
+                                        sampleRate = normalized.sampleRate,
+                                        channelCount = normalized.channelCount,
+                                        packetCount = normalized.packetCount,
+                                        kind = ContainerResourceKind.AUDIO,
+                                        codecId = "A_MPEG/L3",
+                                        name = sourceName.substringBeforeLast('.').ifBlank { "Imported MP3" },
+                                        language = result.descriptor.language?.takeIf { it.isNotBlank() } ?: "und",
+                                        isDefault = false,
+                                        isForced = false,
+                                        sourceAttachmentCount = 0,
+                                    )
+                                } finally {
+                                    temp.delete()
+                                }
+                            }
+                            executableCandidates to assessment
+                        }
+                    }
                 }
-            }.onSuccess { scan ->
+            }.onSuccess { (candidates, assessment) ->
                 if (workspaceEpoch.get() != epoch || _state.value.container.uri != targetContainerUri) {
                     return@onSuccess
-                }
-                val candidates = scan.trackInfos.mapNotNull { info ->
-                    val kind = when (info.kind) {
-                        MatroskaTrackKind.VIDEO -> ContainerResourceKind.VIDEO
-                        MatroskaTrackKind.AUDIO -> ContainerResourceKind.AUDIO
-                        MatroskaTrackKind.SUBTITLE -> ContainerResourceKind.SUBTITLE
-                        else -> null
-                    } ?: return@mapNotNull null
-                    ContainerTrackImportCandidateUi(
-                        sourceUri = sourceUri,
-                        sourceName = sourceName,
-                        sourceTrackNumber = info.number,
-                        sourceTrackUid = info.uid,
-                        kind = kind,
-                        codecId = info.codecId,
-                        name = info.name,
-                        language = info.language,
-                        isDefault = info.isDefault,
-                        isForced = info.isForced,
-                        sourceAttachmentCount = scan.attachmentInfos.size,
-                        languageBcp47 = info.languageBcp47,
-                        hearingImpaired = info.hearingImpaired,
-                        visualImpaired = info.visualImpaired,
-                        textDescriptions = info.textDescriptions,
-                        original = info.original,
-                        commentary = info.commentary,
-                    )
                 }
                 _state.update {
                     it.copy(
@@ -943,11 +1029,33 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                             trackImportBusy = false,
                             trackImportSourceName = sourceName,
                             trackImportCandidates = candidates,
+                            mediaImportAssessment = assessment,
                         ),
-                        status = if (candidates.isEmpty()) {
-                            "来源 $sourceName 中没有可导入的 Video / Audio / Subtitle Track。"
-                        } else {
-                            "已检测 $sourceName：${candidates.size} 条可导入轨道。选择轨道后再加入写入计划。"
+                        status = when {
+                            standaloneKind == ContainerTrackImportSourceKind.STANDALONE_ASS ->
+                                "独立 ASS 已验证并规范化；可作为新的 S_TEXT/ASS Track 加入。"
+                            standaloneKind == ContainerTrackImportSourceKind.STANDALONE_SRT ->
+                                "独立 SRT 已解析并规范化为 ASS；可作为新的 S_TEXT/ASS Track 加入。"
+                            assessment != null -> {
+                                val compatible = assessment.tracks.count {
+                                    it.disposition == MediaImportDisposition.STREAM_COPY_COMPATIBLE
+                                }
+                                val executable = assessment.tracks.count { it.executionImplemented }
+                                val transcode = assessment.tracks.count {
+                                    it.disposition == MediaImportDisposition.TRANSCODE_REQUIRED
+                                }
+                                buildString {
+                                    append("媒体兼容性检测完成：").append(assessment.tracks.size).append(" 条 Track；")
+                                    append("stream-copy 候选 ").append(compatible)
+                                    append("，其中可执行 ").append(executable)
+                                    append("；需显式转码 ").append(transcode).append("。")
+                                    if (candidates.isNotEmpty()) append(" 可执行 Track 已进入候选列表。")
+                                }
+                            }
+                            candidates.isEmpty() ->
+                                "来源 $sourceName 中没有可导入的 Video / Audio / Subtitle Track。"
+                            else ->
+                                "已检测 $sourceName：${candidates.size} 条可导入轨道。选择轨道后再加入写入计划。"
                         },
                     )
                 }
@@ -962,8 +1070,9 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                             trackImportBusy = false,
                             trackImportSourceName = "",
                             trackImportCandidates = emptyList(),
+                            mediaImportAssessment = null,
                         ),
-                        status = "轨道来源检测失败：${error.message ?: error::class.java.simpleName}。当前入口只接受可读取的 Matroska MKV/WebM。",
+                        status = "轨道来源检测失败：" + (error.message ?: error::class.java.simpleName),
                     )
                 }
             }
@@ -979,6 +1088,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                     trackImportBusy = false,
                     trackImportSourceName = "",
                     trackImportCandidates = emptyList(),
+                    mediaImportAssessment = null,
                 ),
             )
         }
@@ -1019,17 +1129,26 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 return@update state.copy(status = "当前显示的是已验证输出快照；请先重新打开该 MKV，再继续修改轨道。")
             }
             val keyExists = state.container.pendingTrackImports.any {
-                it.sourceUri == candidate.sourceUri &&
-                    it.sourceTrackNumber == candidate.sourceTrackNumber
+                it.sourceKind == candidate.sourceKind &&
+                    it.sourceUri == candidate.sourceUri &&
+                    it.sourceTrackNumber == candidate.sourceTrackNumber &&
+                    it.sourceExtractorIndex == candidate.sourceExtractorIndex
             }
             if (keyExists) {
                 return@update state.copy(status = "该来源 Track 已在待导入计划中。")
             }
             val planned = PendingContainerTrackImportUi(
+                sourceKind = candidate.sourceKind,
                 sourceUri = candidate.sourceUri,
                 sourceName = candidate.sourceName,
                 sourceTrackNumber = candidate.sourceTrackNumber,
                 sourceTrackUid = candidate.sourceTrackUid,
+                sourceExtractorIndex = candidate.sourceExtractorIndex,
+                sourceSha256 = candidate.sourceSha256,
+                sourceContentSha256 = candidate.sourceContentSha256,
+                sampleRate = candidate.sampleRate,
+                channelCount = candidate.channelCount,
+                packetCount = candidate.packetCount,
                 kind = candidate.kind,
                 codecId = candidate.codecId,
                 name = name,
@@ -1048,15 +1167,31 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 container = state.container.copy(
                     pendingTrackImports = state.container.pendingTrackImports + planned,
                 ),
-                status = "已计划从 ${candidate.sourceName} 导入 Track #${candidate.sourceTrackNumber}；保存新 MKV 前不会修改源文件。",
+                status = when (candidate.sourceKind) {
+                    ContainerTrackImportSourceKind.MATROSKA_TRACK ->
+                        "已计划从 ${candidate.sourceName} 导入 Track #${candidate.sourceTrackNumber}；保存新 MKV 前不会修改源文件。"
+                    ContainerTrackImportSourceKind.STANDALONE_ASS,
+                    ContainerTrackImportSourceKind.STANDALONE_SRT ->
+                        "已计划把 ${candidate.sourceName} 规范化为新的 S_TEXT/ASS Track；保存时会重新验证来源。"
+                    ContainerTrackImportSourceKind.NORMALIZED_MEDIA_PACKETS ->
+                        "已计划 stream-copy ${candidate.sourceName} · extractor Track #${candidate.sourceExtractorIndex}；保存时会重新 demux 并验证 packet digest。"
+                },
             )
         }
     }
 
-    fun cancelContainerTrackImport(sourceUri: String, sourceTrackNumber: Long) {
+    fun cancelContainerTrackImport(
+        sourceKind: ContainerTrackImportSourceKind,
+        sourceUri: String,
+        sourceTrackNumber: Long?,
+        sourceExtractorIndex: Int? = null,
+    ) {
         _state.update { state ->
             val next = state.container.pendingTrackImports.filterNot {
-                it.sourceUri == sourceUri && it.sourceTrackNumber == sourceTrackNumber
+                it.sourceKind == sourceKind &&
+                    it.sourceUri == sourceUri &&
+                    it.sourceTrackNumber == sourceTrackNumber &&
+                    it.sourceExtractorIndex == sourceExtractorIndex
             }
             if (next.size == state.container.pendingTrackImports.size) {
                 state
@@ -1068,6 +1203,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             }
         }
     }
+
 
     fun extractContainerAttachment(
         target: String,
@@ -1368,21 +1504,87 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                         }
                         val importSourceFiles = linkedMapOf<String, File>()
                         val trackImportInputs = plannedTrackImports.map { planned ->
-                            val sourceFile = importSourceFiles.getOrPut(planned.sourceUri) {
+                            val sourceKey = buildString {
+                                append(planned.sourceKind.name)
+                                append('\u0000').append(planned.sourceUri)
+                                planned.sourceExtractorIndex?.let { append('\u0000').append(it) }
+                            }
+                            val sourceFile = importSourceFiles.getOrPut(sourceKey) {
                                 val dir = File(work, "track-source-" + importSourceFiles.size).apply { mkdirs() }
-                                val target = File(dir, "source.mkv")
-                                app.contentResolver.openInputStream(Uri.parse(planned.sourceUri))?.use { input ->
-                                    target.outputStream().buffered().use { output ->
-                                        input.copyTo(output, 1024 * 1024)
+                                when (planned.sourceKind) {
+                                    ContainerTrackImportSourceKind.MATROSKA_TRACK -> {
+                                        val target = File(dir, "source.mkv")
+                                        app.contentResolver.openInputStream(Uri.parse(planned.sourceUri))?.use { input ->
+                                            target.outputStream().buffered().use { output ->
+                                                input.copyTo(output, 1024 * 1024)
+                                            }
+                                        } ?: error("无法读取待导入 Matroska 来源：" + planned.sourceName)
+                                        require(target.length() > 0L) { "待导入 Matroska 来源为空：" + planned.sourceName }
+                                        target
                                     }
-                                } ?: error("无法读取待导入轨道来源：" + planned.sourceName)
-                                require(target.length() > 0L) { "待导入轨道来源为空：" + planned.sourceName }
-                                target
+
+                                    ContainerTrackImportSourceKind.STANDALONE_ASS,
+                                    ContainerTrackImportSourceKind.STANDALONE_SRT -> {
+                                        val raw = app.contentResolver.openInputStream(Uri.parse(planned.sourceUri))
+                                            ?.use { it.readBytes() }
+                                            ?: error("无法重新读取独立字幕：" + planned.sourceName)
+                                        val normalized = normalizeStandaloneSubtitleTrackSource(
+                                            sourceKind = planned.sourceKind,
+                                            raw = raw,
+                                        )
+                                        val expected = planned.sourceSha256
+                                            ?: error("独立字幕缺少 normalized SHA-256 证据")
+                                        require(normalized.normalizedSha256.equals(expected, ignoreCase = true)) {
+                                            "独立字幕规范化结果已变化；请重新检测来源：" + planned.sourceName
+                                        }
+                                        File(dir, "normalized.ass").apply {
+                                            writeText(normalized.normalizedAssText, Charsets.UTF_8)
+                                        }
+                                    }
+
+                                    ContainerTrackImportSourceKind.NORMALIZED_MEDIA_PACKETS -> {
+                                        val extractorIndex = requireNotNull(planned.sourceExtractorIndex) {
+                                            "媒体 packet 来源缺少 extractor index"
+                                        }
+                                        val target = File(dir, "normalized.awpkt")
+                                        val normalized = AndroidMediaPacketNormalizer.normalizeMp3Track(
+                                            context = app,
+                                            uri = Uri.parse(planned.sourceUri),
+                                            extractorIndex = extractorIndex,
+                                            output = target,
+                                        )
+                                        val expectedBundle = planned.sourceSha256
+                                            ?: error("媒体 packet 来源缺少 bundle SHA-256 证据")
+                                        require(normalized.bundleSha256.equals(expectedBundle, ignoreCase = true)) {
+                                            "媒体 packet normalization 已变化；请重新检测来源：" + planned.sourceName
+                                        }
+                                        val expectedContent = planned.sourceContentSha256
+                                            ?: error("媒体 packet 来源缺少 content SHA-256 证据")
+                                        require(normalized.contentSha256.equals(expectedContent, ignoreCase = true)) {
+                                            "媒体 packet 内容已变化；请重新检测来源：" + planned.sourceName
+                                        }
+                                        require(normalized.sampleRate == planned.sampleRate) {
+                                            "媒体 packet sample rate 已变化；请重新检测来源"
+                                        }
+                                        require(normalized.channelCount == planned.channelCount) {
+                                            "媒体 packet channel count 已变化；请重新检测来源"
+                                        }
+                                        require(normalized.packetCount == planned.packetCount) {
+                                            "媒体 packet 数量已变化；请重新检测来源"
+                                        }
+                                        target
+                                    }
+                                }
                             }
                             TrackImportInput(
+                                sourceKind = planned.sourceKind,
                                 source = sourceFile,
                                 trackNumber = planned.sourceTrackNumber,
                                 sourceTrackUid = planned.sourceTrackUid,
+                                sourceSha256 = planned.sourceSha256,
+                                sourceCodecId = planned.codecId,
+                                sampleRate = planned.sampleRate,
+                                channelCount = planned.channelCount,
                                 name = planned.name,
                                 language = planned.language,
                                 isDefault = planned.isDefault,
@@ -1464,6 +1666,57 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                                 metadataEdits = plannedTrackMetadataEdits,
                                 imports = plannedTrackImports,
                             )
+                            val removedTrackTargets = plannedTrackRemovals.mapTo(hashSetOf()) { it.target }
+                            val survivorCount = sourceScan.trackInfos.count { info ->
+                                val target = info.uid?.let { "uid:$it" } ?: "number:${info.number}"
+                                target !in removedTrackTargets
+                            }
+                            val actualImportedTracks = verifiedScan.trackInfos.drop(survivorCount)
+                            require(actualImportedTracks.size == plannedTrackImports.size) {
+                                "写回验证失败：导入轨道数量映射不一致"
+                            }
+                            plannedTrackImports.zip(trackImportInputs).zip(actualImportedTracks)
+                                .forEach { (planAndInput, actualInfo) ->
+                                    val (planned, staged) = planAndInput
+                                    when (planned.sourceKind) {
+                                        ContainerTrackImportSourceKind.MATROSKA_TRACK -> Unit
+                                        ContainerTrackImportSourceKind.STANDALONE_ASS,
+                                        ContainerTrackImportSourceKind.STANDALONE_SRT -> {
+                                            val sourceDocument = AssCodec.parse(
+                                                staged.source.readText(Charsets.UTF_8)
+                                            )
+                                            val outputTrack = verifiedScan.subtitleTracks
+                                                .firstOrNull { it.number == actualInfo.number }
+                                                ?: error(
+                                                    "写回验证失败：规范化字幕导入 Track #${actualInfo.number} 未出现在字幕 Inventory"
+                                                )
+                                            val outputDocument = AssCodec.parse(outputTrack.toAss())
+                                            val importedRoundTrip = AssRoundTripVerifier.compare(
+                                                AssRoundTripVerifier.snapshot(sourceDocument),
+                                                AssRoundTripVerifier.snapshot(outputDocument),
+                                            )
+                                            require(importedRoundTrip.equivalent) {
+                                                "写回验证失败：规范化字幕导入不等价：" + importedRoundTrip.summary
+                                            }
+                                        }
+                                        ContainerTrackImportSourceKind.NORMALIZED_MEDIA_PACKETS -> {
+                                            val expected = planned.sourceContentSha256
+                                                ?: error("写回验证失败：packet import 缺少 content digest")
+                                            val digest = mkvGoTool.digestTrackContent(
+                                                source = result,
+                                                trackNumber = actualInfo.number,
+                                            )
+                                            require(digest.sha256.equals(expected, ignoreCase = true)) {
+                                                "写回验证失败：MP3 packet payload/timestamp digest 不一致"
+                                            }
+                                            planned.packetCount?.let { expectedCount ->
+                                                require(digest.packetCount == expectedCount) {
+                                                    "写回验证失败：MP3 packet count ${digest.packetCount} != $expectedCount"
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
                             require(verifiedScan.chapterCount == sourceScan.chapterCount) {
                                 "写回验证失败：章节数量发生意外变化"
                             }
@@ -1574,7 +1827,12 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 val savedTrackRemovalTargets = plannedTrackRemovals.mapTo(hashSetOf()) { it.target }
                 val savedTrackMetadataTargets = plannedTrackMetadataEdits.mapTo(hashSetOf()) { it.target }
                 val savedTrackImportKeys = plannedTrackImports.mapTo(hashSetOf()) {
-                    it.sourceUri to it.sourceTrackNumber
+                    listOf(
+                        it.sourceKind.name,
+                        it.sourceUri,
+                        (it.sourceTrackNumber ?: 0L).toString(),
+                        (it.sourceExtractorIndex ?: -1).toString(),
+                    )
                 }
                 _state.update { state ->
                     state.copy(
@@ -1594,9 +1852,17 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                             pendingTrackMetadataEdits = state.container.pendingTrackMetadataEdits
                                 .filterNot { it.target in savedTrackMetadataTargets },
                             pendingTrackImports = state.container.pendingTrackImports
-                                .filterNot { (it.sourceUri to it.sourceTrackNumber) in savedTrackImportKeys },
+                                .filterNot {
+                                    listOf(
+                                        it.sourceKind.name,
+                                        it.sourceUri,
+                                        (it.sourceTrackNumber ?: 0L).toString(),
+                                        (it.sourceExtractorIndex ?: -1).toString(),
+                                    ) in savedTrackImportKeys
+                                },
                             trackImportSourceName = "",
                             trackImportCandidates = emptyList(),
+                            mediaImportAssessment = null,
                             resources = baselineScanSnapshot?.let { baseline ->
                                 diffContainerResources(baseline, verifiedScan)
                             } ?: baselineContainerResources(verifiedScan),

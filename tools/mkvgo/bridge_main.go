@@ -24,6 +24,8 @@ func main() {
 		runEditContainer(os.Args[2:])
 	case "extract-attachment":
 		runExtractAttachment(os.Args[2:])
+	case "digest-track":
+		runDigestTrack(os.Args[2:])
 	default:
 		fatal(usage())
 	}
@@ -420,6 +422,57 @@ func runEditContainer(args []string) {
 				Commentary: parseBoolFlag(args[i+13], "--add-track-v3 commentary"),
 			})
 			i += 13
+		case "--add-ass-track-v2":
+			if i+12 >= len(args) {
+				fatal("--add-ass-track-v2 needs <source.ass> <sha256> <name> <language> <bcp47> <default> <forced> <hearing> <visual> <descriptions> <original> <commentary>")
+			}
+			trackImports = append(trackImports, ops.TrackImport{
+				SourceKind: "ass",
+				SourcePath: args[i+1],
+				SourceSHA256: args[i+2],
+				Name: args[i+3],
+				Language: args[i+4],
+				LanguageBCP47: args[i+5],
+				IsDefault: parseBoolFlag(args[i+6], "--add-ass-track-v2 default"),
+				IsForced: parseBoolFlag(args[i+7], "--add-ass-track-v2 forced"),
+				HearingImpaired: parseBoolFlag(args[i+8], "--add-ass-track-v2 hearing"),
+				VisualImpaired: parseBoolFlag(args[i+9], "--add-ass-track-v2 visual"),
+				TextDescriptions: parseBoolFlag(args[i+10], "--add-ass-track-v2 descriptions"),
+				Original: parseBoolFlag(args[i+11], "--add-ass-track-v2 original"),
+				Commentary: parseBoolFlag(args[i+12], "--add-ass-track-v2 commentary"),
+			})
+			i += 12
+		case "--add-packet-audio-v2":
+			if i+15 >= len(args) {
+				fatal("--add-packet-audio-v2 needs <source.awpkt> <sha256> <codec> <sampleRate> <channels> <name> <language> <bcp47> <default> <forced> <hearing> <visual> <descriptions> <original> <commentary>")
+			}
+			sampleRate, err := strconv.ParseUint(args[i+4], 10, 32)
+			if err != nil || sampleRate == 0 {
+				fatal("--add-packet-audio-v2 sampleRate must be positive")
+			}
+			channels, err := strconv.ParseUint(args[i+5], 10, 8)
+			if err != nil || channels == 0 {
+				fatal("--add-packet-audio-v2 channels must be positive")
+			}
+			trackImports = append(trackImports, ops.TrackImport{
+				SourceKind: "packet-audio",
+				SourcePath: args[i+1],
+				SourceSHA256: args[i+2],
+				SourceCodec: args[i+3],
+				SampleRate: uint32(sampleRate),
+				Channels: uint8(channels),
+				Name: args[i+6],
+				Language: args[i+7],
+				LanguageBCP47: args[i+8],
+				IsDefault: parseBoolFlag(args[i+9], "--add-packet-audio-v2 default"),
+				IsForced: parseBoolFlag(args[i+10], "--add-packet-audio-v2 forced"),
+				HearingImpaired: parseBoolFlag(args[i+11], "--add-packet-audio-v2 hearing"),
+				VisualImpaired: parseBoolFlag(args[i+12], "--add-packet-audio-v2 visual"),
+				TextDescriptions: parseBoolFlag(args[i+13], "--add-packet-audio-v2 descriptions"),
+				Original: parseBoolFlag(args[i+14], "--add-packet-audio-v2 original"),
+				Commentary: parseBoolFlag(args[i+15], "--add-packet-audio-v2 commentary"),
+			})
+			i += 15
 		default:
 			fatal("unknown argument: " + args[i])
 		}
@@ -489,6 +542,30 @@ func runExtractAttachment(args []string) {
 	}
 }
 
+
+func runDigestTrack(args []string) {
+	if len(args) != 3 || args[1] != "--track" {
+		fatal("digest-track needs <file.mkv> --track <trackID>")
+	}
+	trackID, err := strconv.ParseUint(args[2], 10, 64)
+	if err != nil || trackID == 0 {
+		fatal("invalid digest-track TrackNumber")
+	}
+	digest, err := ops.DigestTrackContent(context.Background(), args[0], trackID)
+	if err != nil {
+		fatal(err.Error())
+	}
+	fmt.Println("sha256=" + digest.SHA256)
+	fmt.Printf("count=%d\n", digest.PacketCount)
+	if digest.Seen {
+		fmt.Printf("first_ms=%d\n", digest.FirstMs)
+		fmt.Printf("last_ms=%d\n", digest.LastMs)
+	} else {
+		fmt.Println("first_ms=-")
+		fmt.Println("last_ms=-")
+	}
+}
+
 func parseBoolFlag(value, label string) bool {
 	switch value {
 	case "1", "true":
@@ -512,8 +589,9 @@ func usage() string {
 		"  asswb-mkvgo replace-ass <file.mkv> -o <out.mkv> -t <trackID> [--font <font.ttf>]... [--attachment <file>]... [--remove-attachment <uid-or-name>]... [--replace-attachment <uid-or-name> <file>]... [--edit-attachment-meta <uid-or-name> <name> <description>]... [--remove-track <uid:id|number:id>]... [--edit-track-meta <uid:id|number:id> <name> <language> <default> <forced>]... [--edit-track-meta-v2 <uid:id|number:id> <name> <language> <bcp47> <default> <forced> <hearing> <visual> <descriptions> <original> <commentary>]... <edited.ass>\n" +
 		"  asswb-mkvgo add-attachments <file.mkv> -o <out.mkv> --attachment <file> [--attachment <file>]...\n" +
 		"  asswb-mkvgo edit-attachments <file.mkv> -o <out.mkv> [--attachment <file>]... [--remove-attachment <uid-or-name>]... [--replace-attachment <uid-or-name> <file>]... [--edit-attachment-meta <uid-or-name> <name> <description>]...\n" +
-		"  asswb-mkvgo edit-container <file.mkv> -o <out.mkv> [attachment edits] [--remove-track <uid:id|number:id>]... [--edit-track-meta <uid:id|number:id> <name> <language> <default> <forced>]... [--edit-track-meta-v2 <uid:id|number:id> <name> <language> <bcp47> <default> <forced> <hearing> <visual> <descriptions> <original> <commentary>]... [--add-track <source.mkv> <trackID> <name> <language> <default> <forced>]... [--add-track-v2 <source.mkv> <trackID> <name> <language> <bcp47> <default> <forced> <hearing> <visual> <descriptions> <original> <commentary>]... [--add-track-v3 <source.mkv> <trackID> <trackUID-or-0> <name> <language> <bcp47> <default> <forced> <hearing> <visual> <descriptions> <original> <commentary>]...\n" +
-		"  asswb-mkvgo extract-attachment <file.mkv> -o <file> --target <uid-or-name>"
+		"  asswb-mkvgo edit-container <file.mkv> -o <out.mkv> [attachment edits] [--remove-track <uid:id|number:id>]... [--edit-track-meta <uid:id|number:id> <name> <language> <default> <forced>]... [--edit-track-meta-v2 <uid:id|number:id> <name> <language> <bcp47> <default> <forced> <hearing> <visual> <descriptions> <original> <commentary>]... [--add-track <source.mkv> <trackID> <name> <language> <default> <forced>]... [--add-track-v2 <source.mkv> <trackID> <name> <language> <bcp47> <default> <forced> <hearing> <visual> <descriptions> <original> <commentary>]... [--add-track-v3 <source.mkv> <trackID> <trackUID-or-0> <name> <language> <bcp47> <default> <forced> <hearing> <visual> <descriptions> <original> <commentary>]... [--add-ass-track-v2 <source.ass> <sha256> <name> <language> <bcp47> <default> <forced> <hearing> <visual> <descriptions> <original> <commentary>]... [--add-packet-audio-v2 <source.awpkt> <sha256> <codec> <sampleRate> <channels> <name> <language> <bcp47> <default> <forced> <hearing> <visual> <descriptions> <original> <commentary>]...\n" +
+		"  asswb-mkvgo extract-attachment <file.mkv> -o <file> --target <uid-or-name>\n" +
+		"  asswb-mkvgo digest-track <file.mkv> --track <trackID>"
 }
 
 func fatal(message string) {
