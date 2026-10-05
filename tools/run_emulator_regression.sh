@@ -45,6 +45,7 @@ projection_classes=(
   io.github.assworkbench.app.WorkspaceParameterProjectionInstrumentedTest
   io.github.assworkbench.app.WorkspacePositionProjectionInstrumentedTest
   io.github.assworkbench.app.WorkspaceTransformProjectionInstrumentedTest
+  io.github.assworkbench.app.WorkspaceParameterExtractionInstrumentedTest
 )
 # The comma-separated class filter only ran the first class in observed CI.
 # Separate invocations guarantee every family runs before the full editor suite.

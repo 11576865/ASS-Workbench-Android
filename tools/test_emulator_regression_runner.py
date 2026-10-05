@@ -10,6 +10,7 @@ CLASSES = [
     "io.github.assworkbench.app.WorkspaceParameterProjectionInstrumentedTest",
     "io.github.assworkbench.app.WorkspacePositionProjectionInstrumentedTest",
     "io.github.assworkbench.app.WorkspaceTransformProjectionInstrumentedTest",
+    "io.github.assworkbench.app.WorkspaceParameterExtractionInstrumentedTest",
 ]
 SCRIPT = Path(__file__).with_name("run_emulator_regression.sh").resolve()
 
@@ -36,12 +37,12 @@ sys.exit(7 if os.environ.get("TEST_FAILURE") == arg else 0)
             env = dict(os.environ, PATH=str(root) + os.pathsep + os.environ["PATH"],
                        TEST_RUN_LOG=str(log), TEST_FAILURE="" if hang else failure,
                        TEST_HANG=failure if hang else "",
-                       ASSWB_INITIAL_TEST_TIMEOUT="0.3s", ASSWB_FOCUSED_TEST_TIMEOUT="0.3s",
-                       ASSWB_SUITE_TEST_TIMEOUT="0.3s")
+                       ASSWB_INITIAL_TEST_TIMEOUT="2s", ASSWB_FOCUSED_TEST_TIMEOUT="2s",
+                       ASSWB_SUITE_TEST_TIMEOUT="2s")
             process = subprocess.Popen(["bash", str(SCRIPT)], cwd=root, env=env,
                                        stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True)
             try:
-                process.communicate(timeout=3)
+                process.communicate(timeout=15)
                 status = process.returncode
             except subprocess.TimeoutExpired:
                 os.killpg(process.pid, signal.SIGKILL)

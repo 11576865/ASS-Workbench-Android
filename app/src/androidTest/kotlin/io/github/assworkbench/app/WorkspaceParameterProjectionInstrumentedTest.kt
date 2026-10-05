@@ -2,6 +2,10 @@ package io.github.assworkbench.app
 
 import androidx.activity.ComponentActivity
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.height
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -13,6 +17,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextReplacement
 import androidx.lifecycle.ViewModelProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -41,6 +46,10 @@ class WorkspaceParameterProjectionInstrumentedTest {
     val composeRule = createAndroidComposeRule<ComponentActivity>()
 
     private lateinit var viewModel: EditorViewModel
+    private lateinit var snapshot: AssWorkbenchProjectSnapshot
+    private var visible by mutableStateOf(true)
+    private var compact by mutableStateOf(false)
+    private var binding: WorkspaceBinding by mutableStateOf(WorkspaceBinding.PinnedEvent(1L))
     private var presentation by mutableStateOf(WorkspaceParameterPresentation.NUMBER)
     private val projection = WorkspaceParameterProjection(
         id = "parameter:event.rotation.z:1",
@@ -61,12 +70,11 @@ class WorkspaceParameterProjectionInstrumentedTest {
                     end = SubTime(3000),
                     style = "Default",
                     text = "{\\frz10}A",
-                )
+                ),
+                AssEvent(id = 2L, start = SubTime(0), end = SubTime(3000), style = "Default", text = "Other"),
             ),
         )
-        composeRule.runOnUiThread {
-            viewModel.loadProjectSnapshot(
-                AssWorkbenchProjectSnapshot(
+        snapshot = AssWorkbenchProjectSnapshot(
                     title = "Parameter projection",
                     document = document,
                     videoUri = null,
@@ -81,18 +89,19 @@ class WorkspaceParameterProjectionInstrumentedTest {
                     workspaceState = emptyList(),
                     surfaceState = emptyList(),
                 )
-            )
-        }
+        composeRule.runOnUiThread { viewModel.loadProjectSnapshot(snapshot) }
         composeRule.setContent {
             MaterialTheme {
                 val state by viewModel.state.collectAsState()
-                WorkspaceParameterProjectionPane(
-                    projection = projection.copy(presentation = presentation),
+                Box(if (compact) Modifier.height(180.dp) else Modifier) {
+                if (visible) WorkspaceParameterProjectionPane(
+                    projection = projection.copy(binding = binding, presentation = presentation),
                     state = state,
                     viewModel = viewModel,
                     onRemove = {},
                     onPresentationChange = { presentation = it },
                 )
+                }
             }
         }
     }
@@ -123,7 +132,7 @@ class WorkspaceParameterProjectionInstrumentedTest {
         val committed = viewModel.state.value.document
         assertEquals(
             45.0,
-            AssGeometrySemantic.inspect(committed.events.single().text).rotationZ ?: Double.NaN,
+            AssGeometrySemantic.inspect(committed.events.first().text).rotationZ ?: Double.NaN,
             0.001,
         )
 
@@ -174,6 +183,108 @@ class WorkspaceParameterProjectionInstrumentedTest {
         }
         composeRule.waitUntil(5_000) { viewModel.state.value.previewDocument != null }
         dial.performTouchInput { cancel() }
+        composeRule.waitUntil(5_000) { viewModel.state.value.previewDocument == null }
+        assertEquals(before, viewModel.state.value.document)
+        assertFalse(viewModel.state.value.canUndo)
+    }
+
+    @Test fun invalidNumberCancelsOwnedPreviewWithoutEditing() {
+        val before = viewModel.state.value.document
+        val suffix = projection.id.replace(':', '-')
+        val field = composeRule.onNodeWithTag("parameter-projection-number-$suffix")
+        field.performTextReplacement("45")
+        composeRule.waitUntil(5_000) { viewModel.state.value.previewDocument != null }
+        field.performTextReplacement("NaN")
+        composeRule.waitUntil(5_000) { viewModel.state.value.previewDocument == null }
+        assertEquals(before, viewModel.state.value.document)
+        assertFalse(viewModel.state.value.canUndo)
+    }
+
+    @Test fun obsoletePaneDisposalDoesNotClearReplacementSessionPreview() {
+        val owner = "geometry:1:${projection.id}"
+        composeRule.runOnIdle {
+            viewModel.loadProjectSnapshot(snapshot.copy(title = "Replacement session"))
+            viewModel.previewEventRotationZ(1L, 99.0, ownerId = owner)
+            visible = false
+        }
+        composeRule.waitForIdle()
+        assertEquals(owner, viewModel.state.value.previewOwnerId)
+        assertEquals(99.0, AssGeometrySemantic.inspect(viewModel.state.value.previewDocument!!.events.first().text).rotationZ!!, 0.001)
+        assertFalse(viewModel.state.value.canUndo)
+    }
+
+    @Test fun sliderCancelDoesNotCommitOrRetainPreview() {
+        composeRule.onNodeWithText("Slider").performClick()
+        val before = viewModel.state.value.document
+        val slider = composeRule.onNodeWithTag("parameter-projection-slider-${projection.id.replace(':', '-')}")
+        slider.performTouchInput {
+            down(center)
+            moveTo(center + Offset(center.x * 0.3f, 0f), delayMillis = 100)
+            moveTo(center + Offset(center.x * 0.5f, 0f), delayMillis = 100)
+        }
+        composeRule.waitUntil(5_000) { viewModel.state.value.previewDocument != null }
+        slider.performTouchInput { cancel() }
+        composeRule.waitUntil(5_000) { viewModel.state.value.previewDocument == null }
+        assertEquals(before, viewModel.state.value.document)
+        assertFalse(viewModel.state.value.canUndo)
+    }
+
+    @Test fun focusChangeWhileSliderHeldCannotEditNewEvent() {
+        composeRule.runOnIdle { binding = WorkspaceBinding.FollowFocus }
+        composeRule.onNodeWithText("Slider").performClick()
+        val before = viewModel.state.value.document
+        val slider = composeRule.onNodeWithTag("parameter-projection-slider-${projection.id.replace(':', '-')}")
+        slider.performTouchInput {
+            down(center)
+            moveTo(center + Offset(center.x * 0.3f, 0f), delayMillis = 100)
+        }
+        composeRule.waitUntil(5_000) { viewModel.state.value.previewDocument != null }
+        composeRule.runOnIdle { viewModel.focusNextEvent() }
+        composeRule.waitForIdle()
+        assertEquals(2L, viewModel.state.value.focusedEventId)
+        slider.performTouchInput {
+            moveTo(center + Offset(center.x * 0.5f, 0f), delayMillis = 100)
+            up()
+        }
+        composeRule.waitForIdle()
+        assertEquals(before, viewModel.state.value.document)
+        assertFalse(viewModel.state.value.canUndo)
+        assertNull(viewModel.state.value.previewDocument)
+    }
+
+    @Test fun briefForeignTakeoverInvalidatesSliderEvenAfterOwnerClears() {
+        composeRule.onNodeWithText("Slider").performClick()
+        val before = viewModel.state.value.document
+        val slider = composeRule.onNodeWithTag("parameter-projection-slider-${projection.id.replace(':', '-')}")
+        slider.performTouchInput {
+            down(center)
+            moveTo(center + Offset(center.x * 0.3f, 0f), delayMillis = 100)
+        }
+        composeRule.waitUntil(5_000) { viewModel.state.value.previewDocument != null }
+        composeRule.runOnIdle {
+            viewModel.previewEventRotationZ(1L, 99.0)
+            viewModel.clearTransientPreview("geometry:1")
+        }
+        slider.performTouchInput {
+            moveTo(center + Offset(center.x * 0.5f, 0f), delayMillis = 100)
+            moveTo(center + Offset(center.x * 0.6f, 0f), delayMillis = 100)
+            up()
+        }
+        composeRule.waitForIdle()
+        assertEquals(before, viewModel.state.value.document)
+        assertFalse(viewModel.state.value.canUndo)
+        assertNull(viewModel.state.value.previewDocument)
+    }
+
+    @Test fun compactProjectionCanReachApplyAndCancelByScrolling() {
+        composeRule.runOnIdle { compact = true }
+        val before = viewModel.state.value.document
+        val suffix = projection.id.replace(':', '-')
+        composeRule.onNodeWithTag("parameter-projection-number-$suffix")
+            .performScrollTo().performTextReplacement("45")
+        composeRule.waitUntil(5_000) { viewModel.state.value.previewDocument != null }
+        composeRule.onNodeWithTag("parameter-projection-apply-$suffix").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithTag("parameter-projection-cancel-$suffix").performScrollTo().performClick()
         composeRule.waitUntil(5_000) { viewModel.state.value.previewDocument == null }
         assertEquals(before, viewModel.state.value.document)
         assertFalse(viewModel.state.value.canUndo)

@@ -81,6 +81,8 @@ import io.github.assworkbench.app.ui.preview.PreviewTargetResolver
 import io.github.assworkbench.app.ui.workspace.InfiniteCanvasHost
 import io.github.assworkbench.app.ui.workspace.InfiniteCanvasEntry
 import io.github.assworkbench.app.ui.workspace.WorkspaceBinding
+import io.github.assworkbench.app.ui.workspace.WorkspaceBindingResolution
+import io.github.assworkbench.app.ui.workspace.resolve
 import io.github.assworkbench.app.ui.workspace.SurfaceGeometry
 import io.github.assworkbench.app.ui.workspace.FloatingWorkbenchSurface
 import io.github.assworkbench.app.ui.workspace.WorkbenchSurfaceController
@@ -91,6 +93,7 @@ import io.github.assworkbench.app.ui.workspace.WorkspaceEditScopeResolver
 import io.github.assworkbench.app.ui.workspace.WorkspaceEditScopeSummary
 import io.github.assworkbench.app.ui.workspace.WorkspaceState
 import io.github.assworkbench.app.ui.workspace.WorkspaceToolInstance
+import io.github.assworkbench.app.ui.workspace.WorkspaceParameterExtractionControl
 import io.github.assworkbench.app.ui.workspace.WorkspaceParameterCatalog
 import io.github.assworkbench.app.ui.workspace.WorkspaceParameterDescriptor
 import io.github.assworkbench.app.ui.workspace.WorkspaceParameterPresentation
@@ -6327,6 +6330,16 @@ private fun PositionPane(
         return lease?.owns(current.workspaceSessionId, event.id, parameter,
             current.geometryPreviewRevision, current.previewOwnerId, current.previewDocument != null) == true
     }
+    val extractionSessionId = state.workspaceSessionId
+    fun extractParameter(descriptor: io.github.assworkbench.app.ui.workspace.WorkspaceParameterDescriptor,
+        presentation: WorkspaceParameterPresentation) {
+        val current = viewModel.state.value
+        val target = parameterBinding.resolve(current.focusedEventId, current.selectedEventIds,
+            current.document.events.mapTo(hashSetOf()) { it.id }) as? WorkspaceBindingResolution.Event
+        if (current.workspaceSessionId == extractionSessionId && target?.eventId == event.id) {
+            onExtractParameter?.invoke(descriptor, presentation, parameterBinding)
+        }
+    }
     val displayGeometry = remember(displayEvent.text) { AssGeometrySemantic.inspect(displayEvent.text) }
     val style = state.document.styles.firstOrNull { it.name == event.style }
     val geometry = remember(event.text) { AssGeometrySemantic.inspect(event.text) }
@@ -6355,7 +6368,6 @@ private fun PositionPane(
     var rotationXGestureActive by remember(state.workspaceSessionId, event.id) { mutableStateOf(false) }
     var rotationYGestureActive by remember(state.workspaceSessionId, event.id) { mutableStateOf(false) }
     var rotationGestureActive by remember(state.workspaceSessionId, event.id) { mutableStateOf(false) }
-    var rotationExtractionDragging by remember(state.workspaceSessionId, event.id) { mutableStateOf(false) }
     var rotationXDraftChanged by remember(state.workspaceSessionId, event.id, event.text) { mutableStateOf(false) }
     var rotationYDraftChanged by remember(state.workspaceSessionId, event.id, event.text) { mutableStateOf(false) }
     var rotationDraftChanged by remember(state.workspaceSessionId, event.id, event.text) { mutableStateOf(false) }
@@ -6792,41 +6804,14 @@ private fun PositionPane(
                 },
             )
             if (onExtractParameter != null) {
-                fun extractRotationProjection() {
-                    onExtractParameter(
-                        WorkspaceParameterCatalog.rotationZ,
-                        WorkspaceParameterPresentation.SLIDER,
-                        parameterBinding,
-                    )
-                }
-                TextButton(
-                    onClick = ::extractRotationProjection,
-                    modifier = Modifier
-                        .pointerInput(event.id, parameterBinding) {
-                            detectDragGesturesAfterLongPress(
-                                onDragStart = { rotationExtractionDragging = true },
-                                onDrag = { change, _ -> change.consume() },
-                                onDragEnd = {
-                                    rotationExtractionDragging = false
-                                    extractRotationProjection()
-                                },
-                                onDragCancel = { rotationExtractionDragging = false },
-                            )
-                        }
-                        .testTag("extract-rotation-z-${event.id}"),
-                ) {
-                    Icon(
-                        if (rotationExtractionDragging) Icons.Filled.DragHandle else Icons.Filled.OpenInNew,
-                        null,
-                        Modifier.size(18.dp),
-                    )
-                    Spacer(Modifier.width(6.dp))
-                    Text(
-                        if (rotationExtractionDragging) "松手放到工作区"
-                        else "长按拖出旋转控件",
-                    )
-                }
+                WorkspaceParameterExtractionControl(
+                    label = "旋转控件", gestureKey = "${state.workspaceSessionId}:${event.id}:$parameterBinding:rotation",
+                    onExtract = { extractParameter(WorkspaceParameterCatalog.rotationZ,
+                        WorkspaceParameterPresentation.SLIDER) },
+                    modifier = Modifier.testTag("extract-rotation-z-${event.id}"),
+                )
             }
+
             Text(
                 if (geometry.positionMode == AssPositionMode.MOVE && geometry.origin == null) {
                     "当前是 \\move 且没有显式 \\org：数值/Slider 可用，但画布旋转手柄暂不显示，因为默认旋转中心随运动位置变化。"
@@ -6855,9 +6840,12 @@ private fun PositionPane(
                 )
             }
             if (onExtractParameter != null) {
-                OutlinedButton(onClick = {
-                    onExtractParameter(WorkspaceParameterCatalog.scaleXY, WorkspaceParameterPresentation.SLIDER_PAIR, parameterBinding)
-                }, modifier = Modifier.testTag("extract-scale-xy-${event.id}")) { Text("拆出缩放 X/Y") }
+                WorkspaceParameterExtractionControl(
+                    label = "缩放 X/Y", gestureKey = "${state.workspaceSessionId}:${event.id}:$parameterBinding:scale-xy",
+                    onExtract = { extractParameter(WorkspaceParameterCatalog.scaleXY,
+                        WorkspaceParameterPresentation.SLIDER_PAIR) },
+                    modifier = Modifier.testTag("extract-scale-xy-${event.id}"),
+                )
             }
             ContinuousParameterControl(
                 label = "Scale X",
@@ -6955,9 +6943,12 @@ private fun PositionPane(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             if (onExtractParameter != null) {
-                OutlinedButton(onClick = {
-                    onExtractParameter(WorkspaceParameterCatalog.shearXY, WorkspaceParameterPresentation.XY_PAD, parameterBinding)
-                }, modifier = Modifier.testTag("extract-shear-xy-${event.id}")) { Text("拆出错切 X/Y") }
+                WorkspaceParameterExtractionControl(
+                    label = "错切 X/Y", gestureKey = "${state.workspaceSessionId}:${event.id}:$parameterBinding:shear-xy",
+                    onExtract = { extractParameter(WorkspaceParameterCatalog.shearXY,
+                        WorkspaceParameterPresentation.XY_PAD) },
+                    modifier = Modifier.testTag("extract-shear-xy-${event.id}"),
+                )
             }
             ContinuousParameterControl(
                 label = "Shear X · \\fax",
@@ -7170,13 +7161,15 @@ private fun PositionPane(
         item {
             Text("任意位置")
             if (onExtractParameter != null) {
-                TextButton(
+                WorkspaceParameterExtractionControl(
+                    label = "位置控件", gestureKey = "${state.workspaceSessionId}:${event.id}:$parameterBinding:position",
                     enabled = geometry.positionMode != AssPositionMode.MOVE && geometry.positionMode != AssPositionMode.CONFLICT,
-                    onClick = { onExtractParameter(WorkspaceParameterCatalog.positionXY,
-                        WorkspaceParameterPresentation.XY_PAD, parameterBinding) },
+                    onExtract = { extractParameter(WorkspaceParameterCatalog.positionXY,
+                        WorkspaceParameterPresentation.XY_PAD) },
                     modifier = Modifier.testTag("extract-position-xy-${event.id}"),
-                ) { Text("拆出位置控件") }
+                )
             }
+
             Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small)) {
                 OutlinedTextField(if (externalPreview) displayGeometry.position?.x?.toString().orEmpty() else x,
                     { x = it }, label = { Text("X") }, singleLine = true,

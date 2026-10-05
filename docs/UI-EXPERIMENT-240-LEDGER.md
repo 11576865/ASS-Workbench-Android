@@ -431,3 +431,20 @@ Added finite per-attempt deadlines, app/Activity diagnostics and step checkpoint
 without removing assertions or weakening the gate. Three SDK-free orchestration
 tests passed across eight scenarios, including real hangs; no root-cause fix or
 user acceptance is inferred. Exact new revision Android validation is Pending CI.
+
+### Four predefined parameter families: drag entry and gesture hardening
+
+main 554100f contains merged #127. Follow-up `feat/workspace-vector-drag-guards`
+adds long-press drag extraction for Position XY/Scale XY/Shear XY using the same
+control as Rotation Z. Latest workspace callbacks preserve earlier instances;
+original session/Event/binding keys reject handoff. Rotation now protects disposal,
+invalid drafts, Slider cancellation and continuous geometry publication revisions.
+Short parameter forms are scrollable. UI-240 109/110 retain Partial because arbitrary
+user-defined parameters/composition remain absent.
+
+Supplemental JVM 245 passed; three runner tests passed across nine scenarios.
+Twelve new connected regressions are Pending CI. Independent review found stale
+workspace callback overwrite and post-takeover gesture reacquisition; both were
+addressed and covered by pending connected regressions. Baseline 85-test emulator
+pass belongs only to fcec1b4, not this follow-up. Real-device acceptance remains
+user-owned; Canonical unchanged.

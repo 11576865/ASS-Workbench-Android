@@ -203,8 +203,19 @@ class EditorRegressionInstrumentedTest {
         composeRule.onNodeWithTag("spatial-node-subtitles").assertIsDisplayed()
     }
 
-    @Test
-    fun spatialWorkspaceLongPressDragExtractsRotationWithoutEditingAss() {
+    @Test fun spatialWorkspaceLongPressDragExtractsRotationWithoutEditingAss() =
+        verifySpatialParameterExtraction("event.rotation.z", "rotation-z", "TRANSFORM", "slider")
+
+    @Test fun spatialWorkspaceLongPressDragExtractsPositionWithoutEditingAss() =
+        verifySpatialParameterExtraction("event.position.xy", "position-xy", "PLACEMENT", "xy")
+
+    @Test fun spatialWorkspaceLongPressDragExtractsScaleWithoutEditingAss() =
+        verifySpatialParameterExtraction("event.scale.xy", "scale-xy", "TRANSFORM", "slider-x")
+
+    @Test fun spatialWorkspaceLongPressDragExtractsShearWithoutEditingAss() =
+        verifySpatialParameterExtraction("event.shear.xy", "shear-xy", "TRANSFORM", "xy")
+
+    private fun verifySpatialParameterExtraction(key: String, extractionTag: String, section: String, control: String) {
         restoreRecovery()
 
         composeRule.onNodeWithContentDescription("工具和更多操作").performClick()
@@ -231,15 +242,16 @@ class EditorRegressionInstrumentedTest {
             ).fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()
         }
 
-        composeRule.onNodeWithTag("position-section-TRANSFORM")
+        composeRule.onNodeWithTag("position-section-$section")
             .performScrollTo()
             .performClick()
 
         val before = viewModel.state.value.document
         assertFalse(viewModel.state.value.canUndo)
 
-        composeRule.onNodeWithTag("extract-rotation-z-1")
-            .performScrollTo()
+        composeRule.onNodeWithTag("position-parameter-list")
+            .performScrollToNode(hasTestTag("extract-$extractionTag-1"))
+        composeRule.onNodeWithTag("extract-$extractionTag-1")
             .assertIsDisplayed()
             .performTouchInput {
                 down(center)
@@ -250,14 +262,14 @@ class EditorRegressionInstrumentedTest {
 
         composeRule.waitUntil(5_000) {
             composeRule.onAllNodesWithTag(
-                "spatial-node-parameter-event.rotation.z-1",
+                "spatial-node-parameter-${key}-1",
                 useUnmergedTree = true,
             ).fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()
         }
-        composeRule.onNodeWithTag("spatial-node-parameter-event.rotation.z-1")
+        composeRule.onNodeWithTag("spatial-node-parameter-${key}-1")
             .assertIsDisplayed()
         composeRule.onNodeWithTag(
-            "parameter-projection-slider-parameter-event.rotation.z-1"
+            "parameter-projection-${control}-parameter-${key}-1"
         ).assertIsDisplayed()
 
         assertEquals(before, viewModel.state.value.document)
