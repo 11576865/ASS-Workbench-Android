@@ -1,0 +1,44 @@
+{
+  "packet_version": 1,
+  "packet_id": "ci-11576865-ASS-Workbench-Android-37315313177-1",
+  "status": "pending",
+  "record_type": "ci_failure",
+  "title": "Fontconfig renderer native probe: failure",
+  "summary": "Tracked CI workflow did not complete successfully. Source adapter captured failed job/step evidence when available.",
+  "source_repository": "11576865/ASS-Workbench-Android",
+  "source_event": "workflow_run",
+  "source_ref": "feat/mp3-stream-copy-import",
+  "source_sha": "4dfd35f37e9b1028a2ed3aa28e6f2e7cca544c24",
+  "source_url": "https://github.com/11576865/ASS-Workbench-Android/actions/runs/37315313177",
+  "created_at": "2026-10-05T13:15:27+00:00",
+  "dedupe_key": "workflow_run:11576865/ASS-Workbench-Android:37315313177:1",
+  "routing_hints": [
+    "interface-grammar",
+    "operations",
+    "red-reason",
+    "reliability"
+  ],
+  "evidence": {
+    "workflow": "Fontconfig renderer native probe",
+    "run_id": "37315313177",
+    "run_attempt": "1",
+    "conclusion": "failure",
+    "trigger_event": "pull_request",
+    "failed_jobs": [
+      {
+        "id": 111780455083,
+        "name": "arm64-fontconfig-native",
+        "conclusion": "failure"
+      }
+    ],
+    "failed_steps": [
+      {
+        "job": "arm64-fontconfig-native",
+        "number": 6,
+        "name": "Inject and test ASS Workbench MKV bridge",
+        "conclusion": "failure"
+      }
+    ],
+    "capture_error": ""
+  }
+}
