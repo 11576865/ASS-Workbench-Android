@@ -70,10 +70,23 @@ internal fun WorkspaceParameterProjectionPane(
         return
     }
 
+    if (projection.descriptorKey == WorkspaceParameterCatalog.positionXY.key) {
+        WorkspacePositionXYProjectionPane(
+            projection = projection,
+            state = state,
+            viewModel = viewModel,
+            eventId = eventId,
+            onRemove = onRemove,
+            onPresentationChange = onPresentationChange,
+            modifier = modifier,
+        )
+        return
+    }
+
     if (projection.descriptorKey != WorkspaceParameterCatalog.rotationZ.key) {
         Column(modifier.padding(12.dp)) {
             Text(descriptor.title)
-            Text("这个参数已有持久化投影，但当前 live router 只接通 Rotation Z。")
+            Text("这个参数已有持久化投影，但当前 live router 尚未接通这一参数族。")
             Button(onClick = onRemove) { Text("移除参数控件") }
         }
         return
