@@ -278,7 +278,10 @@ internal fun buildContainerEditPlan(state: EditorState): ContainerEditPlanUi {
             missingAttachmentTargets.isNotEmpty() -> ContainerCompatibilityStatus.UNSUPPORTED
             conflictingTrackTargets.isNotEmpty() -> ContainerCompatibilityStatus.UNSUPPORTED
             missingTrackTargets.isNotEmpty() -> ContainerCompatibilityStatus.UNSUPPORTED
-            trackRemovalTargets.isNotEmpty() && remainingTrackCount <= 0 -> ContainerCompatibilityStatus.UNSUPPORTED
+            trackRemovalTargets.isNotEmpty() &&
+                remainingTrackCount <= 0 &&
+                state.container.pendingTrackImports.isEmpty() ->
+                ContainerCompatibilityStatus.UNSUPPORTED
             removesDirtySelectedAss -> ContainerCompatibilityStatus.UNSUPPORTED
             duplicateTrackImports -> ContainerCompatibilityStatus.UNSUPPORTED
             invalidTrackLegacyLanguage -> ContainerCompatibilityStatus.UNSUPPORTED
@@ -296,8 +299,10 @@ internal fun buildContainerEditPlan(state: EditorState): ContainerEditPlanUi {
                 "同一轨道不能在一次计划中同时删除和修改元数据：" + conflictingTrackTargets.joinToString()
             missingTrackTargets.isNotEmpty() ->
                 "轨道目标已不在当前检测 Inventory 中：" + missingTrackTargets.joinToString()
-            trackRemovalTargets.isNotEmpty() && remainingTrackCount <= 0 ->
-                "不能删除容器中的全部轨道。"
+            trackRemovalTargets.isNotEmpty() &&
+                remainingTrackCount <= 0 &&
+                state.container.pendingTrackImports.isEmpty() ->
+                "不能在没有替代导入轨道的情况下删除容器中的全部轨道。"
             removesDirtySelectedAss ->
                 "当前正在编辑且未保存的 ASS 轨被计划删除；请先保存、放弃修改或取消删除。"
             duplicateTrackImports ->

@@ -392,6 +392,34 @@ func runEditContainer(args []string) {
 				Commentary: parseBoolFlag(args[i+12], "--add-track-v2 commentary"),
 			})
 			i += 12
+		case "--add-track-v3":
+			if i+13 >= len(args) {
+				fatal("--add-track-v3 needs <file> <trackID> <trackUID-or-0> <name> <language> <bcp47> <default> <forced> <hearing> <visual> <descriptions> <original> <commentary>")
+			}
+			id, err := strconv.ParseUint(args[i+2], 10, 64)
+			if err != nil || id == 0 {
+				fatal("--add-track-v3 trackID must be a non-zero integer")
+			}
+			uid, err := strconv.ParseUint(args[i+3], 10, 64)
+			if err != nil {
+				fatal("--add-track-v3 trackUID must be an integer")
+			}
+			trackImports = append(trackImports, ops.TrackImport{
+				SourcePath: args[i+1],
+				TrackID: id,
+				SourceTrackUID: uid,
+				Name: args[i+4],
+				Language: args[i+5],
+				LanguageBCP47: args[i+6],
+				IsDefault: parseBoolFlag(args[i+7], "--add-track-v3 default"),
+				IsForced: parseBoolFlag(args[i+8], "--add-track-v3 forced"),
+				HearingImpaired: parseBoolFlag(args[i+9], "--add-track-v3 hearing"),
+				VisualImpaired: parseBoolFlag(args[i+10], "--add-track-v3 visual"),
+				TextDescriptions: parseBoolFlag(args[i+11], "--add-track-v3 descriptions"),
+				Original: parseBoolFlag(args[i+12], "--add-track-v3 original"),
+				Commentary: parseBoolFlag(args[i+13], "--add-track-v3 commentary"),
+			})
+			i += 13
 		default:
 			fatal("unknown argument: " + args[i])
 		}
@@ -484,7 +512,7 @@ func usage() string {
 		"  asswb-mkvgo replace-ass <file.mkv> -o <out.mkv> -t <trackID> [--font <font.ttf>]... [--attachment <file>]... [--remove-attachment <uid-or-name>]... [--replace-attachment <uid-or-name> <file>]... [--edit-attachment-meta <uid-or-name> <name> <description>]... [--remove-track <uid:id|number:id>]... [--edit-track-meta <uid:id|number:id> <name> <language> <default> <forced>]... [--edit-track-meta-v2 <uid:id|number:id> <name> <language> <bcp47> <default> <forced> <hearing> <visual> <descriptions> <original> <commentary>]... <edited.ass>\n" +
 		"  asswb-mkvgo add-attachments <file.mkv> -o <out.mkv> --attachment <file> [--attachment <file>]...\n" +
 		"  asswb-mkvgo edit-attachments <file.mkv> -o <out.mkv> [--attachment <file>]... [--remove-attachment <uid-or-name>]... [--replace-attachment <uid-or-name> <file>]... [--edit-attachment-meta <uid-or-name> <name> <description>]...\n" +
-		"  asswb-mkvgo edit-container <file.mkv> -o <out.mkv> [attachment edits] [--remove-track <uid:id|number:id>]... [--edit-track-meta <uid:id|number:id> <name> <language> <default> <forced>]... [--edit-track-meta-v2 <uid:id|number:id> <name> <language> <bcp47> <default> <forced> <hearing> <visual> <descriptions> <original> <commentary>]... [--add-track <source.mkv> <trackID> <name> <language> <default> <forced>]... [--add-track-v2 <source.mkv> <trackID> <name> <language> <bcp47> <default> <forced> <hearing> <visual> <descriptions> <original> <commentary>]...\n" +
+		"  asswb-mkvgo edit-container <file.mkv> -o <out.mkv> [attachment edits] [--remove-track <uid:id|number:id>]... [--edit-track-meta <uid:id|number:id> <name> <language> <default> <forced>]... [--edit-track-meta-v2 <uid:id|number:id> <name> <language> <bcp47> <default> <forced> <hearing> <visual> <descriptions> <original> <commentary>]... [--add-track <source.mkv> <trackID> <name> <language> <default> <forced>]... [--add-track-v2 <source.mkv> <trackID> <name> <language> <bcp47> <default> <forced> <hearing> <visual> <descriptions> <original> <commentary>]... [--add-track-v3 <source.mkv> <trackID> <trackUID-or-0> <name> <language> <bcp47> <default> <forced> <hearing> <visual> <descriptions> <original> <commentary>]...\n" +
 		"  asswb-mkvgo extract-attachment <file.mkv> -o <file> --target <uid-or-name>"
 }
 

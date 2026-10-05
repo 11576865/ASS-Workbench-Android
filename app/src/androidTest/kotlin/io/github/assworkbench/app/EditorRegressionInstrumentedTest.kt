@@ -210,7 +210,26 @@ class EditorRegressionInstrumentedTest {
         composeRule.onNodeWithContentDescription("工具和更多操作").performClick()
         composeRule.onNodeWithTag("workspace-mode-toggle").performClick()
         selectUiVariant("ui-variant-use-SPATIAL_EXPERIMENTAL")
-        openTool("POSITION")
+
+        composeRule.onNodeWithText("＋ 工具").performClick()
+        composeRule.waitUntil(5_000) {
+            composeRule.onAllNodesWithTag(
+                "spatial-node-CAPABILITIES-primary",
+                useUnmergedTree = true,
+            ).fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()
+        }
+        composeRule.onNodeWithTag("tool-search")
+            .performTextReplacement("POSITION")
+        hideKeyboard()
+        composeRule.onNodeWithTag("tool-POSITION")
+            .performScrollTo()
+            .performClick()
+        composeRule.waitUntil(5_000) {
+            composeRule.onAllNodesWithTag(
+                "spatial-node-POSITION-primary",
+                useUnmergedTree = true,
+            ).fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()
+        }
 
         composeRule.onNodeWithTag("position-section-TRANSFORM")
             .performScrollTo()
