@@ -6355,6 +6355,7 @@ private fun PositionPane(
     var rotationXGestureActive by remember(state.workspaceSessionId, event.id) { mutableStateOf(false) }
     var rotationYGestureActive by remember(state.workspaceSessionId, event.id) { mutableStateOf(false) }
     var rotationGestureActive by remember(state.workspaceSessionId, event.id) { mutableStateOf(false) }
+    var rotationExtractionDragging by remember(state.workspaceSessionId, event.id) { mutableStateOf(false) }
     var rotationXDraftChanged by remember(state.workspaceSessionId, event.id, event.text) { mutableStateOf(false) }
     var rotationYDraftChanged by remember(state.workspaceSessionId, event.id, event.text) { mutableStateOf(false) }
     var rotationDraftChanged by remember(state.workspaceSessionId, event.id, event.text) { mutableStateOf(false) }
@@ -6791,19 +6792,39 @@ private fun PositionPane(
                 },
             )
             if (onExtractParameter != null) {
+                fun extractRotationProjection() {
+                    onExtractParameter(
+                        WorkspaceParameterCatalog.rotationZ,
+                        WorkspaceParameterPresentation.SLIDER,
+                        parameterBinding,
+                    )
+                }
                 TextButton(
-                    onClick = {
-                        onExtractParameter(
-                            WorkspaceParameterCatalog.rotationZ,
-                            WorkspaceParameterPresentation.SLIDER,
-                            parameterBinding,
-                        )
-                    },
-                    modifier = Modifier.testTag("extract-rotation-z-${event.id}"),
+                    onClick = ::extractRotationProjection,
+                    modifier = Modifier
+                        .pointerInput(event.id, parameterBinding) {
+                            detectDragGesturesAfterLongPress(
+                                onDragStart = { rotationExtractionDragging = true },
+                                onDrag = { change, _ -> change.consume() },
+                                onDragEnd = {
+                                    rotationExtractionDragging = false
+                                    extractRotationProjection()
+                                },
+                                onDragCancel = { rotationExtractionDragging = false },
+                            )
+                        }
+                        .testTag("extract-rotation-z-${event.id}"),
                 ) {
-                    Icon(Icons.Filled.OpenInNew, null, Modifier.size(18.dp))
+                    Icon(
+                        if (rotationExtractionDragging) Icons.Filled.DragHandle else Icons.Filled.OpenInNew,
+                        null,
+                        Modifier.size(18.dp),
+                    )
                     Spacer(Modifier.width(6.dp))
-                    Text("拆出旋转控件")
+                    Text(
+                        if (rotationExtractionDragging) "松手放到工作区"
+                        else "长按拖出旋转控件",
+                    )
                 }
             }
             Text(

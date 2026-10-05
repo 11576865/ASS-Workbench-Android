@@ -144,3 +144,37 @@ drag-to-extract, user-defined composition, graph relations and nested regions
 remain outside this approved slice. UI-240 109/110 remain Partial. Real-device
 acceptance belongs to the user; these changes do not promote the prerelease to a
 stable official release.
+## Drag extraction and typed intent routing follow-up
+
+- Rotation Z supports long-press drag extraction from the Position tool; release creates the persisted workspace projection while a normal click remains a fallback.
+- Extraction changes WorkspaceState only and must not create an ASS document Undo entry.
+- NUMBER, SLIDER and the current-main ANGLE_DIAL all dispatch typed `WorkspaceParameterIntent` values through `WorkspaceParameterIntentRouter`.
+- The router validates descriptor/binding/value/revision semantics first, then delegates PREVIEW / COMMIT / CANCEL to the existing EditorViewModel geometry mutation boundary.
+- The current-main Angle Dial implementation remains authoritative for dial motion, multi-turn behavior, cancellation and accessibility semantics; this follow-up does not replace it with a second dial implementation.
+
+Items 109/110 remain Partial because arbitrary drag extraction and user-defined composition are not yet connected. Vector projections are provided by the Position/Scale/Shear slice above; Rotation Z retains current main's typed intent routing.
+
+
+
+## 2026-10-05 integration evidence
+
+Revision 6b33ee5 passed Android CI (37274834480), Fontconfig native probe
+(37274834459), and Android Emulator Regression (37274834432). The complete
+instrumentation XML reports 84 tests, zero failures/errors/skips, including all
+seven transform tests and inspectorDraftSurvivesToolSwitchAndRotation. The prior
+empty failure did not reproduce; its root cause remains unconfirmed. A passing
+later run is not evidence of a specific repair.
+
+This branch integrates main ce0d905 (PR #118): Rotation Z long-press drag extraction
+and typed intent routing coexist with Position XY / Scale XY / Shear XY renderers.
+Both independent doc additions are retained. The integrated revision's Android
+checks remain Pending CI; prior 6b33ee5 results are not attributed to that revision.
+
+
+Focused-run correction: the 6b33ee5 first-run XML contained only the three Rotation
+Z tests despite the comma-separated three-class filter. Position/Transform were
+executed successfully only in the complete 84-test run. The runner now invokes
+all three classes separately, reporting each immediately, then always executes
+the full suite. The runner regression first failed with five assertions and now
+passes both tests across five execution scenarios. Exact-revision Android evidence
+for the new sequence remains Pending CI.

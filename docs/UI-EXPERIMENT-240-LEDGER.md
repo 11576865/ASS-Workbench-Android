@@ -188,8 +188,8 @@
 
 | ID | 原始要求 | 状态 | Authority | Surface / code | 自动证据 | Visual | DEVICE / 阻塞 |
 |---|---|---|---|---|---|---|---|
-| 109 | 将任意参数从原工具拖到工作区，生成独立参数工具。 | **Partial** | `feat/workspace-live-parameter-projection` | Rotation Z and Position XY can be explicitly extracted from Position into a persisted Infinite Canvas parameter node; WorkspaceState schema v4 stores projection identity/binding/presentation | `WorkspaceParameterContractTest` + `WorkspaceParameterProjectionTest` + connected projection regression | Not 240-ID mapped | Explicit extraction exists for Rotation Z and Position XY; arbitrary parameter drag-to-extract remains pending. |
-| 110 | 同一参数可同时以滑块、角度盘、数值或二维板呈现，全部连接同一正式状态。 | **Partial** | `feat/workspace-live-parameter-projection` | Rotation Z live projections can switch NUMBER/SLIDER/ANGLE_DIAL; Position XY can switch NUMBER_PAIR/XY_PAD and multiple projections share the same Event parameter/EditorViewModel authority | Unit persistence/identity tests + connected preview→commit→Undo regression | Not 240-ID mapped | Rotation Z Angle Dial is implemented with continuous relative angle and commit/cancel routing; connected validation Pending CI. Position XY Pad/paired numbers are implemented; connected validation Pending CI. Scale/Shear and broader parameter families remain pending. |
+| 109 | 将任意参数从原工具拖到工作区，生成独立参数工具。 | **Partial** | main #118 + PR #127 | Rotation Z supports long-press drag extraction; Position XY / Scale XY / Shear XY have explicit extraction and persisted schema-v4 identity/binding/presentation | Model/contract tests + connected extraction/projection regressions | Not 240-ID mapped | All four declared families have extraction entry points; arbitrary parameter drag-to-extract remains pending. |
+| 110 | 同一参数可同时以滑块、角度盘、数值或二维板呈现，全部连接同一正式状态。 | **Partial** | main #118 + PR #127 | Rotation Z NUMBER/SLIDER/ANGLE_DIAL via typed intents; Position XY NUMBER_PAIR/XY_PAD and Scale/Shear NUMBER_PAIR/SLIDER_PAIR/XY_PAD use canonical EditorViewModel mutation authority | Persistence/identity/range tests + connected preview/commit/cancel/Undo regressions | Not 240-ID mapped | 6b33ee5 Android/native and 84 connected tests passed; integrated ce0d905 tree Pending CI. Arbitrary composition remains pending. |
 | 111 | 把字号、字距和描边拼成一个“排版手柄”，用户自定控件顺序。 | **Planned** | main · no dedicated 240 slice | No dedicated custom-tool-construction surface | No 240-ID automated mapping | Not 240-ID mapped | Not item-mapped |
 | 112 | 把 X、Y、角度和旋转中心组合成几何控制台。 | **Planned** | main · no dedicated 240 slice | No dedicated custom-tool-construction surface | No 240-ID automated mapping | Not 240-ID mapped | Not item-mapped |
 | 113 | 为多个事件建立比较工具，同屏显示差异与来源。 | **Planned** | main · no dedicated 240 slice | No dedicated custom-tool-construction surface | No 240-ID automated mapping | Not 240-ID mapped | Not item-mapped |
@@ -404,3 +404,20 @@ unresolved; the projection tests were not executed by that aborted full-suite ru
 Independent review identified a Slider handoff across targets/sessions; keyed
 pointer nodes and a focus-switch regression were added. No real-device or stable
 release promotion claim is made.
+
+
+### Integration follow-up
+
+6b33ee5 Android/native and complete 84-test emulator validation passed, including
+all parameter projections and the previously empty-failure rotation test. That
+failure did not recur; its cause is not established. Main ce0d905 (#118) now adds
+Rotation Z long-press extraction and typed routing. This integration preserves
+that implementation plus all vector renderers; its own Android checks are Pending
+CI. Items 109/110 remain Partial and user-device acceptance is separate.
+
+CI orchestration correction: the 6b33ee5 comma-separated focused filter produced
+only three Rotation tests. All vector tests did run in the successful full suite,
+but were not independently protected from an early full-suite abort. The runner
+now launches Rotation, Position and Transform classes separately and always
+continues to the full suite. SDK-free orchestration regressions failed before the
+fix and pass after it (success plus four separate failure-placement scenarios).
