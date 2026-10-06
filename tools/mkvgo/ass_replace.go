@@ -928,7 +928,7 @@ func planTrackImports(
 			}
 
 		case trackImportSourcePacketAudio:
-			if !strings.EqualFold(input.SourceCodec, "A_MPEG/L3") {
+			if input.SourceCodec != "A_MPEG/L3" && input.SourceCodec != "A_AAC" {
 				return nil, nil, nil, nil, nil, 0, fmt.Errorf(
 					"packet audio source %s has unsupported codec %q",
 					filepath.Base(input.SourcePath),
@@ -948,11 +948,18 @@ func planTrackImports(
 			if err != nil {
 				return nil, nil, nil, nil, nil, 0, err
 			}
+			if input.SourceCodec == "A_AAC" && len(header.codecPrivate) == 0 {
+				return nil, nil, nil, nil, nil, 0, fmt.Errorf("AAC packet source is missing CodecPrivate")
+			}
+			if input.SourceCodec == "A_MPEG/L3" && len(header.codecPrivate) != 0 {
+				return nil, nil, nil, nil, nil, 0, fmt.Errorf("MP3 packet source must not contain CodecPrivate")
+			}
 			sampleRate := float64(input.SampleRate)
 			channels := input.Channels
 			track = mkv.Track{
 				Type: mkv.AudioTrack,
-				Codec: "A_MPEG/L3",
+				Codec: input.SourceCodec,
+				CodecPrivate: append([]byte(nil), header.codecPrivate...),
 				SampleRate: &sampleRate,
 				Channels: &channels,
 			}
@@ -1001,15 +1008,19 @@ func planTrackImports(
 }
 
 const (
-	packetBundleMagic      = "AWPKT001"
-	packetBundleHeaderSize = int64(24)
-	maxPacketPayloadBytes  = uint32(4 * 1024 * 1024)
-	maxPacketCount         = uint64(100_000_000)
+	packetBundleMagicV1        = "AWPKT001"
+	packetBundleMagicV2        = "AWPKT002"
+	packetBundleBaseHeaderSize = int64(24)
+	maxPacketPayloadBytes      = uint32(4 * 1024 * 1024)
+	maxPacketCount             = uint64(100_000_000)
+	maxCodecPrivateBytes       = uint32(1024 * 1024)
 )
 
 type packetBundleHeader struct {
-	durationUs  int64
-	packetCount uint64
+	durationUs   int64
+	packetCount  uint64
+	codecPrivate []byte
+	headerSize   int64
 }
 
 type packetMergeSource struct {
@@ -1029,12 +1040,13 @@ type packetBundleReader struct {
 }
 
 func readPacketBundleHeaderFrom(r io.Reader) (packetBundleHeader, error) {
-	magic := make([]byte, len(packetBundleMagic))
+	magic := make([]byte, len(packetBundleMagicV1))
 	if _, err := io.ReadFull(r, magic); err != nil {
 		return packetBundleHeader{}, fmt.Errorf("read packet bundle magic: %w", err)
 	}
-	if string(magic) != packetBundleMagic {
-		return packetBundleHeader{}, fmt.Errorf("invalid packet bundle magic %q", string(magic))
+	version := string(magic)
+	if version != packetBundleMagicV1 && version != packetBundleMagicV2 {
+		return packetBundleHeader{}, fmt.Errorf("invalid packet bundle magic %q", version)
 	}
 	var durationUs int64
 	if err := binary.Read(r, binary.BigEndian, &durationUs); err != nil {
@@ -1050,7 +1062,26 @@ func readPacketBundleHeaderFrom(r io.Reader) (packetBundleHeader, error) {
 	if packetCount == 0 || packetCount > maxPacketCount {
 		return packetBundleHeader{}, fmt.Errorf("packet bundle count %d is out of bounds", packetCount)
 	}
-	return packetBundleHeader{durationUs: durationUs, packetCount: packetCount}, nil
+	header := packetBundleHeader{
+		durationUs: durationUs,
+		packetCount: packetCount,
+		headerSize: packetBundleBaseHeaderSize,
+	}
+	if version == packetBundleMagicV2 {
+		var size uint32
+		if err := binary.Read(r, binary.BigEndian, &size); err != nil {
+			return packetBundleHeader{}, fmt.Errorf("read packet CodecPrivate size: %w", err)
+		}
+		if size == 0 || size > maxCodecPrivateBytes {
+			return packetBundleHeader{}, fmt.Errorf("packet CodecPrivate size %d is out of bounds", size)
+		}
+		header.codecPrivate = make([]byte, int(size))
+		if _, err := io.ReadFull(r, header.codecPrivate); err != nil {
+			return packetBundleHeader{}, fmt.Errorf("read packet CodecPrivate: %w", err)
+		}
+		header.headerSize += 4 + int64(size)
+	}
+	return header, nil
 }
 
 func readPacketBundleHeader(fs *mkv.FS, path string) (packetBundleHeader, error) {
@@ -1096,7 +1127,7 @@ func newPacketBundleReader(r io.Reader, trackID uint64, expectedPackets uint64) 
 		r: r,
 		trackID: trackID,
 		remaining: header.packetCount,
-		position: packetBundleHeaderSize,
+		position: header.headerSize,
 	}, nil
 }
 
@@ -1339,11 +1370,12 @@ func streamMergeImportedSources(
 }
 
 type TrackContentDigest struct {
-	SHA256      string
-	PacketCount uint64
-	FirstMs     int64
-	LastMs      int64
-	Seen        bool
+	SHA256            string
+	PacketCount       uint64
+	FirstMs           int64
+	LastMs            int64
+	Seen              bool
+	CodecPrivateSHA256 string
 }
 
 func DigestTrackContent(
@@ -1357,15 +1389,20 @@ func DigestTrackContent(
 	if err != nil {
 		return TrackContentDigest{}, err
 	}
-	var exists bool
-	for _, track := range probe.Tracks {
-		if track.ID == trackID {
-			exists = true
+	var target *mkv.Track
+	for i := range probe.Tracks {
+		if probe.Tracks[i].ID == trackID {
+			target = &probe.Tracks[i]
 			break
 		}
 	}
-	if !exists {
+	if target == nil {
 		return TrackContentDigest{}, fmt.Errorf("track %d not found", trackID)
+	}
+	var codecPrivateSHA256 string
+	if len(target.CodecPrivate) > 0 {
+		sum := sha256.Sum256(target.CodecPrivate)
+		codecPrivateSHA256 = hex.EncodeToString(sum[:])
 	}
 
 	file, err := fs.DoOpen(srcPath)
@@ -1419,6 +1456,7 @@ func DigestTrackContent(
 		FirstMs: firstMs,
 		LastMs: lastMs,
 		Seen: true,
+		CodecPrivateSHA256: codecPrivateSHA256,
 	}, nil
 }
 
