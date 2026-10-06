@@ -30,9 +30,15 @@ data class TrackMetadataEditInput(
 )
 
 data class TrackImportInput(
+    val sourceKind: ContainerTrackImportSourceKind = ContainerTrackImportSourceKind.MATROSKA_TRACK,
     val source: File,
-    val trackNumber: Long,
-    val sourceTrackUid: Long?,
+    val trackNumber: Long? = null,
+    val sourceTrackUid: Long? = null,
+    val sourceSha256: String? = null,
+    val sourceContentSha256: String? = null,
+    val sourceCodecId: String? = null,
+    val sampleRate: Int? = null,
+    val channelCount: Int? = null,
     val name: String,
     val language: String,
     val isDefault: Boolean,
@@ -43,6 +49,13 @@ data class TrackImportInput(
     val textDescriptions: Boolean = false,
     val original: Boolean = false,
     val commentary: Boolean = false,
+)
+
+data class TrackContentDigest(
+    val sha256: String,
+    val packetCount: Long,
+    val firstTimecodeMs: Long?,
+    val lastTimecodeMs: Long?,
 )
 
 class MkvGoTool(private val context: Context) {
@@ -260,26 +273,72 @@ class MkvGoTool(private val context: Context) {
                 args += if (metadata.commentary) "1" else "0"
             }
         trackImports
-            .distinctBy { it.source.absolutePath to it.trackNumber }
+            .distinctBy {
+                Triple(
+                    it.sourceKind,
+                    it.source.absolutePath,
+                    if (it.sourceKind == ContainerTrackImportSourceKind.NORMALIZED_MEDIA_PACKETS) {
+                        it.sourceContentSha256.orEmpty()
+                    } else {
+                        it.trackNumber.toString()
+                    },
+                )
+            }
             .forEach { import ->
                 require(import.source.isFile && import.source.length() > 0L) {
                     "轨道来源文件不可用：" + import.source.name
                 }
-                require(import.trackNumber > 0L) { "来源 TrackNumber 必须大于 0" }
-                args += "--add-track-v3"
-                args += import.source.absolutePath
-                args += import.trackNumber.toString()
-                args += (import.sourceTrackUid ?: 0L).toString()
-                args += import.name
-                args += import.language
-                args += import.languageBcp47
-                args += if (import.isDefault) "1" else "0"
-                args += if (import.isForced) "1" else "0"
-                args += if (import.hearingImpaired) "1" else "0"
-                args += if (import.visualImpaired) "1" else "0"
-                args += if (import.textDescriptions) "1" else "0"
-                args += if (import.original) "1" else "0"
-                args += if (import.commentary) "1" else "0"
+                when (import.sourceKind) {
+                    ContainerTrackImportSourceKind.MATROSKA_TRACK -> {
+                        val trackNumber = requireNotNull(import.trackNumber) {
+                            "Matroska 轨道来源缺少 TrackNumber"
+                        }
+                        require(trackNumber > 0L) { "来源 TrackNumber 必须大于 0" }
+                        args += "--add-track-v3"
+                        args += import.source.absolutePath
+                        args += trackNumber.toString()
+                        args += (import.sourceTrackUid ?: 0L).toString()
+                        appendTrackMetadataArgs(args, import)
+                    }
+
+                    ContainerTrackImportSourceKind.STANDALONE_ASS,
+                    ContainerTrackImportSourceKind.STANDALONE_SRT -> {
+                        val sha256 = import.sourceSha256.orEmpty()
+                        require(sha256.matches(Regex("[0-9a-fA-F]{64}"))) {
+                            "独立字幕规范化来源缺少有效 SHA-256 证据"
+                        }
+                        args += "--add-ass-track-v2"
+                        args += import.source.absolutePath
+                        args += sha256.lowercase()
+                        appendTrackMetadataArgs(args, import)
+                    }
+
+                    ContainerTrackImportSourceKind.NORMALIZED_MEDIA_PACKETS -> {
+                        val sha256 = import.sourceSha256.orEmpty()
+                        require(sha256.matches(Regex("[0-9a-fA-F]{64}"))) {
+                            "媒体 packet bundle 缺少有效 SHA-256 证据"
+                        }
+                        val codec = import.sourceCodecId.orEmpty()
+                        require(codec == "A_MPEG/L3") {
+                            "当前 packet audio adapter 只允许 A_MPEG/L3"
+                        }
+                        val sampleRate = requireNotNull(import.sampleRate) {
+                            "packet audio 缺少 sample rate"
+                        }
+                        val channels = requireNotNull(import.channelCount) {
+                            "packet audio 缺少 channel count"
+                        }
+                        require(sampleRate > 0) { "packet audio sample rate 无效" }
+                        require(channels in 1..255) { "packet audio channel count 无效" }
+                        args += "--add-packet-audio-v2"
+                        args += import.source.absolutePath
+                        args += sha256.lowercase()
+                        args += codec
+                        args += sampleRate.toString()
+                        args += channels.toString()
+                        appendTrackMetadataArgs(args, import)
+                    }
+                }
             }
         run(*args.toTypedArray())
         require(output.isFile && output.length() > 0L) { "MKV 写回未生成输出文件" }
@@ -300,6 +359,53 @@ class MkvGoTool(private val context: Context) {
         replacements = replacements,
         metadataEdits = metadataEdits,
     )
+
+    private fun appendTrackMetadataArgs(
+        args: MutableList<String>,
+        import: TrackImportInput,
+    ) {
+        args += import.name
+        args += import.language
+        args += import.languageBcp47
+        args += if (import.isDefault) "1" else "0"
+        args += if (import.isForced) "1" else "0"
+        args += if (import.hearingImpaired) "1" else "0"
+        args += if (import.visualImpaired) "1" else "0"
+        args += if (import.textDescriptions) "1" else "0"
+        args += if (import.original) "1" else "0"
+        args += if (import.commentary) "1" else "0"
+    }
+
+    fun digestTrackContent(
+        source: File,
+        trackNumber: Long,
+    ): TrackContentDigest {
+        require(isAvailable()) { "MKV 写回工具在此 ABI 上不可用" }
+        require(source.isFile && source.length() > 0L) { "待验证 MKV 不可用" }
+        require(trackNumber > 0L) { "待验证 TrackNumber 无效" }
+        val text = run(
+            "digest-track",
+            source.absolutePath,
+            "--track", trackNumber.toString(),
+        )
+        val values = text.lineSequence()
+            .mapNotNull { line ->
+                val index = line.indexOf('=')
+                if (index <= 0) null else line.substring(0, index) to line.substring(index + 1)
+            }
+            .toMap()
+        val sha256 = values["sha256"].orEmpty()
+        require(sha256.matches(Regex("[0-9a-f]{64}"))) {
+            "mkvgo digest-track 未返回有效 SHA-256"
+        }
+        return TrackContentDigest(
+            sha256 = sha256,
+            packetCount = values["count"]?.toLongOrNull()
+                ?: error("mkvgo digest-track 未返回 packet count"),
+            firstTimecodeMs = values["first_ms"]?.takeIf { it != "-" }?.toLongOrNull(),
+            lastTimecodeMs = values["last_ms"]?.takeIf { it != "-" }?.toLongOrNull(),
+        )
+    }
 
     fun extractAttachment(
         source: File,
