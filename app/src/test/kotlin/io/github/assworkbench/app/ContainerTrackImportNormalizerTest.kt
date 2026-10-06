@@ -1,6 +1,8 @@
 package io.github.assworkbench.app
 
 import io.github.assworkbench.domain.AssCodec
+import java.io.ByteArrayInputStream
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
@@ -22,6 +24,61 @@ class ContainerTrackImportNormalizerTest {
             detectStandaloneSubtitleTrackSourceKind("dialogue.SRT"),
         )
         assertEquals(null, detectStandaloneSubtitleTrackSourceKind("movie.mkv"))
+    }
+
+    @Test
+    fun detectsStandaloneSubtitleAdaptersBySpecificMimeWithoutExtension() {
+        assertEquals(
+            ContainerTrackImportSourceKind.STANDALONE_ASS,
+            detectStandaloneSubtitleTrackSourceKind("provider-document", "text/x-ass"),
+        )
+        assertEquals(
+            ContainerTrackImportSourceKind.STANDALONE_ASS,
+            detectStandaloneSubtitleTrackSourceKind("provider-document", "application/x-ssa; charset=utf-8"),
+        )
+        assertEquals(
+            ContainerTrackImportSourceKind.STANDALONE_SRT,
+            detectStandaloneSubtitleTrackSourceKind("provider-document", "application/x-subrip"),
+        )
+        assertEquals(
+            ContainerTrackImportSourceKind.STANDALONE_SRT,
+            detectStandaloneSubtitleTrackSourceKind("provider-document", "text/srt"),
+        )
+    }
+
+    @Test
+    fun extensionWinsOverGenericMimeAndAmbiguousTextPlainStaysUnknown() {
+        assertEquals(
+            ContainerTrackImportSourceKind.STANDALONE_SRT,
+            detectStandaloneSubtitleTrackSourceKind("dialogue.srt", "text/plain"),
+        )
+        assertEquals(
+            ContainerTrackImportSourceKind.STANDALONE_ASS,
+            detectStandaloneSubtitleTrackSourceKind("dialogue.ass", "application/octet-stream"),
+        )
+        assertEquals(
+            null,
+            detectStandaloneSubtitleTrackSourceKind("provider-document", "text/plain"),
+        )
+    }
+
+    @Test
+    fun boundedSubtitleReaderAllowsExactLimitAndRejectsOverflow() {
+        val exact = ByteArray(8) { it.toByte() }
+        assertArrayEquals(
+            exact,
+            readStandaloneSubtitleSourceBytes(ByteArrayInputStream(exact), maxBytes = exact.size),
+        )
+
+        val failure = runCatching {
+            readStandaloneSubtitleSourceBytes(
+                ByteArrayInputStream(ByteArray(9)),
+                maxBytes = 8,
+            )
+        }.exceptionOrNull()
+
+        assertTrue(failure is IllegalArgumentException)
+        assertTrue(failure?.message.orEmpty().contains("8 bytes"))
     }
 
     @Test

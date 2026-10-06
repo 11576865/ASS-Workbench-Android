@@ -53,7 +53,7 @@ class MainActivity : ComponentActivity() {
     private val openSubtitle = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri ?: return@registerForActivityResult
         if (!isSubtitleDocument(uri)) {
-            viewModel.reportError("字幕导入失败", IllegalArgumentException("只接受 .ass / .srt 字幕文件"))
+            viewModel.reportError("字幕导入失败", IllegalArgumentException("只接受 ASS / SSA / SRT 字幕文件"))
             return@registerForActivityResult
         }
         persist(uri, read = true, write = true)
@@ -165,7 +165,18 @@ class MainActivity : ComponentActivity() {
                         },
                         onOpenMkvProject = { openMkvProject.launch(arrayOf("video/x-matroska", "video/*", "application/octet-stream")) },
                         onOpenSubtitle = {
-                            openSubtitle.launch(arrayOf("application/x-ass", "text/x-ass", "text/x-ssa", "application/x-subrip", "text/srt", "text/plain"))
+                            openSubtitle.launch(
+                                arrayOf(
+                                    "application/x-ass",
+                                    "application/x-ssa",
+                                    "text/x-ass",
+                                    "text/x-ssa",
+                                    "application/x-subrip",
+                                    "text/srt",
+                                    "text/plain",
+                                    "application/octet-stream",
+                                )
+                            )
                         },
                         onImportFont = { importFont.launch(arrayOf("font/ttf", "font/otf", "font/collection", "application/x-font-ttf", "application/x-font-opentype", "application/octet-stream")) },
                         onSave = {
@@ -207,7 +218,8 @@ class MainActivity : ComponentActivity() {
             val column = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
             if (column >= 0 && cursor.moveToFirst()) cursor.getString(column) else null
         } ?: uri.lastPathSegment
-        return name?.let { it.endsWith(".ass", ignoreCase = true) || it.endsWith(".srt", ignoreCase = true) } == true
+        val mimeType = runCatching { contentResolver.getType(uri) }.getOrNull()
+        return detectStandaloneSubtitleTrackSourceKind(name.orEmpty(), mimeType) != null
     }
 
     private fun persist(uri: Uri, read: Boolean, write: Boolean) {

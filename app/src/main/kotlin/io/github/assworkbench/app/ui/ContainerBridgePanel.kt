@@ -255,6 +255,8 @@ fun ContainerBridgePanel(
                             "video/webm",
                             "audio/x-matroska",
                             "application/x-matroska",
+                            "application/x-ass",
+                            "application/x-ssa",
                             "text/x-ass",
                             "text/x-ssa",
                             "application/x-subrip",
