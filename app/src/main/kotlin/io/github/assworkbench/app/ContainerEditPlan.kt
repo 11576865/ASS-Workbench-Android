@@ -291,11 +291,13 @@ internal fun buildContainerEditPlan(state: EditorState): ContainerEditPlanUi {
                     !import.sourceSha256.orEmpty().matches(Regex("[0-9a-fA-F]{64}"))
             ContainerTrackImportSourceKind.NORMALIZED_MEDIA_PACKETS ->
                 import.kind != ContainerResourceKind.AUDIO ||
-                    import.codecId != "A_MPEG/L3" ||
+                    import.codecId !in setOf("A_MPEG/L3", "A_AAC") ||
                     import.sourceExtractorIndex == null ||
                     import.sourceExtractorIndex < 0 ||
                     !import.sourceSha256.orEmpty().matches(Regex("[0-9a-fA-F]{64}")) ||
                     !import.sourceContentSha256.orEmpty().matches(Regex("[0-9a-fA-F]{64}")) ||
+                    (import.codecId == "A_AAC" &&
+                        !import.sourceCodecPrivateSha256.orEmpty().matches(Regex("[0-9a-fA-F]{64}"))) ||
                     import.sampleRate == null ||
                     import.sampleRate <= 0 ||
                     import.channelCount == null ||
@@ -388,7 +390,7 @@ internal fun buildContainerEditPlan(state: EditorState): ContainerEditPlanUi {
         dimension = ContainerCompatibilityDimension.OUTPUT_VERIFICATION,
         status = ContainerCompatibilityStatus.SUPPORTED,
         title = "输出验证",
-        detail = "写回后重新扫描实际 MKV，并验证幸存轨道身份/顺序、导入轨道的新 TrackNumber / TrackUID / codec / metadata、章节、未改附件及其他计划修改；规范化字幕额外做 ASS 语义 round-trip，packet stream-copy 额外验证实际输出 Track 的时间戳+payload digest 与 packet count。",
+        detail = "写回后重新扫描实际 MKV，并验证幸存轨道身份/顺序、导入轨道的新 TrackNumber / TrackUID / codec / metadata、章节、未改附件及其他计划修改；规范化字幕额外做 ASS 语义 round-trip，packet stream-copy 额外验证实际输出 Track 的时间戳+payload digest、packet count，AAC 再验证 CodecPrivate SHA-256。",
     )
 
     val hasGenericAttachment = mutations.any {
@@ -436,8 +438,8 @@ internal fun buildContainerEditPlan(state: EditorState): ContainerEditPlanUi {
         checks += ContainerCompatibilityCheckUi(
             dimension = ContainerCompatibilityDimension.SOURCE_INVENTORY,
             status = ContainerCompatibilityStatus.SUPPORTED,
-            title = "MP3 packet stream-copy 证据已固定",
-            detail = "MediaExtractor 压缩 packet 不经过 MediaCodec 解码/重编码；bundle/content SHA-256、packet count、sample rate 与 channel count 会在保存前重新验证。",
+            title = "压缩音频 packet stream-copy 证据已固定",
+            detail = "MediaExtractor 压缩 packet 不经过 MediaCodec 解码/重编码；bundle/content SHA-256、packet count、sample rate 与 channel count 会在保存前重新验证。AAC 还要求 csd-0 / CodecPrivate SHA-256 独立匹配。",
         )
     }
 
