@@ -1663,7 +1663,7 @@ func TestTrackImportAddsAacPacketAudioAndCodecPrivateDigestMatches(t *testing.T)
 		t.Fatalf("track count = %d, want 2: %+v", len(got.Tracks), got.Tracks)
 	}
 	added := got.Tracks[1]
-	if added.Type != mkv.AudioTrack || added.Codec != "A_AAC" {
+	if added.Type != mkv.AudioTrack || added.Codec != "aac" {
 		t.Fatalf("AAC track metadata wrong: %+v", added)
 	}
 	if !bytes.Equal(added.CodecPrivate, codecPrivate) {
