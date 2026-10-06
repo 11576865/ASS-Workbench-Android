@@ -1275,7 +1275,7 @@ func writeNormalizedPacketFixture(
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := out.Write([]byte(packetBundleMagic)); err != nil {
+	if _, err := out.Write([]byte(packetBundleMagicV1)); err != nil {
 		t.Fatal(err)
 	}
 	if err := binary.Write(out, binary.BigEndian, durationUs); err != nil {
