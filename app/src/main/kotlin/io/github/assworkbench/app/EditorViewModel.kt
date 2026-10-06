@@ -979,20 +979,28 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                             val executableCandidates = assessment.tracks.mapNotNull { result ->
                                 if (
                                     !result.executionImplemented ||
-                                    result.disposition != MediaImportDisposition.STREAM_COPY_COMPATIBLE ||
-                                    !result.descriptor.mime.equals("audio/mpeg", ignoreCase = true) ||
-                                    result.matroskaCodecId != "A_MPEG/L3"
+                                    result.disposition != MediaImportDisposition.STREAM_COPY_COMPATIBLE
                                 ) {
                                     return@mapNotNull null
                                 }
+                                val codecId = result.matroskaCodecId ?: return@mapNotNull null
                                 val temp = File.createTempFile("media-import-probe-", ".awpkt", app.cacheDir)
                                 try {
-                                    val normalized = AndroidMediaPacketNormalizer.normalizeMp3Track(
-                                        context = app,
-                                        uri = uri,
-                                        extractorIndex = result.descriptor.extractorIndex,
-                                        output = temp,
-                                    )
+                                    val normalized = when (codecId) {
+                                        "A_MPEG/L3" -> AndroidMediaPacketNormalizer.normalizeMp3Track(
+                                            context = app,
+                                            uri = uri,
+                                            extractorIndex = result.descriptor.extractorIndex,
+                                            output = temp,
+                                        )
+                                        "A_AAC" -> AndroidMediaPacketNormalizer.normalizeAacTrack(
+                                            context = app,
+                                            uri = uri,
+                                            extractorIndex = result.descriptor.extractorIndex,
+                                            output = temp,
+                                        )
+                                        else -> return@mapNotNull null
+                                    }
                                     ContainerTrackImportCandidateUi(
                                         sourceKind = ContainerTrackImportSourceKind.NORMALIZED_MEDIA_PACKETS,
                                         sourceUri = sourceUri,
@@ -1000,12 +1008,15 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                                         sourceExtractorIndex = result.descriptor.extractorIndex,
                                         sourceSha256 = normalized.bundleSha256,
                                         sourceContentSha256 = normalized.contentSha256,
+                                        sourceCodecPrivateSha256 = normalized.codecPrivateSha256,
                                         sampleRate = normalized.sampleRate,
                                         channelCount = normalized.channelCount,
                                         packetCount = normalized.packetCount,
                                         kind = ContainerResourceKind.AUDIO,
-                                        codecId = "A_MPEG/L3",
-                                        name = sourceName.substringBeforeLast('.').ifBlank { "Imported MP3" },
+                                        codecId = codecId,
+                                        name = sourceName.substringBeforeLast('.').ifBlank {
+                                            if (codecId == "A_AAC") "Imported AAC" else "Imported MP3"
+                                        },
                                         language = result.descriptor.language?.takeIf { it.isNotBlank() } ?: "und",
                                         isDefault = false,
                                         isForced = false,
@@ -1146,6 +1157,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 sourceExtractorIndex = candidate.sourceExtractorIndex,
                 sourceSha256 = candidate.sourceSha256,
                 sourceContentSha256 = candidate.sourceContentSha256,
+                sourceCodecPrivateSha256 = candidate.sourceCodecPrivateSha256,
                 sampleRate = candidate.sampleRate,
                 channelCount = candidate.channelCount,
                 packetCount = candidate.packetCount,
@@ -1547,12 +1559,21 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                                             "媒体 packet 来源缺少 extractor index"
                                         }
                                         val target = File(dir, "normalized.awpkt")
-                                        val normalized = AndroidMediaPacketNormalizer.normalizeMp3Track(
-                                            context = app,
-                                            uri = Uri.parse(planned.sourceUri),
-                                            extractorIndex = extractorIndex,
-                                            output = target,
-                                        )
+                                        val normalized = when (planned.codecId) {
+                                            "A_MPEG/L3" -> AndroidMediaPacketNormalizer.normalizeMp3Track(
+                                                context = app,
+                                                uri = Uri.parse(planned.sourceUri),
+                                                extractorIndex = extractorIndex,
+                                                output = target,
+                                            )
+                                            "A_AAC" -> AndroidMediaPacketNormalizer.normalizeAacTrack(
+                                                context = app,
+                                                uri = Uri.parse(planned.sourceUri),
+                                                extractorIndex = extractorIndex,
+                                                output = target,
+                                            )
+                                            else -> error("当前没有 ${planned.codecId} 的 packet normalizer")
+                                        }
                                         val expectedBundle = planned.sourceSha256
                                             ?: error("媒体 packet 来源缺少 bundle SHA-256 证据")
                                         require(normalized.bundleSha256.equals(expectedBundle, ignoreCase = true)) {
@@ -1562,6 +1583,19 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                                             ?: error("媒体 packet 来源缺少 content SHA-256 证据")
                                         require(normalized.contentSha256.equals(expectedContent, ignoreCase = true)) {
                                             "媒体 packet 内容已变化；请重新检测来源：" + planned.sourceName
+                                        }
+                                        val expectedCodecPrivate = planned.sourceCodecPrivateSha256
+                                        if (planned.codecId == "A_AAC") {
+                                            require(
+                                                expectedCodecPrivate != null &&
+                                                    normalized.codecPrivateSha256.equals(expectedCodecPrivate, ignoreCase = true)
+                                            ) {
+                                                "AAC CodecPrivate 已变化；请重新检测来源：" + planned.sourceName
+                                            }
+                                        } else {
+                                            require(normalized.codecPrivateSha256 == null) {
+                                                "MP3 packet source 不应携带 CodecPrivate"
+                                            }
                                         }
                                         require(normalized.sampleRate == planned.sampleRate) {
                                             "媒体 packet sample rate 已变化；请重新检测来源"
@@ -1707,11 +1741,24 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                                                 trackNumber = actualInfo.number,
                                             )
                                             require(digest.sha256.equals(expected, ignoreCase = true)) {
-                                                "写回验证失败：MP3 packet payload/timestamp digest 不一致"
+                                                "写回验证失败：packet payload/timestamp digest 不一致"
                                             }
                                             planned.packetCount?.let { expectedCount ->
                                                 require(digest.packetCount == expectedCount) {
-                                                    "写回验证失败：MP3 packet count ${digest.packetCount} != $expectedCount"
+                                                    "写回验证失败：packet count ${digest.packetCount} != $expectedCount"
+                                                }
+                                            }
+                                            val expectedCodecPrivate = planned.sourceCodecPrivateSha256
+                                            if (planned.codecId == "A_AAC") {
+                                                require(
+                                                    expectedCodecPrivate != null &&
+                                                        digest.codecPrivateSha256.equals(expectedCodecPrivate, ignoreCase = true)
+                                                ) {
+                                                    "写回验证失败：AAC CodecPrivate SHA-256 不一致"
+                                                }
+                                            } else {
+                                                require(digest.codecPrivateSha256 == null) {
+                                                    "写回验证失败：MP3 输出意外出现 CodecPrivate"
                                                 }
                                             }
                                         }
