@@ -185,13 +185,33 @@ internal fun buildContainerEditPlan(state: EditorState): ContainerEditPlanUi {
 
     state.container.pendingTrackImports.forEach { import ->
         mutations += ContainerMutationUi(
-            id = "add-track:${import.sourceUri}#${import.sourceTrackNumber}",
+            id = buildString {
+                append("add-track:").append(import.sourceKind.name)
+                append(':').append(import.sourceUri)
+                import.sourceTrackNumber?.let { append(":track:").append(it) }
+                import.sourceExtractorIndex?.let { append(":extractor:").append(it) }
+            },
             kind = ContainerMutationKind.ADD_TRACK,
             source = ContainerMutationSource.EXTERNAL_TRACK,
             title = "导入 ${import.kind.name.lowercase()} 轨道",
             detail = buildString {
                 append(import.sourceName)
-                append(" · Track #").append(import.sourceTrackNumber)
+                when (import.sourceKind) {
+                    ContainerTrackImportSourceKind.MATROSKA_TRACK ->
+                        append(" · source Track #").append(import.sourceTrackNumber)
+                    ContainerTrackImportSourceKind.STANDALONE_ASS ->
+                        append(" · standalone ASS → normalized ASS → S_TEXT/ASS · normalized SHA-256 pinned")
+                    ContainerTrackImportSourceKind.STANDALONE_SRT ->
+                        append(" · standalone SRT → normalized ASS → S_TEXT/ASS · normalized SHA-256 pinned")
+                    ContainerTrackImportSourceKind.NORMALIZED_MEDIA_PACKETS -> {
+                        append(" · MediaExtractor packet stream-copy")
+                        import.sourceExtractorIndex?.let { append(" · extractor Track #").append(it) }
+                        import.packetCount?.let { append(" · ").append(it).append(" packets") }
+                        import.sampleRate?.let { append(" · ").append(it).append("Hz") }
+                        import.channelCount?.let { append(" · ").append(it).append("ch") }
+                        append(" · bundle/content digest pinned")
+                    }
+                }
                 append(" · ").append(import.codecId)
                 if (import.name.isNotBlank()) append(" · ").append(import.name)
                 if (import.language.isNotBlank()) append(" · legacy ").append(import.language)
@@ -252,9 +272,38 @@ internal fun buildContainerEditPlan(state: EditorState): ContainerEditPlanUi {
     val removesDirtySelectedAss =
         state.dirty && selectedTrackTarget != null && selectedTrackTarget in trackRemovalTargets
     val importKeys = state.container.pendingTrackImports.map {
-        it.sourceUri to it.sourceTrackNumber
+        listOf(
+            it.sourceKind.name,
+            it.sourceUri,
+            (it.sourceTrackNumber ?: 0L).toString(),
+            (it.sourceExtractorIndex ?: -1).toString(),
+        )
     }
     val duplicateTrackImports = importKeys.size != importKeys.distinct().size
+    val invalidTrackImports = state.container.pendingTrackImports.any { import ->
+        when (import.sourceKind) {
+            ContainerTrackImportSourceKind.MATROSKA_TRACK ->
+                import.sourceTrackNumber == null || import.sourceTrackNumber <= 0L
+            ContainerTrackImportSourceKind.STANDALONE_ASS,
+            ContainerTrackImportSourceKind.STANDALONE_SRT ->
+                import.kind != ContainerResourceKind.SUBTITLE ||
+                    import.codecId != "S_TEXT/ASS" ||
+                    !import.sourceSha256.orEmpty().matches(Regex("[0-9a-fA-F]{64}"))
+            ContainerTrackImportSourceKind.NORMALIZED_MEDIA_PACKETS ->
+                import.kind != ContainerResourceKind.AUDIO ||
+                    import.codecId != "A_MPEG/L3" ||
+                    import.sourceExtractorIndex == null ||
+                    import.sourceExtractorIndex < 0 ||
+                    !import.sourceSha256.orEmpty().matches(Regex("[0-9a-fA-F]{64}")) ||
+                    !import.sourceContentSha256.orEmpty().matches(Regex("[0-9a-fA-F]{64}")) ||
+                    import.sampleRate == null ||
+                    import.sampleRate <= 0 ||
+                    import.channelCount == null ||
+                    import.channelCount !in 1..255 ||
+                    import.packetCount == null ||
+                    import.packetCount <= 0L
+        }
+    }
     val invalidTrackLegacyLanguage =
         state.container.pendingTrackMetadataEdits.any {
             it.language.isNotEmpty() && !it.language.matches(Regex("[a-z]{3}"))
@@ -284,6 +333,7 @@ internal fun buildContainerEditPlan(state: EditorState): ContainerEditPlanUi {
                 ContainerCompatibilityStatus.UNSUPPORTED
             removesDirtySelectedAss -> ContainerCompatibilityStatus.UNSUPPORTED
             duplicateTrackImports -> ContainerCompatibilityStatus.UNSUPPORTED
+            invalidTrackImports -> ContainerCompatibilityStatus.UNSUPPORTED
             invalidTrackLegacyLanguage -> ContainerCompatibilityStatus.UNSUPPORTED
             invalidTrackBcp47 -> ContainerCompatibilityStatus.UNSUPPORTED
             mutations.isEmpty() -> ContainerCompatibilityStatus.WARNING
@@ -307,6 +357,8 @@ internal fun buildContainerEditPlan(state: EditorState): ContainerEditPlanUi {
                 "当前正在编辑且未保存的 ASS 轨被计划删除；请先保存、放弃修改或取消删除。"
             duplicateTrackImports ->
                 "同一个外部来源 Track 不能在一次计划中重复导入。"
+            invalidTrackImports ->
+                "导入来源的身份/规范化证据不完整或与目标 Track 类型不一致；请重新检测来源。"
             invalidTrackLegacyLanguage ->
                 "Track 的 legacy Language 必须为空或 3 字母 ISO 639-2 代码。"
             invalidTrackBcp47 ->
@@ -336,7 +388,7 @@ internal fun buildContainerEditPlan(state: EditorState): ContainerEditPlanUi {
         dimension = ContainerCompatibilityDimension.OUTPUT_VERIFICATION,
         status = ContainerCompatibilityStatus.SUPPORTED,
         title = "输出验证",
-        detail = "写回后重新扫描实际 MKV，并验证幸存轨道身份/顺序、导入轨道的新 TrackNumber / TrackUID / codec / metadata、章节、未改附件及其他计划修改。",
+        detail = "写回后重新扫描实际 MKV，并验证幸存轨道身份/顺序、导入轨道的新 TrackNumber / TrackUID / codec / metadata、章节、未改附件及其他计划修改；规范化字幕额外做 ASS 语义 round-trip，packet stream-copy 额外验证实际输出 Track 的时间戳+payload digest 与 packet count。",
     )
 
     val hasGenericAttachment = mutations.any {
@@ -348,7 +400,16 @@ internal fun buildContainerEditPlan(state: EditorState): ContainerEditPlanUi {
             it.source == ContainerMutationSource.EXTERNAL_TRACK
     }
     val importsSubtitleWithSourceAttachments = state.container.pendingTrackImports.any {
-        it.kind == ContainerResourceKind.SUBTITLE && it.sourceAttachmentCount > 0
+        it.sourceKind == ContainerTrackImportSourceKind.MATROSKA_TRACK &&
+            it.kind == ContainerResourceKind.SUBTITLE &&
+            it.sourceAttachmentCount > 0
+    }
+    val hasNormalizedSubtitleImport = state.container.pendingTrackImports.any {
+        it.sourceKind == ContainerTrackImportSourceKind.STANDALONE_ASS ||
+            it.sourceKind == ContainerTrackImportSourceKind.STANDALONE_SRT
+    }
+    val hasPacketStreamCopyImport = state.container.pendingTrackImports.any {
+        it.sourceKind == ContainerTrackImportSourceKind.NORMALIZED_MEDIA_PACKETS
     }
     val hasFontAttachment = mutations.any { it.source == ContainerMutationSource.FONT_PACKAGE }
     val hasAss = mutations.any { it.kind == ContainerMutationKind.REPLACE_ASS_TRACK }
@@ -359,6 +420,24 @@ internal fun buildContainerEditPlan(state: EditorState): ContainerEditPlanUi {
             status = ContainerCompatibilityStatus.WARNING,
             title = "导入字幕轨不自动复制来源附件",
             detail = "所选字幕来源包含 Attachment；本次只导入所选 Track。若字幕依赖来源字体，请另外把需要的字体加入附件计划。",
+        )
+    }
+
+    if (hasNormalizedSubtitleImport) {
+        checks += ContainerCompatibilityCheckUi(
+            dimension = ContainerCompatibilityDimension.SOURCE_INVENTORY,
+            status = ContainerCompatibilityStatus.SUPPORTED,
+            title = "独立字幕规范化证据已固定",
+            detail = "ASS / SRT 保存前会重新读取原 URI 并生成同一 deterministic UTF-8 ASS execution representation；normalized SHA-256 漂移会 fail closed。",
+        )
+    }
+
+    if (hasPacketStreamCopyImport) {
+        checks += ContainerCompatibilityCheckUi(
+            dimension = ContainerCompatibilityDimension.SOURCE_INVENTORY,
+            status = ContainerCompatibilityStatus.SUPPORTED,
+            title = "MP3 packet stream-copy 证据已固定",
+            detail = "MediaExtractor 压缩 packet 不经过 MediaCodec 解码/重编码；bundle/content SHA-256、packet count、sample rate 与 channel count 会在保存前重新验证。",
         )
     }
 

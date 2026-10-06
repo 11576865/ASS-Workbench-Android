@@ -64,7 +64,10 @@ import io.github.assworkbench.app.ContainerResourceChange
 import io.github.assworkbench.app.ContainerResourceKind
 import io.github.assworkbench.app.ContainerResourceUi
 import io.github.assworkbench.app.ContainerTrackImportCandidateUi
+import io.github.assworkbench.app.ContainerTrackImportSourceKind
 import io.github.assworkbench.app.EditorViewModel
+import io.github.assworkbench.app.MediaImportDisposition
+import io.github.assworkbench.app.MediaImportTrackKind
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -246,9 +249,17 @@ fun ContainerBridgePanel(
                 onClick = {
                     trackImportPicker.launch(
                         arrayOf(
+                            "video/*",
+                            "audio/*",
                             "video/x-matroska",
                             "video/webm",
+                            "audio/x-matroska",
                             "application/x-matroska",
+                            "text/x-ass",
+                            "text/x-ssa",
+                            "application/x-subrip",
+                            "text/srt",
+                            "text/plain",
                             "application/octet-stream",
                         )
                     )
@@ -473,6 +484,94 @@ fun ContainerBridgePanel(
             }
         }
 
+        state.mediaImportAssessment?.let { assessment ->
+            HorizontalDivider()
+            Row(
+                Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        "媒体导入兼容性检测 · ${assessment.sourceName}",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    Text(
+                        "兼容性结果属于只读证据；只有 execution implemented 的 adapter 会另外出现在可导入候选中。",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                TextButton(
+                    enabled = !state.trackImportBusy && !state.writeBackBusy,
+                    onClick = viewModel::dismissContainerTrackImportCandidates,
+                ) { Text("关闭") }
+            }
+            assessment.tracks.forEach { result ->
+                val track = result.descriptor
+                Row(
+                    Modifier.fillMaxWidth().padding(vertical = 6.dp, horizontal = 4.dp),
+                    verticalAlignment = Alignment.Top,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Icon(
+                        imageVector = when (track.kind) {
+                            MediaImportTrackKind.VIDEO -> Icons.Filled.Movie
+                            MediaImportTrackKind.AUDIO -> Icons.Filled.Audiotrack
+                            MediaImportTrackKind.SUBTITLE -> Icons.Filled.Subtitles
+                            MediaImportTrackKind.OTHER -> Icons.Filled.HelpOutline
+                        },
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            "Extractor Track #${track.extractorIndex} · ${track.mime}",
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        Text(
+                            buildString {
+                                append(
+                                    when (result.disposition) {
+                                        MediaImportDisposition.STREAM_COPY_COMPATIBLE -> "Stream-copy compatible"
+                                        MediaImportDisposition.TRANSCODE_REQUIRED -> "需要显式 Transcode"
+                                        MediaImportDisposition.UNSUPPORTED -> "当前导入域不支持"
+                                        MediaImportDisposition.UNKNOWN -> "兼容性未决"
+                                    }
+                                )
+                                result.matroskaCodecId?.let { append(" · ").append(it) }
+                                track.language?.takeIf(String::isNotBlank)?.let { append(" · ").append(it) }
+                                if (track.kind == MediaImportTrackKind.VIDEO &&
+                                    track.width != null && track.height != null
+                                ) {
+                                    append(" · ").append(track.width).append("×").append(track.height)
+                                }
+                                if (track.kind == MediaImportTrackKind.AUDIO) {
+                                    track.channelCount?.let { append(" · ").append(it).append("ch") }
+                                    track.sampleRate?.let { append(" · ").append(it).append("Hz") }
+                                }
+                                if (track.codecPrivateKeys.isNotEmpty()) {
+                                    append(" · codec config ").append(track.codecPrivateKeys.joinToString())
+                                }
+                                track.decoderAvailable?.let {
+                                    append(if (it) " · decoder available" else " · decoder unavailable")
+                                }
+                                append(if (result.executionImplemented) " · execution implemented" else " · execution not wired")
+                            },
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Text(
+                            result.reason,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+        }
+
         if (state.pendingTrackImports.isNotEmpty()) {
             HorizontalDivider()
             Text(
@@ -508,8 +607,30 @@ fun ContainerBridgePanel(
                         Text(
                             buildString {
                                 append(track.sourceName)
-                                append(" · Track #").append(track.sourceTrackNumber)
-                                if (track.codecId.isNotBlank()) append(" · ").append(track.codecId)
+                                when (track.sourceKind) {
+                                    ContainerTrackImportSourceKind.MATROSKA_TRACK ->
+                                        append(" · source Track #").append(track.sourceTrackNumber)
+                                    ContainerTrackImportSourceKind.STANDALONE_ASS ->
+                                        append(" · standalone ASS → normalized ASS")
+                                    ContainerTrackImportSourceKind.STANDALONE_SRT ->
+                                        append(" · standalone SRT → normalized ASS")
+                                    ContainerTrackImportSourceKind.NORMALIZED_MEDIA_PACKETS -> {
+                                        append(" · packet stream-copy")
+                                        track.sourceExtractorIndex?.let {
+                                            append(" · extractor Track #").append(it)
+                                        }
+                                        track.packetCount?.let {
+                                            append(" · ").append(it).append(" packets")
+                                        }
+                                        track.sampleRate?.let {
+                                            append(" · ").append(it).append("Hz")
+                                        }
+                                        track.channelCount?.let {
+                                            append(" · ").append(it).append("ch")
+                                        }
+                                    }
+                                }
+                                append(" · ").append(track.codecId)
                                 if (track.languageBcp47.isNotBlank()) append(" · ").append(track.languageBcp47)
                                 else if (track.language.isNotBlank()) append(" · ").append(track.language)
                                 if (track.isDefault) append(" · Default")
@@ -528,8 +649,10 @@ fun ContainerBridgePanel(
                         enabled = !state.writeBackBusy,
                         onClick = {
                             viewModel.cancelContainerTrackImport(
-                                track.sourceUri,
-                                track.sourceTrackNumber,
+                                sourceKind = track.sourceKind,
+                                sourceUri = track.sourceUri,
+                                sourceTrackNumber = track.sourceTrackNumber,
+                                sourceExtractorIndex = track.sourceExtractorIndex,
                             )
                         },
                     ) { Text("取消") }
@@ -639,8 +762,10 @@ fun ContainerBridgePanel(
                         )
                         state.trackImportCandidates.forEach { candidate ->
                             val alreadyPlanned = state.pendingTrackImports.any {
-                                it.sourceUri == candidate.sourceUri &&
-                                    it.sourceTrackNumber == candidate.sourceTrackNumber
+                                it.sourceKind == candidate.sourceKind &&
+                                    it.sourceUri == candidate.sourceUri &&
+                                    it.sourceTrackNumber == candidate.sourceTrackNumber &&
+                                    it.sourceExtractorIndex == candidate.sourceExtractorIndex
                             }
                             Surface(
                                 tonalElevation = 1.dp,
@@ -664,15 +789,49 @@ fun ContainerBridgePanel(
                                     Column(Modifier.weight(1f)) {
                                         Text(
                                             candidate.name.ifBlank {
-                                                candidate.codecId.ifBlank { "Track #${candidate.sourceTrackNumber}" }
+                                                candidate.codecId.ifBlank {
+                                                    when (candidate.sourceKind) {
+                                                        ContainerTrackImportSourceKind.MATROSKA_TRACK ->
+                                                            "Track #${candidate.sourceTrackNumber}"
+                                                        ContainerTrackImportSourceKind.STANDALONE_ASS ->
+                                                            "Standalone ASS"
+                                                        ContainerTrackImportSourceKind.STANDALONE_SRT ->
+                                                            "Standalone SRT"
+                                                        ContainerTrackImportSourceKind.NORMALIZED_MEDIA_PACKETS ->
+                                                            "Media Track #${candidate.sourceExtractorIndex}"
+                                                    }
+                                                }
                                             },
                                             style = MaterialTheme.typography.bodyMedium,
                                         )
                                         Text(
                                             buildString {
-                                                append("Track #").append(candidate.sourceTrackNumber)
+                                                when (candidate.sourceKind) {
+                                                    ContainerTrackImportSourceKind.MATROSKA_TRACK ->
+                                                        append("source Track #").append(candidate.sourceTrackNumber)
+                                                    ContainerTrackImportSourceKind.STANDALONE_ASS ->
+                                                        append("standalone ASS → normalized ASS")
+                                                    ContainerTrackImportSourceKind.STANDALONE_SRT ->
+                                                        append("standalone SRT → normalized ASS")
+                                                    ContainerTrackImportSourceKind.NORMALIZED_MEDIA_PACKETS -> {
+                                                        append("MediaExtractor stream-copy")
+                                                        candidate.sourceExtractorIndex?.let {
+                                                            append(" · extractor Track #").append(it)
+                                                        }
+                                                        candidate.packetCount?.let {
+                                                            append(" · ").append(it).append(" packets")
+                                                        }
+                                                        candidate.sampleRate?.let {
+                                                            append(" · ").append(it).append("Hz")
+                                                        }
+                                                        candidate.channelCount?.let {
+                                                            append(" · ").append(it).append("ch")
+                                                        }
+                                                    }
+                                                }
                                                 if (candidate.codecId.isNotBlank()) append(" · ").append(candidate.codecId)
-                                                if (candidate.language.isNotBlank()) append(" · ").append(candidate.language)
+                                                if (candidate.languageBcp47.isNotBlank()) append(" · ").append(candidate.languageBcp47)
+                                                else if (candidate.language.isNotBlank()) append(" · ").append(candidate.language)
                                                 if (candidate.isDefault) append(" · Default")
                                                 if (candidate.isForced) append(" · Forced")
                                             },
@@ -722,7 +881,20 @@ fun ContainerBridgePanel(
         trackImportCandidate?.let { candidate ->
             AlertDialog(
                 onDismissRequest = { trackImportCandidate = null },
-                title = { Text("导入 Track #${candidate.sourceTrackNumber}") },
+                title = {
+                    Text(
+                        when (candidate.sourceKind) {
+                            ContainerTrackImportSourceKind.MATROSKA_TRACK ->
+                                "导入 Track #${candidate.sourceTrackNumber}"
+                            ContainerTrackImportSourceKind.STANDALONE_ASS ->
+                                "导入独立 ASS"
+                            ContainerTrackImportSourceKind.STANDALONE_SRT ->
+                                "导入独立 SRT"
+                            ContainerTrackImportSourceKind.NORMALIZED_MEDIA_PACKETS ->
+                                "导入媒体 Track #${candidate.sourceExtractorIndex}"
+                        }
+                    )
+                },
                 text = {
                     Column(
                         Modifier
@@ -776,7 +948,7 @@ fun ContainerBridgePanel(
                             onCommentaryChange = { trackImportCommentary = it },
                         )
                         Text(
-                            "保存时分配新的 TrackNumber / TrackUID。Default 作为目标容器的选择策略默认关闭；Forced、无障碍和语义 disposition 从来源继承。来源附件不会自动复制。",
+                            "保存时分配新的 TrackNumber / TrackUID。Default 作为目标容器策略默认关闭；BCP 47 与无障碍/语义 disposition 保留 current-main 规则。Matroska 来源附件不会自动复制；ASS / SRT 与 packet 来源按各自 normalization evidence 重新验证。",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )

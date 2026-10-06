@@ -110,11 +110,25 @@ data class PendingContainerTrackMetadataUi(
     val commentary: Boolean = false,
 )
 
+enum class ContainerTrackImportSourceKind {
+    MATROSKA_TRACK,
+    STANDALONE_ASS,
+    STANDALONE_SRT,
+    NORMALIZED_MEDIA_PACKETS,
+}
+
 data class ContainerTrackImportCandidateUi(
+    val sourceKind: ContainerTrackImportSourceKind = ContainerTrackImportSourceKind.MATROSKA_TRACK,
     val sourceUri: String,
     val sourceName: String,
-    val sourceTrackNumber: Long,
-    val sourceTrackUid: Long?,
+    val sourceTrackNumber: Long? = null,
+    val sourceTrackUid: Long? = null,
+    val sourceExtractorIndex: Int? = null,
+    val sourceSha256: String? = null,
+    val sourceContentSha256: String? = null,
+    val sampleRate: Int? = null,
+    val channelCount: Int? = null,
+    val packetCount: Long? = null,
     val kind: ContainerResourceKind,
     val codecId: String,
     val name: String,
@@ -131,10 +145,17 @@ data class ContainerTrackImportCandidateUi(
 )
 
 data class PendingContainerTrackImportUi(
+    val sourceKind: ContainerTrackImportSourceKind = ContainerTrackImportSourceKind.MATROSKA_TRACK,
     val sourceUri: String,
     val sourceName: String,
-    val sourceTrackNumber: Long,
-    val sourceTrackUid: Long?,
+    val sourceTrackNumber: Long? = null,
+    val sourceTrackUid: Long? = null,
+    val sourceExtractorIndex: Int? = null,
+    val sourceSha256: String? = null,
+    val sourceContentSha256: String? = null,
+    val sampleRate: Int? = null,
+    val channelCount: Int? = null,
+    val packetCount: Long? = null,
     val kind: ContainerResourceKind,
     val codecId: String,
     val name: String,
@@ -168,6 +189,7 @@ data class ContainerBridgeState(
     val trackImportBusy: Boolean = false,
     val trackImportSourceName: String = "",
     val trackImportCandidates: List<ContainerTrackImportCandidateUi> = emptyList(),
+    val mediaImportAssessment: MediaImportSourceAssessment? = null,
     val extractedFontCount: Int = 0,
     val skippedAttachmentCount: Int = 0,
     val writeBackAvailable: Boolean = false,
