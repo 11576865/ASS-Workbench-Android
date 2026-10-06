@@ -165,7 +165,18 @@ class MainActivity : ComponentActivity() {
                         },
                         onOpenMkvProject = { openMkvProject.launch(arrayOf("video/x-matroska", "video/*", "application/octet-stream")) },
                         onOpenSubtitle = {
-                            openSubtitle.launch(arrayOf("application/x-ass", "text/x-ass", "text/x-ssa", "application/x-subrip", "text/srt", "text/plain"))
+                            openSubtitle.launch(
+                                arrayOf(
+                                    "application/x-ass",
+                                    "application/x-ssa",
+                                    "text/x-ass",
+                                    "text/x-ssa",
+                                    "application/x-subrip",
+                                    "text/srt",
+                                    "text/plain",
+                                    "application/octet-stream",
+                                )
+                            )
                         },
                         onImportFont = { importFont.launch(arrayOf("font/ttf", "font/otf", "font/collection", "application/x-font-ttf", "application/x-font-opentype", "application/octet-stream")) },
                         onSave = {
