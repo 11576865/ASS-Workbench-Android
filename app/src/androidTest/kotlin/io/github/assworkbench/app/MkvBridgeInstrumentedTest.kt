@@ -1,6 +1,10 @@
 package io.github.assworkbench.app
 
 import android.app.Application
+import android.media.MediaCodec
+import android.media.MediaCodecInfo
+import android.media.MediaFormat
+import android.media.MediaMuxer
 import android.net.Uri
 import android.util.Base64
 import androidx.test.core.app.ApplicationProvider
@@ -610,6 +614,207 @@ class MkvBridgeInstrumentedTest {
             before.attachmentInfos.map { listOf(it.uid, it.fileName, it.mimeType, it.sizeBytes) },
             after.attachmentInfos.map { listOf(it.uid, it.fileName, it.mimeType, it.sizeBytes) },
         )
+    }
+
+
+    @Test
+    fun nativeBridgeStreamCopiesRealAacPacketsWithCodecPrivate() = runBlocking {
+        val source = File(workDir, "aac-import-base.mkv")
+        InstrumentationRegistry.getInstrumentation().context.assets
+            .open("mkv/source.mkv")
+            .use { input -> source.outputStream().use { output -> input.copyTo(output) } }
+
+        val before = source.inputStream().use { MatroskaReader().scan(it) }
+        val maxOriginalNumber = before.trackInfos.maxOf { it.number }
+        val originalUids = before.trackInfos.mapNotNull { it.uid }.toSet()
+
+        val m4a = File(workDir, "silent-fixture.m4a")
+        writeAacM4aFixture(m4a)
+        assertTrue(m4a.isFile && m4a.length() > 0L)
+
+        val assessment = AndroidMediaImportProbe.probe(
+            context = application,
+            uri = Uri.fromFile(m4a),
+            sourceName = m4a.name,
+        )
+        val executable = assessment.tracks.single {
+            it.descriptor.mime.equals("audio/mp4a-latm", ignoreCase = true)
+        }
+        assertTrue(executable.executionImplemented)
+        assertEquals("A_AAC", executable.matroskaCodecId)
+
+        val normalizedFile = File(workDir, "silent-aac.awpkt")
+        val normalized = AndroidMediaPacketNormalizer.normalizeAacTrack(
+            context = application,
+            uri = Uri.fromFile(m4a),
+            extractorIndex = executable.descriptor.extractorIndex,
+            output = normalizedFile,
+        )
+        assertEquals("audio/mp4a-latm", normalized.mime)
+        assertEquals(44_100, normalized.sampleRate)
+        assertEquals(2, normalized.channelCount)
+        assertTrue(normalized.packetCount > 0L)
+        assertTrue(normalized.bundleSha256.matches(Regex("[0-9a-f]{64}")))
+        assertTrue(normalized.contentSha256.matches(Regex("[0-9a-f]{64}")))
+        val codecPrivateSha = requireNotNull(normalized.codecPrivateSha256)
+        assertTrue(codecPrivateSha.matches(Regex("[0-9a-f]{64}")))
+
+        val output = File(workDir, "aac-stream-copy-updated.mkv")
+        val tool = MkvGoTool(application)
+        assertTrue("x86_64 emulator APK must package the mkvgo helper", tool.isAvailable())
+        tool.editContainer(
+            source = source,
+            output = output,
+            trackImports = listOf(
+                TrackImportInput(
+                    sourceKind = ContainerTrackImportSourceKind.NORMALIZED_MEDIA_PACKETS,
+                    source = normalized.file,
+                    sourceSha256 = normalized.bundleSha256,
+                    sourceCodecId = "A_AAC",
+                    sampleRate = normalized.sampleRate,
+                    channelCount = normalized.channelCount,
+                    name = "Imported AAC",
+                    language = "und",
+                    isDefault = false,
+                    isForced = false,
+                )
+            ),
+        )
+
+        val after = output.inputStream().use { MatroskaReader().scan(it) }
+        assertEquals(before.trackInfos.size + 1, after.trackInfos.size)
+        assertEquals(
+            before.trackPreservationSignature(),
+            after.copy(trackInfos = after.trackInfos.take(before.trackInfos.size))
+                .trackPreservationSignature(),
+        )
+
+        val added = after.trackInfos.last()
+        assertEquals(MatroskaTrackKind.AUDIO, added.kind)
+        assertEquals("A_AAC", added.codecId)
+        assertTrue(added.number > maxOriginalNumber)
+        val addedUid = added.uid
+        assertTrue(addedUid != null && addedUid !in originalUids)
+        assertEquals("Imported AAC", added.name)
+
+        val digest = tool.digestTrackContent(output, added.number)
+        assertEquals(normalized.contentSha256, digest.sha256)
+        assertEquals(normalized.packetCount, digest.packetCount)
+        assertEquals(codecPrivateSha, digest.codecPrivateSha256)
+        assertEquals(0L, digest.firstTimecodeMs)
+
+        assertEquals(before.chapterCount, after.chapterCount)
+        assertEquals(
+            before.attachmentInfos.map { listOf(it.uid, it.fileName, it.mimeType, it.sizeBytes) },
+            after.attachmentInfos.map { listOf(it.uid, it.fileName, it.mimeType, it.sizeBytes) },
+        )
+    }
+
+    private fun writeAacM4aFixture(file: File) {
+        val sampleRate = 44_100
+        val channelCount = 2
+        val format = MediaFormat.createAudioFormat(
+            "audio/mp4a-latm",
+            sampleRate,
+            channelCount,
+        ).apply {
+            setInteger(
+                MediaFormat.KEY_AAC_PROFILE,
+                MediaCodecInfo.CodecProfileLevel.AACObjectLC,
+            )
+            setInteger(MediaFormat.KEY_BIT_RATE, 64_000)
+            setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, 16 * 1024)
+        }
+
+        val codec = MediaCodec.createEncoderByType("audio/mp4a-latm")
+        val muxer = MediaMuxer(
+            file.absolutePath,
+            MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4,
+        )
+        var muxerStarted = false
+        try {
+            codec.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
+            codec.start()
+
+            val bufferInfo = MediaCodec.BufferInfo()
+            val totalFrames = sampleRate / 4
+            val bytesPerFrame = channelCount * 2
+            var framesQueued = 0
+            var inputDone = false
+            var outputDone = false
+            var muxerTrack = -1
+
+            while (!outputDone) {
+                if (!inputDone) {
+                    val inputIndex = codec.dequeueInputBuffer(10_000)
+                    if (inputIndex >= 0) {
+                        val inputBuffer = requireNotNull(codec.getInputBuffer(inputIndex))
+                        inputBuffer.clear()
+                        val framesRemaining = totalFrames - framesQueued
+                        if (framesRemaining <= 0) {
+                            val ptsUs = framesQueued * 1_000_000L / sampleRate
+                            codec.queueInputBuffer(
+                                inputIndex,
+                                0,
+                                0,
+                                ptsUs,
+                                MediaCodec.BUFFER_FLAG_END_OF_STREAM,
+                            )
+                            inputDone = true
+                        } else {
+                            val frameCapacity = inputBuffer.remaining() / bytesPerFrame
+                            val frames = minOf(framesRemaining, frameCapacity, 1024)
+                            repeat(frames * channelCount) {
+                                inputBuffer.putShort(0)
+                            }
+                            val size = frames * bytesPerFrame
+                            val ptsUs = framesQueued * 1_000_000L / sampleRate
+                            codec.queueInputBuffer(
+                                inputIndex,
+                                0,
+                                size,
+                                ptsUs,
+                                0,
+                            )
+                            framesQueued += frames
+                        }
+                    }
+                }
+
+                when (val outputIndex = codec.dequeueOutputBuffer(bufferInfo, 10_000)) {
+                    MediaCodec.INFO_TRY_AGAIN_LATER -> Unit
+                    MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
+                        check(!muxerStarted) { "AAC encoder output format changed twice" }
+                        muxerTrack = muxer.addTrack(codec.outputFormat)
+                        muxer.start()
+                        muxerStarted = true
+                    }
+                    else -> if (outputIndex >= 0) {
+                        val outputBuffer = requireNotNull(codec.getOutputBuffer(outputIndex))
+                        if (bufferInfo.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG != 0) {
+                            bufferInfo.size = 0
+                        }
+                        if (bufferInfo.size > 0) {
+                            check(muxerStarted) { "AAC muxer has not started" }
+                            outputBuffer.position(bufferInfo.offset)
+                            outputBuffer.limit(bufferInfo.offset + bufferInfo.size)
+                            muxer.writeSampleData(muxerTrack, outputBuffer, bufferInfo)
+                        }
+                        outputDone =
+                            bufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0
+                        codec.releaseOutputBuffer(outputIndex, false)
+                    }
+                }
+            }
+        } finally {
+            runCatching { codec.stop() }
+            codec.release()
+            if (muxerStarted) {
+                runCatching { muxer.stop() }
+            }
+            muxer.release()
+        }
+        check(file.isFile && file.length() > 0L) { "AAC M4A fixture was not created" }
     }
 
 
