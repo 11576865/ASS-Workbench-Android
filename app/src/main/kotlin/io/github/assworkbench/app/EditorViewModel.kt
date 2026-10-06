@@ -887,7 +887,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         val sourceUri = uri.toString()
         val sourceName = displayName(uri) ?: "external.bin"
         val sourceMime = runCatching { app.contentResolver.getType(uri) }.getOrNull()
-        val standaloneKind = detectStandaloneSubtitleTrackSourceKind(sourceName)
+        val standaloneKind = detectStandaloneSubtitleTrackSourceKind(sourceName, sourceMime)
         val matroskaFamily = isMatroskaFamilySource(sourceName, sourceMime)
         val epoch = workspaceEpoch.get()
         val targetContainerUri = snapshot.container.uri
@@ -912,8 +912,9 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 withContext(Dispatchers.IO) {
                     when {
                         standaloneKind != null -> {
-                            val raw = app.contentResolver.openInputStream(uri)?.use { it.readBytes() }
-                                ?: error("无法读取独立字幕来源")
+                            val raw = app.contentResolver.openInputStream(uri)?.use { input ->
+                                readStandaloneSubtitleSourceBytes(input)
+                            } ?: error("无法读取独立字幕来源")
                             val normalized = normalizeStandaloneSubtitleTrackSource(
                                 sourceKind = standaloneKind,
                                 raw = raw,
@@ -1526,7 +1527,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                                     ContainerTrackImportSourceKind.STANDALONE_ASS,
                                     ContainerTrackImportSourceKind.STANDALONE_SRT -> {
                                         val raw = app.contentResolver.openInputStream(Uri.parse(planned.sourceUri))
-                                            ?.use { it.readBytes() }
+                                            ?.use { input -> readStandaloneSubtitleSourceBytes(input) }
                                             ?: error("无法重新读取独立字幕：" + planned.sourceName)
                                         val normalized = normalizeStandaloneSubtitleTrackSource(
                                             sourceKind = planned.sourceKind,
@@ -1946,11 +1947,15 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     fun openSubtitle(uri: Uri) {
         clearPendingRecovery()
         beginWorkspaceBoundary()
-        val bytes = app.contentResolver.openInputStream(uri)?.use { it.readBytes() }
-            ?: error("无法读取字幕")
-        val decoded = AssTextDecoder.decode(bytes)
         val name = displayName(uri) ?: "subtitle"
-        val isSrt = name.endsWith(".srt", ignoreCase = true)
+        val mimeType = runCatching { app.contentResolver.getType(uri) }.getOrNull()
+        val sourceKind = detectStandaloneSubtitleTrackSourceKind(name, mimeType)
+            ?: error("无法识别字幕格式；只接受 ASS / SSA / SRT")
+        val bytes = app.contentResolver.openInputStream(uri)?.use { input ->
+            readStandaloneSubtitleSourceBytes(input)
+        } ?: error("无法读取字幕")
+        val decoded = AssTextDecoder.decode(bytes)
+        val isSrt = sourceKind == ContainerTrackImportSourceKind.STANDALONE_SRT
         val document = if (isSrt) SrtCodec.parse(decoded.text) else AssCodec.parse(decoded.text)
         history.reset(document)
         _state.update {
