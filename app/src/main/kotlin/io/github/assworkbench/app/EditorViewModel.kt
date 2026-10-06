@@ -1701,6 +1701,25 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                                             }
                                         }
                                         ContainerTrackImportSourceKind.NORMALIZED_MEDIA_PACKETS -> {
+                                            require(actualInfo.kind == MatroskaTrackKind.AUDIO) {
+                                                "写回验证失败：MP3 导入结果不是 Audio Track"
+                                            }
+                                            require(actualInfo.codecId == planned.codecId) {
+                                                "写回验证失败：MP3 CodecID ${actualInfo.codecId} != ${planned.codecId}"
+                                            }
+                                            val expectedSampleRate = planned.sampleRate
+                                                ?: error("写回验证失败：packet import 缺少 sample rate")
+                                            val actualSampleRate = actualInfo.audioSamplingFrequency
+                                                ?: error("写回验证失败：输出 MP3 Track 缺少 SamplingFrequency")
+                                            require(kotlin.math.abs(actualSampleRate - expectedSampleRate.toDouble()) < 0.5) {
+                                                "写回验证失败：MP3 SamplingFrequency $actualSampleRate != $expectedSampleRate"
+                                            }
+                                            val expectedChannels = planned.channelCount
+                                                ?: error("写回验证失败：packet import 缺少 channel count")
+                                            require(actualInfo.audioChannels == expectedChannels) {
+                                                "写回验证失败：MP3 Channels ${actualInfo.audioChannels} != $expectedChannels"
+                                            }
+
                                             val expected = planned.sourceContentSha256
                                                 ?: error("写回验证失败：packet import 缺少 content digest")
                                             val digest = mkvGoTool.digestTrackContent(
@@ -1714,6 +1733,9 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                                                 require(digest.packetCount == expectedCount) {
                                                     "写回验证失败：MP3 packet count ${digest.packetCount} != $expectedCount"
                                                 }
+                                            }
+                                            require(digest.firstTimecodeMs == 0L) {
+                                                "写回验证失败：MP3 首包时间戳 ${digest.firstTimecodeMs}ms != 0ms"
                                             }
                                         }
                                     }

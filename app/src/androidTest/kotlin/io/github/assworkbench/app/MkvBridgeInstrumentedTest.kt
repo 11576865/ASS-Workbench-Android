@@ -599,6 +599,9 @@ class MkvBridgeInstrumentedTest {
         assertEquals("und", added.language)
         assertFalse(added.isDefault)
         assertFalse(added.isForced)
+        assertEquals("A_MPEG/L3", added.codecId)
+        assertEquals(normalized.sampleRate.toDouble(), added.audioSamplingFrequency)
+        assertEquals(normalized.channelCount, added.audioChannels)
 
         val digest = tool.digestTrackContent(output, added.number)
         assertEquals(normalized.contentSha256, digest.sha256)
