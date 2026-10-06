@@ -146,4 +146,69 @@ class MediaImportCompatibilityTest {
         assertFalse(isMatroskaFamilySource("movie.mp4", "video/mp4"))
         assertFalse(isMatroskaFamilySource("track.mp3", "audio/mpeg"))
     }
+
+    @Test
+    fun isoBmffAacWithCsd0PromotesExecution() {
+        val base = MediaImportCompatibilityPlanner.assess(
+            MediaImportTrackDescriptor(
+                extractorIndex = 1,
+                kind = MediaImportTrackKind.AUDIO,
+                mime = "audio/mp4a-latm",
+                codecPrivateKeys = setOf("csd-0"),
+                decoderAvailable = true,
+            )
+        )
+
+        val promoted = promoteSourceSpecificMediaExecution(
+            assessment = base,
+            sourceName = "fixture.m4a",
+        )
+
+        assertEquals(MediaImportDisposition.STREAM_COPY_COMPATIBLE, promoted.disposition)
+        assertEquals("A_AAC", promoted.matroskaCodecId)
+        assertTrue(promoted.executionImplemented)
+        assertTrue(promoted.reason.contains("ISO-BMFF"))
+    }
+
+    @Test
+    fun aacOutsideIsoBmffDoesNotPromoteExecution() {
+        val base = MediaImportCompatibilityPlanner.assess(
+            MediaImportTrackDescriptor(
+                extractorIndex = 1,
+                kind = MediaImportTrackKind.AUDIO,
+                mime = "audio/mp4a-latm",
+                codecPrivateKeys = setOf("csd-0"),
+                decoderAvailable = true,
+            )
+        )
+
+        val promoted = promoteSourceSpecificMediaExecution(
+            assessment = base,
+            sourceName = "fixture.aac",
+        )
+
+        assertFalse(promoted.executionImplemented)
+        assertEquals("A_AAC", promoted.matroskaCodecId)
+    }
+
+    @Test
+    fun isoBmffAacWithoutCsd0DoesNotPromoteExecution() {
+        val base = MediaImportCompatibilityPlanner.assess(
+            MediaImportTrackDescriptor(
+                extractorIndex = 1,
+                kind = MediaImportTrackKind.AUDIO,
+                mime = "audio/mp4a-latm",
+                codecPrivateKeys = emptySet(),
+                decoderAvailable = true,
+            )
+        )
+
+        val promoted = promoteSourceSpecificMediaExecution(
+            assessment = base,
+            sourceName = "fixture.m4a",
+        )
+
+        assertFalse(promoted.executionImplemented)
+        assertEquals(MediaImportDisposition.UNKNOWN, promoted.disposition)
+    }
 }
