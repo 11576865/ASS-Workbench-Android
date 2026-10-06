@@ -203,6 +203,23 @@ class EditorRegressionInstrumentedTest {
         composeRule.onNodeWithTag("spatial-node-subtitles").assertIsDisplayed()
     }
 
+    @Test fun birdseyeNavigationPreservesSubtitleDocumentAndUndoHistory() {
+        restoreRecovery()
+        composeRule.onNodeWithContentDescription("工具和更多操作").performClick()
+        composeRule.onNodeWithTag("workspace-mode-toggle").performClick()
+        selectUiVariant("ui-variant-use-SPATIAL_EXPERIMENTAL")
+        val before = viewModel.state.value.document
+        val undoBefore = viewModel.state.value.canUndo
+        val redoBefore = viewModel.state.value.canRedo
+        composeRule.onNodeWithTag("spatial-birdseye").performClick()
+        composeRule.onNodeWithTag("spatial-birdseye-node-audio").performScrollTo().performClick()
+        composeRule.waitForIdle()
+        assertEquals(before, viewModel.state.value.document)
+        assertEquals(undoBefore, viewModel.state.value.canUndo)
+        assertEquals(redoBefore, viewModel.state.value.canRedo)
+        composeRule.onNodeWithTag("spatial-node-audio").assertIsDisplayed()
+    }
+
     @Test fun spatialWorkspaceLongPressDragExtractsRotationWithoutEditingAss() =
         verifySpatialParameterExtraction("event.rotation.z", "rotation-z", "TRANSFORM", "slider")
 

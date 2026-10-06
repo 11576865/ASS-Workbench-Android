@@ -88,7 +88,8 @@ internal fun InfiniteCanvasHost(
             else InfiniteCanvasPersistence.decode(savedScene))
     }
     SideEffect { onSaveScene(InfiniteCanvasPersistence.encode(scene.first, scene.second)) }
-    var detailedId by rememberSaveable { mutableStateOf<String?>(null) }
+    var detailedId by rememberSaveable(sessionId) { mutableStateOf<String?>(null) }
+    var birdseye by rememberSaveable(sessionId) { mutableStateOf(false) }
     var recall by remember { mutableStateOf(false) }
     var edgeRailOpen by rememberSaveable(sessionId) { mutableStateOf(false) }
     var edgeRailResident by rememberSaveable(sessionId) { mutableStateOf(false) }
@@ -139,6 +140,13 @@ internal fun InfiniteCanvasHost(
             val scale = minOf(1f, (viewportW - 32f) / width, (viewportH - 96f) / height).coerceIn(0.25f, 2f)
             scene = InfiniteCanvasCamera(16f - left * scale, 64f - top * scale, scale) to scene.second
         }
+        if (birdseye) CanvasOverviewDialog(entries, nodes, enabled = !gestureOwned,
+            onDismiss = { birdseye = false }, onFocus = { id ->
+                if (!captured) scene.second.firstOrNull { it.id == id }?.let {
+                    focus(it)
+                    birdseye = false
+                }
+            })
         Box(Modifier.fillMaxSize().testTag("spatial-background").pointerInput(sessionId) {
             detectTransformGestures { center, pan, zoom, _ ->
                 if (!captured) {
@@ -408,6 +416,8 @@ internal fun InfiniteCanvasHost(
                     onAddTool()
                 }) { Text("＋ 工具") }
                 TextButton(onClick = ::overview, enabled = !gestureOwned, modifier = Modifier.testTag("spatial-overview")) { Text("总览") }
+                TextButton(onClick = { birdseye = true }, enabled = !gestureOwned,
+                    modifier = Modifier.testTag("spatial-birdseye")) { Text("鸟瞰") }
                 Box {
                     TextButton(onClick = { recall = true }) { Text("召回") }
                     DropdownMenu(expanded = recall, onDismissRequest = { recall = false }) {
