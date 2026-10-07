@@ -28,6 +28,8 @@ data class MatroskaTrackInfo(
     val textDescriptions: Boolean = false,
     val original: Boolean = false,
     val commentary: Boolean = false,
+    val audioSamplingFrequency: Double? = null,
+    val audioChannels: Int? = null,
     val contentHash: String? = null,
 )
 
