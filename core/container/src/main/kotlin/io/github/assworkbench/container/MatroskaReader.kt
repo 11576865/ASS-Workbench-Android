@@ -130,6 +130,8 @@ class MatroskaReader(
         var textDescriptions = false
         var original = false
         var commentary = false
+        var audioSamplingFrequency: Double? = null
+        var audioChannels: Int? = null
         while (true) {
             val h = r.headerOrNull() ?: break
             when (h.id) {
@@ -141,6 +143,11 @@ class MatroskaReader(
                 ID_LANGUAGE_BCP47 -> languageBcp47 = r.readString(h.size)
                 ID_CODEC_ID -> codecId = r.readString(h.size)
                 ID_CODEC_PRIVATE -> codecPrivate = r.readString(h.size)
+                ID_AUDIO -> {
+                    val audio = parseAudio(r.readBytesChecked(h.size, 64 * 1024))
+                    audioSamplingFrequency = audio.samplingFrequency
+                    audioChannels = audio.channels
+                }
                 ID_FLAG_DEFAULT -> isDefault = r.readUnsigned(h.size) != 0L
                 ID_FLAG_FORCED -> isForced = r.readUnsigned(h.size) != 0L
                 ID_FLAG_HEARING_IMPAIRED -> hearingImpaired = r.readUnsigned(h.size) != 0L
@@ -169,7 +176,29 @@ class MatroskaReader(
             textDescriptions = textDescriptions,
             original = original,
             commentary = commentary,
+            audioSamplingFrequency = audioSamplingFrequency,
+            audioChannels = audioChannels,
         )
+    }
+
+    private fun parseAudio(bytes: ByteArray): AudioInfo {
+        val r = EbmlReader(ByteArrayInputStream(bytes))
+        var samplingFrequency: Double? = null
+        var channels: Int? = null
+        while (true) {
+            val h = r.headerOrNull() ?: break
+            when (h.id) {
+                ID_SAMPLING_FREQUENCY -> {
+                    samplingFrequency = r.readFloat(h.size).takeIf { it.isFinite() && it > 0.0 }
+                }
+                ID_CHANNELS -> {
+                    val value = r.readUnsigned(h.size)
+                    channels = value.takeIf { it in 1..Int.MAX_VALUE.toLong() }?.toInt()
+                }
+                else -> r.skipFully(h.size)
+            }
+        }
+        return AudioInfo(samplingFrequency, channels)
     }
 
     private fun parseAttachment(
@@ -334,6 +363,11 @@ class MatroskaReader(
         val attachment: MatroskaAttachment?,
     )
 
+    private data class AudioInfo(
+        val samplingFrequency: Double?,
+        val channels: Int?,
+    )
+
     private data class TrackBuilder(
         val number: Long,
         val uid: Long?,
@@ -350,6 +384,8 @@ class MatroskaReader(
         val textDescriptions: Boolean,
         val original: Boolean,
         val commentary: Boolean,
+        val audioSamplingFrequency: Double?,
+        val audioChannels: Int?,
         val packets: MutableList<MatroskaSubtitlePacket> = mutableListOf(),
     ) {
         fun build() = MatroskaSubtitleTrack(number, uid, name, language, codecId, codecPrivate, packets.toList())
@@ -370,6 +406,8 @@ class MatroskaReader(
             textDescriptions = textDescriptions,
             original = original,
             commentary = commentary,
+            audioSamplingFrequency = audioSamplingFrequency,
+            audioChannels = audioChannels,
             contentHash = if (codecId == "S_TEXT/ASS") {
                 val bytes = buildString {
                     append(codecPrivate)
@@ -433,6 +471,12 @@ class MatroskaReader(
             var result = 0L
             repeat(size.toInt()) { result = (result shl 8) or readByte().toLong() }
             return result
+        }
+
+        fun readFloat(size: Long): Double = when (size) {
+            4L -> Float.fromBits(readUnsigned(4).toInt()).toDouble()
+            8L -> Double.fromBits(readUnsigned(8))
+            else -> throw IllegalArgumentException("Unsupported float size: $size")
         }
 
         fun readString(size: Long): String =
@@ -525,6 +569,9 @@ class MatroskaReader(
         private const val ID_LANGUAGE_BCP47 = 0x22B59DL
         private const val ID_CODEC_ID = 0x86L
         private const val ID_CODEC_PRIVATE = 0x63A2L
+        private const val ID_AUDIO = 0xE1L
+        private const val ID_SAMPLING_FREQUENCY = 0xB5L
+        private const val ID_CHANNELS = 0x9FL
         private const val ID_FLAG_DEFAULT = 0x88L
         private const val ID_FLAG_FORCED = 0x55AAL
         private const val ID_FLAG_HEARING_IMPAIRED = 0x55ABL
