@@ -148,6 +148,34 @@ class MatroskaReaderTest {
     }
 
     @Test
+    fun readsAudioSamplingFrequencyAndChannels() {
+        val audioSettings = master(
+            0xE1,
+            float64(0xB5, 48_000.0) +
+                uint(0x9F, 2),
+        )
+        val trackEntry = master(
+            0xAE,
+            uint(0xD7, 2) +
+                uint(0x73C5, 202) +
+                uint(0x83, 0x02) +
+                text(0x86, "A_MPEG/L3") +
+                audioSettings,
+        )
+        val segment = master(0x18538067, master(0x1654AE6B, trackEntry))
+
+        val track = MatroskaReader()
+            .scan(ByteArrayInputStream(segment))
+            .trackInfos
+            .single()
+
+        assertEquals(MatroskaTrackKind.AUDIO, track.kind)
+        assertEquals("A_MPEG/L3", track.codecId)
+        assertEquals(48_000.0, track.audioSamplingFrequency)
+        assertEquals(2, track.audioChannels)
+    }
+
+    @Test
     fun readsBcp47AndExtendedDispositionFlags() {
         val trackEntry = master(
             0xAE,
@@ -206,6 +234,16 @@ class MatroskaReaderTest {
         for (i in bytes - 1 downTo 0) {
             data[i] = (v and 0xFF).toByte()
             v = v ushr 8
+        }
+        return binary(id, data)
+    }
+
+    private fun float64(id: Long, value: Double): ByteArray {
+        var bits = value.toBits()
+        val data = ByteArray(8)
+        for (i in data.indices.reversed()) {
+            data[i] = (bits and 0xFF).toByte()
+            bits = bits ushr 8
         }
         return binary(id, data)
     }
