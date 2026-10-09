@@ -9,6 +9,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTouchInput
@@ -185,7 +186,7 @@ class InfiniteCanvasInstrumentedTest {
                 }
             }
         }
-        composeRule.onNodeWithTag("spatial-add-tool").performClick()
+        composeRule.onNodeWithTag("spatial-add-tool").assertIsDisplayed().performClick()
         composeRule.onNodeWithTag("spatial-native-content-CAPABILITIES-primary").assertExists()
         composeRule.runOnIdle { requestedId = "POSITION:primary" }
         composeRule.onNodeWithTag("spatial-native-content-POSITION-primary").assertExists()
