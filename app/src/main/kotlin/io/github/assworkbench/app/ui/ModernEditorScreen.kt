@@ -3024,6 +3024,7 @@ private fun SpatialWorkspace(
             )
         }
     } + parameterEntries
+    Box(modifier) {
     InfiniteCanvasHost(
         sessionId = state.workspaceSessionId,
         savedScene = surfaceController.infiniteSceneForSession(state.workspaceSessionId),
@@ -3094,7 +3095,7 @@ private fun SpatialWorkspace(
         canUndo = state.canUndo,
         canRedo = state.canRedo,
         requestedActiveToolId = workspaceState.activeInstanceId,
-        modifier = modifier,
+        modifier = Modifier.fillMaxSize(),
     ) { id, interactive ->
         when (id) {
             "preview" -> WorkbenchPreview(
@@ -3174,8 +3175,10 @@ private fun SpatialWorkspace(
             document = state.document,
             onSelect = selectCanvasObject,
             onDismiss = { pendingObjectPick = null },
-            modifier = Modifier.fillMaxWidth().testTag("spatial-object-candidate-picker"),
+            modifier = Modifier.align(Alignment.Center).fillMaxWidth(0.94f)
+                .testTag("spatial-object-candidate-picker"),
         )
+    }
     }
 }
 
