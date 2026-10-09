@@ -4,6 +4,13 @@
 状态：Phase 0 traceability baseline（追踪基线），不是完成宣言。  
 源清单：`ASS-Workbench-Android_超级激进UI实验清单_2026-10-02.txt`。原清单明确属于拟议要求，不是现有能力说明。
 
+## 2026-10-10 UI 收敛说明（PR #138，仍待最新 CI）
+产品层现在只允许选择 **FIXED 标准主界面** 和 **SPATIAL_EXPERIMENTAL 无限画布**。其他八种实验布局从 `UiVariantRegistry.entries` 退出并标记归档；历史 `.asswb` 模式名称经 `resolve()` 定向迁移至无限画布，不清除 ASS、工具实例、绑定或已保存布局。遗留的私有实现源码暂不作为可到达的产品页面；待其复用组件、测试和依赖迁移通过后再单独删除。
+
+功能统一的代码对应关系：Timeline Dock → 无限画布常驻紧凑/展开真实时间轴；Edge Bookmark → `BOOKMARKED` ToolInstance 侧轨；Subtitle Object → 视频长按冻结时刻的目标消歧；Precision Lens → Position 阶段独占精密操作层；Glass Layered → 世界工具节点透明度和音频穿透；Pager → 原生聚焦编辑/快捷切换；Tool Instances/Canvas → 工作区身份、布局锁、复制、关闭、收回和召回。**此列表是迁移范围和待验证的代码落点，不等于旧清单所有 240 项已完成，也不代表与旧实验完全同等功能。**
+
+下方历史条目仍是 2026-10-02 的逐项追踪基线，不因为界面归并自动改写 `Implemented/Partial/Planned/Blocked` 状态；需在 PR CI、视觉证据和真机验收后逐条更新证据。
+
 ## 事实快照
 
 - current main at Slice E branch point: `73c09f4052af0b7b057794a138a618f7883f4803`
