@@ -248,9 +248,9 @@ internal fun InfiniteCanvasHost(
             scene = scene.first to changed
             focusedId = null
             val shown = changed.filter { !it.hidden && entries.any { entry -> entry.id == it.id } }
-            fitCanvasCamera(shown, viewportW, viewportH)?.let { camera ->
-                scene = camera to changed
-            }
+            val fitted = fitCanvasCamera(shown, viewportW, viewportH)
+            if (fitted != null) scene = fitted to changed
+            else if (shown.isNotEmpty()) birdseyeOpen = true
             arrangeOpen = false
         }
 
@@ -340,7 +340,11 @@ internal fun InfiniteCanvasHost(
                                             )
                                         }.padding(start = 8.dp),
                                         verticalAlignment = Alignment.CenterVertically) {
-                                        Icon(Icons.Filled.DragIndicator, null, Modifier.size(18.dp))
+                                        Icon(
+                                            if (node.layoutLocked) Icons.Filled.Lock else Icons.Filled.DragIndicator,
+                                            if (node.layoutLocked) "已锁定布局" else "拖动工具",
+                                            Modifier.size(18.dp),
+                                        )
                                         if (width >= 148f) Text(entry.title,
                                             style = MaterialTheme.typography.labelMedium,
                                             maxLines = 1)
@@ -485,7 +489,7 @@ internal fun InfiniteCanvasHost(
                     TextButton(onClick = ::showToolPicker, enabled = !gestureOwned,
                         modifier = Modifier.testTag("spatial-add-tool")) {
                         Icon(Icons.Filled.Add, null, Modifier.size(18.dp))
-                        Text("＋ 工具")
+                        Text("工具")
                     }
                     VerticalDivider(Modifier.height(26.dp).padding(horizontal = 4.dp))
                     Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()),
