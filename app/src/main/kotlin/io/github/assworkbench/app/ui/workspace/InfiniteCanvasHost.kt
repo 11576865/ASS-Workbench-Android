@@ -489,40 +489,7 @@ internal fun InfiniteCanvasHost(
                 modifier = Modifier.align(Alignment.CenterStart).zIndex(1_000_012f)
                     .testTag("spatial-edge-handle-left"),
             ) { Icon(Icons.Filled.ChevronRight, "展开工具目录") }
-            if (toolDrawerOpen) Surface(
-                modifier = Modifier.align(Alignment.CenterStart).fillMaxHeight().width(112.dp)
-                    .zIndex(1_000_020f).testTag("spatial-edge-rail-left"),
-                color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                tonalElevation = 6.dp,
-                shadowElevation = 4.dp,
-            ) {
-                Column(Modifier.fillMaxSize().padding(8.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = { toolDrawerResident = !toolDrawerResident },
-                            modifier = Modifier.testTag("spatial-edge-pin-left")) {
-                            Icon(Icons.Filled.PushPin, if (toolDrawerResident) "取消驻留" else "驻留")
-                        }
-                        IconButton(onClick = { toolDrawerOpen = false; toolDrawerResident = false },
-                            modifier = Modifier.testTag("spatial-edge-close-left")) {
-                            Icon(Icons.Filled.ChevronLeft, "收起目录")
-                        }
-                    }
-                    Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
-                        entries.forEach { entry ->
-                            TextButton(onClick = { focus(entry.id) },
-                                enabled = !gestureOwned,
-                                modifier = Modifier.fillMaxWidth()
-                                    .testTag("spatial-edge-entry-" + entry.id.replace(':', '-'))) {
-                                Text(entry.title, maxLines = 1)
-                            }
-                        }
-                    }
-                    IconButton(onClick = ::showToolPicker,
-                        modifier = Modifier.testTag("spatial-edge-add-tool")) {
-                        Icon(Icons.Filled.Add, "添加工具")
-                    }
-                }
-            }
+
         } else {
             // No camera transform reaches this subtree: editors keep native-size hit areas.
             val (entry, node) = focused!!
@@ -647,6 +614,43 @@ internal fun InfiniteCanvasHost(
                 }
             }
         }
+
+        // A resident tool directory is a shared overlay, not a board-only
+        // surface: pinning it keeps tool switching available while editing.
+            if (toolDrawerOpen) Surface(
+                modifier = Modifier.align(Alignment.CenterStart).fillMaxHeight().width(112.dp)
+                    .zIndex(1_000_020f).testTag("spatial-edge-rail-left"),
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                tonalElevation = 6.dp,
+                shadowElevation = 4.dp,
+            ) {
+                Column(Modifier.fillMaxSize().padding(8.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(onClick = { toolDrawerResident = !toolDrawerResident },
+                            modifier = Modifier.testTag("spatial-edge-pin-left")) {
+                            Icon(Icons.Filled.PushPin, if (toolDrawerResident) "取消驻留" else "驻留")
+                        }
+                        IconButton(onClick = { toolDrawerOpen = false; toolDrawerResident = false },
+                            modifier = Modifier.testTag("spatial-edge-close-left")) {
+                            Icon(Icons.Filled.ChevronLeft, "收起目录")
+                        }
+                    }
+                    Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
+                        entries.forEach { entry ->
+                            TextButton(onClick = { focus(entry.id) },
+                                enabled = !gestureOwned,
+                                modifier = Modifier.fillMaxWidth()
+                                    .testTag("spatial-edge-entry-" + entry.id.replace(':', '-'))) {
+                                Text(entry.title, maxLines = 1)
+                            }
+                        }
+                    }
+                    IconButton(onClick = ::showToolPicker,
+                        modifier = Modifier.testTag("spatial-edge-add-tool")) {
+                        Icon(Icons.Filled.Add, "添加工具")
+                    }
+                }
+            }
 
         // Workspace actions remain separate from ASS document Undo/Redo.
         if (boardMode) Surface(Modifier.align(Alignment.TopCenter).padding(8.dp).zIndex(1_000_025f),
