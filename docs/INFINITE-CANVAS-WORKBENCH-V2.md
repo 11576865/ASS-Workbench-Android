@@ -65,3 +65,20 @@ Tool access is available from the bottom project strip and from the existing bir
 - **Safety restriction:** do **not** virtualize subtitle authoring, parameters, or arbitrary ToolInstances yet. The current `SaveableStateHolder` contract does not establish recovery for every non-saveable pending edit draft. General editor Composables remain mounted despite offscreen placement until their edit-session ownership/restoration has dedicated tests.
 - Added two JVM predicate tests and an Android instrumentation regression for media suspension, far-node recall, and retained general editors.
 - No performance measurements or emulator PASS are claimed from source changes alone. **Pending CI**.
+
+## Usability and v1 capability recovery — 2026-10-10
+
+The v2 host originally improved low-zoom legibility while silently losing portions of v1's production workbench contract. This slice restores concrete, direct-manipulation functionality:
+
+- **Native tool creation from either mode:** `spatial-add-tool` is available on the spatial board and focused editor. Existing and newly opened ToolInstances can be selected without returning to an unreadable, scaled directory.
+- **Fast focus switching:** tap the active tool title in the focused editor to select another registered tool immediately. Birdseye remains available for actual spatial navigation.
+- **Tool ownership actions:** each capability-declared tool can expose Close, Duplicate preserving its binding, Duplicate with FollowFocus, and Pin/Unpin its *read* Event. All commands delegate to `WorkspaceState`, including capability checks. Pinning a read source is explicitly **not** a new write-target policy.
+- **Per-node layout lock:** saved `infinite-v2` layout rows add `layoutLocked`, retaining read compatibility with `infinite-v1` rows. Lock prevents header movement and corner resize, not recall or camera navigation. The header displays a lock rather than a misleading drag affordance.
+- **Spatial organization:** explicit one-column/two-column arrange moves only shown, unlocked nodes; hidden nodes and intentionally locked anchors keep geometry, z-order, alpha and identity. Unfittable arrangements direct the user to birdseye.
+- **Close versus hide:** Close removes the domain ToolInstance (or parameter projection) and a known removed scene identity; Hide retains both node and domain tool for recall. Initial project scene restore is not pruned just because WorkspaceState has not hydrated yet.
+- **Draft-safe semantic zoom:** general editor Composables remain mounted at native component size while the low-zoom card masks their visible control surface. Media nodes can be culled offscreen as before. This addresses a lifecycle hole where toggling LOD destroyed plain `remember` (non-saveable) drafts.
+- **Responsive focused chrome:** the essential Back/Tool Picker/Birdseye/Context entry points remain visible on narrow screens; document Undo/Redo is in the context menu at narrow widths and in the header on wider screens. Document history remains separate from canvas actions.
+
+Tests have been added for persistence v1/v2, layout lock, safe arrangement, focused toolbar reachability, tool lifecycle callbacks, focused switcher, and unsaveable editor draft continuity through semantic zoom.
+
+**Validation boundary:** the initial v2 emulator run had 5 remaining failures out of 111 tests (four missing `spatial-add-tool` on initial focused entry and one resident left-rail visibility). New code and tests are **Pending CI/Emulator**; this document does not claim they passed. Real-device touch, IME, drawing, very-large-workspace performance and full multi-tool simultaneous write-conflict semantics remain separate acceptance tasks.
