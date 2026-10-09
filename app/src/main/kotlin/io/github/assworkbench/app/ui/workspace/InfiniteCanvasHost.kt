@@ -124,8 +124,15 @@ internal fun InfiniteCanvasHost(
                 it.id !in beforePicker && it.id != "CAPABILITIES:primary"
             }
             (selected ?: added)?.let { opened ->
+                // Opening a previously hidden primary is a genuine reveal.
+                // Do not leave the domain instance hidden while its editor is
+                // apparently active on screen.
+                scene = scene.first to scene.second.map { node ->
+                    if (node.id == opened.id) node.copy(hidden = false) else node
+                }
                 focusedId = opened.id
                 pendingToolSelection = null
+                if (opened.initiallyHidden) active(opened.id)
             }
         }
         val ids = entries.mapTo(mutableSetOf()) { it.id }
