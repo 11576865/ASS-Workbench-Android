@@ -52,6 +52,7 @@ internal fun InfiniteCanvasHost(
     onRedo: () -> Unit,
     canUndo: Boolean,
     canRedo: Boolean,
+    requestedActiveToolId: String? = null,
     modifier: Modifier = Modifier,
     content: @Composable (String, Boolean) -> Unit,
 ) {
@@ -81,7 +82,7 @@ internal fun InfiniteCanvasHost(
     val density = LocalDensity.current.density
     val active by rememberUpdatedState(onActivate)
 
-    LaunchedEffect(sessionId, entries.map { it.id }) {
+    LaunchedEffect(sessionId, entries.map { it.id }, requestedActiveToolId) {
         val existing = scene.second.mapTo(mutableSetOf()) { it.id }
         val missing = entries.filterNot { it.id in existing }
         if (missing.isNotEmpty()) {
@@ -99,12 +100,17 @@ internal fun InfiniteCanvasHost(
         }
         val beforePicker = pendingToolSelection
         if (beforePicker != null) {
-            entries.lastOrNull {
+            // Newly created and already-existing tools must both be reachable
+            // from the directory without returning to a scaled overview.
+            val selected = requestedActiveToolId?.let { id ->
+                entries.firstOrNull { it.id == id && it.id != "CAPABILITIES:primary" }
+            }
+            val added = entries.lastOrNull {
                 it.id !in beforePicker && it.id != "CAPABILITIES:primary"
-            }?.let { opened ->
+            }
+            (selected ?: added)?.let { opened ->
                 focusedId = opened.id
                 pendingToolSelection = null
-                active(opened.id)
             }
         }
         if (focusedId != null && entries.none { it.id == focusedId } &&
