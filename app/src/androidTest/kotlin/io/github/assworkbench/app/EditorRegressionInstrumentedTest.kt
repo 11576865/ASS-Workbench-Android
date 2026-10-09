@@ -73,10 +73,15 @@ class EditorRegressionInstrumentedTest {
     }
 
     private fun selectUiVariant(tag: String) {
-        composeRule.onNodeWithTag(tag)
-            .performScrollTo()
-            .assertIsDisplayed()
-            .performClick()
+        val choices = composeRule.onAllNodesWithTag(tag)
+            .fetchSemanticsNodes(atLeastOneRootRequired = false)
+        if (choices.isEmpty() && tag == "ui-variant-use-SPATIAL_EXPERIMENTAL") {
+            // Already selected: the two-layout chooser does not offer "Use" twice.
+            composeRule.onNodeWithText("关闭").performClick()
+        } else {
+            composeRule.onNodeWithTag(tag)
+                .performScrollTo().assertIsDisplayed().performClick()
+        }
         composeRule.waitForIdle()
     }
 
