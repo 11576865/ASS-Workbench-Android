@@ -118,37 +118,20 @@ class EditorRegressionInstrumentedTest {
     }
 
     @Test
-    fun pagerWorkspaceSwitchesBetweenRealSubtitlePreviewAndToolPages() {
+    fun unifiedCanvasSwitchesDirectlyBetweenRealPreviewAndSubtitleAuthoring() {
         restoreRecovery()
-
-        composeRule.onNodeWithContentDescription("工具和更多操作").performClick()
-        composeRule.onNodeWithTag("workspace-mode-toggle").performClick()
-        selectUiVariant("ui-variant-use-PAGER_EXPERIMENTAL")
-
-        composeRule.onNodeWithTag("pager-workspace").assertIsDisplayed()
-        composeRule.onNodeWithTag("pager-page-preview").assertIsDisplayed()
-
-        composeRule.onNodeWithTag("pager-nav-SUBTITLES").performClick()
-        composeRule.waitUntil(5_000) {
-            composeRule.onAllNodesWithTag("pager-page-subtitles", useUnmergedTree = true)
-                .fetchSemanticsNodes(atLeastOneRootRequired = false)
-                .isNotEmpty()
+        switchToUnifiedCanvas()
+        if (composeRule.onAllNodesWithTag("spatial-tool-switcher")
+                .fetchSemanticsNodes(atLeastOneRootRequired = false).isEmpty()) {
+            composeRule.onNodeWithTag("spatial-quick-preview").performClick()
         }
-
-        composeRule.onNodeWithTag("event-row-1").performClick()
-        composeRule.waitUntil(5_000) {
-            composeRule.onAllNodesWithTag("pager-page-tool", useUnmergedTree = true)
-                .fetchSemanticsNodes(atLeastOneRootRequired = false)
-                .isNotEmpty()
-        }
-        composeRule.onNodeWithTag("event-inspector").assertIsDisplayed()
-
-        composeRule.onNodeWithTag("pager-nav-PREVIEW").performClick()
-        composeRule.waitUntil(5_000) {
-            composeRule.onAllNodesWithTag("pager-page-preview", useUnmergedTree = true)
-                .fetchSemanticsNodes(atLeastOneRootRequired = false)
-                .isNotEmpty()
-        }
+        composeRule.onNodeWithTag("spatial-tool-switcher").performClick()
+        composeRule.onNodeWithTag("spatial-switch-to-subtitles").performClick()
+        composeRule.onNodeWithTag("spatial-native-content-subtitles").assertExists()
+        composeRule.onNodeWithTag("spatial-reference-preview").assertExists()
+        composeRule.onNodeWithTag("spatial-tool-switcher").performClick()
+        composeRule.onNodeWithTag("spatial-switch-to-preview").performClick()
+        composeRule.onNodeWithTag("spatial-native-content-preview").assertExists()
     }
 
     @Test
@@ -282,98 +265,59 @@ class EditorRegressionInstrumentedTest {
     }
 
     @Test
-    fun toolInstanceWorkspaceSupportsHideAndRestore() {
+    fun unifiedCanvasHidesAndRecallsNativeToolDirectory() {
         restoreRecovery()
-
-        composeRule.onNodeWithContentDescription("工具和更多操作").performClick()
-        composeRule.onNodeWithTag("workspace-mode-toggle").performClick()
-        selectUiVariant("ui-variant-use-TOOL_INSTANCES_EXPERIMENTAL")
-
-        composeRule.onNodeWithTag("tool-instance-workspace").assertIsDisplayed()
-        composeRule.onNodeWithTag("tool-instance-directory").assertIsDisplayed()
-
-        composeRule.onNodeWithTag("tool-instance-directory").performClick()
-        composeRule.waitUntil(5_000) {
-            composeRule.onAllNodesWithTag("surface-CAPABILITIES-primary", useUnmergedTree = true)
-                .fetchSemanticsNodes(atLeastOneRootRequired = false)
-                .isNotEmpty()
-        }
-
-        composeRule.onNodeWithTag("tool-hide-temporary").performClick()
-        composeRule.onNodeWithTag("tool-hidden-CAPABILITIES-primary").assertIsDisplayed()
-        composeRule.onNodeWithTag("tool-hidden-CAPABILITIES-primary").performClick()
-
-        composeRule.waitUntil(5_000) {
-            composeRule.onAllNodesWithTag("surface-CAPABILITIES-primary", useUnmergedTree = true)
-                .fetchSemanticsNodes(atLeastOneRootRequired = false)
-                .isNotEmpty()
-        }
+        switchToUnifiedCanvas()
+        composeRule.onNodeWithTag("spatial-add-tool").performClick()
+        composeRule.onNodeWithTag("spatial-native-content-CAPABILITIES-primary").assertExists()
+        composeRule.onNodeWithTag("spatial-menu-CAPABILITIES-primary").performClick()
+        composeRule.onNodeWithText("收回工具").performClick()
+        composeRule.onNodeWithText("召回").performClick()
+        composeRule.onNodeWithTag("spatial-recall-CAPABILITIES-primary").performClick()
+        composeRule.onNodeWithTag("spatial-native-content-CAPABILITIES-primary").assertExists()
     }
 
     @Test
-    fun edgeBookmarkWorkspaceOpensFourEdgeLayersAndBookmarks() {
+    fun unifiedCanvasPreservesPersistentTimelineAndToolNavigation() {
         restoreRecovery()
-
-        composeRule.onNodeWithContentDescription("工具和更多操作").performClick()
-        composeRule.onNodeWithTag("workspace-mode-toggle").performClick()
-        selectUiVariant("ui-variant-use-EDGE_BOOKMARK_EXPERIMENTAL")
-
-        composeRule.onNodeWithTag("edge-bookmark-workspace").assertIsDisplayed()
-        composeRule.onNodeWithTag("edge-bookmark-left").assertIsDisplayed()
-        composeRule.onNodeWithTag("edge-bookmark-right").assertIsDisplayed()
-        composeRule.onNodeWithTag("edge-handle-top").assertIsDisplayed()
-        composeRule.onNodeWithTag("edge-handle-bottom").assertIsDisplayed()
-        composeRule.onNodeWithTag("edge-handle-left").assertIsDisplayed()
-        composeRule.onNodeWithTag("edge-handle-right").assertIsDisplayed()
-
-        composeRule.onNodeWithTag("edge-toggle-top").assertIsDisplayed().performClick()
-        composeRule.waitUntil(5_000) {
-            composeRule.onAllNodesWithTag("edge-layer-top", useUnmergedTree = true)
-                .fetchSemanticsNodes(atLeastOneRootRequired = false)
-                .isNotEmpty()
-        }
-
-        composeRule.onNodeWithTag("edge-toggle-bottom").assertIsDisplayed().performClick()
-        composeRule.waitUntil(5_000) {
-            composeRule.onAllNodesWithTag("edge-layer-bottom", useUnmergedTree = true)
-                .fetchSemanticsNodes(atLeastOneRootRequired = false)
-                .isNotEmpty()
-        }
+        switchToUnifiedCanvas()
+        composeRule.onNodeWithTag("spatial-timeline-toggle").performClick()
+        composeRule.onNodeWithTag("spatial-timeline-dock").assertIsDisplayed()
+        composeRule.onNodeWithTag("spatial-timeline-content").assertExists()
+        composeRule.onNodeWithTag("spatial-timeline-expand").performClick()
+        composeRule.onNodeWithTag("spatial-timeline-dock").assertIsDisplayed()
+        composeRule.onNodeWithTag("spatial-timeline-close").performClick()
+        composeRule.onNodeWithTag("spatial-timeline-dock").assertDoesNotExist()
     }
 
     @Test
-    fun glassLayeredWorkspaceExposesMaterialAndPerformanceControls() {
+    fun unifiedCanvasRetainsTransparentAudioAndInputPassthrough() {
         restoreRecovery()
-
-        composeRule.onNodeWithContentDescription("工具和更多操作").performClick()
-        composeRule.onNodeWithTag("workspace-mode-toggle").performClick()
-        selectUiVariant("ui-variant-use-GLASS_LAYERED_EXPERIMENTAL")
-
-        composeRule.onNodeWithTag("glass-layered-workspace").assertIsDisplayed()
-        composeRule.onNodeWithTag("glass-control-deck").assertIsDisplayed()
-        composeRule.onNodeWithTag("glass-performance-QUALITY").assertIsDisplayed().performClick()
-        composeRule.onNodeWithTag("glass-performance-LOW_COST").assertIsDisplayed().performClick()
-        composeRule.onNodeWithTag("glass-alpha").assertIsDisplayed()
-        composeRule.onNodeWithTag("glass-blur").assertIsDisplayed()
-        composeRule.onNodeWithTag("glass-layer-overview").assertIsDisplayed()
+        switchToUnifiedCanvas()
+        composeRule.onNodeWithTag("spatial-birdseye").performClick()
+        composeRule.onNodeWithTag("spatial-birdseye-node-audio").performScrollTo().performClick()
+        composeRule.onNodeWithTag("spatial-native-content-audio").assertExists()
+        composeRule.onNodeWithTag("spatial-menu-audio").performClick()
+        composeRule.onNodeWithText("恢复实底").performClick()
+        composeRule.onNodeWithTag("spatial-menu-audio").performClick()
+        composeRule.onNodeWithText("透明叠加").performClick()
+        composeRule.onNodeWithTag("spatial-menu-audio").performClick()
+        composeRule.onNodeWithText("穿透操作视频").performClick()
     }
 
     @Test
-    fun precisionLensWorkspaceShowsPrecisionControls() {
+    fun unifiedCanvasCanOpenNativePositionEditorWithoutASecondPrecisionUi() {
         restoreRecovery()
-
-        composeRule.onNodeWithContentDescription("工具和更多操作").performClick()
-        composeRule.onNodeWithTag("workspace-mode-toggle").performClick()
-        selectUiVariant("ui-variant-use-PRECISION_LENS_EXPERIMENTAL")
-
-        composeRule.onNodeWithTag("precision-lens-workspace").assertIsDisplayed()
-        composeRule.onNodeWithTag("precision-controls").assertIsDisplayed()
-        composeRule.onNodeWithTag("precision-gain-COARSE").assertIsDisplayed()
-        composeRule.onNodeWithTag("precision-gain-FINE").assertIsDisplayed()
-        composeRule.onNodeWithTag("precision-lens-LOCAL_FOCUS").assertIsDisplayed()
-        composeRule.onNodeWithTag("precision-lens-FLOATING_LENS").assertIsDisplayed()
-        composeRule.onNodeWithTag("precision-snap-toggle").assertIsDisplayed()
-        composeRule.onNodeWithTag("precision-snap-bypass").assertIsDisplayed()
+        switchToUnifiedCanvas()
+        composeRule.onNodeWithTag("spatial-add-tool").performClick()
+        composeRule.onNodeWithTag("tool-search").performTextReplacement("POSITION")
+        hideKeyboard()
+        composeRule.onNodeWithTag("tool-POSITION").performScrollTo().performClick()
+        composeRule.waitUntil(10_000) {
+            composeRule.onAllNodesWithTag("spatial-native-content-POSITION-primary")
+                .fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()
+        }
+        composeRule.onNodeWithTag("spatial-reference-preview").assertExists()
     }
 
     @Test
