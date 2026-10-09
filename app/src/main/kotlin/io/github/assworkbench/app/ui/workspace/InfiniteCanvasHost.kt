@@ -181,6 +181,7 @@ internal fun InfiniteCanvasHost(
     BoxWithConstraints(modifier.clipToBounds().background(MaterialTheme.colorScheme.surfaceContainerLowest)) {
         val viewportW = maxWidth.value
         val viewportH = maxHeight.value
+        val railWidth = if (viewportW < 480f) 88.dp else 112.dp
         val camera = scene.first
         val nodes = scene.second
         val focused = focusedId?.let { id ->
@@ -522,7 +523,9 @@ internal fun InfiniteCanvasHost(
         } else {
             // No camera transform reaches this subtree: editors keep native-size hit areas.
             val (entry, node) = focused!!
-            Surface(Modifier.fillMaxSize().testTag("spatial-focused-editor"),
+            Surface(Modifier.fillMaxSize()
+                .padding(start = if (toolDrawerOpen && toolDrawerResident) railWidth else 0.dp)
+                .testTag("spatial-focused-editor"),
                 color = MaterialTheme.colorScheme.surface) {
                 Column {
                     Row(Modifier.fillMaxWidth().height(64.dp).padding(horizontal = 8.dp),
@@ -684,6 +687,10 @@ internal fun InfiniteCanvasHost(
                     }
                     val reference = nodes.firstOrNull { it.id == "preview" && !it.hidden }
                     val showReferenceOption = entry.id != "preview" && entry.id != "audio" && reference != null
+                    // Give the text/parameter editor the full available height
+                    // while the soft keyboard is visible. The user's split choice
+                    // remains intact and automatically returns after IME closes.
+                    val imeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
                     val referenceFraction = when (referencePreviewSize) {
                         0 -> 0.25f
                         2 -> 0.54f
@@ -714,7 +721,7 @@ internal fun InfiniteCanvasHost(
                                 else -> "预览 40%"
                             }) }
                         }
-                        if (showReferenceOption && referencePreviewVisible) {
+                        if (showReferenceOption && referencePreviewVisible && !imeVisible) {
                             // The reference is the real video/ASS renderer and shares the
                             // current media clock and document focus with this editor.
                             // SaveableStateProvider keys are unique within the stage.
@@ -750,7 +757,7 @@ internal fun InfiniteCanvasHost(
         // A resident tool directory is a shared overlay, not a board-only
         // surface: pinning it keeps tool switching available while editing.
             if (toolDrawerOpen) Surface(
-                modifier = Modifier.align(Alignment.CenterStart).fillMaxHeight().width(112.dp)
+                modifier = Modifier.align(Alignment.CenterStart).fillMaxHeight().width(railWidth)
                     .zIndex(1_000_020f).testTag("spatial-edge-rail-left"),
                 color = MaterialTheme.colorScheme.surfaceContainerHigh,
                 tonalElevation = 6.dp,
@@ -759,11 +766,11 @@ internal fun InfiniteCanvasHost(
                 Column(Modifier.fillMaxSize().padding(8.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         IconButton(onClick = { toolDrawerResident = !toolDrawerResident },
-                            modifier = Modifier.testTag("spatial-edge-pin-left")) {
+                            modifier = Modifier.size(40.dp).testTag("spatial-edge-pin-left")) {
                             Icon(Icons.Filled.PushPin, if (toolDrawerResident) "取消驻留" else "驻留")
                         }
                         IconButton(onClick = { toolDrawerOpen = false; toolDrawerResident = false },
-                            modifier = Modifier.testTag("spatial-edge-close-left")) {
+                            modifier = Modifier.size(40.dp).testTag("spatial-edge-close-left")) {
                             Icon(Icons.Filled.ChevronLeft, "收起目录")
                         }
                     }
