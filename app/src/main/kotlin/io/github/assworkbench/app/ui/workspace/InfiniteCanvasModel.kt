@@ -61,6 +61,41 @@ internal fun canvasCameraForNode(
 ): InfiniteCanvasCamera =
     fitCanvasCamera(listOf(node), viewportWidth, viewportHeight) ?: InfiniteCanvasCamera()
 
+
+/**
+ * Visibility for expensive production editor content (not for its saved node).
+ * Screen-viewport clipping alone does not suspend composition or native media
+ * resources. Keep a modest screen-dp prefetch band to avoid rapid churn on pans.
+ *
+ * Double arithmetic is intentional: finite opposite-end Float world positions
+ * must not overflow before the intersection check.
+ */
+internal fun shouldComposeCanvasTool(
+    camera: InfiniteCanvasCamera,
+    node: InfiniteCanvasNode,
+    viewportWidth: Float,
+    viewportHeight: Float,
+    prefetchDp: Float = 128f,
+): Boolean {
+    if (!camera.x.isFinite() || !camera.y.isFinite() || !camera.scale.isFinite() ||
+        camera.scale <= 0f || !node.x.isFinite() || !node.y.isFinite() ||
+        !node.width.isFinite() || !node.height.isFinite() ||
+        node.width <= 0f || node.height <= 0f ||
+        !viewportWidth.isFinite() || !viewportHeight.isFinite() ||
+        viewportWidth <= 0f || viewportHeight <= 0f ||
+        !prefetchDp.isFinite() || prefetchDp < 0f) return false
+
+    val scale = camera.scale.toDouble()
+    val left = camera.x.toDouble() + node.x.toDouble() * scale
+    val top = camera.y.toDouble() + node.y.toDouble() * scale
+    val right = camera.x.toDouble() + (node.x.toDouble() + node.width.toDouble()) * scale
+    val bottom = camera.y.toDouble() + (node.y.toDouble() + node.height.toDouble()) * scale
+    val padding = prefetchDp.toDouble()
+    return right >= -padding && bottom >= -padding &&
+        left <= viewportWidth.toDouble() + padding &&
+        top <= viewportHeight.toDouble() + padding
+}
+
 internal data class InfiniteCanvasNode(
     val id: String,
     val x: Float = 0f, val y: Float = 0f,
