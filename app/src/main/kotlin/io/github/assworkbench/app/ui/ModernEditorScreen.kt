@@ -2980,7 +2980,7 @@ private fun SpatialWorkspace(
         InfiniteCanvasEntry("preview", "视频", "实时视频 / ASS"),
         InfiniteCanvasEntry("subtitles", "字幕", "选择 / 文本"),
         InfiniteCanvasEntry("audio", "音频证据", "波形 / 声谱图 · 与视频同步"),
-    ) + visibleTools.mapNotNull { toolInstance ->
+    ) + workspaceState.tools.mapNotNull { toolInstance ->
         WorkbenchTool.entries.firstOrNull { it.name == toolInstance.toolKey }?.let { tool ->
             val pinned = toolInstance.binding as? WorkspaceBinding.PinnedEvent
             InfiniteCanvasEntry(
@@ -2995,6 +2995,7 @@ private fun SpatialWorkspace(
                 canBindEvent = tool.descriptor.eventBindable,
                 pinnedEvent = pinned != null,
                 focusEventId = state.focusedEventId,
+                initiallyHidden = toolInstance.presence == WorkspaceToolPresence.HIDDEN,
             )
         }
     } + parameterEntries
@@ -3005,7 +3006,14 @@ private fun SpatialWorkspace(
         entries = entries,
         gestureOwned = interactionRegistry.activeHandleId != null,
         onAddTool = { onActiveTool(WorkbenchTool.CAPABILITIES) },
-        onActivate = { id -> if (visibleTools.any { it.id == id }) onActivateInstance(id) },
+        onActivate = { id ->
+            val instance = workspaceState.tools.firstOrNull { it.id == id }
+            if (instance?.presence == WorkspaceToolPresence.HIDDEN) {
+                onWorkspaceStateChange(
+                    workspaceState.updatePresence(id, WorkspaceToolPresence.TEMPORARY).activate(id)
+                )
+            } else if (instance != null) onActivateInstance(id)
+        },
         onCloseTool = { id ->
             when {
                 workspaceState.tools.any { it.id == id } ->
@@ -3095,7 +3103,7 @@ private fun SpatialWorkspace(
                         modifier = Modifier.fillMaxSize(),
                     )
                 } else {
-                    visibleTools.firstOrNull { it.id == id }?.let { toolInstance ->
+                    workspaceState.tools.firstOrNull { it.id == id }?.let { toolInstance ->
                         val tool = WorkbenchTool.entries.firstOrNull { it.name == toolInstance.toolKey }
                             ?: return@let
                         FloatingToolContent(
