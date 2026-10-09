@@ -89,6 +89,8 @@ internal fun InfiniteCanvasHost(
     var recallOpen by remember(sessionId) { mutableStateOf(false) }
     var arrangeOpen by remember(sessionId) { mutableStateOf(false) }
     var switcherOpen by remember(sessionId) { mutableStateOf(false) }
+    var referencePreviewVisible by rememberSaveable(sessionId) { mutableStateOf(true) }
+    var referencePreviewSize by rememberSaveable(sessionId) { mutableIntStateOf(1) }
     var cardMenuId by remember(sessionId) { mutableStateOf<String?>(null) }
     // A directory selection may asynchronously create a ToolInstance. Carry the
     // invoking set of IDs until the new production tool is actually available.
@@ -639,36 +641,99 @@ internal fun InfiniteCanvasHost(
                         }
                     }
                     HorizontalDivider()
-                    Box(Modifier.weight(1f).fillMaxWidth()
-                        .testTag("spatial-native-content-" + entry.id.replace(':', '-'))) {
-                        val preview = nodes.firstOrNull { it.id == "preview" && !it.hidden }
-                        val audio = nodes.firstOrNull { it.id == "audio" && !it.hidden }
-                        // Audio/video is a real layered editing surface, not a flattened card.
-                        // Keep actual renderer and waveform on their existing clock and callbacks.
-                        if (entry.id == "audio" && preview != null) {
-                            contentState.SaveableStateProvider(sessionId.toString() + "/preview") {
-                                content("preview", true)
-                            }
-                            Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth()
-                                .height(node.height.coerceIn(160f, 460f).dp)
-                                .background(MaterialTheme.colorScheme.surface.copy(alpha = node.alpha))) {
-                                contentState.SaveableStateProvider(sessionId.toString() + "/audio") {
-                                    content("audio", !node.passthrough)
+                    val productionEditor: @Composable (Modifier) -> Unit = { paneModifier ->
+                        Box(paneModifier.testTag("spatial-native-content-" + entry.id.replace(':', '-'))) {
+                            val preview = nodes.firstOrNull { it.id == "preview" && !it.hidden }
+                            val audio = nodes.firstOrNull { it.id == "audio" && !it.hidden }
+                            // Audio/video is a real layered editing surface, not a flattened card.
+                            // Keep actual renderer and waveform on their existing clock and callbacks.
+                            if (entry.id == "audio" && preview != null) {
+                                contentState.SaveableStateProvider(sessionId.toString() + "/preview") {
+                                    content("preview", true)
                                 }
-                            }
-                        } else {
-                            contentState.SaveableStateProvider(sessionId.toString() + "/" + entry.id) {
-                                content(entry.id, !node.passthrough)
-                            }
-                            if (entry.id == "preview" && audio != null) {
                                 Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth()
-                                    .height(audio.height.coerceIn(160f, 460f).dp)
-                                    .background(MaterialTheme.colorScheme.surface.copy(alpha = audio.alpha))) {
+                                    .height(node.height.coerceIn(160f, 460f).dp)
+                                    .background(MaterialTheme.colorScheme.surface.copy(alpha = node.alpha))) {
                                     contentState.SaveableStateProvider(sessionId.toString() + "/audio") {
-                                        content("audio", !audio.passthrough)
+                                        content("audio", !node.passthrough)
+                                    }
+                                }
+                            } else {
+                                contentState.SaveableStateProvider(sessionId.toString() + "/" + entry.id) {
+                                    content(entry.id, !node.passthrough)
+                                }
+                                if (entry.id == "preview" && audio != null) {
+                                    Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth()
+                                        .height(audio.height.coerceIn(160f, 460f).dp)
+                                        .background(MaterialTheme.colorScheme.surface.copy(alpha = audio.alpha))) {
+                                        contentState.SaveableStateProvider(sessionId.toString() + "/audio") {
+                                            content("audio", !audio.passthrough)
+                                        }
                                     }
                                 }
                             }
+                        
+                        }
+                    }
+                    val reference = nodes.firstOrNull { it.id == "preview" && !it.hidden }
+                    val showReferenceOption = entry.id != "preview" && entry.id != "audio" && reference != null
+                    val referenceFraction = when (referencePreviewSize) {
+                        0 -> 0.25f
+                        2 -> 0.54f
+                        else -> 0.40f
+                    }
+                    Column(Modifier.weight(1f).fillMaxWidth()) {
+                        if (showReferenceOption) Row(
+                            Modifier.fillMaxWidth().height(40.dp).padding(horizontal = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            TextButton(
+                                onClick = { referencePreviewVisible = !referencePreviewVisible },
+                                enabled = !gestureOwned,
+                                modifier = Modifier.testTag("spatial-preview-toggle"),
+                            ) {
+                                Icon(if (referencePreviewVisible) Icons.Filled.VisibilityOff
+                                    else Icons.Filled.Visibility, null, Modifier.size(18.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text(if (referencePreviewVisible) "隐藏参考画面" else "显示参考画面")
+                            }
+                            if (referencePreviewVisible) TextButton(
+                                onClick = { referencePreviewSize = (referencePreviewSize + 1) % 3 },
+                                enabled = !gestureOwned,
+                                modifier = Modifier.testTag("spatial-preview-size"),
+                            ) { Text(when (referencePreviewSize) {
+                                0 -> "预览 25%"
+                                2 -> "预览 54%"
+                                else -> "预览 40%"
+                            }) }
+                        }
+                        if (showReferenceOption && referencePreviewVisible) {
+                            // The reference is the real video/ASS renderer and shares the
+                            // current media clock and document focus with this editor.
+                            // SaveableStateProvider keys are unique within the stage.
+                            val referencePane: @Composable (Modifier) -> Unit = { paneModifier ->
+                                Box(paneModifier.background(MaterialTheme.colorScheme.surfaceContainerLow)
+                                    .testTag("spatial-reference-preview")) {
+                                    contentState.SaveableStateProvider(sessionId.toString() + "/preview") {
+                                        content("preview", true)
+                                    }
+                                }
+                            }
+                            if (viewportW >= 840f) {
+                                Row(Modifier.fillMaxSize()) {
+                                    referencePane(Modifier.weight(referenceFraction).fillMaxHeight())
+                                    VerticalDivider()
+                                    productionEditor(Modifier.weight(1f - referenceFraction).fillMaxHeight())
+                                }
+                            } else {
+                                Column(Modifier.fillMaxSize()) {
+                                    referencePane(Modifier.fillMaxWidth().fillMaxHeight(referenceFraction))
+                                    HorizontalDivider()
+                                    productionEditor(Modifier.weight(1f).fillMaxWidth())
+                                }
+                            }
+                        } else {
+                            productionEditor(Modifier.fillMaxSize())
                         }
                     }
                 }
