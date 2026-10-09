@@ -57,3 +57,11 @@ Tool access is available from the bottom project strip and from the existing bir
 - Android instrumentation: `pickerSwitchesToAnAlreadyExistingToolInstance` now checks that the directory affordance is actually displayed; `explicitBirdseyeNavigationCancelsAbandonedToolPickerSelection` covers stale selection invalidation.
 - Verification: new head CI has started, but final outcomes are **Pending CI**, **Pending Emulator**, and **Pending Fontconfig**. Source-code and test submission are not equivalent to emulator PASS.
 - Merge policy: keep PR #138 in Draft until Android Emulator is green, then review visual evidence and user-device acceptance separately.
+
+## Bounded offscreen composition — 2026-10-09
+
+- A camera/world-space intersection predicate now uses Double intermediates and a 128 dp prefetch margin; this is distinct from drawing-layer clipping.
+- At close-up semantic zoom, heavy media surfaces (`preview`, `audio`) may be removed from active composition while fully offscreen; their persisted world nodes remain accessible through the spatial map and quick strip.
+- **Safety restriction:** do **not** virtualize subtitle authoring, parameters, or arbitrary ToolInstances yet. The current `SaveableStateHolder` contract does not establish recovery for every non-saveable pending edit draft. General editor Composables remain mounted despite offscreen placement until their edit-session ownership/restoration has dedicated tests.
+- Added two JVM predicate tests and an Android instrumentation regression for media suspension, far-node recall, and retained general editors.
+- No performance measurements or emulator PASS are claimed from source changes alone. **Pending CI**.
