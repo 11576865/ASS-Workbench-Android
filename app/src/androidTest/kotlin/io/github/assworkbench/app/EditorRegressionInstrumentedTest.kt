@@ -702,99 +702,42 @@ class EditorRegressionInstrumentedTest {
     }
 
     @Test
-    fun canvasWorkspaceSupportsStackHideRestoreWithoutPreviewModes() {
+    fun unifiedCanvasHidesAndRestoresWorldNodeWithoutDeletingToolState() {
         restoreRecovery()
-        switchToCanvas()
-
-        fun waitForSurface(tag: String) {
-            composeRule.waitUntil(timeoutMillis = 10_000) {
-                runCatching {
-                    composeRule.onNodeWithTag(tag).assertIsDisplayed()
-                    true
-                }.getOrDefault(false)
-            }
+        switchToUnifiedCanvas()
+        if (composeRule.onAllNodesWithTag("spatial-return-to-board")
+                .fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()) {
+            composeRule.onNodeWithTag("spatial-return-to-board").performClick()
         }
-
-        openTool("POSITION")
-        waitForSurface("surface-POSITION")
-        val dragHandle = composeRule.onNodeWithTag("surface-drag-POSITION")
-        val before = dragHandle.fetchSemanticsNode().boundsInRoot
-        dragHandle.performTouchInput {
-            swipe(
-                start = center,
-                end = center + androidx.compose.ui.geometry.Offset(140f, 90f),
-                durationMillis = 350,
-            )
-        }
-        composeRule.waitForIdle()
-        val after = dragHandle.fetchSemanticsNode().boundsInRoot
-        assertTrue("Floating surface drag handle should move the surface", after.left > before.left || after.top > before.top)
-
-        openTool("STYLE")
-        waitForSurface("surface-STYLE")
-
-        openTool("FONTS")
-        openTool("QC")
-        waitForSurface("surface-FONTS")
-        waitForSurface("surface-QC")
-
-        composeRule.onNodeWithContentDescription("隐藏全部浮层").performClick()
-        composeRule.waitUntil(timeoutMillis = 10_000) {
-            composeRule.onAllNodesWithTag("surface-drag-POSITION")
-                .fetchSemanticsNodes(atLeastOneRootRequired = false)
-                .isEmpty()
-        }
-
-        composeRule.onNodeWithContentDescription("呼回全部浮层").performClick()
-        composeRule.waitUntil(timeoutMillis = 10_000) {
-            composeRule.onAllNodesWithTag("surface-drag-POSITION")
-                .fetchSemanticsNodes(atLeastOneRootRequired = false)
-                .isNotEmpty()
-        }
-        composeRule.onNodeWithTag("surface-POSITION").assertIsDisplayed()
-        composeRule.onNodeWithTag("surface-FONTS").assertIsDisplayed()
-
-        composeRule.onNodeWithTag("preview-workspace").assertIsDisplayed()
-        listOf("NORMAL", "FOCUS", "FLOATING", "MANIPULATION").forEach {
-            composeRule.onNodeWithTag("preview-mode-$it").assertDoesNotExist()
-        }
-        composeRule.onNodeWithTag("floating-preview").assertDoesNotExist()
-        composeRule.onNodeWithText("跟随系统").assertDoesNotExist()
-        composeRule.onNodeWithText("白天").assertDoesNotExist()
-        captureLayout("floating-workspace")
-
+        val before = viewModel.state.value.document
+        composeRule.onNodeWithTag("spatial-menu-preview").performClick()
+        composeRule.onNodeWithText("收回工具").performClick()
+        composeRule.onNodeWithTag("spatial-birdseye").performClick()
+        composeRule.onNodeWithTag("spatial-birdseye-node-preview").performScrollTo().performClick()
+        composeRule.onNodeWithTag("spatial-native-content-preview").assertExists()
+        assertEquals(before, viewModel.state.value.document)
     }
 
     @Test
-    fun surfaceResizeAndLayoutLockSurviveRecreationWithoutChangingSubtitle() {
+    fun unifiedCanvasLayoutLockSurvivesRecreationWithoutTouchingSubtitle() {
         restoreRecovery()
-        switchToCanvas()
+        switchToUnifiedCanvas()
         val canonical = viewModel.state.value.document
-        openTool("POSITION")
-        composeRule.waitForIdle()
-        val surface = composeRule.onNodeWithTag("surface-POSITION")
-        val before = surface.fetchSemanticsNode().boundsInRoot
-        composeRule.onNodeWithTag("surface-resize-POSITION").performTouchInput {
-            swipe(start = center, end = center - androidx.compose.ui.geometry.Offset(80f, 100f), durationMillis = 350)
+        if (composeRule.onAllNodesWithTag("spatial-return-to-board")
+                .fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()) {
+            composeRule.onNodeWithTag("spatial-return-to-board").performClick()
         }
-        composeRule.waitForIdle()
-        val resized = surface.fetchSemanticsNode().boundsInRoot
-        assertTrue("Resize must reduce the committed window size", resized.width < before.width || resized.height < before.height)
-        composeRule.onNodeWithTag("surface-lock-POSITION").performClick()
-        val handle = composeRule.onNodeWithTag("surface-drag-POSITION")
-        val locked = handle.fetchSemanticsNode().boundsInRoot
-        handle.performTouchInput {
-            swipe(start = center, end = center + androidx.compose.ui.geometry.Offset(60f, 60f), durationMillis = 350)
-        }
-        composeRule.waitForIdle()
-        assertEquals(locked, handle.fetchSemanticsNode().boundsInRoot)
+        composeRule.onNodeWithTag("spatial-menu-preview").performClick()
+        composeRule.onNodeWithTag("spatial-layout-lock-preview").performClick()
         composeRule.activityRule.scenario.recreate()
         composeRule.waitForIdle()
         viewModel = composeRule.activity.editorViewModel
-        composeRule.onNodeWithContentDescription("解除布局锁定").assertIsDisplayed()
-        val restored = composeRule.onNodeWithTag("surface-POSITION").fetchSemanticsNode().boundsInRoot
-        assertEquals(resized.width, restored.width, 1f)
-        assertEquals(resized.height, restored.height, 1f)
+        if (composeRule.onAllNodesWithTag("spatial-return-to-board")
+                .fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()) {
+            composeRule.onNodeWithTag("spatial-return-to-board").performClick()
+        }
+        composeRule.onNodeWithTag("spatial-menu-preview").performClick()
+        composeRule.onNodeWithText("解除布局锁").assertIsDisplayed()
         assertEquals(canonical, viewModel.state.value.document)
     }
 
@@ -1144,16 +1087,17 @@ class EditorRegressionInstrumentedTest {
         composeRule.waitForIdle()
     }
 
-    private fun switchToCanvas() {
+    private fun switchToUnifiedCanvas() {
         hideKeyboard()
+        if (composeRule.onAllNodesWithTag("spatial-workspace", useUnmergedTree = true)
+                .fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()) return
         composeRule.onNodeWithContentDescription("工具和更多操作").performClick()
         composeRule.onNodeWithTag("workspace-mode-toggle").performClick()
         composeRule.onNodeWithTag("ui-variant-lab").assertIsDisplayed()
-        selectUiVariant("ui-variant-use-CANVAS_EXPERIMENTAL")
+        selectUiVariant("ui-variant-use-SPATIAL_EXPERIMENTAL")
         composeRule.waitUntil(10_000) {
-            composeRule.onAllNodesWithTag("canvas-workspace", useUnmergedTree = true)
-                .fetchSemanticsNodes(atLeastOneRootRequired = false)
-                .isNotEmpty()
+            composeRule.onAllNodesWithTag("spatial-workspace", useUnmergedTree = true)
+                .fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()
         }
     }
 
