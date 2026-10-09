@@ -444,6 +444,53 @@ class InfiniteCanvasInstrumentedTest {
         assertEquals(nodes, saved.second)
     }
 
+
+    @Test fun referencePreviewAndNativeEditorAreVisibleTogetherWithoutDestroyingDraft() {
+        val nodes = listOf(InfiniteCanvasNode("preview", width = 400f, height = 320f),
+            InfiniteCanvasNode("subtitles", x = 480f, width = 400f, height = 360f))
+        val initial = InfiniteCanvasPersistence.encode(
+            InfiniteCanvasCamera(0f, 0f, 0.85f), nodes)
+        var saved = InfiniteCanvasPersistence.decode(initial)
+        composeRule.activityRule.scenario.onActivity { activity ->
+            activity.setContent {
+                MaterialTheme {
+                    InfiniteCanvasHost(
+                        sessionId = 82L, savedScene = initial,
+                        onSaveScene = { saved = InfiniteCanvasPersistence.decode(it) },
+                        entries = nodes.map { InfiniteCanvasEntry(it.id, it.id) },
+                        gestureOwned = false, onAddTool = {}, onActivate = {},
+                        onUndo = {}, onRedo = {}, canUndo = false, canRedo = false,
+                        modifier = Modifier.fillMaxSize(),
+                    ) { id, _ ->
+                        if (id == "preview") Text("Live ASS video", Modifier.testTag("reference-video"))
+                        else {
+                            var unsavedDraft by remember { mutableIntStateOf(0) }
+                            Button(onClick = { unsavedDraft++ },
+                                modifier = Modifier.testTag("split-editor-draft")) {
+                                Text("Unsaved ${unsavedDraft}")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        composeRule.onNodeWithTag("spatial-quick-subtitles").performClick()
+        composeRule.onNodeWithTag("spatial-reference-preview").assertIsDisplayed()
+        composeRule.onNodeWithTag("spatial-native-content-subtitles").assertIsDisplayed()
+        composeRule.onNodeWithTag("reference-video").assertExists()
+        composeRule.onNodeWithTag("split-editor-draft").performClick()
+        composeRule.onNodeWithText("Unsaved 1").assertExists()
+        composeRule.onNodeWithTag("spatial-preview-size").performClick()
+        composeRule.onNodeWithText("Unsaved 1").assertExists()
+        composeRule.onNodeWithTag("spatial-preview-toggle").performClick()
+        composeRule.onNodeWithTag("spatial-reference-preview").assertDoesNotExist()
+        composeRule.onNodeWithText("Unsaved 1").assertExists()
+        composeRule.onNodeWithTag("spatial-preview-toggle").performClick()
+        composeRule.onNodeWithTag("spatial-reference-preview").assertExists()
+        composeRule.onNodeWithText("Unsaved 1").assertExists()
+        assertEquals(nodes, saved.second)
+    }
+
     @Test fun focusedEditorIsNotShrunkByBoardCamera() {
         val fixture = OverviewFixture(listOf(
             InfiniteCanvasNode("preview", x = 8000f, width = 900f),
