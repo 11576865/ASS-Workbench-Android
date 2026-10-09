@@ -156,6 +156,14 @@ fun ModernEditorScreen(
     var fixedNavigationRevision by rememberSaveable { mutableIntStateOf(0) }
     var fixedListRequested by rememberSaveable { mutableStateOf(false) }
     val workspaceMode = UiVariantRegistry.resolve(workspaceModeName)
+    // SaveState restored from older app versions can still contain retired
+    // experiments. Canonicalize the saved presentation name once; the domain
+    // WorkspaceState and project snapshot are not reset by this migration.
+    LaunchedEffect(workspaceModeName) {
+        if (workspaceModeName != UiVariantRegistry.resolve(workspaceModeName).name) {
+            workspaceModeName = UiVariantRegistry.resolve(workspaceModeName).name
+        }
+    }
     val fixedTool = WorkbenchTool.valueOf(fixedToolName)
 
     LaunchedEffect(state.workspaceSessionId) {
