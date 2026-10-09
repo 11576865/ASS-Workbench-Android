@@ -320,10 +320,12 @@ internal fun InfiniteCanvasHost(
                                     }
                                 }
                                 if (camera.scale >= 0.95f &&
-                                    shouldComposeCanvasTool(camera, node, viewportW, viewportH)) {
-                                    // Compose actual editors only near the screen viewport.
-                                    // A saved world node always remains available in birdseye,
-                                    // rail, and quick-access navigation even while suspended.
+                                    (entry.id != "preview" && entry.id != "audio" ||
+                                        shouldComposeCanvasTool(camera, node, viewportW, viewportH))) {
+                                    // Only media evidence/preview is suspended outside the viewport.
+                                    // General editors may hold non-saveable uncommitted drafts,
+                                    // so do not unmount them without a proven edit-session contract.
+                                    // All world nodes remain recallable in birdseye and tool rails.
                                     Box(Modifier.weight(1f).fillMaxWidth()
                                         .background(MaterialTheme.colorScheme.surface.copy(alpha = node.alpha))
                                         .testTag("spatial-live-" + entry.id.replace(':', '-'))) {
