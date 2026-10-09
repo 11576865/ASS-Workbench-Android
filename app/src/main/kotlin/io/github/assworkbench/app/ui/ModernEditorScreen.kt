@@ -2968,6 +2968,23 @@ private fun SpatialWorkspace(
     onCloseSearch: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    var pendingObjectPick by remember(state.workspaceSessionId) { mutableStateOf<PreviewObjectPick?>(null) }
+    val selectCanvasObject: (Long) -> Unit = { id ->
+        if (state.document.events.any { it.id == id }) {
+            viewModel.focusEvent(id, seek = false)
+            pendingObjectPick = null
+        }
+    }
+    val pickCanvasObject: (PreviewObjectPick) -> Unit = { pick ->
+        val reliable = pick.candidates.filter {
+            it.confidence != PreviewTargetConfidence.UNRESOLVED
+        }
+        if (pick.candidates.size == 1 && reliable.size == 1) {
+            selectCanvasObject(pick.candidates.single().eventId)
+        } else {
+            pendingObjectPick = pick
+        }
+    }
     val visibleTools = workspaceState.tools.filter { it.presence != WorkspaceToolPresence.HIDDEN }
     val parameterEntries = workspaceState.parameterProjections.mapNotNull { projection ->
         WorkspaceParameterCatalog.find(projection.descriptorKey)?.let { descriptor ->
@@ -3089,6 +3106,7 @@ private fun SpatialWorkspace(
                 onEditEventPosition = onEditEventPosition,
                 interactionRegistry = if (activeTool == WorkbenchTool.POSITION) interactionRegistry else null,
                 viewportGesturesEnabled = activeTool != WorkbenchTool.POSITION,
+                onObjectLongPress = if (activeTool == WorkbenchTool.POSITION) null else pickCanvasObject,
                 modifier = Modifier.fillMaxSize(),
             )
             "subtitles" -> Column(Modifier.fillMaxSize()) {
@@ -3148,6 +3166,16 @@ private fun SpatialWorkspace(
                 }
             }
         }
+    }
+    pendingObjectPick?.let { pick ->
+        // Ambiguous hits are never silently retargeted to Focus.
+        ObjectCandidatePicker(
+            pick = pick,
+            document = state.document,
+            onSelect = selectCanvasObject,
+            onDismiss = { pendingObjectPick = null },
+            modifier = Modifier.fillMaxWidth().testTag("spatial-object-candidate-picker"),
+        )
     }
 }
 
