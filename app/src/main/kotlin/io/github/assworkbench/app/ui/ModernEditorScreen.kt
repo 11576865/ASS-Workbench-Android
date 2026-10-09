@@ -325,7 +325,11 @@ fun ModernEditorScreen(
         Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
             androidx.compose.animation.AnimatedVisibility(
-                visible = workspaceMode == WorkspacePresentationMode.FIXED || !workspaceState.surfacesHidden
+                // Global project/navigation chrome must not disappear merely
+                // because workspace surfaces were temporarily hidden.
+                visible = workspaceMode == WorkspacePresentationMode.FIXED ||
+                    workspaceMode == WorkspacePresentationMode.SPATIAL_EXPERIMENTAL ||
+                    !workspaceState.surfacesHidden
             ) {
             ModernAppBar(
                 state = state,
