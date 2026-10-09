@@ -301,10 +301,10 @@ internal fun InfiniteCanvasHost(
                     }
                 }
             }
-            UnboundedBoardLayer(Modifier.fillMaxSize().testTag("spatial-world")) {
+            UnboundedBoardLayer(Modifier.fillMaxSize().padding(bottom = dockHeight).testTag("spatial-world")) {
                 entries.forEach { entry ->
                     val saved = nodes.firstOrNull { it.id == entry.id } ?: return@forEach
-                    if (!saved.hidden) key(entry.id) {
+                    if (!saved.hidden && !entry.bookmarked) key(entry.id) {
                         var moving by remember { mutableStateOf<InfiniteCanvasNode?>(null) }
                         val node = moving ?: saved
                         val liveNode by rememberUpdatedState(node)
@@ -376,6 +376,11 @@ internal fun InfiniteCanvasHost(
                                                     scene = scene.first to raiseCanvasNode(scene.second, entry.id)
                                                     cardMenuId = null
                                                 })
+                                            if (entry.canClose) DropdownMenuItem(
+                                                text = { Text(if (entry.bookmarked) "取消侧书签" else "放入侧书签") },
+                                                modifier = Modifier.testTag("spatial-bookmark-" + entry.id.replace(':', '-')),
+                                                onClick = { onToggleBookmark(entry.id); cardMenuId = null },
+                                            )
                                             DropdownMenuItem(
                                                 text = { Text(if (node.layoutLocked) "解除布局锁" else "锁定布局") },
                                                 onClick = {
@@ -598,6 +603,11 @@ internal fun InfiniteCanvasHost(
                                         onClick = { onRedo(); cardMenuId = null })
                                     HorizontalDivider()
                                 }
+                                if (entry.canClose) DropdownMenuItem(
+                                    text = { Text(if (entry.bookmarked) "取消侧书签" else "放入侧书签") },
+                                    modifier = Modifier.testTag("spatial-bookmark-" + entry.id.replace(':', '-')),
+                                    onClick = { onToggleBookmark(entry.id); cardMenuId = null },
+                                )
                                 DropdownMenuItem(text = { Text(if (node.layoutLocked) "解除布局锁" else "锁定布局") },
                                     modifier = Modifier.testTag("spatial-layout-lock-" + entry.id.replace(':', '-')),
                                     onClick = {
@@ -804,6 +814,28 @@ internal fun InfiniteCanvasHost(
                     }
                 }
             }
+
+        // Side bookmarks are live ToolInstance identities, not cloned editors.
+        // The world node remains saved while BOOKMARKED, so recall is reversible.
+        val bookmarked = entries.filter { it.bookmarked }
+        if (bookmarked.isNotEmpty()) Surface(
+            Modifier.align(Alignment.CenterEnd).padding(bottom = dockHeight).width(68.dp)
+                .zIndex(1_000_022f).testTag("spatial-bookmark-rail"),
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            tonalElevation = 4.dp,
+        ) {
+            Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())
+                .padding(vertical = 8.dp),
+                horizontalAlignment = Alignment.CenterHorizontally) {
+                bookmarked.forEach { item ->
+                    TextButton(onClick = { focus(item.id) }, enabled = !gestureOwned,
+                        modifier = Modifier.fillMaxWidth()
+                            .testTag("spatial-bookmark-open-" + item.id.replace(':', '-'))) {
+                        Text(item.title.take(4), maxLines = 2)
+                    }
+                }
+            }
+        }
 
         // The timeline is a persistent *real* editor surface owned by this
         // workspace, not a separate presentation mode or a detached media clock.
