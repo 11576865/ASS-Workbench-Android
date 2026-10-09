@@ -48,4 +48,41 @@ class InfiniteCanvasModelTest {
         assertEquals(c, c.pan(Float.POSITIVE_INFINITY, 0f))
         assertEquals(c, InfiniteCanvasPersistence.decode(listOf("invalid")).first)
     }
+
+    @Test fun totalOverviewCanFitWidelySeparatedNodesBelowLegacyQuarterScale() {
+        val nodes = listOf(
+            InfiniteCanvasNode("preview", x = 0f, width = 400f),
+            InfiniteCanvasNode("subtitles", x = 8_000f, width = 400f),
+        )
+        val camera = fitCanvasCamera(nodes, 360f, 700f)!!
+        assertTrue(camera.scale < 0.25f)
+        assertTrue(camera.scale >= 0.025f)
+        assertTrue(camera.x + 8_400f * camera.scale <= 360f)
+        val restored = InfiniteCanvasPersistence.decode(
+            InfiniteCanvasPersistence.encode(camera, nodes))
+        assertEquals(camera, restored.first)
+        assertEquals(nodes, restored.second)
+    }
+
+    @Test fun approachingToolMovesCameraWithoutMovingWorldGeometry() {
+        val target = InfiniteCanvasNode("style", x = 8_000f, y = -1_200f, width = 480f, height = 450f)
+        val camera = canvasCameraForNode(target, 420f, 860f)
+        assertTrue(camera.scale in 0.025f..1f)
+        val projectedX = camera.x + target.x * camera.scale
+        val projectedY = camera.y + target.y * camera.scale
+        assertTrue(projectedX in 0f..420f)
+        assertTrue(projectedY in 0f..860f)
+        assertEquals(8_000f, target.x, 0f)
+    }
+
+    @Test fun fitIgnoresNonFiniteNodesAndInvalidViewport() {
+        val valid = InfiniteCanvasNode("preview", x = 100f)
+        val invalid = InfiniteCanvasNode("broken", x = Float.NaN)
+        assertEquals(
+            fitCanvasCamera(listOf(valid), 400f, 800f),
+            fitCanvasCamera(listOf(valid, invalid), 400f, 800f),
+        )
+        assertNull(fitCanvasCamera(listOf(invalid), 400f, 800f))
+        assertNull(fitCanvasCamera(listOf(valid), 0f, 800f))
+    }
 }
