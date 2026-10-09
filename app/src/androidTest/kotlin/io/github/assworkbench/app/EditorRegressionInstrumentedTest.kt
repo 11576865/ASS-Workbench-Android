@@ -123,6 +123,25 @@ class EditorRegressionInstrumentedTest {
     }
 
     @Test
+    fun mainLayoutSwitchAlwaysReachableAndDoesNotReplaceCanonicalDocument() {
+        restoreRecovery()
+        val original = viewModel.state.value.document
+        // Layout chrome must stay present even if WorkspaceState hides surfaces.
+        if (composeRule.onAllNodesWithTag("spatial-workspace", useUnmergedTree = true)
+                .fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()) {
+            composeRule.onNodeWithContentDescription("切换至标准工作台").performClick()
+        }
+        composeRule.onNodeWithTag("fixed-workspace").assertIsDisplayed()
+        assertEquals(original, viewModel.state.value.document)
+        composeRule.onNodeWithContentDescription("切换至无限画布").performClick()
+        composeRule.onNodeWithTag("spatial-workspace").assertIsDisplayed()
+        assertEquals(original, viewModel.state.value.document)
+        composeRule.onNodeWithContentDescription("切换至标准工作台").performClick()
+        composeRule.onNodeWithTag("fixed-workspace").assertIsDisplayed()
+        assertEquals(original, viewModel.state.value.document)
+    }
+
+    @Test
     fun unifiedCanvasSwitchesDirectlyBetweenRealPreviewAndSubtitleAuthoring() {
         restoreRecovery()
         switchToUnifiedCanvas()
