@@ -491,6 +491,80 @@ class InfiniteCanvasInstrumentedTest {
         assertEquals(nodes, saved.second)
     }
 
+    @Test fun unifiedCanvasTimelineDockWorksInsideFocusedEditorAndBoard() {
+        val nodes = listOf(InfiniteCanvasNode("preview"), InfiniteCanvasNode("subtitles", x = 500f))
+        val scene = InfiniteCanvasPersistence.encode(InfiniteCanvasCamera(0f, 0f, 0.85f), nodes)
+        var renderCompact by mutableStateOf(true)
+        composeRule.activityRule.scenario.onActivity { activity ->
+            activity.setContent {
+                MaterialTheme {
+                    InfiniteCanvasHost(
+                        sessionId = 83L, savedScene = scene, onSaveScene = {},
+                        entries = nodes.map { InfiniteCanvasEntry(it.id, it.id) },
+                        gestureOwned = false, onAddTool = {}, onActivate = {},
+                        renderTimeline = { compact ->
+                            renderCompact = compact
+                            Text("Real timeline pane", Modifier.testTag("test-timeline-content"))
+                        },
+                        onUndo = {}, onRedo = {}, canUndo = false, canRedo = false,
+                        modifier = Modifier.fillMaxSize(),
+                    ) { id, _ -> Text(id, Modifier.testTag("content-" + id)) }
+                }
+            }
+        }
+        composeRule.onNodeWithTag("spatial-quick-preview").performClick()
+        composeRule.onNodeWithTag("spatial-timeline-toggle").performClick()
+        composeRule.onNodeWithTag("spatial-timeline-dock").assertIsDisplayed()
+        composeRule.onNodeWithTag("test-timeline-content").assertIsDisplayed()
+        composeRule.runOnIdle { assertTrue(renderCompact) }
+        composeRule.onNodeWithTag("spatial-timeline-expand").performClick()
+        composeRule.runOnIdle { assertFalse(renderCompact) }
+        composeRule.onNodeWithTag("spatial-return-to-board").performClick()
+        composeRule.onNodeWithTag("spatial-timeline-dock").assertExists()
+        composeRule.onNodeWithTag("spatial-timeline-close").performClick()
+        composeRule.onNodeWithTag("spatial-timeline-dock").assertDoesNotExist()
+    }
+
+    @Test fun unifiedCanvasSideBookmarksReuseToolIdentityAndPersistWorldGeometry() {
+        val nodes = listOf(
+            InfiniteCanvasNode("preview"),
+            InfiniteCanvasNode("STYLE:primary", x = 200f, y = 180f),
+        )
+        val initial = InfiniteCanvasPersistence.encode(InfiniteCanvasCamera(0f, 0f, 0.85f), nodes)
+        var bookmarked by mutableStateOf(false)
+        var saved = InfiniteCanvasPersistence.decode(initial)
+        composeRule.activityRule.scenario.onActivity { activity ->
+            activity.setContent {
+                MaterialTheme {
+                    InfiniteCanvasHost(
+                        sessionId = 84L, savedScene = initial,
+                        onSaveScene = { saved = InfiniteCanvasPersistence.decode(it) },
+                        entries = listOf(
+                            InfiniteCanvasEntry("preview", "视频"),
+                            InfiniteCanvasEntry("STYLE:primary", "样式",
+                                canClose = true, bookmarked = bookmarked),
+                        ),
+                        gestureOwned = false, onAddTool = {}, onActivate = {},
+                        onToggleBookmark = { id ->
+                            if (id == "STYLE:primary") bookmarked = !bookmarked
+                        },
+                        onUndo = {}, onRedo = {}, canUndo = false, canRedo = false,
+                        modifier = Modifier.fillMaxSize(),
+                    ) { id, _ -> Text(id, Modifier.testTag("content-" + id)) }
+                }
+            }
+        }
+        composeRule.onNodeWithTag("spatial-quick-STYLE-primary").performClick()
+        composeRule.onNodeWithTag("spatial-menu-STYLE-primary").performClick()
+        composeRule.onNodeWithTag("spatial-bookmark-STYLE-primary").performClick()
+        composeRule.onNodeWithTag("spatial-bookmark-rail").assertExists()
+        composeRule.onNodeWithTag("spatial-return-to-board").performClick()
+        composeRule.onNodeWithTag("spatial-node-STYLE-primary").assertDoesNotExist()
+        composeRule.onNodeWithTag("spatial-bookmark-open-STYLE-primary").performClick()
+        composeRule.onNodeWithTag("spatial-native-content-STYLE-primary").assertExists()
+        assertEquals(nodes, saved.second)
+    }
+
     @Test fun focusedEditorIsNotShrunkByBoardCamera() {
         val fixture = OverviewFixture(listOf(
             InfiniteCanvasNode("preview", x = 8000f, width = 900f),
