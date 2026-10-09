@@ -70,17 +70,26 @@ internal enum class WorkspacePresentationMode(
 }
 
 /**
- * Single registration point for all editor UI variants.
+ * Single registration point for the main UI and one unified canvas experiment.
  *
- * New presentations should be added here and rendered by ModernEditorScreen.
- * Keeping discovery metadata centralized lets UI Lab grow without replacing
- * or silently deleting older presentations.
+ * Retired experiments remain enum decode tokens only; do not expose their UI.
+ * Their useful interaction patterns must be integrated into the unified canvas.
  */
 internal object UiVariantRegistry {
-    val entries: List<WorkspacePresentationMode> = WorkspacePresentationMode.entries
+    // Stable main UI and ONE experimental UI. Historical enum names stay readable
+    // for .asswb compatibility but are no longer offered as distinct products.
+    val entries: List<WorkspacePresentationMode> = listOf(
+        WorkspacePresentationMode.FIXED,
+        WorkspacePresentationMode.SPATIAL_EXPERIMENTAL,
+    )
 
     val default: WorkspacePresentationMode = WorkspacePresentationMode.SPATIAL_EXPERIMENTAL
 
-    fun resolve(persistedName: String?): WorkspacePresentationMode =
-        WorkspacePresentationMode.entries.firstOrNull { it.name == persistedName } ?: default
+    fun resolve(persistedName: String?): WorkspacePresentationMode = when (persistedName) {
+        WorkspacePresentationMode.FIXED.name -> WorkspacePresentationMode.FIXED
+        WorkspacePresentationMode.SPATIAL_EXPERIMENTAL.name -> WorkspacePresentationMode.SPATIAL_EXPERIMENTAL
+        // Legacy projects preserve their WorkspaceState, surface snapshots and
+        // Event binding while their retired presentation routes to the canvas.
+        else -> WorkspacePresentationMode.SPATIAL_EXPERIMENTAL
+    }
 }
