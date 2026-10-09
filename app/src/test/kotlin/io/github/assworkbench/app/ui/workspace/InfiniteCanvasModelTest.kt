@@ -152,4 +152,15 @@ class InfiniteCanvasModelTest {
         assertEquals(nodes, arrangeCanvasNodes(nodes, 0))
     }
 
+    @Test fun glassOpacityCyclesThroughReadablePersistenceValues() {
+        assertEquals(0.75f, nextCanvasOpacity(1f))
+        assertEquals(0.50f, nextCanvasOpacity(0.75f))
+        assertEquals(0.25f, nextCanvasOpacity(0.50f))
+        assertEquals(1f, nextCanvasOpacity(0.25f))
+        assertEquals(0.75f, nextCanvasOpacity(Float.NaN))
+        val node = InfiniteCanvasNode("STYLE:primary", alpha = 0.50f)
+        assertEquals(node, InfiniteCanvasPersistence.decode(
+            InfiniteCanvasPersistence.encode(InfiniteCanvasCamera(), listOf(node))).second.single())
+    }
+
 }
