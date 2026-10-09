@@ -412,6 +412,38 @@ class InfiniteCanvasInstrumentedTest {
         composeRule.onNodeWithText("Draft 1").assertExists()
     }
 
+
+    @Test fun focusedToolTitleSwitchesDirectlyToAnotherToolWithoutLosingSpatialLayout() {
+        val nodes = listOf(
+            InfiniteCanvasNode("preview", width = 420f, height = 360f),
+            InfiniteCanvasNode("subtitles", x = 700f, y = 400f),
+        )
+        val initial = InfiniteCanvasPersistence.encode(
+            InfiniteCanvasCamera(0f, 0f, 0.7f), nodes)
+        var saved = InfiniteCanvasPersistence.decode(initial)
+        composeRule.activityRule.scenario.onActivity { activity ->
+            activity.setContent {
+                MaterialTheme {
+                    InfiniteCanvasHost(
+                        sessionId = 81L, savedScene = initial,
+                        onSaveScene = { saved = InfiniteCanvasPersistence.decode(it) },
+                        entries = nodes.map { InfiniteCanvasEntry(it.id, it.id) },
+                        gestureOwned = false, onAddTool = {}, onActivate = {},
+                        onUndo = {}, onRedo = {}, canUndo = false, canRedo = false,
+                        modifier = Modifier.fillMaxSize(),
+                    ) { id, _ -> Text(id, Modifier.testTag("overview-content-" + id)) }
+                }
+            }
+        }
+        composeRule.onNodeWithTag("spatial-quick-preview").performClick()
+        composeRule.onNodeWithTag("spatial-tool-switcher").performClick()
+        composeRule.onNodeWithTag("spatial-switch-to-subtitles").performClick()
+        composeRule.onNodeWithTag("spatial-native-content-subtitles").assertExists()
+        composeRule.onNodeWithTag("spatial-native-content-preview").assertDoesNotExist()
+        composeRule.onNodeWithTag("spatial-return-to-board").performClick()
+        assertEquals(nodes, saved.second)
+    }
+
     @Test fun focusedEditorIsNotShrunkByBoardCamera() {
         val fixture = OverviewFixture(listOf(
             InfiniteCanvasNode("preview", x = 8000f, width = 900f),
