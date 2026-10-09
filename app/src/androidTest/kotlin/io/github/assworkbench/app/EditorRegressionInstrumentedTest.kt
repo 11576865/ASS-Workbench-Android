@@ -227,10 +227,10 @@ class EditorRegressionInstrumentedTest {
         composeRule.onNodeWithTag("workspace-mode-toggle").performClick()
         selectUiVariant("ui-variant-use-SPATIAL_EXPERIMENTAL")
 
-        composeRule.onNodeWithText("＋ 工具").performClick()
+        composeRule.onNodeWithTag("spatial-add-tool").performClick()
         composeRule.waitUntil(5_000) {
             composeRule.onAllNodesWithTag(
-                "spatial-node-CAPABILITIES-primary",
+                "spatial-native-content-CAPABILITIES-primary",
                 useUnmergedTree = true,
             ).fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()
         }
@@ -242,7 +242,7 @@ class EditorRegressionInstrumentedTest {
             .performClick()
         composeRule.waitUntil(5_000) {
             composeRule.onAllNodesWithTag(
-                "spatial-node-POSITION-primary",
+                "spatial-native-content-POSITION-primary",
                 useUnmergedTree = true,
             ).fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()
         }
@@ -265,17 +265,17 @@ class EditorRegressionInstrumentedTest {
                 up()
             }
 
-        composeRule.waitUntil(5_000) {
-            composeRule.onAllNodesWithTag(
-                "spatial-node-parameter-${key}-1",
-                useUnmergedTree = true,
-            ).fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()
-        }
-        composeRule.onNodeWithTag("spatial-node-parameter-${key}-1")
-            .assertIsDisplayed()
+        // A projection is a real ToolInstance, reachable through birdseye even
+        // when the user remains focused in the source parameter editor.
+        composeRule.onNodeWithTag("spatial-birdseye").performClick()
+        composeRule.onNodeWithTag("spatial-birdseye-node-parameter-${key}-1")
+            .performScrollTo().performClick()
+        composeRule.onNodeWithTag("spatial-native-content-parameter-${key}-1").assertExists()
         composeRule.onNodeWithTag(
             "parameter-projection-${control}-parameter-${key}-1"
         ).assertIsDisplayed()
+        composeRule.onNodeWithTag("spatial-return-to-board").performClick()
+        composeRule.onNodeWithTag("spatial-node-parameter-${key}-1").assertExists()
 
         assertEquals(before, viewModel.state.value.document)
         assertFalse("Extracting a workspace projection must not enter ASS Undo", viewModel.state.value.canUndo)
