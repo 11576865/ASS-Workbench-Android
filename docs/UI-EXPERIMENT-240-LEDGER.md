@@ -5,7 +5,7 @@
 源清单：`ASS-Workbench-Android_超级激进UI实验清单_2026-10-02.txt`。原清单明确属于拟议要求，不是现有能力说明。
 
 ## 2026-10-10 UI 收敛说明（PR #138，仍待最新 CI）
-产品层现在只允许选择 **FIXED 标准主界面** 和 **SPATIAL_EXPERIMENTAL 无限画布**。其他八种实验布局从 `UiVariantRegistry.entries` 退出并标记归档；历史 `.asswb` 模式名称经 `resolve()` 定向迁移至无限画布，不清除 ASS、工具实例、绑定或已保存布局。遗留的私有实现源码暂不作为可到达的产品页面；待其复用组件、测试和依赖迁移通过后再单独删除。
+产品层现在只允许选择 **FIXED 标准主界面** 和 **SPATIAL_EXPERIMENTAL 无限画布**。其他八种实验布局从 `UiVariantRegistry.entries` 退出并标记归档；历史 `.asswb` 模式名称经 `resolve()` 定向迁移至无限画布，不清除 ASS、工具实例、绑定或已保存布局。旧完整实验页面的私有组合实现已从 `ModernEditorScreen` 清理；底层被复用的领域工具、原生预览、候选选择器及其必要辅助组件仍保留。
 
 功能统一的代码对应关系：Timeline Dock → 无限画布常驻紧凑/展开真实时间轴；Edge Bookmark → `BOOKMARKED` ToolInstance 侧轨；Subtitle Object → 视频长按冻结时刻的目标消歧；Precision Lens → Position 阶段独占精密操作层；Glass Layered → 世界工具节点透明度和音频穿透；Pager → 原生聚焦编辑/快捷切换；Tool Instances/Canvas → 工作区身份、布局锁、复制、关闭、收回和召回。**此列表是迁移范围和待验证的代码落点，不等于旧清单所有 240 项已完成，也不代表与旧实验完全同等功能。**
 
