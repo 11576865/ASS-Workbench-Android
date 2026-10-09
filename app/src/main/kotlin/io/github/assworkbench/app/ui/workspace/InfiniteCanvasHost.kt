@@ -525,9 +525,10 @@ internal fun InfiniteCanvasHost(
                 Column {
                     Row(Modifier.fillMaxWidth().height(64.dp).padding(horizontal = 8.dp),
                         verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = ::returnToBoard, enabled = !gestureOwned,
+                        TextButton(onClick = ::returnToBoard, enabled = !gestureOwned,
                             modifier = Modifier.testTag("spatial-return-to-board")) {
-                            Icon(Icons.Filled.ArrowBack, "返回空间画布")
+                            Icon(Icons.Filled.ArrowBack, null, Modifier.size(18.dp))
+                            Text("画布")
                         }
                         Box(Modifier.weight(1f)) {
                             Column(Modifier.fillMaxWidth()
