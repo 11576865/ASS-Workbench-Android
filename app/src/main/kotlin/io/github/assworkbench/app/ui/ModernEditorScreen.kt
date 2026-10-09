@@ -49,6 +49,7 @@ import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
@@ -4001,6 +4002,7 @@ private fun ModernAppBar(
 ) {
     val uiState = state.toEditorUiState()
     val uiActions = remember(viewModel) { EditorViewModelUiActions(viewModel) }
+    val compactToolbar = LocalConfiguration.current.screenWidthDp < 480
     var moreMenuOpen by remember { mutableStateOf(false) }
     Surface(tonalElevation = 2.dp) {
         Row(
@@ -4045,8 +4047,14 @@ private fun ModernAppBar(
                     )
                 }
                 TooltipIconButton("保存", onSave, enabled = uiState.document.subtitleLoaded) { Icon(Icons.Filled.Save, null) }
-                TooltipIconButton("撤销", uiActions::undo, enabled = uiState.history.canUndo) { Icon(Icons.Filled.Undo, null) }
-                TooltipIconButton("重做", uiActions::redo, enabled = uiState.history.canRedo) { Icon(Icons.Filled.Redo, null) }
+                if (!compactToolbar) {
+                    TooltipIconButton("撤销", uiActions::undo, enabled = uiState.history.canUndo) {
+                        Icon(Icons.Filled.Undo, null)
+                    }
+                    TooltipIconButton("重做", uiActions::redo, enabled = uiState.history.canRedo) {
+                        Icon(Icons.Filled.Redo, null)
+                    }
+                }
                 Box {
                     TooltipIconButton("打开文件 / 工程", onOpenMenu) { Icon(Icons.Filled.FolderOpen, null) }
                     DropdownMenu(expanded = openMenu, onDismissRequest = onDismissMenu) {
@@ -4062,6 +4070,15 @@ private fun ModernAppBar(
                 Box {
                     TooltipIconButton("工具和更多操作", { moreMenuOpen = true }) { Icon(Icons.Filled.MoreVert, null) }
                     DropdownMenu(expanded = moreMenuOpen, onDismissRequest = { moreMenuOpen = false }) {
+                        if (compactToolbar) {
+                            DropdownMenuItem(text = { Text("撤销") }, enabled = uiState.history.canUndo,
+                                onClick = { moreMenuOpen = false; uiActions.undo() },
+                                modifier = Modifier.testTag("toolbar-menu-undo"))
+                            DropdownMenuItem(text = { Text("重做") }, enabled = uiState.history.canRedo,
+                                onClick = { moreMenuOpen = false; uiActions.redo() },
+                                modifier = Modifier.testTag("toolbar-menu-redo"))
+                            HorizontalDivider()
+                        }
                         DropdownMenuItem(text = { Text("字体管理") }, leadingIcon = { Icon(Icons.Filled.FontDownload, null) }, onClick = { moreMenuOpen = false; onTool(WorkbenchTool.FONTS) })
                         DropdownMenuItem(text = { Text("质量检查") }, leadingIcon = { Icon(Icons.Filled.ErrorOutline, null) }, onClick = { moreMenuOpen = false; onTool(WorkbenchTool.QC) })
                         DropdownMenuItem(text = { Text("项目") }, leadingIcon = { Icon(Icons.Filled.Info, null) }, onClick = { moreMenuOpen = false; onTool(WorkbenchTool.PROJECT) })
