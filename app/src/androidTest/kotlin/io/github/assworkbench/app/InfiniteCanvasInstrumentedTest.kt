@@ -229,6 +229,44 @@ class InfiniteCanvasInstrumentedTest {
         composeRule.onNodeWithTag("spatial-native-content-STYLE-primary").assertDoesNotExist()
     }
 
+
+    @Test fun distantLiveEditorSuspendsButRemainsRecallableAndRehydratesOnReturn() {
+        val nodes = listOf(
+            InfiniteCanvasNode("preview", width = 280f, height = 220f),
+            InfiniteCanvasNode("subtitles", x = 8_000f, width = 280f, height = 220f),
+        )
+        val initial = InfiniteCanvasPersistence.encode(
+            InfiniteCanvasCamera(0f, 0f, 1f), nodes)
+        var saved = InfiniteCanvasPersistence.decode(initial)
+        composeRule.activityRule.scenario.onActivity { activity ->
+            activity.setContent {
+                MaterialTheme {
+                    InfiniteCanvasHost(
+                        sessionId = 6L, savedScene = initial,
+                        onSaveScene = { saved = InfiniteCanvasPersistence.decode(it) },
+                        entries = nodes.map { InfiniteCanvasEntry(it.id, it.id) },
+                        gestureOwned = false, onAddTool = {}, onActivate = {},
+                        onUndo = {}, onRedo = {}, canUndo = false, canRedo = false,
+                        modifier = Modifier.fillMaxSize(),
+                    ) { id, _ -> Text(id, Modifier.testTag("overview-content-" + id)) }
+                }
+            }
+        }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("spatial-live-preview").assertExists()
+        composeRule.onNodeWithTag("spatial-live-subtitles").assertDoesNotExist()
+        composeRule.onNodeWithTag("overview-content-subtitles").assertDoesNotExist()
+        composeRule.onNodeWithTag("spatial-birdseye").performClick()
+        composeRule.onNodeWithTag("spatial-birdseye-node-subtitles")
+            .performScrollTo().performClick()
+        composeRule.onNodeWithTag("spatial-native-content-subtitles").assertExists()
+        composeRule.onNodeWithTag("overview-content-subtitles").assertExists()
+        composeRule.onNodeWithTag("spatial-return-to-board").performClick()
+        composeRule.onNodeWithTag("spatial-live-subtitles").assertExists()
+        composeRule.onNodeWithTag("spatial-live-preview").assertDoesNotExist()
+        assertEquals(nodes, saved.second)
+    }
+
     @Test fun focusedEditorIsNotShrunkByBoardCamera() {
         val fixture = OverviewFixture(listOf(
             InfiniteCanvasNode("preview", x = 8000f, width = 900f),
