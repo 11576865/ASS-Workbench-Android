@@ -641,38 +641,45 @@ internal fun InfiniteCanvasHost(
                         }
                     }
                     HorizontalDivider()
-                    val productionEditor: @Composable (Modifier) -> Unit = { paneModifier ->
+                    val liveNode by rememberUpdatedState(node)
+                    val liveNodes by rememberUpdatedState(nodes)
+                    val liveContent by rememberUpdatedState(content)
+                    // Preserve ordinary remember() drafts while a pane is moved
+                    // between split and fullscreen layouts (or resized).
+                    val productionEditor = remember(entry.id, sessionId) {
+                        movableContentOf<Modifier> { paneModifier ->
                         Box(paneModifier.testTag("spatial-native-content-" + entry.id.replace(':', '-'))) {
-                            val preview = nodes.firstOrNull { it.id == "preview" && !it.hidden }
-                            val audio = nodes.firstOrNull { it.id == "audio" && !it.hidden }
+                            val preview = liveNodes.firstOrNull { it.id == "preview" && !it.hidden }
+                            val audio = liveNodes.firstOrNull { it.id == "audio" && !it.hidden }
                             // Audio/video is a real layered editing surface, not a flattened card.
                             // Keep actual renderer and waveform on their existing clock and callbacks.
                             if (entry.id == "audio" && preview != null) {
                                 contentState.SaveableStateProvider(sessionId.toString() + "/preview") {
-                                    content("preview", true)
+                                    liveContent("preview", true)
                                 }
                                 Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth()
-                                    .height(node.height.coerceIn(160f, 460f).dp)
-                                    .background(MaterialTheme.colorScheme.surface.copy(alpha = node.alpha))) {
+                                    .height(liveNode.height.coerceIn(160f, 460f).dp)
+                                    .background(MaterialTheme.colorScheme.surface.copy(alpha = liveNode.alpha))) {
                                     contentState.SaveableStateProvider(sessionId.toString() + "/audio") {
-                                        content("audio", !node.passthrough)
+                                        liveContent("audio", !liveNode.passthrough)
                                     }
                                 }
                             } else {
                                 contentState.SaveableStateProvider(sessionId.toString() + "/" + entry.id) {
-                                    content(entry.id, !node.passthrough)
+                                    liveContent(entry.id, !liveNode.passthrough)
                                 }
                                 if (entry.id == "preview" && audio != null) {
                                     Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth()
                                         .height(audio.height.coerceIn(160f, 460f).dp)
                                         .background(MaterialTheme.colorScheme.surface.copy(alpha = audio.alpha))) {
                                         contentState.SaveableStateProvider(sessionId.toString() + "/audio") {
-                                            content("audio", !audio.passthrough)
+                                            liveContent("audio", !audio.passthrough)
                                         }
                                     }
                                 }
                             }
                         
+                        }
                         }
                     }
                     val reference = nodes.firstOrNull { it.id == "preview" && !it.hidden }
