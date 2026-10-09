@@ -334,6 +334,39 @@ internal fun InfiniteCanvasHost(
                                                     scene = scene.first to raiseCanvasNode(scene.second, entry.id)
                                                     cardMenuId = null
                                                 })
+                                            DropdownMenuItem(
+                                                text = { Text(if (node.layoutLocked) "解除布局锁" else "锁定布局") },
+                                                onClick = {
+                                                    updateNode(node.copy(layoutLocked = !node.layoutLocked))
+                                                    cardMenuId = null
+                                                },
+                                                modifier = Modifier.testTag("spatial-layout-lock-" + entry.id.replace(':', '-')),
+                                            )
+                                            if (entry.canBindEvent) DropdownMenuItem(
+                                                text = { Text(if (entry.pinnedEvent) "解除对象固定（跟随焦点）"
+                                                    else "固定读取对象 #" + entry.focusEventId) },
+                                                enabled = entry.pinnedEvent || entry.focusEventId != null,
+                                                onClick = { onToggleEventBinding(entry.id); cardMenuId = null },
+                                            )
+                                            if (entry.canDuplicate) {
+                                                DropdownMenuItem(text = { Text("复制工具（保留绑定）") }, onClick = {
+                                                    pendingToolSelection = entries.mapTo(mutableSetOf()) { it.id }
+                                                    onDuplicateTool(entry.id, false)
+                                                    cardMenuId = null
+                                                })
+                                                DropdownMenuItem(text = { Text("复制工具（跟随焦点）") }, onClick = {
+                                                    pendingToolSelection = entries.mapTo(mutableSetOf()) { it.id }
+                                                    onDuplicateTool(entry.id, true)
+                                                    cardMenuId = null
+                                                })
+                                            }
+                                            if (entry.canClose) DropdownMenuItem(text = { Text("关闭工具实例") },
+                                                modifier = Modifier.testTag("spatial-close-" + entry.id.replace(':', '-')),
+                                                onClick = {
+                                                    onCloseTool(entry.id)
+                                                    cardMenuId = null
+                                                    pendingToolSelection = null
+                                                })
                                             DropdownMenuItem(text = { Text("收回工具") },
                                                 onClick = { updateNode(node.copy(hidden = true)); cardMenuId = null })
                                             DropdownMenuItem(
@@ -507,6 +540,10 @@ internal fun InfiniteCanvasHost(
                             if (entry.subtitle.isNotBlank()) Text(entry.subtitle,
                                 style = MaterialTheme.typography.labelSmall, maxLines = 1)
                         }
+                        IconButton(onClick = ::showToolPicker, enabled = !gestureOwned,
+                            modifier = Modifier.testTag("spatial-add-tool")) {
+                            Icon(Icons.Filled.Add, "添加工具")
+                        }
                         IconButton(onClick = { birdseyeOpen = true }, enabled = !gestureOwned,
                             modifier = Modifier.testTag("spatial-birdseye")) {
                             Icon(Icons.Filled.Apps, "切换工具")
@@ -518,6 +555,37 @@ internal fun InfiniteCanvasHost(
                             }
                             DropdownMenu(expanded = cardMenuId == entry.id,
                                 onDismissRequest = { cardMenuId = null }) {
+                                DropdownMenuItem(text = { Text(if (node.layoutLocked) "解除布局锁" else "锁定布局") },
+                                    modifier = Modifier.testTag("spatial-layout-lock-" + entry.id.replace(':', '-')),
+                                    onClick = {
+                                        updateNode(node.copy(layoutLocked = !node.layoutLocked))
+                                        cardMenuId = null
+                                    })
+                                if (entry.canBindEvent) DropdownMenuItem(
+                                    text = { Text(if (entry.pinnedEvent) "解除对象固定（跟随焦点）"
+                                        else "固定读取对象 #" + entry.focusEventId) },
+                                    enabled = entry.pinnedEvent || entry.focusEventId != null,
+                                    onClick = { onToggleEventBinding(entry.id); cardMenuId = null })
+                                if (entry.canDuplicate) {
+                                    DropdownMenuItem(text = { Text("复制工具（保留绑定）") }, onClick = {
+                                        pendingToolSelection = entries.mapTo(mutableSetOf()) { it.id }
+                                        onDuplicateTool(entry.id, false)
+                                        cardMenuId = null
+                                    })
+                                    DropdownMenuItem(text = { Text("复制工具（跟随焦点）") }, onClick = {
+                                        pendingToolSelection = entries.mapTo(mutableSetOf()) { it.id }
+                                        onDuplicateTool(entry.id, true)
+                                        cardMenuId = null
+                                    })
+                                }
+                                if (entry.canClose) DropdownMenuItem(text = { Text("关闭工具实例") },
+                                    modifier = Modifier.testTag("spatial-close-" + entry.id.replace(':', '-')),
+                                    onClick = {
+                                        onCloseTool(entry.id)
+                                        focusedId = null
+                                        cardMenuId = null
+                                        pendingToolSelection = null
+                                    })
                                 DropdownMenuItem(text = { Text("收回工具") }, onClick = {
                                     updateNode(node.copy(hidden = true))
                                     focusedId = null
@@ -591,6 +659,16 @@ internal fun InfiniteCanvasHost(
                         style = MaterialTheme.typography.titleSmall)
                     TextButton(onClick = ::overview, enabled = !gestureOwned,
                         modifier = Modifier.testTag("spatial-overview")) { Text("总览") }
+                    Box {
+                        TextButton(onClick = { arrangeOpen = true }, enabled = !gestureOwned,
+                            modifier = Modifier.testTag("spatial-arrange")) { Text("整理") }
+                        DropdownMenu(expanded = arrangeOpen, onDismissRequest = { arrangeOpen = false }) {
+                            DropdownMenuItem(text = { Text("纵向排列") },
+                                onClick = { arrange(1) }, modifier = Modifier.testTag("spatial-arrange-column"))
+                            DropdownMenuItem(text = { Text("两列排列") },
+                                onClick = { arrange(2) }, modifier = Modifier.testTag("spatial-arrange-two"))
+                        }
+                    }
                     TextButton(onClick = { birdseyeOpen = true }, enabled = !gestureOwned,
                         modifier = Modifier.testTag("spatial-birdseye")) { Text("鸟瞰") }
                     Box {
