@@ -88,6 +88,7 @@ internal fun InfiniteCanvasHost(
     var toolDrawerResident by rememberSaveable(sessionId) { mutableStateOf(false) }
     var recallOpen by remember(sessionId) { mutableStateOf(false) }
     var arrangeOpen by remember(sessionId) { mutableStateOf(false) }
+    var switcherOpen by remember(sessionId) { mutableStateOf(false) }
     var cardMenuId by remember(sessionId) { mutableStateOf<String?>(null) }
     // A directory selection may asynchronously create a ToolInstance. Carry the
     // invoking set of IDs until the new production tool is actually available.
@@ -518,10 +519,33 @@ internal fun InfiniteCanvasHost(
                             modifier = Modifier.testTag("spatial-return-to-board")) {
                             Icon(Icons.Filled.ArrowBack, "返回空间画布")
                         }
-                        Column(Modifier.weight(1f)) {
-                            Text(entry.title, style = MaterialTheme.typography.titleMedium, maxLines = 1)
-                            if (entry.subtitle.isNotBlank()) Text(entry.subtitle,
-                                style = MaterialTheme.typography.labelSmall, maxLines = 1)
+                        Box(Modifier.weight(1f)) {
+                            Column(Modifier.fillMaxWidth()
+                                .clickable(enabled = !gestureOwned) { switcherOpen = true }
+                                .testTag("spatial-tool-switcher")) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(entry.title, style = MaterialTheme.typography.titleMedium,
+                                        maxLines = 1)
+                                    Icon(Icons.Filled.ArrowDropDown, "切换工具", Modifier.size(18.dp))
+                                }
+                                if (entry.subtitle.isNotBlank()) Text(entry.subtitle,
+                                    style = MaterialTheme.typography.labelSmall, maxLines = 1)
+                            }
+                            DropdownMenu(expanded = switcherOpen,
+                                onDismissRequest = { switcherOpen = false }) {
+                                entries.forEach { target ->
+                                    DropdownMenuItem(
+                                        text = { Text((if (target.id == entry.id) "✓ " else "") + target.title) },
+                                        enabled = !gestureOwned,
+                                        modifier = Modifier.testTag(
+                                            "spatial-switch-to-" + target.id.replace(':', '-')),
+                                        onClick = {
+                                            focus(target.id)
+                                            switcherOpen = false
+                                        },
+                                    )
+                                }
+                            }
                         }
                         IconButton(onClick = ::showToolPicker, enabled = !gestureOwned,
                             modifier = Modifier.testTag("spatial-add-tool")) {
@@ -538,6 +562,13 @@ internal fun InfiniteCanvasHost(
                             }
                             DropdownMenu(expanded = cardMenuId == entry.id,
                                 onDismissRequest = { cardMenuId = null }) {
+                                if (viewportW < 460f) {
+                                    DropdownMenuItem(text = { Text("撤销字幕编辑") }, enabled = canUndo,
+                                        onClick = { onUndo(); cardMenuId = null })
+                                    DropdownMenuItem(text = { Text("重做字幕编辑") }, enabled = canRedo,
+                                        onClick = { onRedo(); cardMenuId = null })
+                                    HorizontalDivider()
+                                }
                                 DropdownMenuItem(text = { Text(if (node.layoutLocked) "解除布局锁" else "锁定布局") },
                                     modifier = Modifier.testTag("spatial-layout-lock-" + entry.id.replace(':', '-')),
                                     onClick = {
@@ -587,11 +618,13 @@ internal fun InfiniteCanvasHost(
                                     })
                             }
                         }
-                        IconButton(onClick = onUndo, enabled = canUndo) {
-                            Icon(Icons.Filled.Undo, "撤销字幕编辑")
-                        }
-                        IconButton(onClick = onRedo, enabled = canRedo) {
-                            Icon(Icons.Filled.Redo, "重做字幕编辑")
+                        if (viewportW >= 460f) {
+                            IconButton(onClick = onUndo, enabled = canUndo) {
+                                Icon(Icons.Filled.Undo, "撤销字幕编辑")
+                            }
+                            IconButton(onClick = onRedo, enabled = canRedo) {
+                                Icon(Icons.Filled.Redo, "重做字幕编辑")
+                            }
                         }
                     }
                     HorizontalDivider()
