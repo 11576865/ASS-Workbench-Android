@@ -11,6 +11,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.click
@@ -269,6 +270,114 @@ class InfiniteCanvasInstrumentedTest {
         composeRule.onNodeWithTag("spatial-live-audio").assertDoesNotExist()
         composeRule.onNodeWithTag("spatial-live-subtitles").assertExists()
         assertEquals(nodes, saved.second)
+    }
+
+
+    @Test fun focusedPreviewHasDirectAddToolEntryAndOpensNativeToolDirectory() {
+        var directoryAdded by mutableStateOf(false)
+        composeRule.activityRule.scenario.onActivity { activity ->
+            activity.setContent {
+                MaterialTheme {
+                    InfiniteCanvasHost(
+                        sessionId = 77L, savedScene = emptyList(),
+                        onSaveScene = {},
+                        entries = listOf(InfiniteCanvasEntry("preview", "视频")) +
+                            if (directoryAdded) listOf(
+                                InfiniteCanvasEntry("CAPABILITIES:primary", "工具目录")) else emptyList(),
+                        gestureOwned = false, onAddTool = { directoryAdded = true },
+                        onActivate = {}, onUndo = {}, onRedo = {},
+                        canUndo = false, canRedo = false,
+                        modifier = Modifier.fillMaxSize(),
+                    ) { id, _ -> Text(id, Modifier.testTag("overview-content-" + id)) }
+                }
+            }
+        }
+        composeRule.onNodeWithTag("spatial-native-content-preview").assertExists()
+        composeRule.onNodeWithTag("spatial-add-tool").assertIsDisplayed().performClick()
+        composeRule.onNodeWithTag("spatial-native-content-CAPABILITIES-primary").assertExists()
+        composeRule.onNodeWithTag("overview-content-CAPABILITIES:primary").assertExists()
+    }
+
+    @Test fun contextualToolLifecycleAndLayoutActionsAreReachableInFocusedAndBoardModes() {
+        val nodes = listOf(
+            InfiniteCanvasNode("preview"),
+            InfiniteCanvasNode("POSITION:primary", x = 560f),
+        )
+        val initial = InfiniteCanvasPersistence.encode(InfiniteCanvasCamera(0f, 0f, 0.85f), nodes)
+        var saved = InfiniteCanvasPersistence.decode(initial)
+        var closeCount by mutableIntStateOf(0)
+        var cloneCount by mutableIntStateOf(0)
+        var pinCount by mutableIntStateOf(0)
+        composeRule.activityRule.scenario.onActivity { activity ->
+            activity.setContent {
+                MaterialTheme {
+                    InfiniteCanvasHost(
+                        sessionId = 78L, savedScene = initial,
+                        onSaveScene = { saved = InfiniteCanvasPersistence.decode(it) },
+                        entries = listOf(
+                            InfiniteCanvasEntry("preview", "视频"),
+                            InfiniteCanvasEntry("POSITION:primary", "位置",
+                                canClose = true, canDuplicate = true, canBindEvent = true,
+                                focusEventId = 4L),
+                        ),
+                        gestureOwned = false, onAddTool = {}, onActivate = {},
+                        onCloseTool = { closeCount++ },
+                        onDuplicateTool = { _, _ -> cloneCount++ },
+                        onToggleEventBinding = { pinCount++ },
+                        onUndo = {}, onRedo = {}, canUndo = false, canRedo = false,
+                        modifier = Modifier.fillMaxSize(),
+                    ) { id, _ -> Text(id, Modifier.testTag("overview-content-" + id)) }
+                }
+            }
+        }
+        composeRule.onNodeWithTag("spatial-quick-POSITION-primary").performClick()
+        composeRule.onNodeWithTag("spatial-menu-POSITION-primary").performClick()
+        composeRule.onNodeWithTag("spatial-layout-lock-POSITION-primary").performClick()
+        composeRule.waitForIdle()
+        assertTrue(saved.second.single { it.id == "POSITION:primary" }.layoutLocked)
+        composeRule.onNodeWithTag("spatial-menu-POSITION-primary").performClick()
+        composeRule.onNodeWithText("固定读取对象 #4").performClick()
+        composeRule.onNodeWithTag("spatial-menu-POSITION-primary").performClick()
+        composeRule.onNodeWithText("复制工具（保留绑定）").performClick()
+        composeRule.runOnIdle {
+            assertEquals(1, pinCount)
+            assertEquals(1, cloneCount)
+        }
+        composeRule.onNodeWithTag("spatial-menu-POSITION-primary").performClick()
+        composeRule.onNodeWithTag("spatial-close-POSITION-primary").performClick()
+        composeRule.runOnIdle { assertEquals(1, closeCount) }
+        composeRule.onNodeWithTag("spatial-return-to-board").assertDoesNotExist()
+    }
+
+    @Test fun boardArrangeDoesNotAlterHiddenOrLockedWorldNodes() {
+        val nodes = listOf(
+            InfiniteCanvasNode("preview", x = 900f, y = 700f, layoutLocked = true),
+            InfiniteCanvasNode("subtitles", x = -900f, y = 500f),
+            InfiniteCanvasNode("audio", x = 500f, y = -500f, hidden = true),
+        )
+        val initial = InfiniteCanvasPersistence.encode(InfiniteCanvasCamera(0f, 0f, 0.85f), nodes)
+        var saved = InfiniteCanvasPersistence.decode(initial)
+        composeRule.activityRule.scenario.onActivity { activity ->
+            activity.setContent {
+                MaterialTheme {
+                    InfiniteCanvasHost(
+                        sessionId = 79L, savedScene = initial,
+                        onSaveScene = { saved = InfiniteCanvasPersistence.decode(it) },
+                        entries = nodes.map { InfiniteCanvasEntry(it.id, it.id) },
+                        gestureOwned = false, onAddTool = {}, onActivate = {},
+                        onUndo = {}, onRedo = {}, canUndo = false, canRedo = false,
+                        modifier = Modifier.fillMaxSize(),
+                    ) { id, _ -> Text(id, Modifier.testTag("overview-content-" + id)) }
+                }
+            }
+        }
+        composeRule.onNodeWithTag("spatial-arrange").performClick()
+        composeRule.onNodeWithTag("spatial-arrange-column").performClick()
+        composeRule.waitForIdle()
+        assertEquals(nodes[0], saved.second.first())
+        assertEquals(nodes[2], saved.second.last())
+        assertTrue(saved.second[1].y > nodes[0].y + nodes[0].height)
+        assertEquals(nodes.map { it.z }, saved.second.map { it.z })
     }
 
     @Test fun focusedEditorIsNotShrunkByBoardCamera() {
