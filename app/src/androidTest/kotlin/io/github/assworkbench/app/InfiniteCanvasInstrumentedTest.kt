@@ -124,6 +124,41 @@ class InfiniteCanvasInstrumentedTest {
         assertEquals(original, fixture.saved.second)
     }
 
+    @Test fun closeUpBoardKeepsMultipleRealToolsAndOverviewUsesSummaries() {
+        val fixture = OverviewFixture(listOf(
+            InfiniteCanvasNode("preview", width = 360f, height = 320f),
+            InfiniteCanvasNode("subtitles", x = 440f, width = 360f, height = 320f),
+        ))
+        val boardAtOne = InfiniteCanvasPersistence.encode(
+            InfiniteCanvasCamera(0f, 0f, 1f), fixture.nodes)
+        composeRule.activityRule.scenario.onActivity { activity ->
+            activity.setContent {
+                MaterialTheme {
+                    InfiniteCanvasHost(
+                        sessionId = 3L, savedScene = boardAtOne,
+                        onSaveScene = { fixture.saved = InfiniteCanvasPersistence.decode(it) },
+                        entries = fixture.nodes.map { InfiniteCanvasEntry(it.id, it.id) },
+                        gestureOwned = false, onAddTool = {}, onActivate = {},
+                        onUndo = {}, onRedo = {}, canUndo = false, canRedo = false,
+                        modifier = Modifier.fillMaxSize(),
+                    ) { id, _ -> Text(id, Modifier.testTag("overview-content-" + id)) }
+                }
+            }
+        }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("spatial-live-preview").assertExists()
+        composeRule.onNodeWithTag("spatial-live-subtitles").assertExists()
+        composeRule.onNodeWithTag("overview-content-preview").assertExists()
+        composeRule.onNodeWithTag("overview-content-subtitles").assertExists()
+
+        composeRule.onNodeWithTag("spatial-zoom-out").performClick()
+        composeRule.onNodeWithTag("spatial-live-preview").assertDoesNotExist()
+        composeRule.onNodeWithTag("spatial-open-preview").assertExists()
+        composeRule.onNodeWithTag("spatial-zoom-in").performClick()
+        composeRule.onNodeWithTag("spatial-live-preview").assertExists()
+        assertEquals(fixture.nodes, fixture.saved.second)
+    }
+
     @Test fun focusedEditorIsNotShrunkByBoardCamera() {
         val fixture = OverviewFixture(listOf(
             InfiniteCanvasNode("preview", x = 8000f, width = 900f),
