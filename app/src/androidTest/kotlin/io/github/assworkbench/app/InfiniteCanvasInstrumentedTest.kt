@@ -1,7 +1,7 @@
 package io.github.assworkbench.app
 
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.*
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.Button
@@ -561,6 +561,52 @@ class InfiniteCanvasInstrumentedTest {
         composeRule.onNodeWithTag("spatial-return-to-board").performClick()
         composeRule.onNodeWithTag("spatial-node-STYLE-primary").assertDoesNotExist()
         composeRule.onNodeWithTag("spatial-bookmark-open-STYLE-primary").performClick()
+        composeRule.onNodeWithTag("spatial-native-content-STYLE-primary").assertExists()
+        assertEquals(nodes, saved.second)
+    }
+
+
+    @Test fun externalToolbarFocusRequestOpensAndReopensAnExistingNativeInstance() {
+        val nodes = listOf(InfiniteCanvasNode("preview"),
+            InfiniteCanvasNode("STYLE:primary", x = 800f, y = 120f))
+        val initial = InfiniteCanvasPersistence.encode(
+            InfiniteCanvasCamera(0f, 0f, 0.7f), nodes)
+        var activeId by mutableStateOf<String?>(null)
+        var revision by mutableIntStateOf(0)
+        var saved = InfiniteCanvasPersistence.decode(initial)
+        composeRule.activityRule.scenario.onActivity { activity ->
+            activity.setContent {
+                MaterialTheme {
+                    Column(Modifier.fillMaxSize()) {
+                        Button(onClick = {
+                            activeId = "STYLE:primary"
+                            revision++
+                        }, modifier = Modifier.testTag("test-main-open-style")) {
+                            Text("Open style in unified canvas")
+                        }
+                        InfiniteCanvasHost(
+                            sessionId = 86L, savedScene = initial,
+                            onSaveScene = { saved = InfiniteCanvasPersistence.decode(it) },
+                            entries = listOf(InfiniteCanvasEntry("preview", "视频"),
+                                InfiniteCanvasEntry("STYLE:primary", "样式")),
+                            gestureOwned = false, onAddTool = {},
+                            onActivate = { activeId = it },
+                            onUndo = {}, onRedo = {}, canUndo = false, canRedo = false,
+                            requestedActiveToolId = activeId,
+                            requestedFocusRevision = revision,
+                            modifier = Modifier.weight(1f).fillMaxWidth(),
+                        ) { id, _ -> Text(id, Modifier.testTag("content-" + id)) }
+                    }
+                }
+            }
+        }
+        composeRule.onNodeWithTag("test-main-open-style").performClick()
+        composeRule.onNodeWithTag("spatial-native-content-STYLE-primary").assertExists()
+        composeRule.onNodeWithTag("spatial-return-to-board").performClick()
+        composeRule.onNodeWithTag("spatial-native-content-STYLE-primary").assertDoesNotExist()
+        // The identity did not change: only a new explicit user action can
+        // re-open the existing tool rather than relying on ID-change effects.
+        composeRule.onNodeWithTag("test-main-open-style").performClick()
         composeRule.onNodeWithTag("spatial-native-content-STYLE-primary").assertExists()
         assertEquals(nodes, saved.second)
     }
