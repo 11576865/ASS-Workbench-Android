@@ -82,3 +82,16 @@ The v2 host originally improved low-zoom legibility while silently losing portio
 Tests have been added for persistence v1/v2, layout lock, safe arrangement, focused toolbar reachability, tool lifecycle callbacks, focused switcher, and unsaveable editor draft continuity through semantic zoom.
 
 **Validation boundary:** the initial v2 emulator run had 5 remaining failures out of 111 tests (four missing `spatial-add-tool` on initial focused entry and one resident left-rail visibility). New code and tests are **Pending CI/Emulator**; this document does not claim they passed. Real-device touch, IME, drawing, very-large-workspace performance and full multi-tool simultaneous write-conflict semantics remain separate acceptance tasks.
+
+## Usable focused-stage composition — 2026-10-10 (follow-up)
+
+The former focused editor was a full-screen replacement for the canvas. That prevented a subtitle/parameter author from observing the real video/ASS result without switching views. The updated focused stage instead composes the **real video preview and real production editor simultaneously** whenever a separate visible preview node exists:
+
+- On narrow Android viewports: a vertically stacked reference preview above the editor. On >=840 world-dp width: a horizontal video+editor split.
+- The user can hide the reference, restore it, or cycle its approximate proportion between 25%, 40% and 54%; all are presentation-only state. The preview uses the existing renderer, document state and media clock, not a screenshot, replacement scene graph or fabricated preview.
+- Soft-keyboard visibility temporarily collapses the reference to recover authoring height, without overwriting the saved user choice.
+- A resident tool rail is given dedicated width in the focused stage rather than covering the real editor's hit targets. Narrow rails use 88 dp, otherwise 112 dp.
+- The primary editor is hosted in a keyed `movableContentOf` scope and the active node/renderer callbacks are read via `rememberUpdatedState`. This is intended to preserve plain `remember` draft state while the preview is resized/hidden/restored and pane layout changes. The secondary media renderer can be torn down when hidden.
+- New connected regression exercises the real two-pane composition, reference controls and a non-saveable draft across visibility/size changes.
+
+This does **not** prove native moving-video latency, IME ergonomics on all OEM devices, arbitrary dual-authoring tools, or draft continuity across workspace-session replacement. Automated tests for the latest PR head are **Pending CI/Emulator**, and visual/device acceptance is still outstanding.
