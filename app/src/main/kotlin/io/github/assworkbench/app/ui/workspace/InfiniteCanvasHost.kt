@@ -164,6 +164,10 @@ internal fun InfiniteCanvasHost(
             // or dismissing a dialog can recompose the workspace controller.
             onSaveScene(InfiniteCanvasPersistence.encode(nextScene.first, nextScene.second))
             focusedId = id
+            // A deliberate recall or birdseye navigation cancels an abandoned
+            // directory transaction. Future unrelated ToolInstance changes must
+            // never steal navigation focus.
+            pendingToolSelection = null
             cardMenuId = null
             toolDrawerOpen = toolDrawerResident
             active(id)
