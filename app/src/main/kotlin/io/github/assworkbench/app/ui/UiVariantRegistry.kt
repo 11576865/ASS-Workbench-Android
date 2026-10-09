@@ -24,12 +24,12 @@ internal enum class WorkspacePresentationMode(
     ),
     CANVAS_EXPERIMENTAL(
         title = "自由 Canvas",
-        status = UiVariantStatus.EXPERIMENTAL,
+        status = UiVariantStatus.ARCHIVED,
         description = "以预览为底层，多个工具作为可移动 Surface 叠加与组织。",
     ),
     PAGER_EXPERIMENTAL(
         title = "聚焦翻页工作台",
-        status = UiVariantStatus.EXPERIMENTAL,
+        status = UiVariantStatus.ARCHIVED,
         description = "字幕、预览、当前工具三页切换；一次只把一个主要任务放到前台。",
     ),
     SPATIAL_EXPERIMENTAL(
@@ -39,32 +39,32 @@ internal enum class WorkspacePresentationMode(
     ),
     PRECISION_LENS_EXPERIMENTAL(
         title = "操纵杆精密放大工作台",
-        status = UiVariantStatus.EXPERIMENTAL,
+        status = UiVariantStatus.ARCHIVED,
         description = "围绕字幕几何操纵杆加入局部放大、粗细调、吸附预告、触觉反馈与实时读数。",
     ),
     TOOL_INSTANCES_EXPERIMENTAL(
         title = "工具实例工作台",
-        status = UiVariantStatus.EXPERIMENTAL,
+        status = UiVariantStatus.ARCHIVED,
         description = "同一工具可多实例；临时、驻留、侧书签和隐藏状态彼此独立，绑定与局部现场随实例保留。",
     ),
     GLASS_LAYERED_EXPERIMENTAL(
         title = "玻璃叠层工作台",
-        status = UiVariantStatus.EXPERIMENTAL,
+        status = UiVariantStatus.ARCHIVED,
         description = "工具以独立透明/磨砂/实底层叠加在预览上；支持真实背景模糊、层概览与临时看穿。",
     ),
     SUBTITLE_OBJECT_EXPERIMENTAL(
         title = "字幕对象工作台",
-        status = UiVariantStatus.EXPERIMENTAL,
+        status = UiVariantStatus.ARCHIVED,
         description = "长按画面冻结命中时刻并选择字幕对象；能力围绕对象展开，并保留候选置信与关系信息。",
     ),
     EDGE_BOOKMARK_EXPERIMENTAL(
         title = "四边书签工作台",
-        status = UiVariantStatus.EXPERIMENTAL,
+        status = UiVariantStatus.ARCHIVED,
         description = "左右书签轨与四边工具层围绕中央预览展开；边层可临时、驻留、拖动预览并吸附尺寸。",
     ),
     TIMELINE_DOCK_EXPERIMENTAL(
         title = "常驻时间轴工作台",
-        status = UiVariantStatus.EXPERIMENTAL,
+        status = UiVariantStatus.ARCHIVED,
         description = "预览与底部时间骨架持续共存；时间轴可上拉展开、下拉收拢并调节高度，保持同一时间视口现场。",
     ),
 }
