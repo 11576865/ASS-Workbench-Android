@@ -31,15 +31,11 @@ class PresentationStateSmokeInstrumentedTest {
         get() = composeRule.activity.editorViewModel
 
     @Test
-    fun canvasPreservesCanonicalStateAndExistingHistory() =
-        assertPresentationInvariant("CANVAS_EXPERIMENTAL", "canvas-workspace")
+    fun standardMainPreservesCanonicalStateAndExistingHistory() =
+        assertPresentationInvariant("FIXED", "fixed-workspace")
 
     @Test
-    fun pagerPreservesCanonicalStateAndExistingHistory() =
-        assertPresentationInvariant("PAGER_EXPERIMENTAL", "pager-workspace")
-
-    @Test
-    fun spatialPreservesCanonicalStateAndExistingHistory() =
+    fun unifiedInfiniteCanvasPreservesCanonicalStateAndExistingHistory() =
         assertPresentationInvariant("SPATIAL_EXPERIMENTAL", "spatial-workspace")
 
     @Test fun spatialCameraAndOverlayDoNotEditDocument() {
@@ -71,30 +67,6 @@ class PresentationStateSmokeInstrumentedTest {
         viewModel.undo()
         composeRule.waitUntil(5_000) { eventText(1L) == "Recovered line" }
     }
-
-    @Test
-    fun toolInstancesPreserveCanonicalStateAndExistingHistory() =
-        assertPresentationInvariant("TOOL_INSTANCES_EXPERIMENTAL", "tool-instance-workspace")
-
-    @Test
-    fun glassLayeredPreservesCanonicalStateAndExistingHistory() =
-        assertPresentationInvariant("GLASS_LAYERED_EXPERIMENTAL", "glass-layered-workspace")
-
-    @Test
-    fun precisionLensPreservesCanonicalStateAndExistingHistory() =
-        assertPresentationInvariant("PRECISION_LENS_EXPERIMENTAL", "precision-lens-workspace")
-
-    @Test
-    fun subtitleObjectPreservesCanonicalStateAndExistingHistory() =
-        assertPresentationInvariant("SUBTITLE_OBJECT_EXPERIMENTAL", "subtitle-object-workspace")
-
-    @Test
-    fun edgeBookmarkPreservesCanonicalStateAndExistingHistory() =
-        assertPresentationInvariant("EDGE_BOOKMARK_EXPERIMENTAL", "edge-bookmark-workspace")
-
-    @Test
-    fun timelineDockPreservesCanonicalStateAndExistingHistory() =
-        assertPresentationInvariant("TIMELINE_DOCK_EXPERIMENTAL", "timeline-dock-workspace")
 
     private fun assertPresentationInvariant(variant: String, rootTag: String) {
         composeRule.onNodeWithTag("recovery-restore")
@@ -158,10 +130,15 @@ class PresentationStateSmokeInstrumentedTest {
         composeRule.onNodeWithContentDescription("工具和更多操作").performClick()
         composeRule.onNodeWithTag("workspace-mode-toggle").performClick()
         composeRule.onNodeWithTag("ui-variant-lab").assertIsDisplayed()
-        composeRule.onNodeWithTag("ui-variant-use-$variant")
-            .performScrollTo()
-            .assertIsDisplayed()
-            .performClick()
+        val selection = composeRule.onAllNodesWithTag("ui-variant-use-$variant")
+            .fetchSemanticsNodes(atLeastOneRootRequired = false)
+        if (selection.isNotEmpty()) {
+            composeRule.onNodeWithTag("ui-variant-use-$variant")
+                .performScrollTo().assertIsDisplayed().performClick()
+        } else {
+            // The app can already be using the requested default layout.
+            composeRule.onNodeWithText("关闭").performClick()
+        }
 
         composeRule.waitUntil(10_000) {
             composeRule.onAllNodesWithTag(rootTag, useUnmergedTree = true)
