@@ -19,6 +19,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -26,6 +27,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
@@ -384,13 +386,29 @@ internal fun InfiniteCanvasHost(
                                         }
                                     }
                                 }
-                                if (camera.scale >= 0.95f &&
-                                    (entry.id != "preview" && entry.id != "audio" ||
-                                        shouldComposeCanvasTool(camera, node, viewportW, viewportH))) {
-                                    // Only media evidence/preview is suspended outside the viewport.
-                                    // General editors may hold non-saveable uncommitted drafts,
-                                    // so do not unmount them without a proven edit-session contract.
-                                    // All world nodes remain recallable in birdseye and tool rails.
+                                val compact = camera.scale < 0.95f
+                                val mediaNode = entry.id == "preview" || entry.id == "audio"
+                                if (!mediaNode) {
+                                    // Retain the *same* editor composition while a board node
+                                    // changes LOD. A compact card merely masks drawing and input;
+                                    // it must not destroy uncommitted non-saveable drafts.
+                                    Box(Modifier.weight(1f).fillMaxWidth()) {
+                                        Box(Modifier
+                                            .then(if (compact) Modifier.requiredSize(
+                                                node.width.dp, (node.height - 92f).coerceAtLeast(160f).dp,
+                                            ) else Modifier.fillMaxSize())
+                                            .alpha(if (compact) 0f else 1f)
+                                            .then(if (compact) Modifier.clearAndSetSemantics { } else Modifier)
+                                            .testTag("spatial-live-" + entry.id.replace(':', '-'))) {
+                                            contentState.SaveableStateProvider(sessionId.toString() + "/" + entry.id) {
+                                                content(entry.id, !node.passthrough)
+                                            }
+                                        }
+                                        if (compact) CanvasToolSummary(entry, width, height,
+                                            enabled = !gestureOwned, onOpen = { focus(entry.id) })
+                                    }
+                                } else if (!compact &&
+                                    shouldComposeCanvasTool(camera, node, viewportW, viewportH)) {
                                     Box(Modifier.weight(1f).fillMaxWidth()
                                         .background(MaterialTheme.colorScheme.surface.copy(alpha = node.alpha))
                                         .testTag("spatial-live-" + entry.id.replace(':', '-'))) {
@@ -399,30 +417,9 @@ internal fun InfiniteCanvasHost(
                                         }
                                     }
                                 } else {
-                                    Box(Modifier.weight(1f).fillMaxWidth()
-                                        .clickable(enabled = !gestureOwned) { focus(entry.id) }
-                                        .testTag("spatial-open-" + entry.id.replace(':', '-'))) {
-                                        Column(Modifier.align(Alignment.Center).padding(8.dp),
-                                            horizontalAlignment = Alignment.CenterHorizontally) {
-                                            Icon(
-                                                when (entry.id) {
-                                                    "preview" -> Icons.Filled.Movie
-                                                    "subtitles" -> Icons.Filled.Subtitles
-                                                    "audio" -> Icons.Filled.GraphicEq
-                                                    else -> Icons.Filled.Tune
-                                                },
-                                                contentDescription = "打开 " + entry.title,
-                                                tint = MaterialTheme.colorScheme.primary,
-                                            )
-                                            if (width >= 148f && height >= 140f) {
-                                                Spacer(Modifier.height(6.dp))
-                                                Text(entry.title, style = MaterialTheme.typography.titleSmall,
-                                                    maxLines = 1)
-                                                if (entry.subtitle.isNotBlank()) Text(entry.subtitle,
-                                                    style = MaterialTheme.typography.labelSmall,
-                                                    maxLines = 1)
-                                            }
-                                        }
+                                    Box(Modifier.weight(1f).fillMaxWidth()) {
+                                        CanvasToolSummary(entry, width, height,
+                                            enabled = !gestureOwned, onOpen = { focus(entry.id) })
                                     }
                                 }
                                 Icon(Icons.Filled.OpenInFull, "调整 " + entry.title + " 大小",
@@ -709,6 +706,39 @@ internal fun InfiniteCanvasHost(
                 IconButton(onClick = onRedo, enabled = canRedo) {
                     Icon(Icons.Filled.Redo, "重做字幕编辑")
                 }
+            }
+        }
+    }
+}
+
+/** Compact LOD visual; the native editor remains independent of camera scale. */
+@Composable
+private fun CanvasToolSummary(
+    entry: InfiniteCanvasEntry,
+    width: Float,
+    height: Float,
+    enabled: Boolean,
+    onOpen: () -> Unit,
+) {
+    Box(Modifier.fillMaxSize().clickable(enabled = enabled, onClick = onOpen)
+        .testTag("spatial-open-" + entry.id.replace(':', '-'))) {
+        Column(Modifier.align(Alignment.Center).padding(8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(
+                when (entry.id) {
+                    "preview" -> Icons.Filled.Movie
+                    "subtitles" -> Icons.Filled.Subtitles
+                    "audio" -> Icons.Filled.GraphicEq
+                    else -> Icons.Filled.Tune
+                },
+                contentDescription = "打开 " + entry.title,
+                tint = MaterialTheme.colorScheme.primary,
+            )
+            if (width >= 148f && height >= 140f) {
+                Spacer(Modifier.height(6.dp))
+                Text(entry.title, style = MaterialTheme.typography.titleSmall, maxLines = 1)
+                if (entry.subtitle.isNotBlank()) Text(entry.subtitle,
+                    style = MaterialTheme.typography.labelSmall, maxLines = 1)
             }
         }
     }
