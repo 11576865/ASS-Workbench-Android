@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -24,6 +23,7 @@ import io.github.assworkbench.app.ui.workspace.InfiniteCanvasPersistence
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -107,27 +107,33 @@ class InfiniteCanvasInstrumentedTest {
         composeRule.waitForIdle()
     }
 
-    @Test fun surfaceMeasurementIsNotClampedToThePhoneViewport() {
-        var expectedWidth = 0
-        val scene = InfiniteCanvasPersistence.encode(InfiniteCanvasCamera(),
-            listOf(InfiniteCanvasNode("preview", width = 900f, height = 300f)))
-        composeRule.activityRule.scenario.onActivity { activity ->
-            activity.setContent {
-                MaterialTheme {
-                    expectedWidth = (900f * LocalDensity.current.density).roundToInt()
-                    InfiniteCanvasHost(
-                        sessionId = 1L, savedScene = scene, onSaveScene = {},
-                        entries = listOf(InfiniteCanvasEntry("preview", "Video")),
-                        gestureOwned = false, onAddTool = {}, onActivate = {},
-                        onUndo = {}, onRedo = {}, canUndo = false, canRedo = false,
-                        modifier = Modifier.fillMaxSize(),
-                    ) { _, _ -> Text("Real-sized surface") }
-                }
-            }
-        }
-        composeRule.waitForIdle()
-        assertEquals(expectedWidth,
-            composeRule.onNodeWithTag("spatial-node-preview", useUnmergedTree = true)
-                .fetchSemanticsNode().layoutInfo.width)
+    @Test fun overviewCardsOpenNativeSizedEditorAndReturnWithoutChangingNodes() {
+        val fixture = OverviewFixture(listOf(
+            InfiniteCanvasNode("preview", width = 900f, height = 300f),
+        ))
+        showOverviewFixture(fixture)
+        val original = fixture.saved.second
+        composeRule.onNodeWithTag("spatial-open-preview").performClick()
+        composeRule.onNodeWithTag("spatial-focused-editor").assertExists()
+        composeRule.onNodeWithTag("spatial-native-content-preview").assertExists()
+        composeRule.onNodeWithTag("overview-content-preview").assertExists()
+        composeRule.onNodeWithTag("spatial-node-preview").assertDoesNotExist()
+        composeRule.onNodeWithTag("spatial-return-to-board").performClick()
+        composeRule.onNodeWithTag("spatial-node-preview").assertExists()
+        composeRule.onNodeWithTag("spatial-native-content-preview").assertDoesNotExist()
+        assertEquals(original, fixture.saved.second)
+    }
+
+    @Test fun focusedEditorIsNotShrunkByBoardCamera() {
+        val fixture = OverviewFixture(listOf(
+            InfiniteCanvasNode("preview", x = 8000f, width = 900f),
+        ))
+        showOverviewFixture(fixture)
+        composeRule.onNodeWithTag("spatial-quick-preview").performClick()
+        val editorWidth = composeRule.onNodeWithTag("spatial-focused-editor")
+            .fetchSemanticsNode().layoutInfo.width
+        assertTrue(editorWidth > 0)
+        assertTrue(editorWidth < (900f * composeRule.activity.resources.displayMetrics.density).roundToInt())
+        composeRule.onNodeWithTag("overview-content-preview").assertExists()
     }
 }
