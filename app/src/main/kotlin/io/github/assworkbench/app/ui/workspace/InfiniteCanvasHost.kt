@@ -74,6 +74,9 @@ internal fun InfiniteCanvasHost(
     var toolDrawerResident by rememberSaveable(sessionId) { mutableStateOf(false) }
     var recallOpen by remember { mutableStateOf(false) }
     var cardMenuId by remember(sessionId) { mutableStateOf<String?>(null) }
+    // A directory selection may asynchronously create a ToolInstance. Carry the
+    // invoking set of IDs until the new production tool is actually available.
+    var pendingToolSelection by remember(sessionId) { mutableStateOf<Set<String>?>(null) }
     val contentState = rememberSaveableStateHolder()
     val density = LocalDensity.current.density
     val active by rememberUpdatedState(onActivate)
@@ -94,16 +97,31 @@ internal fun InfiniteCanvasHost(
             }
             scene = scene.first to (scene.second + additions)
         }
-        if (focusedId != null && entries.none { it.id == focusedId }) focusedId = null
+        val beforePicker = pendingToolSelection
+        if (beforePicker != null) {
+            entries.lastOrNull {
+                it.id !in beforePicker && it.id != "CAPABILITIES:primary"
+            }?.let { opened ->
+                focusedId = opened.id
+                pendingToolSelection = null
+                active(opened.id)
+            }
+        }
+        if (focusedId != null && entries.none { it.id == focusedId } &&
+            focusedId != "CAPABILITIES:primary") focusedId = null
     }
 
     fun updateNode(node: InfiniteCanvasNode) {
         scene = scene.first to scene.second.map { if (it.id == node.id) node else it }
     }
     fun showToolPicker() {
+        if (gestureOwned) return
+        pendingToolSelection = entries.mapTo(mutableSetOf()) { it.id }
         scene = scene.first to scene.second.map {
             if (it.id == "CAPABILITIES:primary") it.copy(hidden = false) else it
         }
+        // A tool directory is a real native editor, never a 0.85x summary card.
+        focusedId = "CAPABILITIES:primary"
         onAddTool()
     }
 
@@ -118,7 +136,11 @@ internal fun InfiniteCanvasHost(
             }
         }
         val boardMode = focused == null
-        BackHandler(enabled = !gestureOwned && focused != null && !birdseyeOpen) { focusedId = null }
+        BackHandler(enabled = !gestureOwned && focused != null && !birdseyeOpen) {
+            focusedId = null
+            if (toolDrawerResident) toolDrawerOpen = true
+            pendingToolSelection = null
+        }
         BackHandler(enabled = !gestureOwned && boardMode && toolDrawerOpen && !birdseyeOpen) {
             toolDrawerOpen = false
             toolDrawerResident = false
@@ -129,8 +151,12 @@ internal fun InfiniteCanvasHost(
             val node = scene.second.firstOrNull { it.id == id } ?: return
             if (entries.none { it.id == id }) return
             val expanded = expandAudioCanvasForFocus(node, 1f, viewportH)
-            scene = canvasCameraForNode(node, viewportW, viewportH) to
+            val nextScene = canvasCameraForNode(node, viewportW, viewportH) to
                 scene.second.map { if (it.id == id) expanded.copy(hidden = false) else it }
+            scene = nextScene
+            // Publish the newly recalled geometry before activating another tool
+            // or dismissing a dialog can recompose the workspace controller.
+            onSaveScene(InfiniteCanvasPersistence.encode(nextScene.first, nextScene.second))
             focusedId = id
             cardMenuId = null
             toolDrawerOpen = toolDrawerResident
@@ -152,7 +178,10 @@ internal fun InfiniteCanvasHost(
             focusedId = null
         }
         fun returnToBoard() {
-            if (!gestureOwned) focusedId = null
+            if (gestureOwned) return
+            focusedId = null
+            if (toolDrawerResident) toolDrawerOpen = true
+            pendingToolSelection = null
         }
 
         if (birdseyeOpen) CanvasOverviewDialog(
@@ -364,8 +393,9 @@ internal fun InfiniteCanvasHost(
                             Text(entry.title, maxLines = 1)
                         }
                     }
-                    TextButton(onClick = ::showToolPicker, enabled = !gestureOwned) {
-                        Icon(Icons.Filled.Add, null, Modifier.size(18.dp)); Text("工具")
+                    TextButton(onClick = ::showToolPicker, enabled = !gestureOwned,
+                        modifier = Modifier.testTag("spatial-add-tool")) {
+                        Icon(Icons.Filled.Add, null, Modifier.size(18.dp)); Text("＋ 工具")
                     }
                 }
             }
