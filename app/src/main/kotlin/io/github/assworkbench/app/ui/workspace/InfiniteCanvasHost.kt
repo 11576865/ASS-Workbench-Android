@@ -34,8 +34,9 @@ internal data class InfiniteCanvasEntry(val id: String, val title: String, val s
 
 /**
  * The board and the editor are different interaction layers:
- * - the camera transforms summary cards and world-space layout only;
- * - the actual production Composable is hosted at native screen density.
+ * - camera transforms world placement but never scales native control density;
+ * - zoomed-out nodes are summaries, close-up nodes can host live tools;
+ * - an explicitly focused tool is hosted at native screen density.
  * No pan/zoom or scene operation is routed through ASS document history.
  */
 @Composable
@@ -154,7 +155,7 @@ internal fun InfiniteCanvasHost(
             onFocus = { id -> focus(id); if (!gestureOwned) birdseyeOpen = false },
         )
 
-        // The working renderer is never placed in this camera-transformed region.
+        // Spatial summaries are used when zoomed out; close-up tools render at native density.
         if (boardMode) {
             Box(Modifier.fillMaxSize().testTag("spatial-background")
                 .pointerInput(sessionId, gestureOwned) {
@@ -271,28 +272,41 @@ internal fun InfiniteCanvasHost(
                                         }
                                     }
                                 }
-                                Box(Modifier.weight(1f).fillMaxWidth().clickable(enabled = !gestureOwned) {
-                                    focus(entry.id)
-                                }.testTag("spatial-open-" + entry.id.replace(':', '-'))) {
-                                    Column(Modifier.align(Alignment.Center).padding(8.dp),
-                                        horizontalAlignment = Alignment.CenterHorizontally) {
-                                        Icon(
-                                            when (entry.id) {
-                                                "preview" -> Icons.Filled.Movie
-                                                "subtitles" -> Icons.Filled.Subtitles
-                                                "audio" -> Icons.Filled.GraphicEq
-                                                else -> Icons.Filled.Tune
-                                            },
-                                            contentDescription = "打开 " + entry.title,
-                                            tint = MaterialTheme.colorScheme.primary,
-                                        )
-                                        if (width >= 148f && height >= 140f) {
-                                            Spacer(Modifier.height(6.dp))
-                                            Text(entry.title, style = MaterialTheme.typography.titleSmall,
-                                                maxLines = 1)
-                                            if (entry.subtitle.isNotBlank()) Text(entry.subtitle,
-                                                style = MaterialTheme.typography.labelSmall,
-                                                maxLines = 1)
+                                if (camera.scale >= 0.95f) {
+                                    // Multiple actual tools may coexist at readable native density.
+                                    // Camera scale moves and spaces surfaces; it never scales fonts,
+                                    // slider touch targets, video renderer pixels or pointer deltas.
+                                    Box(Modifier.weight(1f).fillMaxWidth()
+                                        .background(MaterialTheme.colorScheme.surface.copy(alpha = node.alpha))
+                                        .testTag("spatial-live-" + entry.id.replace(':', '-'))) {
+                                        contentState.SaveableStateProvider(sessionId.toString() + "/" + entry.id) {
+                                            content(entry.id, !node.passthrough)
+                                        }
+                                    }
+                                } else {
+                                    Box(Modifier.weight(1f).fillMaxWidth()
+                                        .clickable(enabled = !gestureOwned) { focus(entry.id) }
+                                        .testTag("spatial-open-" + entry.id.replace(':', '-'))) {
+                                        Column(Modifier.align(Alignment.Center).padding(8.dp),
+                                            horizontalAlignment = Alignment.CenterHorizontally) {
+                                            Icon(
+                                                when (entry.id) {
+                                                    "preview" -> Icons.Filled.Movie
+                                                    "subtitles" -> Icons.Filled.Subtitles
+                                                    "audio" -> Icons.Filled.GraphicEq
+                                                    else -> Icons.Filled.Tune
+                                                },
+                                                contentDescription = "打开 " + entry.title,
+                                                tint = MaterialTheme.colorScheme.primary,
+                                            )
+                                            if (width >= 148f && height >= 140f) {
+                                                Spacer(Modifier.height(6.dp))
+                                                Text(entry.title, style = MaterialTheme.typography.titleSmall,
+                                                    maxLines = 1)
+                                                if (entry.subtitle.isNotBlank()) Text(entry.subtitle,
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    maxLines = 1)
+                                            }
                                         }
                                     }
                                 }
