@@ -4014,14 +4014,16 @@ private fun ModernAppBar(
                 ) {
                     Icon(if (searchOpen) Icons.Filled.Close else Icons.Filled.Search, null)
                 }
-                TooltipIconButton(
-                    if (workspaceMode == WorkspacePresentationMode.FIXED)
-                        "切换至无限画布" else "切换至标准工作台",
-                    onToggleWorkspaceMode,
+                IconButton(
+                    onClick = onToggleWorkspaceMode,
+                    modifier = Modifier.size(40.dp).testTag("workspace-direct-mode-toggle"),
                 ) {
-                    Icon(if (workspaceMode == WorkspacePresentationMode.FIXED)
-                        Icons.Filled.DashboardCustomize else Icons.Filled.Dashboard, null,
-                        Modifier.testTag("workspace-direct-mode-toggle"))
+                    Icon(
+                        if (workspaceMode == WorkspacePresentationMode.FIXED)
+                            Icons.Filled.DashboardCustomize else Icons.Filled.Dashboard,
+                        contentDescription = if (workspaceMode == WorkspacePresentationMode.FIXED)
+                            "切换至无限画布" else "切换至标准工作台",
+                    )
                 }
                 TooltipIconButton("保存", onSave, enabled = uiState.document.subtitleLoaded) { Icon(Icons.Filled.Save, null) }
                 TooltipIconButton("撤销", uiActions::undo, enabled = uiState.history.canUndo) { Icon(Icons.Filled.Undo, null) }
