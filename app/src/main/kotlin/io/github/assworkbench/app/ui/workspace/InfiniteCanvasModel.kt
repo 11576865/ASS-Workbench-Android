@@ -102,12 +102,13 @@ internal data class InfiniteCanvasNode(
     val width: Float = 400f, val height: Float = 320f,
     val z: Int = 1, val alpha: Float = 1f,
     val passthrough: Boolean = false, val hidden: Boolean = false,
+    val layoutLocked: Boolean = false,
 ) {
     fun move(dx: Float, dy: Float): InfiniteCanvasNode =
-        if (dx.isFinite() && dy.isFinite() && (x + dx).isFinite() && (y + dy).isFinite())
+        if (!layoutLocked && dx.isFinite() && dy.isFinite() && (x + dx).isFinite() && (y + dy).isFinite())
             copy(x = x + dx, y = y + dy) else this
     fun resize(dw: Float, dh: Float): InfiniteCanvasNode =
-        if (dw.isFinite() && dh.isFinite() && (width + dw).isFinite() && (height + dh).isFinite())
+        if (!layoutLocked && dw.isFinite() && dh.isFinite() && (width + dw).isFinite() && (height + dh).isFinite())
             copy(width = (width + dw).coerceIn(220f, 2400f), height = (height + dh).coerceIn(160f, 1800f)) else this
 }
 
@@ -121,6 +122,39 @@ internal fun expandAudioCanvasForFocus(node: InfiniteCanvasNode, scale: Float, v
     return node.copy(height = maxOf(node.height, screenHeight / scale).coerceAtMost(1800f))
 }
 
+
+/**
+ * Arrange only visible, unlocked nodes; never rewrite pinned geometry, hidden
+ * cards, domain values or z-order. Start below locked cards so a convenience
+ * layout cannot cover deliberately anchored windows.
+ */
+internal fun arrangeCanvasNodes(nodes: List<InfiniteCanvasNode>, columns: Int, gap: Float = 40f): List<InfiniteCanvasNode> {
+    if (columns !in 1..6 || !gap.isFinite() || gap < 0f) return nodes
+    val movable = nodes.filter { !it.hidden && !it.layoutLocked }
+    if (movable.isEmpty()) return nodes
+    val locked = nodes.filter { !it.hidden && it.layoutLocked }
+    val originY = maxOf(0f, locked.maxOfOrNull { it.y + it.height } ?: 0f) +
+        if (locked.isNotEmpty()) gap else 0f
+    if (!originY.isFinite()) return nodes
+    val widths = FloatArray(columns)
+    movable.forEachIndexed { i, node ->
+        widths[i % columns] = maxOf(widths[i % columns], node.width)
+    }
+    val starts = FloatArray(columns)
+    for (i in 1 until columns) starts[i] = starts[i - 1] + widths[i - 1] + gap
+    if (starts.any { !it.isFinite() }) return nodes
+    val relocated = mutableMapOf<String, InfiniteCanvasNode>()
+    var y = originY
+    movable.chunked(columns).forEach { row ->
+        row.forEachIndexed { col, node ->
+            relocated[node.id] = node.copy(x = starts[col], y = y)
+        }
+        y += (row.maxOfOrNull { it.height } ?: 0f) + gap
+        if (!y.isFinite()) return nodes
+    }
+    return nodes.map { relocated[it.id] ?: it }
+}
+
 internal fun raiseCanvasNode(nodes: List<InfiniteCanvasNode>, id: String): List<InfiniteCanvasNode> {
     val normalized = if ((nodes.maxOfOrNull { it.z } ?: 0) >= 999_999)
         nodes.sortedBy { it.z }.mapIndexed { i, n -> n.copy(z = i + 1) } else nodes
@@ -132,22 +166,26 @@ internal fun raiseCanvasNode(nodes: List<InfiniteCanvasNode>, id: String): List<
 internal object InfiniteCanvasPersistence {
     private const val SEP = '\u001f'
     fun encode(camera: InfiniteCanvasCamera, nodes: List<InfiniteCanvasNode>): List<String> =
-        listOf("infinite-v1", listOf(camera.x, camera.y, camera.scale).joinToString(SEP.toString())) +
-            nodes.map { listOf(it.id, it.x, it.y, it.width, it.height, it.z, it.alpha, it.passthrough, it.hidden).joinToString(SEP.toString()) }
+        listOf("infinite-v2", listOf(camera.x, camera.y, camera.scale).joinToString(SEP.toString())) +
+            nodes.map { listOf(it.id, it.x, it.y, it.width, it.height, it.z, it.alpha, it.passthrough, it.hidden, it.layoutLocked).joinToString(SEP.toString()) }
     fun decode(rows: List<String>): Pair<InfiniteCanvasCamera, List<InfiniteCanvasNode>> {
-        if (rows.firstOrNull() != "infinite-v1" || rows.size < 2) return InfiniteCanvasCamera() to emptyList()
+        val version = rows.firstOrNull()
+        if (version !in listOf("infinite-v1", "infinite-v2") || rows.size < 2)
+            return InfiniteCanvasCamera() to emptyList()
         val c = rows[1].split(SEP).mapNotNull { it.toFloatOrNull()?.takeIf(Float::isFinite) }
         if (c.size != 3 || c[2] !in 0.025f..2f) return InfiniteCanvasCamera() to emptyList()
         val nodes = rows.drop(2).mapNotNull { row ->
             val p = row.split(SEP)
-            if (p.size != 9 || p[0].isBlank()) return@mapNotNull null
+            if (p.size != (if (version == "infinite-v2") 10 else 9) || p[0].isBlank()) return@mapNotNull null
             val f = p.slice(1..4).map { it.toFloatOrNull()?.takeIf(Float::isFinite) ?: return@mapNotNull null }
             if (f[2] !in 220f..2400f || f[3] !in 160f..1800f) return@mapNotNull null
             val z = p[5].toIntOrNull()?.takeIf { it in 1..1_000_000 } ?: return@mapNotNull null
             val alpha = p[6].toFloatOrNull()?.takeIf { it.isFinite() && it in 0f..1f } ?: return@mapNotNull null
             val pass = p[7].toBooleanStrictOrNull() ?: return@mapNotNull null
             val hidden = p[8].toBooleanStrictOrNull() ?: return@mapNotNull null
-            InfiniteCanvasNode(p[0], f[0], f[1], f[2], f[3], z, alpha, pass, hidden)
+            val locked = if (version == "infinite-v2")
+                p[9].toBooleanStrictOrNull() ?: return@mapNotNull null else false
+            InfiniteCanvasNode(p[0], f[0], f[1], f[2], f[3], z, alpha, pass, hidden, locked)
         }.distinctBy { it.id }
         return InfiniteCanvasCamera(c[0], c[1], c[2]) to nodes
     }
