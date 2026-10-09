@@ -38,6 +38,25 @@ class PresentationStateSmokeInstrumentedTest {
     fun unifiedInfiniteCanvasPreservesCanonicalStateAndExistingHistory() =
         assertPresentationInvariant("SPATIAL_EXPERIMENTAL", "spatial-workspace")
 
+    @Test fun mainHeaderSwitchesBetweenOnlyTwoLayoutsWithoutMutatingDocument() {
+        composeRule.activityRule.scenario.onActivity { it.restoreDeterministicFixture() }
+        composeRule.waitUntil(10_000) { viewModel.state.value.document.events.size == 2 }
+        val canonical = viewModel.state.value.document
+        val focus = viewModel.state.value.focusedEventId
+        // A previously restored activity may start in either permitted layout.
+        composeRule.onNodeWithTag("workspace-direct-mode-toggle").performClick()
+        composeRule.waitForIdle()
+        val fixed = composeRule.onAllNodesWithTag("fixed-workspace", useUnmergedTree = true)
+            .fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()
+        val spatial = composeRule.onAllNodesWithTag("spatial-workspace", useUnmergedTree = true)
+            .fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()
+        assertTrue(fixed != spatial)
+        composeRule.onNodeWithTag("workspace-direct-mode-toggle").performClick()
+        composeRule.waitForIdle()
+        assertEquals(canonical, viewModel.state.value.document)
+        assertEquals(focus, viewModel.state.value.focusedEventId)
+    }
+
     @Test fun spatialCameraAndOverlayDoNotEditDocument() {
         composeRule.activityRule.scenario.onActivity { it.restoreDeterministicFixture() }
         composeRule.waitUntil(10_000) { viewModel.state.value.document.events.size == 2 }
