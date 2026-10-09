@@ -23,6 +23,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalDensity
@@ -316,6 +317,7 @@ internal fun InfiniteCanvasHost(
                                 (camera.x + node.x * camera.scale).dp,
                                 (camera.y + node.y * camera.scale).dp,
                             ).requiredSize(width.dp, height.dp)
+                                .graphicsLayer(alpha = node.alpha)
                                 .zIndex(node.z.toFloat())
                                 .testTag("spatial-node-" + entry.id.replace(':', '-')),
                             shape = MaterialTheme.shapes.large,
@@ -414,7 +416,23 @@ internal fun InfiniteCanvasHost(
                                                     cardMenuId = null
                                                     pendingToolSelection = null
                                                 })
-                                            DropdownMenuItem(text = { Text("收回工具") },
+                                            DropdownMenuItem(
+                                                text = { Text("透明度 " + (node.alpha * 100).toInt() + "% · 调整") },
+                                                modifier = Modifier.testTag("spatial-opacity-" + entry.id.replace(':', '-')),
+                                                onClick = {
+                                                    updateNode(node.copy(alpha = nextCanvasOpacity(node.alpha)))
+                                                    cardMenuId = null
+                                                },
+                                            )
+                                            DropdownMenuItem(
+                                    text = { Text("透明度 " + (node.alpha * 100).toInt() + "% · 调整") },
+                                    modifier = Modifier.testTag("spatial-opacity-" + entry.id.replace(':', '-')),
+                                    onClick = {
+                                        updateNode(node.copy(alpha = nextCanvasOpacity(node.alpha)))
+                                        cardMenuId = null
+                                    },
+                                )
+                                DropdownMenuItem(text = { Text("收回工具") },
                                                 onClick = { updateNode(node.copy(hidden = true)); cardMenuId = null })
                                             DropdownMenuItem(
                                                 text = { Text(if (node.alpha < 1f) "恢复实底" else "透明叠加") },
