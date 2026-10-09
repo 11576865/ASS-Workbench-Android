@@ -359,6 +359,13 @@ fun ModernEditorScreen(
                 onTool = ::openTool,
                 workspaceMode = workspaceMode,
                 onOpenUiVariantLab = { uiVariantLabOpen = true },
+                onToggleWorkspaceMode = {
+                    selectWorkspaceMode(
+                        if (workspaceMode == WorkspacePresentationMode.FIXED)
+                            WorkspacePresentationMode.SPATIAL_EXPERIMENTAL
+                        else WorkspacePresentationMode.FIXED
+                    )
+                },
                 onOpenProject = {
                     if (state.dirty) {
                         destructiveWorkspaceAction = DestructiveWorkspaceAction.OPEN_PROJECT
@@ -3935,6 +3942,7 @@ private fun ModernAppBar(
     onTool: (WorkbenchTool) -> Unit,
     workspaceMode: WorkspacePresentationMode,
     onOpenUiVariantLab: () -> Unit,
+    onToggleWorkspaceMode: () -> Unit,
     onOpenProject: () -> Unit,
     onSaveProject: () -> Unit,
     onExportSrt: () -> Unit,
@@ -3975,6 +3983,15 @@ private fun ModernAppBar(
                 ) {
                     Icon(if (searchOpen) Icons.Filled.Close else Icons.Filled.Search, null)
                 }
+                TooltipIconButton(
+                    if (workspaceMode == WorkspacePresentationMode.FIXED)
+                        "切换至无限画布" else "切换至标准工作台",
+                    onToggleWorkspaceMode,
+                ) {
+                    Icon(if (workspaceMode == WorkspacePresentationMode.FIXED)
+                        Icons.Filled.DashboardCustomize else Icons.Filled.Dashboard, null,
+                        Modifier.testTag("workspace-direct-mode-toggle"))
+                }
                 TooltipIconButton("保存", onSave, enabled = uiState.document.subtitleLoaded) { Icon(Icons.Filled.Save, null) }
                 TooltipIconButton("撤销", uiActions::undo, enabled = uiState.history.canUndo) { Icon(Icons.Filled.Undo, null) }
                 TooltipIconButton("重做", uiActions::redo, enabled = uiState.history.canRedo) { Icon(Icons.Filled.Redo, null) }
@@ -3999,7 +4016,7 @@ private fun ModernAppBar(
                         DropdownMenuItem(text = { Text("诊断") }, leadingIcon = { Icon(Icons.Filled.Tune, null) }, onClick = { moreMenuOpen = false; onTool(WorkbenchTool.DIAGNOSTICS) })
                         Divider()
                         DropdownMenuItem(
-                            text = { Text("UI 实验室 · " + workspaceMode.title) },
+                            text = { Text("工作区布局 · " + workspaceMode.title) },
                             leadingIcon = { Icon(Icons.Filled.ViewCarousel, null) },
                             onClick = { moreMenuOpen = false; onOpenUiVariantLab() },
                             modifier = Modifier.testTag("workspace-mode-toggle"),
