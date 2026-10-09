@@ -48,6 +48,10 @@ class PresentationStateSmokeInstrumentedTest {
         viewModel.focusEvent(1L, seek = false)
         viewModel.updateEventText(1L, "Overlay invariant")
         switchPresentation("SPATIAL_EXPERIMENTAL", "spatial-workspace")
+        if (composeRule.onAllNodesWithTag("spatial-return-to-board")
+                .fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()) {
+            composeRule.onNodeWithTag("spatial-return-to-board").performClick()
+        }
         val document = viewModel.state.value.document
         val selection = viewModel.state.value.focusedEventId
         composeRule.onNodeWithTag("spatial-zoom-out").performClick()
