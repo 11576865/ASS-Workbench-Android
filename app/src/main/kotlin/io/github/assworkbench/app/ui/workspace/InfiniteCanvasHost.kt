@@ -383,25 +383,31 @@ internal fun InfiniteCanvasHost(
             // Reusable tool access does not require travelling across world space.
             Surface(Modifier.align(Alignment.BottomCenter).padding(8.dp)
                 .zIndex(1_000_010f), shape = MaterialTheme.shapes.large, shadowElevation = 3.dp) {
-                Row(Modifier.horizontalScroll(rememberScrollState())
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                Row(Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically) {
-                    entries.forEach { entry ->
-                        val node = nodes.firstOrNull { it.id == entry.id }
-                        TextButton(
-                            enabled = node != null && !gestureOwned,
-                            onClick = { focus(entry.id) },
-                            modifier = Modifier.testTag("spatial-quick-" + entry.id.replace(':', '-')),
-                        ) {
-                            Icon(if (node?.hidden == true) Icons.Filled.VisibilityOff
-                                else Icons.Filled.Tab, null, Modifier.size(16.dp))
-                            Spacer(Modifier.width(4.dp))
-                            Text(entry.title, maxLines = 1)
-                        }
-                    }
+                    // Keep the only creation affordance inside the visible viewport.
+                    // Instance tabs may scroll without pushing the directory off-screen.
                     TextButton(onClick = ::showToolPicker, enabled = !gestureOwned,
                         modifier = Modifier.testTag("spatial-add-tool")) {
-                        Icon(Icons.Filled.Add, null, Modifier.size(18.dp)); Text("＋ 工具")
+                        Icon(Icons.Filled.Add, null, Modifier.size(18.dp))
+                        Text("＋ 工具")
+                    }
+                    VerticalDivider(Modifier.height(26.dp).padding(horizontal = 4.dp))
+                    Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()),
+                        verticalAlignment = Alignment.CenterVertically) {
+                        entries.forEach { entry ->
+                            val node = nodes.firstOrNull { it.id == entry.id }
+                            TextButton(
+                                enabled = node != null && !gestureOwned,
+                                onClick = { focus(entry.id) },
+                                modifier = Modifier.testTag("spatial-quick-" + entry.id.replace(':', '-')),
+                            ) {
+                                Icon(if (node?.hidden == true) Icons.Filled.VisibilityOff
+                                    else Icons.Filled.Tab, null, Modifier.size(16.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text(entry.title, maxLines = 1)
+                            }
+                        }
                     }
                 }
             }
