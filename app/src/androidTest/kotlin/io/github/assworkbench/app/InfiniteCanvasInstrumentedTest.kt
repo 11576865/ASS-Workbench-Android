@@ -40,6 +40,7 @@ class InfiniteCanvasInstrumentedTest {
         composeRule.onNodeWithTag("spatial-birdseye").performClick()
         composeRule.onNodeWithTag("spatial-birdseye-node-subtitles").performScrollTo().performClick()
         composeRule.waitForIdle()
+        composeRule.onNodeWithTag("spatial-native-content-subtitles").assertExists()
         val recalled = fixture.saved.second.first { it.id == "subtitles" }
         assertEquals(fixture.nodes.last().copy(hidden = false), recalled)
         assertFalse(recalled.hidden)
@@ -53,6 +54,7 @@ class InfiniteCanvasInstrumentedTest {
         composeRule.onNodeWithTag("spatial-birdseye").performClick()
         composeRule.onNodeWithTag("spatial-birdseye-map").performTouchInput { click(center) }
         composeRule.waitForIdle()
+        composeRule.onNodeWithTag("spatial-native-content-preview").assertExists()
         assertEquals(fixture.nodes, fixture.saved.second)
         assertNotEquals(InfiniteCanvasCamera(0f, 0f, 0.25f), fixture.saved.first)
         composeRule.onNodeWithTag("overview-content-preview").assertExists()
@@ -157,6 +159,36 @@ class InfiniteCanvasInstrumentedTest {
         composeRule.onNodeWithTag("spatial-zoom-in").performClick()
         composeRule.onNodeWithTag("spatial-live-preview").assertExists()
         assertEquals(fixture.nodes, fixture.saved.second)
+    }
+
+    @Test fun pickerSwitchesToAnAlreadyExistingToolInstance() {
+        val nodes = listOf(
+            InfiniteCanvasNode("CAPABILITIES:primary"),
+            InfiniteCanvasNode("POSITION:primary", x = 460f),
+        )
+        val initial = InfiniteCanvasPersistence.encode(
+            InfiniteCanvasCamera(0f, 0f, 0.85f), nodes)
+        var requestedId by mutableStateOf<String?>(null)
+        composeRule.activityRule.scenario.onActivity { activity ->
+            activity.setContent {
+                MaterialTheme {
+                    InfiniteCanvasHost(
+                        sessionId = 4L, savedScene = initial, onSaveScene = {},
+                        entries = nodes.map { InfiniteCanvasEntry(it.id, it.id) },
+                        gestureOwned = false,
+                        onAddTool = { requestedId = "CAPABILITIES:primary" },
+                        onActivate = {},
+                        onUndo = {}, onRedo = {}, canUndo = false, canRedo = false,
+                        requestedActiveToolId = requestedId,
+                        modifier = Modifier.fillMaxSize(),
+                    ) { id, _ -> Text(id, Modifier.testTag("overview-content-" + id)) }
+                }
+            }
+        }
+        composeRule.onNodeWithTag("spatial-add-tool").performClick()
+        composeRule.onNodeWithTag("spatial-native-content-CAPABILITIES-primary").assertExists()
+        composeRule.runOnIdle { requestedId = "POSITION:primary" }
+        composeRule.onNodeWithTag("spatial-native-content-POSITION-primary").assertExists()
     }
 
     @Test fun focusedEditorIsNotShrunkByBoardCamera() {
