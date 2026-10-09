@@ -142,7 +142,13 @@ internal fun InfiniteCanvasHost(
                 !node.hidden && entries.any { it.id == node.id }
             }
             val fitted = fitCanvasCamera(shown, viewportW, viewportH)
-            if (fitted != null) scene = fitted to scene.second
+            if (fitted != null) {
+                scene = fitted to scene.second
+            } else if (shown.isNotEmpty()) {
+                // A scene spanning extreme coordinates cannot truthfully fit at
+                // the camera's minimum zoom; birdseye remains fully reachable.
+                birdseyeOpen = true
+            }
             focusedId = null
         }
         fun returnToBoard() {
