@@ -323,6 +323,11 @@ class EditorRegressionInstrumentedTest {
                 .fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()
         }
         composeRule.onNodeWithTag("spatial-reference-preview").assertExists()
+        composeRule.onNodeWithTag("spatial-precision-toggle").performClick()
+        composeRule.onNodeWithTag("precision-controls").assertExists()
+        composeRule.onNodeWithTag("precision-gain-FINE").assertExists()
+        composeRule.onNodeWithTag("precision-lens-FLOATING_LENS").assertExists()
+        composeRule.onNodeWithTag("spatial-precision-toggle").performClick()
     }
 
     @Test
