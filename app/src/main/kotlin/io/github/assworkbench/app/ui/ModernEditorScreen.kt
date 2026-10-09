@@ -155,6 +155,7 @@ fun ModernEditorScreen(
     var workspaceModeName by rememberSaveable { mutableStateOf(initialWorkspaceModeName) }
     var fixedToolName by rememberSaveable { mutableStateOf(WorkbenchTool.STYLE.name) }
     var fixedNavigationRevision by rememberSaveable { mutableIntStateOf(0) }
+    var spatialFocusRevision by rememberSaveable { mutableIntStateOf(0) }
     var fixedListRequested by rememberSaveable { mutableStateOf(false) }
     var spatialPrecisionEnabled by rememberSaveable { mutableStateOf(false) }
     var spatialFocusedSurfaceId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -250,40 +251,17 @@ fun ModernEditorScreen(
     }
 
     fun openTool(next: WorkbenchTool) {
-        val primaryId = WorkspaceState.primaryInstanceId(next.name)
-        if (workspaceMode == WorkspacePresentationMode.TOOL_INSTANCES_EXPERIMENTAL) {
-            val existing = workspaceState.primary(next.name)
-            workspaceState = if (
-                existing != null &&
-                workspaceState.activeInstanceId == primaryId &&
-                existing.presence == WorkspaceToolPresence.TEMPORARY
-            ) {
-                workspaceState.updatePresence(primaryId, WorkspaceToolPresence.HIDDEN)
-            } else {
-                workspaceState
-                    .openPrimary(next.name, next.descriptor.defaultBinding)
-                    .updatePresence(primaryId, WorkspaceToolPresence.TEMPORARY)
-                    .hideOtherTemporary(primaryId)
-                    .withSurfacesHidden(false)
-            }
-            if (workspaceState.primary(next.name)?.presence == WorkspaceToolPresence.TEMPORARY) {
-                surfaceController.bringToFront(primaryId)
-            }
-            return
-        }
-
         workspaceState = workspaceState.openPrimary(next.name, next.descriptor.defaultBinding)
-        if (workspaceMode == WorkspacePresentationMode.FIXED ||
-            workspaceMode == WorkspacePresentationMode.PAGER_EXPERIMENTAL ||
-            workspaceMode == WorkspacePresentationMode.SPATIAL_EXPERIMENTAL
-        ) {
+        if (workspaceMode == WorkspacePresentationMode.FIXED) {
             fixedListRequested = next == WorkbenchTool.SUBTITLES
             fixedNavigationRevision += 1
             if (!fixedListRequested) fixedToolName = next.name
-            return
+        } else {
+            // A main-toolbar command is a real navigation request. Creating
+            // ToolInstance state alone is not sufficient to show its editor.
+            fixedToolName = next.name
+            spatialFocusRevision += 1
         }
-        workspaceState = workspaceState.withSurfacesHidden(false)
-        surfaceController.bringToFront(primaryId)
     }
 
     fun openPositionTarget(eventId: Long) {
@@ -295,9 +273,8 @@ fun ModernEditorScreen(
         fixedListRequested = false
         fixedNavigationRevision += 1
         fixedToolName = toolKey
-        if (workspaceMode == WorkspacePresentationMode.CANVAS_EXPERIMENTAL) {
-            workspaceState = workspaceState.withSurfacesHidden(false)
-            workspaceState.activeInstanceId?.let { id -> surfaceController.bringToFront(id) }
+        if (workspaceMode == WorkspacePresentationMode.SPATIAL_EXPERIMENTAL) {
+            spatialFocusRevision += 1
         }
     }
 
@@ -561,6 +538,7 @@ fun ModernEditorScreen(
                     positionEditEventId = positionEditEventId,
                     precisionEnabled = spatialPrecisionEnabled,
                     onTogglePrecision = { spatialPrecisionEnabled = !spatialPrecisionEnabled },
+                    requestedFocusRevision = spatialFocusRevision,
                     onFocusedSurfaceChange = { id ->
                         if (spatialFocusedSurfaceId != id) spatialFocusedSurfaceId = id
                     },
@@ -578,12 +556,7 @@ fun ModernEditorScreen(
                             toolKey = fixedTool.name,
                             binding = fixedTool.descriptor.defaultBinding,
                         ),
-                    onActiveTool = { tool ->
-                        fixedToolName = tool.name
-                        workspaceState = workspaceState
-                            .openPrimary(tool.name, tool.descriptor.defaultBinding)
-                            .activate(WorkspaceState.primaryInstanceId(tool.name))
-                    },
+                    onActiveTool = ::openTool,
                     expandedEventId = expandedEventId,
                     onExpandedChange = { expandedEventId = it },
                     onImportFont = onImportFont,
@@ -723,6 +696,7 @@ private fun SpatialWorkspace(
     positionEditEventId: Long?,
     precisionEnabled: Boolean,
     onTogglePrecision: () -> Unit,
+    requestedFocusRevision: Int,
     onFocusedSurfaceChange: (String?) -> Unit,
     onActivateInstance: (String) -> Unit,
     state: EditorState,
@@ -874,6 +848,7 @@ private fun SpatialWorkspace(
         canUndo = state.canUndo,
         canRedo = state.canRedo,
         requestedActiveToolId = workspaceState.activeInstanceId,
+        requestedFocusRevision = requestedFocusRevision,
         modifier = Modifier.fillMaxSize(),
     ) { id, interactive ->
         when (id) {
