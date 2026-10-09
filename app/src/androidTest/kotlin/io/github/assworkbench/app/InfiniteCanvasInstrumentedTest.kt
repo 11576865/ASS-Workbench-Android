@@ -230,10 +230,11 @@ class InfiniteCanvasInstrumentedTest {
     }
 
 
-    @Test fun distantLiveEditorSuspendsButRemainsRecallableAndRehydratesOnReturn() {
+    @Test fun offscreenMediaSuspendsWithoutUnmountingGeneralEditors() {
         val nodes = listOf(
-            InfiniteCanvasNode("preview", width = 280f, height = 220f),
-            InfiniteCanvasNode("subtitles", x = 8_000f, width = 280f, height = 220f),
+            InfiniteCanvasNode("audio", width = 280f, height = 220f),
+            InfiniteCanvasNode("subtitles", x = 1_000f, width = 280f, height = 220f),
+            InfiniteCanvasNode("preview", x = 8_000f, width = 280f, height = 220f),
         )
         val initial = InfiniteCanvasPersistence.encode(
             InfiniteCanvasCamera(0f, 0f, 1f), nodes)
@@ -253,17 +254,20 @@ class InfiniteCanvasInstrumentedTest {
             }
         }
         composeRule.waitForIdle()
-        composeRule.onNodeWithTag("spatial-live-preview").assertExists()
-        composeRule.onNodeWithTag("spatial-live-subtitles").assertDoesNotExist()
-        composeRule.onNodeWithTag("overview-content-subtitles").assertDoesNotExist()
-        composeRule.onNodeWithTag("spatial-birdseye").performClick()
-        composeRule.onNodeWithTag("spatial-birdseye-node-subtitles")
-            .performScrollTo().performClick()
-        composeRule.onNodeWithTag("spatial-native-content-subtitles").assertExists()
-        composeRule.onNodeWithTag("overview-content-subtitles").assertExists()
-        composeRule.onNodeWithTag("spatial-return-to-board").performClick()
-        composeRule.onNodeWithTag("spatial-live-subtitles").assertExists()
+        composeRule.onNodeWithTag("spatial-live-audio").assertExists()
         composeRule.onNodeWithTag("spatial-live-preview").assertDoesNotExist()
+        // Unproven draft-bearing tools remain mounted even while offscreen.
+        composeRule.onNodeWithTag("spatial-live-subtitles").assertExists()
+        composeRule.onNodeWithTag("overview-content-subtitles").assertExists()
+        composeRule.onNodeWithTag("spatial-birdseye").performClick()
+        composeRule.onNodeWithTag("spatial-birdseye-node-preview")
+            .performScrollTo().performClick()
+        composeRule.onNodeWithTag("spatial-native-content-preview").assertExists()
+        composeRule.onNodeWithTag("overview-content-preview").assertExists()
+        composeRule.onNodeWithTag("spatial-return-to-board").performClick()
+        composeRule.onNodeWithTag("spatial-live-preview").assertExists()
+        composeRule.onNodeWithTag("spatial-live-audio").assertDoesNotExist()
+        composeRule.onNodeWithTag("spatial-live-subtitles").assertExists()
         assertEquals(nodes, saved.second)
     }
 
