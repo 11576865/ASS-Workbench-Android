@@ -1,5 +1,6 @@
 package io.github.assworkbench.app.ui.workspace
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -71,7 +72,7 @@ internal fun InfiniteCanvasHost(
     var toolDrawerOpen by rememberSaveable(sessionId) { mutableStateOf(false) }
     var toolDrawerResident by rememberSaveable(sessionId) { mutableStateOf(false) }
     var recallOpen by remember { mutableStateOf(false) }
-    var cardMenuId by remember { mutableStateOf<String?>(null) }
+    var cardMenuId by remember(sessionId) { mutableStateOf<String?>(null) }
     val contentState = rememberSaveableStateHolder()
     val density = LocalDensity.current.density
     val active by rememberUpdatedState(onActivate)
@@ -116,6 +117,11 @@ internal fun InfiniteCanvasHost(
             }
         }
         val boardMode = focused == null
+        BackHandler(enabled = !gestureOwned && focused != null && !birdseyeOpen) { focusedId = null }
+        BackHandler(enabled = !gestureOwned && boardMode && toolDrawerOpen && !birdseyeOpen) {
+            toolDrawerOpen = false
+            toolDrawerResident = false
+        }
 
         fun focus(id: String) {
             if (gestureOwned) return
@@ -188,7 +194,7 @@ internal fun InfiniteCanvasHost(
                         val liveNode by rememberUpdatedState(node)
                         val scale by rememberUpdatedState(camera.scale)
                         val width = (node.width * camera.scale).coerceAtLeast(72f)
-                        val height = (node.height * camera.scale).coerceAtLeast(84f)
+                        val height = (node.height * camera.scale).coerceAtLeast(112f)
                         Surface(
                             modifier = Modifier.offset(
                                 (camera.x + node.x * camera.scale).dp,
@@ -398,18 +404,73 @@ internal fun InfiniteCanvasHost(
                             if (entry.subtitle.isNotBlank()) Text(entry.subtitle,
                                 style = MaterialTheme.typography.labelSmall, maxLines = 1)
                         }
-                        TextButton(onClick = {
-                            if (!gestureOwned) {
-                                updateNode(node.copy(hidden = true))
-                                focusedId = null
+                        IconButton(onClick = { birdseyeOpen = true }, enabled = !gestureOwned,
+                            modifier = Modifier.testTag("spatial-birdseye")) {
+                            Icon(Icons.Filled.Apps, "切换工具")
+                        }
+                        Box {
+                            IconButton(onClick = { cardMenuId = entry.id }, enabled = !gestureOwned,
+                                modifier = Modifier.testTag("spatial-menu-" + entry.id.replace(':', '-'))) {
+                                Icon(Icons.Filled.MoreHoriz, "管理 " + entry.title)
                             }
-                        }, enabled = !gestureOwned) { Text("收回") }
+                            DropdownMenu(expanded = cardMenuId == entry.id,
+                                onDismissRequest = { cardMenuId = null }) {
+                                DropdownMenuItem(text = { Text("收回工具") }, onClick = {
+                                    updateNode(node.copy(hidden = true))
+                                    focusedId = null
+                                    cardMenuId = null
+                                })
+                                DropdownMenuItem(text = { Text(if (node.alpha < 1f) "恢复实底" else "透明叠加") },
+                                    onClick = {
+                                        updateNode(node.copy(alpha = if (node.alpha < 1f) 1f else 0.2f))
+                                        cardMenuId = null
+                                    })
+                                if (entry.id == "audio") DropdownMenuItem(
+                                    text = { Text(if (node.passthrough) "操作波形" else "穿透操作视频") },
+                                    onClick = {
+                                        updateNode(node.copy(passthrough = !node.passthrough))
+                                        cardMenuId = null
+                                    })
+                            }
+                        }
+                        IconButton(onClick = onUndo, enabled = canUndo) {
+                            Icon(Icons.Filled.Undo, "撤销字幕编辑")
+                        }
+                        IconButton(onClick = onRedo, enabled = canRedo) {
+                            Icon(Icons.Filled.Redo, "重做字幕编辑")
+                        }
                     }
                     HorizontalDivider()
                     Box(Modifier.weight(1f).fillMaxWidth()
                         .testTag("spatial-native-content-" + entry.id.replace(':', '-'))) {
-                        contentState.SaveableStateProvider(sessionId.toString() + "/" + entry.id) {
-                            content(entry.id, !node.passthrough)
+                        val preview = nodes.firstOrNull { it.id == "preview" && !it.hidden }
+                        val audio = nodes.firstOrNull { it.id == "audio" && !it.hidden }
+                        // Audio/video is a real layered editing surface, not a flattened card.
+                        // Keep actual renderer and waveform on their existing clock and callbacks.
+                        if (entry.id == "audio" && preview != null) {
+                            contentState.SaveableStateProvider(sessionId.toString() + "/preview") {
+                                content("preview", true)
+                            }
+                            Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth()
+                                .height(node.height.coerceIn(160f, 460f).dp)
+                                .background(MaterialTheme.colorScheme.surface.copy(alpha = node.alpha))) {
+                                contentState.SaveableStateProvider(sessionId.toString() + "/audio") {
+                                    content("audio", !node.passthrough)
+                                }
+                            }
+                        } else {
+                            contentState.SaveableStateProvider(sessionId.toString() + "/" + entry.id) {
+                                content(entry.id, !node.passthrough)
+                            }
+                            if (entry.id == "preview" && audio != null) {
+                                Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth()
+                                    .height(audio.height.coerceIn(160f, 460f).dp)
+                                    .background(MaterialTheme.colorScheme.surface.copy(alpha = audio.alpha))) {
+                                    contentState.SaveableStateProvider(sessionId.toString() + "/audio") {
+                                        content("audio", !audio.passthrough)
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -417,7 +478,7 @@ internal fun InfiniteCanvasHost(
         }
 
         // Workspace actions remain separate from ASS document Undo/Redo.
-        Surface(Modifier.align(Alignment.TopCenter).padding(8.dp).zIndex(1_000_025f),
+        if (boardMode) Surface(Modifier.align(Alignment.TopCenter).padding(8.dp).zIndex(1_000_025f),
             shape = MaterialTheme.shapes.large, shadowElevation = 2.dp,
             color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.96f)) {
             Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 6.dp),
@@ -456,11 +517,6 @@ internal fun InfiniteCanvasHost(
                         }, modifier = Modifier.testTag("spatial-zoom-in")) {
                         Icon(Icons.Filled.Add, "放大画布")
                     }
-                } else {
-                    Text("编辑 · 原生尺寸", Modifier.padding(horizontal = 8.dp),
-                        style = MaterialTheme.typography.labelLarge)
-                    TextButton(onClick = { birdseyeOpen = true }, enabled = !gestureOwned,
-                        modifier = Modifier.testTag("spatial-birdseye")) { Text("切换工具") }
                 }
                 IconButton(onClick = onUndo, enabled = canUndo) {
                     Icon(Icons.Filled.Undo, "撤销字幕编辑")
