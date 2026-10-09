@@ -319,10 +319,11 @@ internal fun InfiniteCanvasHost(
                                         }
                                     }
                                 }
-                                if (camera.scale >= 0.95f) {
-                                    // Multiple actual tools may coexist at readable native density.
-                                    // Camera scale moves and spaces surfaces; it never scales fonts,
-                                    // slider touch targets, video renderer pixels or pointer deltas.
+                                if (camera.scale >= 0.95f &&
+                                    shouldComposeCanvasTool(camera, node, viewportW, viewportH)) {
+                                    // Compose actual editors only near the screen viewport.
+                                    // A saved world node always remains available in birdseye,
+                                    // rail, and quick-access navigation even while suspended.
                                     Box(Modifier.weight(1f).fillMaxWidth()
                                         .background(MaterialTheme.colorScheme.surface.copy(alpha = node.alpha))
                                         .testTag("spatial-live-" + entry.id.replace(':', '-'))) {
