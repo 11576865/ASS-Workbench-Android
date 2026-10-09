@@ -66,6 +66,7 @@ internal fun InfiniteCanvasHost(
     onToggleBookmark: (String) -> Unit = {},
     precisionEnabled: Boolean = false,
     onTogglePrecision: () -> Unit = {},
+    onFocusedSurfaceChange: (String?) -> Unit = {},
     renderTimeline: @Composable (Boolean) -> Unit = {},
     onUndo: () -> Unit,
     onRedo: () -> Unit,
@@ -89,6 +90,7 @@ internal fun InfiniteCanvasHost(
     var focusedId by rememberSaveable(sessionId) {
         mutableStateOf<String?>(if (savedScene.isEmpty()) "preview" else null)
     }
+    SideEffect { onFocusedSurfaceChange(focusedId) }
     var birdseyeOpen by rememberSaveable(sessionId) { mutableStateOf(false) }
     var toolDrawerOpen by rememberSaveable(sessionId) { mutableStateOf(false) }
     var toolDrawerResident by rememberSaveable(sessionId) { mutableStateOf(false) }
