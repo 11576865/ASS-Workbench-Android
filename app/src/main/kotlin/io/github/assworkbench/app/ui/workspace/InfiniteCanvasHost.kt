@@ -204,12 +204,14 @@ internal fun InfiniteCanvasHost(
                                 .zIndex(node.z.toFloat())
                                 .testTag("spatial-node-" + entry.id.replace(':', '-')),
                             shape = MaterialTheme.shapes.large,
-                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            color = if (node.alpha < 1f) Color.Transparent
+                                else MaterialTheme.colorScheme.surfaceContainerHigh,
                             tonalElevation = 3.dp,
                             shadowElevation = 2.dp,
                         ) {
                             Column {
-                                Row(Modifier.fillMaxWidth().height(48.dp),
+                                Row(Modifier.fillMaxWidth().height(48.dp)
+                                    .background(MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.96f)),
                                     verticalAlignment = Alignment.CenterVertically) {
                                     Row(Modifier.weight(1f).fillMaxHeight()
                                         .testTag("spatial-drag-" + entry.id.replace(':', '-'))
