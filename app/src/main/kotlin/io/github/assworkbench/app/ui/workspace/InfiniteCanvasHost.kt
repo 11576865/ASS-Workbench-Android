@@ -40,6 +40,7 @@ internal data class InfiniteCanvasEntry(
     val pinnedEvent: Boolean = false,
     val focusEventId: Long? = null,
     val initiallyHidden: Boolean = false,
+    val bookmarked: Boolean = false,
 )
 
 /**
@@ -61,6 +62,8 @@ internal fun InfiniteCanvasHost(
     onCloseTool: (String) -> Unit = {},
     onDuplicateTool: (String, Boolean) -> Unit = { _, _ -> },
     onToggleEventBinding: (String) -> Unit = {},
+    onToggleBookmark: (String) -> Unit = {},
+    renderTimeline: @Composable (Boolean) -> Unit = {},
     onUndo: () -> Unit,
     onRedo: () -> Unit,
     canUndo: Boolean,
@@ -89,6 +92,8 @@ internal fun InfiniteCanvasHost(
     var recallOpen by remember(sessionId) { mutableStateOf(false) }
     var arrangeOpen by remember(sessionId) { mutableStateOf(false) }
     var switcherOpen by remember(sessionId) { mutableStateOf(false) }
+    var timelineDockVisible by rememberSaveable(sessionId) { mutableStateOf(false) }
+    var timelineDockExpanded by rememberSaveable(sessionId) { mutableStateOf(false) }
     var referencePreviewVisible by rememberSaveable(sessionId) { mutableStateOf(true) }
     var referencePreviewSize by rememberSaveable(sessionId) { mutableIntStateOf(1) }
     var cardMenuId by remember(sessionId) { mutableStateOf<String?>(null) }
@@ -179,8 +184,10 @@ internal fun InfiniteCanvasHost(
     }
 
     BoxWithConstraints(modifier.clipToBounds().background(MaterialTheme.colorScheme.surfaceContainerLowest)) {
+        val dockHeight = if (!timelineDockVisible) 0.dp
+            else if (timelineDockExpanded) maxHeight * 0.42f else 142.dp
         val viewportW = maxWidth.value
-        val viewportH = maxHeight.value
+        val viewportH = (maxHeight - dockHeight).value
         val railWidth = if (viewportW < 480f) 88.dp else 112.dp
         val camera = scene.first
         val nodes = scene.second
@@ -265,7 +272,7 @@ internal fun InfiniteCanvasHost(
 
         // Spatial summaries are used when zoomed out; close-up tools render at native density.
         if (boardMode) {
-            Box(Modifier.fillMaxSize().testTag("spatial-background")
+            Box(Modifier.fillMaxSize().padding(bottom = dockHeight).testTag("spatial-background")
                 .pointerInput(sessionId, gestureOwned) {
                     detectTransformGestures { centroid, pan, zoom, _ ->
                         if (!gestureOwned) {
@@ -483,7 +490,8 @@ internal fun InfiniteCanvasHost(
                 }
             }
             // Reusable tool access does not require travelling across world space.
-            Surface(Modifier.align(Alignment.BottomCenter).padding(8.dp)
+            Surface(Modifier.align(Alignment.BottomCenter)
+                .padding(bottom = dockHeight + 8.dp, start = 8.dp, end = 8.dp)
                 .zIndex(1_000_010f), shape = MaterialTheme.shapes.large, shadowElevation = 3.dp) {
                 Row(Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically) {
@@ -524,6 +532,7 @@ internal fun InfiniteCanvasHost(
             // No camera transform reaches this subtree: editors keep native-size hit areas.
             val (entry, node) = focused!!
             Surface(Modifier.fillMaxSize()
+                .padding(bottom = dockHeight)
                 .padding(start = if (toolDrawerOpen && toolDrawerResident) railWidth else 0.dp)
                 .testTag("spatial-focused-editor"),
                 color = MaterialTheme.colorScheme.surface) {
@@ -562,6 +571,10 @@ internal fun InfiniteCanvasHost(
                                     )
                                 }
                             }
+                        }
+                        IconButton(onClick = { timelineDockVisible = !timelineDockVisible },
+                            enabled = !gestureOwned, modifier = Modifier.testTag("spatial-timeline-toggle")) {
+                            Icon(Icons.Filled.ViewTimeline, if (timelineDockVisible) "收起时间轴" else "展开时间轴")
                         }
                         IconButton(onClick = ::showToolPicker, enabled = !gestureOwned,
                             modifier = Modifier.testTag("spatial-add-tool")) {
@@ -757,7 +770,8 @@ internal fun InfiniteCanvasHost(
         // A resident tool directory is a shared overlay, not a board-only
         // surface: pinning it keeps tool switching available while editing.
             if (toolDrawerOpen) Surface(
-                modifier = Modifier.align(Alignment.CenterStart).fillMaxHeight().width(railWidth)
+                modifier = Modifier.align(Alignment.CenterStart).fillMaxHeight()
+                    .padding(bottom = dockHeight).width(railWidth)
                     .zIndex(1_000_020f).testTag("spatial-edge-rail-left"),
                 color = MaterialTheme.colorScheme.surfaceContainerHigh,
                 tonalElevation = 6.dp,
@@ -791,6 +805,35 @@ internal fun InfiniteCanvasHost(
                 }
             }
 
+        // The timeline is a persistent *real* editor surface owned by this
+        // workspace, not a separate presentation mode or a detached media clock.
+        if (timelineDockVisible) Surface(
+            Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(dockHeight)
+                .zIndex(1_000_040f).testTag("spatial-timeline-dock"),
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            tonalElevation = 5.dp,
+        ) {
+            Column {
+                Row(Modifier.fillMaxWidth().height(40.dp).padding(horizontal = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Filled.DragHandle, null, Modifier.size(18.dp))
+                    Text("时间轴", Modifier.weight(1f), style = MaterialTheme.typography.labelLarge)
+                    TextButton(onClick = { timelineDockExpanded = !timelineDockExpanded },
+                        modifier = Modifier.testTag("spatial-timeline-expand")) {
+                        Text(if (timelineDockExpanded) "紧凑" else "展开")
+                    }
+                    IconButton(onClick = { timelineDockVisible = false },
+                        modifier = Modifier.testTag("spatial-timeline-close")) {
+                        Icon(Icons.Filled.Close, "关闭常驻时间轴")
+                    }
+                }
+                HorizontalDivider()
+                Box(Modifier.weight(1f).fillMaxWidth().testTag("spatial-timeline-content")) {
+                    renderTimeline(!timelineDockExpanded)
+                }
+            }
+        }
+
         // Workspace actions remain separate from ASS document Undo/Redo.
         if (boardMode) Surface(Modifier.align(Alignment.TopCenter).padding(8.dp).zIndex(1_000_025f),
             shape = MaterialTheme.shapes.large, shadowElevation = 2.dp,
@@ -802,6 +845,10 @@ internal fun InfiniteCanvasHost(
                         style = MaterialTheme.typography.titleSmall)
                     TextButton(onClick = ::overview, enabled = !gestureOwned,
                         modifier = Modifier.testTag("spatial-overview")) { Text("总览") }
+                    TextButton(onClick = { timelineDockVisible = !timelineDockVisible },
+                        enabled = !gestureOwned, modifier = Modifier.testTag("spatial-timeline-toggle")) {
+                        Text(if (timelineDockVisible) "收起时间轴" else "时间轴")
+                    }
                     Box {
                         TextButton(onClick = { arrangeOpen = true }, enabled = !gestureOwned,
                             modifier = Modifier.testTag("spatial-arrange")) { Text("整理") }
