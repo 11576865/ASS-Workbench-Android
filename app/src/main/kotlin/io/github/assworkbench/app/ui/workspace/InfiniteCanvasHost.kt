@@ -98,7 +98,7 @@ internal fun InfiniteCanvasHost(
     val density = LocalDensity.current.density
     val active by rememberUpdatedState(onActivate)
 
-    LaunchedEffect(sessionId, entries.map { it.id }, requestedActiveToolId) {
+    LaunchedEffect(sessionId, entries.map { it.id to it.initiallyHidden }, requestedActiveToolId) {
         val existing = scene.second.mapTo(mutableSetOf()) { it.id }
         val missing = entries.filterNot { it.id in existing }
         if (missing.isNotEmpty()) {
