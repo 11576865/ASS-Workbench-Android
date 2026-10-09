@@ -12,8 +12,8 @@ The current host scales both the surface footprint and its live controls by came
 
 One workspace session, two deliberately separate interaction surfaces:
 
-1. **Spatial board** — an indefinitely pannable, pinch-zoomable arrangement of *semantic surface cards*. Cards convey tool identity, target/binding summary, visibility and spatial relationship. Their touch targets do not expose shrunken live editor controls. Header drag moves a card in world coordinates; the resize grip changes saved world geometry. Explicit Raise is the only action that changes z-order.
-2. **Focused editor** — selecting a card opens its actual production Composable at native screen density in a bounded stage, with persistent "Back to board" and object identity. Editing controls are never scaled by the camera, and background panning cannot intercept editor gestures. The same ToolInstance/Binding/EditorUiContract continues to own business semantics.
+1. **Spatial board** — a pannable, pinch-zoomable world. At overview scale (`scale < 0.95`) each node is a lightweight semantic card showing identity and binding summary. At close-up scale (`scale >= 0.95`), multiple actual production tools can coexist in their saved world positions with **unscaled native text and touch controls**. The camera changes spatial placement and surface footprint, never font or touch-target density. Header drag moves world geometry; corner drag resizes it. Explicit Raise is the only action that changes z-order.
+2. **Focused editor** — selecting a card opens its actual production Composable at native screen density in a bounded stage, with persistent "Back to board" and object identity. Camera gestures cannot intercept editor gestures. When editing video/audio, the real preview and transparent audio can be layered rather than substituting a screenshot. The same ToolInstance/Binding/EditorUiContract continues to own business semantics.
 
 Tool access is available from the bottom project strip and from the existing birdseye map. Hidden entries can be recalled. The board maintains its spatial arrangement when editing is opened or closed. No document Undo entries are created for camera, layout or focus switching.
 
@@ -29,9 +29,19 @@ Tool access is available from the bottom project strip and from the existing bir
 
 ## Acceptance
 
-- Spatial zoom changes *cards*, never the live production editor's touch-target size.
-- "Open" from card/strip/birdseye opens the actual tool, and "Return" restores the board without changing document history.
+- Spatial zoom switches low-detail cards to close-up native-density live surfaces; zoom does not rescale the live editor's fonts or touch targets.
+- "Open" from card/strip/birdseye opens the actual tool, and "Return" restores the board without changing document history. At close-up zoom, two real tools can coexist without opening a second product UI.
 - Drag, resize, hide, raise, opacity and audio pass-through remain functional.
 - Existing save/reopen and editor undo invariants hold; changing a session removes stale focus state.
 - JVM model tests and Android connected tests cover mode transitions, editor isolation, hidden tool recall, and geometry persistence.
 - Real device typography, keyboard, waveform interaction, video renderer and OEM system-gesture acceptance remain separate from CI.
+
+
+## Implementation status — 2026-10-09
+
+- Branch: \`redesign/infinite-canvas-workbench-v2\`.
+- Replaces \`InfiniteCanvasHost\` composition; model adds Double-based fit and a lower, persistable overview camera scale. Existing nine-field \`infinite-v1\` persistence rows remain readable.
+- Adds a compact board toolbar, spatial grid, tool access strip, optional left drawer, full-density focused editor, Back navigation, semantic LOD and native close-up coexistence.
+- Preserves audio/video layered editing and explicit audio pass-through policy, and protects camera/tool focus mutations during an owned gesture.
+- Model and Android instrumentation regressions have been updated for the new view contract. Their execution result is **Pending CI**.
+- **Not established**: full-device usability, renderer/frame-time benchmarks, 240-UI completion, arbitrary parameter extraction, universal draft ownership, or guaranteed viewport virtualization for very large numbers of concurrently live tools.
