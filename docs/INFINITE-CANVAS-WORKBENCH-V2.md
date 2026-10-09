@@ -43,5 +43,9 @@ Tool access is available from the bottom project strip and from the existing bir
 - Replaces \`InfiniteCanvasHost\` composition; model adds Double-based fit and a lower, persistable overview camera scale. Existing nine-field \`infinite-v1\` persistence rows remain readable.
 - Adds a compact board toolbar, spatial grid, tool access strip, optional left drawer, full-density focused editor, Back navigation, semantic LOD and native close-up coexistence.
 - Preserves audio/video layered editing and explicit audio pass-through policy, and protects camera/tool focus mutations during an owned gesture.
-- Model and Android instrumentation regressions have been updated for the new view contract. Their execution result is **Pending CI**.
+- Initial PR #138 head `01f58b4` ran Android CI **success**, Fontconfig probe **success**, Emulator **failure** (107 tests, 7 failures, zero errors/skips; run `37903981669`).
+- Four failures were tied to a removed `＋ 工具` entry and old assumptions about a permanently composed scaled-window tool directory. The repair adds a stable `spatial-add-tool` action, native-density directory stage, and selected ToolInstance handoff for both new and existing tools.
+- One failure concerned left-rail residency after returning from a focused editor. The return and Back paths now reopen a resident drawer.
+- Two failures concerned birdseye recall and camera/hidden-node evidence. The focus path now publishes restored scene state before its active-tool callback, and instrumented tests separately assert that the native editor becomes visible.
+- Follow-up commits and regressions are submitted. **Post-repair CI is Pending**; these fixes are not yet presented as confirmed successful.
 - **Not established**: full-device usability, renderer/frame-time benchmarks, 240-UI completion, arbitrary parameter extraction, universal draft ownership, or guaranteed viewport virtualization for very large numbers of concurrently live tools.
