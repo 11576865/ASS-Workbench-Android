@@ -64,6 +64,8 @@ internal fun InfiniteCanvasHost(
     onDuplicateTool: (String, Boolean) -> Unit = { _, _ -> },
     onToggleEventBinding: (String) -> Unit = {},
     onToggleBookmark: (String) -> Unit = {},
+    precisionEnabled: Boolean = false,
+    onTogglePrecision: () -> Unit = {},
     renderTimeline: @Composable (Boolean) -> Unit = {},
     onUndo: () -> Unit,
     onRedo: () -> Unit,
@@ -598,6 +600,14 @@ internal fun InfiniteCanvasHost(
                         IconButton(onClick = { timelineDockVisible = !timelineDockVisible },
                             enabled = !gestureOwned, modifier = Modifier.testTag("spatial-timeline-toggle")) {
                             Icon(Icons.Filled.ViewTimeline, if (timelineDockVisible) "收起时间轴" else "展开时间轴")
+                        }
+                        if (entry.id.startsWith("POSITION:")) IconButton(
+                            onClick = onTogglePrecision, enabled = !gestureOwned,
+                            modifier = Modifier.testTag("spatial-precision-toggle"),
+                        ) {
+                            Icon(if (precisionEnabled) Icons.Filled.CenterFocusStrong
+                                else Icons.Filled.CenterFocusWeak,
+                                if (precisionEnabled) "关闭精密操控" else "开启精密操控")
                         }
                         IconButton(onClick = ::showToolPicker, enabled = !gestureOwned,
                             modifier = Modifier.testTag("spatial-add-tool")) {
