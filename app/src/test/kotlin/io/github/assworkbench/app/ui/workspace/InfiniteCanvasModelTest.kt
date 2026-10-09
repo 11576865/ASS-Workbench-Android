@@ -113,4 +113,43 @@ class InfiniteCanvasModelTest {
         assertFalse(shouldComposeCanvasTool(camera, node.copy(x = -600f), 420f, 800f))
     }
 
+    @Test fun layoutLockSurvivesSceneRoundTripAndFreezesGeometry() {
+        val locked = InfiniteCanvasNode("preview", x = -500f, y = 1200f, layoutLocked = true)
+        assertEquals(locked, locked.move(50f, -30f))
+        assertEquals(locked, locked.resize(100f, 100f))
+        val restored = InfiniteCanvasPersistence.decode(
+            InfiniteCanvasPersistence.encode(InfiniteCanvasCamera(), listOf(locked)))
+        assertEquals(locked, restored.second.single())
+    }
+
+    @Test fun legacyV1RowsRestoreAsUnlockedAndInvalidV2RowsFailClosed() {
+        val separator = "\u001f"
+        val legacy = listOf("infinite-v1", "0${separator}0${separator}1",
+            "preview${separator}0${separator}0${separator}400${separator}320${separator}1${separator}1${separator}false${separator}false")
+        val scene = InfiniteCanvasPersistence.decode(legacy)
+        assertEquals(1, scene.second.size)
+        assertFalse(scene.second.single().layoutLocked)
+        val malformed = InfiniteCanvasPersistence.encode(InfiniteCanvasCamera(), scene.second).toMutableList()
+        malformed[2] = malformed[2].substringBeforeLast(separator) + separator + "invalid"
+        assertTrue(InfiniteCanvasPersistence.decode(malformed).second.isEmpty())
+    }
+
+    @Test fun arrangementPreservesLockHiddenIdentityAndZOrderWithoutOverlappingMovableCards() {
+        val nodes = listOf(
+            InfiniteCanvasNode("fixed", 100f, 100f, width = 400f, height = 350f, layoutLocked = true),
+            InfiniteCanvasNode("a", x = -200f, width = 500f, height = 300f, z = 3),
+            InfiniteCanvasNode("hidden", x = 9000f, hidden = true),
+            InfiniteCanvasNode("b", width = 300f, height = 600f, z = 5),
+            InfiniteCanvasNode("c", width = 250f, height = 200f),
+        )
+        val arranged = arrangeCanvasNodes(nodes, columns = 2)
+        assertEquals(nodes[0], arranged[0])
+        assertEquals(nodes[2], arranged[2])
+        assertEquals(nodes.map { it.z }, arranged.map { it.z })
+        assertTrue(arranged[1].y >= nodes[0].y + nodes[0].height)
+        assertTrue(arranged[3].x >= arranged[1].x + arranged[1].width + 40f)
+        assertTrue(arranged[4].y >= arranged[1].y + maxOf(arranged[1].height, arranged[3].height) + 40f)
+        assertEquals(nodes, arrangeCanvasNodes(nodes, 0))
+    }
+
 }
