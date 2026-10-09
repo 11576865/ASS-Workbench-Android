@@ -303,7 +303,7 @@ fun ModernEditorScreen(
 
     fun selectWorkspaceMode(next: WorkspacePresentationMode) {
         if (next == workspaceMode) return
-        if (workspaceMode == WorkspacePresentationMode.CANVAS_EXPERIMENTAL) {
+        if (workspaceMode == WorkspacePresentationMode.SPATIAL_EXPERIMENTAL) {
             workspaceState.activeInstanceId
                 ?.let { id -> workspaceState.tools.firstOrNull { it.id == id }?.toolKey }
                 ?.let { key -> WorkbenchTool.entries.firstOrNull { it.name == key } }
@@ -326,13 +326,8 @@ fun ModernEditorScreen(
     ) {
         Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
-            androidx.compose.animation.AnimatedVisibility(
-                // Global project/navigation chrome must not disappear merely
-                // because workspace surfaces were temporarily hidden.
-                visible = workspaceMode == WorkspacePresentationMode.FIXED ||
-                    workspaceMode == WorkspacePresentationMode.SPATIAL_EXPERIMENTAL ||
-                    !workspaceState.surfacesHidden
-            ) {
+            // File, project, history and workspace navigation are never gated
+            // by hiding floating tools or opening a spatial authoring pane.
             ModernAppBar(
                 state = state,
                 viewModel = viewModel,
@@ -340,7 +335,7 @@ fun ModernEditorScreen(
                 searchOpen = searchOpen,
                 onSearchToggle = {
                     searchOpen = !searchOpen
-                    if (searchOpen || workspaceMode == WorkspacePresentationMode.CANVAS_EXPERIMENTAL) {
+                    if (searchOpen) {
                         openTool(WorkbenchTool.SUBTITLES)
                     }
                 },
@@ -395,7 +390,6 @@ fun ModernEditorScreen(
                 appearance = appearance,
                 onAppearanceChange = onAppearanceChange,
             )
-            }
 
             if (uiVariantLabOpen) {
                 UiVariantLabDialog(
