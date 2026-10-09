@@ -155,6 +155,7 @@ fun ModernEditorScreen(
     var fixedToolName by rememberSaveable { mutableStateOf(WorkbenchTool.STYLE.name) }
     var fixedNavigationRevision by rememberSaveable { mutableIntStateOf(0) }
     var fixedListRequested by rememberSaveable { mutableStateOf(false) }
+    var spatialPrecisionEnabled by rememberSaveable { mutableStateOf(false) }
     val workspaceMode = UiVariantRegistry.resolve(workspaceModeName)
     // SaveState restored from older app versions can still contain retired
     // experiments. Canonicalize the saved presentation name once; the domain
@@ -175,6 +176,7 @@ fun ModernEditorScreen(
             expandedEventId = null
             fixedToolName = WorkbenchTool.STYLE.name
             fixedListRequested = false
+            spatialPrecisionEnabled = false
             workspaceModeName = initialWorkspaceModeName
         }
     }
@@ -587,6 +589,8 @@ fun ModernEditorScreen(
                     onWorkspaceStateChange = { workspaceState = it },
                     interactionRegistry = interactionRegistry,
                     positionEditEventId = positionEditEventId,
+                    precisionEnabled = spatialPrecisionEnabled,
+                    onTogglePrecision = { spatialPrecisionEnabled = !spatialPrecisionEnabled },
                     onActivateInstance = { id ->
                         workspaceState = workspaceState.activate(id)
                         workspaceState.tools.firstOrNull { it.id == id }?.let { fixedToolName = it.toolKey }
@@ -881,7 +885,8 @@ fun ModernEditorScreen(
                 WorkspacePresentationMode.FIXED -> fixedTool == WorkbenchTool.POSITION
                 WorkspacePresentationMode.CANVAS_EXPERIMENTAL -> !workspaceState.surfacesHidden
                 WorkspacePresentationMode.PAGER_EXPERIMENTAL -> false
-                WorkspacePresentationMode.SPATIAL_EXPERIMENTAL -> fixedTool == WorkbenchTool.POSITION
+                WorkspacePresentationMode.SPATIAL_EXPERIMENTAL ->
+                    fixedTool == WorkbenchTool.POSITION && !spatialPrecisionEnabled
                 WorkspacePresentationMode.PRECISION_LENS_EXPERIMENTAL -> false
                 WorkspacePresentationMode.TOOL_INSTANCES_EXPERIMENTAL -> false
                 WorkspacePresentationMode.GLASS_LAYERED_EXPERIMENTAL -> false
@@ -897,7 +902,9 @@ fun ModernEditorScreen(
             onScaleLockedChange = viewModel::setGeometryScaleLocked,
             scaleSnapStep = state.geometryScaleSnapStep,
             onScaleSnapStepChange = viewModel::setGeometryScaleSnapStep,
-            visible = workspaceMode == WorkspacePresentationMode.PRECISION_LENS_EXPERIMENTAL,
+            visible = workspaceMode == WorkspacePresentationMode.PRECISION_LENS_EXPERIMENTAL ||
+                (workspaceMode == WorkspacePresentationMode.SPATIAL_EXPERIMENTAL &&
+                    fixedTool == WorkbenchTool.POSITION && spatialPrecisionEnabled),
             modifier = Modifier.fillMaxSize(),
         )
         }
@@ -2956,6 +2963,8 @@ private fun SpatialWorkspace(
     onWorkspaceStateChange: (WorkspaceState) -> Unit,
     interactionRegistry: InteractionOverlayRegistry,
     positionEditEventId: Long?,
+    precisionEnabled: Boolean,
+    onTogglePrecision: () -> Unit,
     onActivateInstance: (String) -> Unit,
     state: EditorState,
     viewModel: EditorViewModel,
@@ -3070,6 +3079,8 @@ private fun SpatialWorkspace(
                 }
             }
         },
+        precisionEnabled = precisionEnabled,
+        onTogglePrecision = onTogglePrecision,
         onToggleBookmark = { id ->
             workspaceState.tools.firstOrNull { it.id == id }?.let { instance ->
                 val nextPresence = if (instance.presence == WorkspaceToolPresence.BOOKMARKED)
