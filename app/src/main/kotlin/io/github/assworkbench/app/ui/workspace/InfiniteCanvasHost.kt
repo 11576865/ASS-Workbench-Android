@@ -73,6 +73,7 @@ internal fun InfiniteCanvasHost(
     canUndo: Boolean,
     canRedo: Boolean,
     requestedActiveToolId: String? = null,
+    requestedFocusRevision: Int = 0,
     modifier: Modifier = Modifier,
     content: @Composable (String, Boolean) -> Unit,
 ) {
@@ -106,6 +107,7 @@ internal fun InfiniteCanvasHost(
     // invoking set of IDs until the new production tool is actually available.
     var pendingToolSelection by remember(sessionId) { mutableStateOf<Set<String>?>(null) }
     var previouslyPresentEntries by remember(sessionId) { mutableStateOf<Set<String>?>(null) }
+    var consumedFocusRevision by remember(sessionId) { mutableIntStateOf(requestedFocusRevision) }
     val contentState = rememberSaveableStateHolder()
     val density = LocalDensity.current.density
     val active by rememberUpdatedState(onActivate)
@@ -232,6 +234,19 @@ internal fun InfiniteCanvasHost(
             cardMenuId = null
             toolDrawerOpen = toolDrawerResident
             active(id)
+        }
+        LaunchedEffect(sessionId, requestedFocusRevision, requestedActiveToolId, entries.map { it.id }) {
+            if (requestedFocusRevision != consumedFocusRevision) {
+                val id = requestedActiveToolId
+                if (id != null && entries.any { it.id == id }) {
+                    // The directory already owns pending selection; explicitly
+                    // focusing it again would cancel the user's picker intent.
+                    if (id != "CAPABILITIES:primary" || pendingToolSelection == null) {
+                        focus(id)
+                    }
+                    consumedFocusRevision = requestedFocusRevision
+                }
+            }
         }
         fun overview() {
             if (gestureOwned) return
