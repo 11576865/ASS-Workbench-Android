@@ -2997,6 +2997,7 @@ private fun SpatialWorkspace(
         onRedo = viewModel::redo,
         canUndo = state.canUndo,
         canRedo = state.canRedo,
+        requestedActiveToolId = workspaceState.activeInstanceId,
         modifier = modifier,
     ) { id, interactive ->
         when (id) {
