@@ -751,4 +751,95 @@ class ContainerEditPlanTest {
             }.status,
         )
     }
+
+    @Test
+    fun normalizedAacImportRequiresCodecPrivateEvidence() {
+        val import = PendingContainerTrackImportUi(
+            sourceKind = ContainerTrackImportSourceKind.NORMALIZED_MEDIA_PACKETS,
+            sourceUri = "content://external/audio.m4a",
+            sourceName = "audio.m4a",
+            sourceExtractorIndex = 0,
+            sourceSha256 = "a".repeat(64),
+            sourceContentSha256 = "b".repeat(64),
+            sourceCodecPrivateSha256 = "c".repeat(64),
+            sampleRate = 44_100,
+            channelCount = 2,
+            packetCount = 42L,
+            kind = ContainerResourceKind.AUDIO,
+            codecId = "A_AAC",
+            name = "Imported AAC",
+            language = "und",
+            isDefault = false,
+            isForced = false,
+            sourceAttachmentCount = 0,
+        )
+        val state = EditorState(
+            container = ContainerBridgeState(
+                uri = "fixture-source",
+                writeBackAvailable = true,
+                resources = listOf(
+                    ContainerResourceUi(
+                        rowKey = "track:uid:101",
+                        kind = ContainerResourceKind.VIDEO,
+                        title = "Video",
+                        detail = "V_VP9 · Track #1",
+                        trackNumber = 1L,
+                        trackTarget = "uid:101",
+                    )
+                ),
+                pendingTrackImports = listOf(import),
+            ),
+        )
+
+        val plan = buildContainerEditPlan(state)
+
+        assertTrue(plan.executable)
+        assertEquals(ContainerMutationKind.ADD_TRACK, plan.mutations.single().kind)
+        assertTrue(plan.mutations.single().detail.contains("A_AAC"))
+        assertTrue(
+            plan.checks.single {
+                it.dimension == ContainerCompatibilityDimension.OUTPUT_VERIFICATION
+            }.detail.contains("payload digest")
+        )
+    }
+
+    @Test
+    fun normalizedAacWithoutCodecPrivateEvidenceBlocksPreflight() {
+        val import = PendingContainerTrackImportUi(
+            sourceKind = ContainerTrackImportSourceKind.NORMALIZED_MEDIA_PACKETS,
+            sourceUri = "content://external/audio.m4a",
+            sourceName = "audio.m4a",
+            sourceExtractorIndex = 0,
+            sourceSha256 = "a".repeat(64),
+            sourceContentSha256 = "b".repeat(64),
+            sourceCodecPrivateSha256 = null,
+            sampleRate = 44_100,
+            channelCount = 2,
+            packetCount = 42L,
+            kind = ContainerResourceKind.AUDIO,
+            codecId = "A_AAC",
+            name = "Imported AAC",
+            language = "und",
+            isDefault = false,
+            isForced = false,
+            sourceAttachmentCount = 0,
+        )
+        val state = EditorState(
+            container = ContainerBridgeState(
+                uri = "fixture-source",
+                writeBackAvailable = true,
+                pendingTrackImports = listOf(import),
+            ),
+        )
+
+        val plan = buildContainerEditPlan(state)
+
+        assertFalse(plan.executable)
+        assertEquals(
+            ContainerCompatibilityStatus.UNSUPPORTED,
+            plan.checks.single {
+                it.dimension == ContainerCompatibilityDimension.CONTAINER_STRUCTURE
+            }.status,
+        )
+    }
 }

@@ -564,6 +564,11 @@ func runDigestTrack(args []string) {
 		fmt.Println("first_ms=-")
 		fmt.Println("last_ms=-")
 	}
+	if digest.CodecPrivateSHA256 != "" {
+		fmt.Println("codec_private_sha256=" + digest.CodecPrivateSHA256)
+	} else {
+		fmt.Println("codec_private_sha256=-")
+	}
 }
 
 func parseBoolFlag(value, label string) bool {

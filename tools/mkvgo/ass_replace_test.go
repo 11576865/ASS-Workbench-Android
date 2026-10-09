@@ -1275,7 +1275,7 @@ func writeNormalizedPacketFixture(
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := out.Write([]byte(packetBundleMagic)); err != nil {
+	if _, err := out.Write([]byte(packetBundleMagicV1)); err != nil {
 		t.Fatal(err)
 	}
 	if err := binary.Write(out, binary.BigEndian, durationUs); err != nil {
@@ -1509,5 +1509,243 @@ func TestTrackImportAddsPacketAudioAndDigestMatches(t *testing.T) {
 	}
 	if digest.PacketCount != uint64(len(packets)) || digest.FirstMs != 0 || digest.LastMs != 52 {
 		t.Fatalf("output packet evidence wrong: %+v", digest)
+	}
+}
+
+
+func writeNormalizedPacketFixtureV2(
+	t *testing.T,
+	path string,
+	durationUs int64,
+	codecPrivate []byte,
+	packets []struct {
+		ptsUs int64
+		data  []byte
+	},
+) (bundleSHA string, contentSHA string, codecPrivateSHA string) {
+	t.Helper()
+	if len(codecPrivate) == 0 {
+		t.Fatal("CodecPrivate fixture must not be empty")
+	}
+	out, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := out.Write([]byte(packetBundleMagicV2)); err != nil {
+		t.Fatal(err)
+	}
+	if err := binary.Write(out, binary.BigEndian, durationUs); err != nil {
+		t.Fatal(err)
+	}
+	if err := binary.Write(out, binary.BigEndian, uint64(len(packets))); err != nil {
+		t.Fatal(err)
+	}
+	if err := binary.Write(out, binary.BigEndian, uint32(len(codecPrivate))); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := out.Write(codecPrivate); err != nil {
+		t.Fatal(err)
+	}
+
+	content := sha256.New()
+	var header [12]byte
+	for _, packet := range packets {
+		if err := binary.Write(out, binary.BigEndian, packet.ptsUs); err != nil {
+			t.Fatal(err)
+		}
+		if err := binary.Write(out, binary.BigEndian, uint32(0)); err != nil {
+			t.Fatal(err)
+		}
+		if err := binary.Write(out, binary.BigEndian, uint32(len(packet.data))); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := out.Write(packet.data); err != nil {
+			t.Fatal(err)
+		}
+		binary.BigEndian.PutUint64(header[:8], uint64(packet.ptsUs/1000))
+		binary.BigEndian.PutUint32(header[8:], uint32(len(packet.data)))
+		_, _ = content.Write(header[:])
+		_, _ = content.Write(packet.data)
+	}
+	if err := out.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bundle := sha256.Sum256(raw)
+	private := sha256.Sum256(codecPrivate)
+	return hex.EncodeToString(bundle[:]),
+		hex.EncodeToString(content.Sum(nil)),
+		hex.EncodeToString(private[:])
+}
+
+func TestTrackImportAddsAacPacketAudioAndCodecPrivateDigestMatches(t *testing.T) {
+	dir := t.TempDir()
+	base := filepath.Join(dir, "base.mkv")
+	packetPath := filepath.Join(dir, "audio-aac.awpkt")
+	dst := filepath.Join(dir, "out.mkv")
+
+	out, err := os.Create(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mw := writer.NewMKVWriter(out)
+	if err := mw.WriteStart(); err != nil {
+		t.Fatal(err)
+	}
+	baseTrack := mkv.Track{ID: 4, UID: 404, Type: mkv.VideoTrack, Codec: "vp9"}
+	if err := mw.WriteMetadata(
+		&mkv.Container{Info: mkv.SegmentInfo{TimecodeScale: 1_000_000}},
+		[]mkv.Track{baseTrack},
+		1000,
+	); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.WriteCluster(out, 0, 1_000_000, []mkv.Block{
+		{TrackNumber: 4, Timecode: 0, Keyframe: true, Data: []byte("video")},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := mw.Finalize(); err != nil {
+		t.Fatal(err)
+	}
+	if err := out.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	// AAC-LC, 44.1 kHz, stereo AudioSpecificConfig. The packet payload bytes
+	// are protocol fixtures; playable AAC framing is covered by the Android
+	// MediaExtractor regression.
+	codecPrivate := []byte{0x12, 0x10}
+	packets := []struct {
+		ptsUs int64
+		data  []byte
+	}{
+		{0, []byte{0x21, 0x10, 0x04, 0x60}},
+		{23_220, []byte{0x21, 0x10, 0x04, 0x61}},
+		{46_440, []byte{0x21, 0x10, 0x04, 0x62}},
+	}
+	bundleSHA, contentSHA, codecPrivateSHA := writeNormalizedPacketFixtureV2(
+		t,
+		packetPath,
+		70_000,
+		codecPrivate,
+		packets,
+	)
+
+	if err := EditContainerResourcesWithTrackImports(
+		context.Background(),
+		base,
+		dst,
+		nil, nil, nil, nil, nil, nil,
+		[]TrackImport{{
+			SourceKind: trackImportSourcePacketAudio,
+			SourcePath: packetPath,
+			SourceSHA256: bundleSHA,
+			SourceCodec: "A_AAC",
+			SampleRate: 44_100,
+			Channels: 2,
+			Name: "Imported AAC",
+			Language: "und",
+		}},
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := reader.Open(context.Background(), dst)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Tracks) != 2 {
+		t.Fatalf("track count = %d, want 2: %+v", len(got.Tracks), got.Tracks)
+	}
+	added := got.Tracks[1]
+	if added.Type != mkv.AudioTrack || added.Codec != "aac" {
+		t.Fatalf("AAC track metadata wrong: %+v", added)
+	}
+	if !bytes.Equal(added.CodecPrivate, codecPrivate) {
+		t.Fatalf("CodecPrivate = %x, want %x", added.CodecPrivate, codecPrivate)
+	}
+
+	digest, err := DigestTrackContent(context.Background(), dst, added.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if digest.SHA256 != contentSHA {
+		t.Fatalf("output packet digest = %s, want %s", digest.SHA256, contentSHA)
+	}
+	if digest.CodecPrivateSHA256 != codecPrivateSHA {
+		t.Fatalf(
+			"output CodecPrivate digest = %s, want %s",
+			digest.CodecPrivateSHA256,
+			codecPrivateSHA,
+		)
+	}
+	if digest.PacketCount != uint64(len(packets)) {
+		t.Fatalf("output packet count = %d, want %d", digest.PacketCount, len(packets))
+	}
+}
+
+func TestTrackImportRejectsAacPacketAudioWithoutCodecPrivate(t *testing.T) {
+	dir := t.TempDir()
+	base := filepath.Join(dir, "base.mkv")
+	packetPath := filepath.Join(dir, "audio-v1.awpkt")
+	dst := filepath.Join(dir, "out.mkv")
+
+	out, err := os.Create(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mw := writer.NewMKVWriter(out)
+	if err := mw.WriteStart(); err != nil {
+		t.Fatal(err)
+	}
+	baseTrack := mkv.Track{ID: 4, UID: 404, Type: mkv.VideoTrack, Codec: "vp9"}
+	if err := mw.WriteMetadata(
+		&mkv.Container{Info: mkv.SegmentInfo{TimecodeScale: 1_000_000}},
+		[]mkv.Track{baseTrack},
+		1000,
+	); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.WriteCluster(out, 0, 1_000_000, []mkv.Block{
+		{TrackNumber: 4, Timecode: 0, Keyframe: true, Data: []byte("video")},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := mw.Finalize(); err != nil {
+		t.Fatal(err)
+	}
+	if err := out.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	packets := []struct {
+		ptsUs int64
+		data  []byte
+	}{
+		{0, []byte{0x21, 0x10, 0x04, 0x60}},
+	}
+	bundleSHA, _ := writeNormalizedPacketFixture(t, packetPath, 30_000, packets)
+
+	err = EditContainerResourcesWithTrackImports(
+		context.Background(),
+		base,
+		dst,
+		nil, nil, nil, nil, nil, nil,
+		[]TrackImport{{
+			SourceKind: trackImportSourcePacketAudio,
+			SourcePath: packetPath,
+			SourceSHA256: bundleSHA,
+			SourceCodec: "A_AAC",
+			SampleRate: 44_100,
+			Channels: 2,
+		}},
+	)
+	if err == nil || !strings.Contains(err.Error(), "missing CodecPrivate") {
+		t.Fatalf("expected missing CodecPrivate rejection, got %v", err)
 	}
 }

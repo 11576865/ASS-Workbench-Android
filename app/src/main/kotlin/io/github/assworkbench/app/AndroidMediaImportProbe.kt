@@ -47,9 +47,7 @@ internal object AndroidMediaImportProbe {
                     } else {
                         null
                     }
-                    add(
-                        MediaImportCompatibilityPlanner.assess(
-                            MediaImportTrackDescriptor(
+                    val descriptor = MediaImportTrackDescriptor(
                                 extractorIndex = index,
                                 kind = kind,
                                 mime = mime,
@@ -60,8 +58,12 @@ internal object AndroidMediaImportProbe {
                                 channelCount = format.intOrNull(MediaFormat.KEY_CHANNEL_COUNT),
                                 sampleRate = format.intOrNull(MediaFormat.KEY_SAMPLE_RATE),
                                 codecPrivateKeys = codecPrivateKeys,
-                                decoderAvailable = decoderAvailable,
-                            )
+                        decoderAvailable = decoderAvailable,
+                    )
+                    add(
+                        promoteSourceSpecificMediaExecution(
+                            assessment = MediaImportCompatibilityPlanner.assess(descriptor),
+                            sourceName = sourceName,
                         )
                     )
                 }
@@ -94,4 +96,27 @@ internal object AndroidMediaImportProbe {
         } else {
             null
         }
+}
+
+
+internal fun promoteSourceSpecificMediaExecution(
+    assessment: MediaImportTrackAssessment,
+    sourceName: String,
+): MediaImportTrackAssessment {
+    val extension = sourceName.substringAfterLast('.', "").lowercase()
+    val descriptor = assessment.descriptor
+    val isIsoBmffAac =
+        descriptor.mime.equals("audio/mp4a-latm", ignoreCase = true) &&
+            assessment.matroskaCodecId == "A_AAC" &&
+            assessment.disposition == MediaImportDisposition.STREAM_COPY_COMPATIBLE &&
+            "csd-0" in descriptor.codecPrivateKeys &&
+            extension in setOf("m4a", "mp4", "3gp", "3g2")
+    return if (isIsoBmffAac) {
+        assessment.copy(
+            executionImplemented = true,
+            reason = "AAC 位于已验证的 ISO-BMFF 来源；MediaExtractor packet 可直接写入 A_AAC，csd-0 作为 Matroska CodecPrivate，并在输出后独立验证。",
+        )
+    } else {
+        assessment
+    }
 }

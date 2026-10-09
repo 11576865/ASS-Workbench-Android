@@ -18,6 +18,7 @@ data class NormalizedMediaPacketSource(
     val file: File,
     val bundleSha256: String,
     val contentSha256: String,
+    val codecPrivateSha256: String? = null,
     val mime: String,
     val sampleRate: Int,
     val channelCount: Int,
@@ -26,16 +27,53 @@ data class NormalizedMediaPacketSource(
 )
 
 internal object AndroidMediaPacketNormalizer {
-    private val MAGIC = "AWPKT001".toByteArray(Charsets.US_ASCII)
-    private const val HEADER_BYTES = 24L
+    private val MAGIC_V1 = "AWPKT001".toByteArray(Charsets.US_ASCII)
+    private val MAGIC_V2 = "AWPKT002".toByteArray(Charsets.US_ASCII)
+    private const val BASE_HEADER_BYTES = 24L
     private const val DEFAULT_SAMPLE_BUFFER = 256 * 1024
     private const val MAX_SAMPLE_BUFFER = 4 * 1024 * 1024
+    private const val MAX_CODEC_PRIVATE_BYTES = 1024 * 1024
 
     suspend fun normalizeMp3Track(
         context: Context,
         uri: Uri,
         extractorIndex: Int,
         output: File,
+    ): NormalizedMediaPacketSource =
+        normalizeAudioTrack(
+            context = context,
+            uri = uri,
+            extractorIndex = extractorIndex,
+            output = output,
+            expectedMime = "audio/mpeg",
+            label = "MP3",
+            includeCodecPrivate = false,
+        )
+
+    suspend fun normalizeAacTrack(
+        context: Context,
+        uri: Uri,
+        extractorIndex: Int,
+        output: File,
+    ): NormalizedMediaPacketSource =
+        normalizeAudioTrack(
+            context = context,
+            uri = uri,
+            extractorIndex = extractorIndex,
+            output = output,
+            expectedMime = "audio/mp4a-latm",
+            label = "AAC",
+            includeCodecPrivate = true,
+        )
+
+    private suspend fun normalizeAudioTrack(
+        context: Context,
+        uri: Uri,
+        extractorIndex: Int,
+        output: File,
+        expectedMime: String,
+        label: String,
+        includeCodecPrivate: Boolean,
     ): NormalizedMediaPacketSource {
         val extractor = MediaExtractor()
         try {
@@ -46,15 +84,28 @@ internal object AndroidMediaPacketNormalizer {
             val format = extractor.getTrackFormat(extractorIndex)
             val mime = format.stringOrNull(MediaFormat.KEY_MIME)
                 ?: error("媒体 Track MIME 缺失")
-            require(mime.equals("audio/mpeg", ignoreCase = true)) {
-                "当前 packet adapter 只执行 audio/mpeg；实际为 $mime"
+            require(mime.equals(expectedMime, ignoreCase = true)) {
+                "当前 packet adapter 期望 $expectedMime；实际为 $mime"
             }
             val sampleRate = format.intOrNull(MediaFormat.KEY_SAMPLE_RATE)
                 ?.takeIf { it > 0 }
-                ?: error("MP3 Track 缺少 sample rate")
+                ?: error("$label Track 缺少 sample rate")
             val channelCount = format.intOrNull(MediaFormat.KEY_CHANNEL_COUNT)
                 ?.takeIf { it in 1..255 }
-                ?: error("MP3 Track 缺少有效 channel count")
+                ?: error("$label Track 缺少有效 channel count")
+            val codecPrivate = if (includeCodecPrivate) {
+                format.byteArrayOrNull("csd-0")
+                    ?.takeIf { it.isNotEmpty() }
+                    ?: error("$label Track 缺少 csd-0 / CodecPrivate")
+            } else {
+                null
+            }
+            codecPrivate?.let {
+                require(it.size <= MAX_CODEC_PRIVATE_BYTES) {
+                    "$label CodecPrivate 过大：${it.size} bytes"
+                }
+            }
+
             val declaredDurationUs = format.longOrNull(MediaFormat.KEY_DURATION)
                 ?.coerceAtLeast(0L)
                 ?: 0L
@@ -76,9 +127,17 @@ internal object AndroidMediaPacketNormalizer {
             val buffer = ByteBuffer.allocateDirect(capacity)
 
             DataOutputStream(output.outputStream().buffered()).use { out ->
-                out.write(MAGIC)
+                if (codecPrivate == null) {
+                    out.write(MAGIC_V1)
+                } else {
+                    out.write(MAGIC_V2)
+                }
                 out.writeLong(0L) // durationUs, patched after streaming
                 out.writeLong(0L) // packetCount, patched after streaming
+                if (codecPrivate != null) {
+                    out.writeInt(codecPrivate.size)
+                    out.write(codecPrivate)
+                }
 
                 while (true) {
                     currentCoroutineContext().ensureActive()
@@ -86,14 +145,16 @@ internal object AndroidMediaPacketNormalizer {
                     val size = extractor.readSampleData(buffer, 0)
                     if (size < 0) break
                     require(size in 1..capacity) {
-                        "MP3 sample size $size exceeds packet adapter bound $capacity"
+                        "$label sample size $size exceeds packet adapter bound $capacity"
                     }
                     val sourcePtsUs = extractor.sampleTime
-                    require(sourcePtsUs >= 0L) { "MP3 sample 缺少有效 presentation timestamp" }
+                    require(sourcePtsUs >= 0L) {
+                        "$label sample 缺少有效 presentation timestamp"
+                    }
                     if (firstSourcePtsUs < 0L) firstSourcePtsUs = sourcePtsUs
                     val ptsUs = (sourcePtsUs - firstSourcePtsUs).coerceAtLeast(0L)
                     require(previousPtsUs <= ptsUs) {
-                        "MP3 sample timestamp 非单调；当前 stream-copy adapter 拒绝重排"
+                        "$label sample timestamp 非单调；当前 stream-copy adapter 拒绝重排"
                     }
                     if (previousPtsUs >= 0L && ptsUs > previousPtsUs) {
                         minimumGapUs = minOf(minimumGapUs, ptsUs - previousPtsUs)
@@ -118,7 +179,7 @@ internal object AndroidMediaPacketNormalizer {
                 }
             }
 
-            require(packetCount > 0L) { "MP3 Track 没有可导入的压缩 packet" }
+            require(packetCount > 0L) { "$label Track 没有可导入的压缩 packet" }
             val measuredEndUs = lastPtsUs + when {
                 minimumGapUs != Long.MAX_VALUE -> minimumGapUs
                 declaredDurationUs > 0L && firstSourcePtsUs >= 0L ->
@@ -132,18 +193,22 @@ internal object AndroidMediaPacketNormalizer {
             }
             val durationUs = max(measuredEndUs, rebasedDeclaredUs).coerceAtLeast(1000L)
 
+            val minimumHeaderBytes = BASE_HEADER_BYTES +
+                if (codecPrivate != null) 4L + codecPrivate.size else 0L
             RandomAccessFile(output, "rw").use { raf ->
-                require(raf.length() >= HEADER_BYTES) { "packet bundle header 写入不完整" }
-                raf.seek(MAGIC.size.toLong())
+                require(raf.length() >= minimumHeaderBytes) {
+                    "packet bundle header 写入不完整"
+                }
+                raf.seek(MAGIC_V1.size.toLong())
                 raf.writeLong(durationUs)
                 raf.writeLong(packetCount)
             }
 
-            val bundleSha256 = sha256File(output)
             return NormalizedMediaPacketSource(
                 file = output,
-                bundleSha256 = bundleSha256,
+                bundleSha256 = sha256File(output),
                 contentSha256 = contentDigest.digest().toHex(),
+                codecPrivateSha256 = codecPrivate?.let(::sha256Bytes),
                 mime = mime,
                 sampleRate = sampleRate,
                 channelCount = channelCount,
@@ -181,6 +246,9 @@ internal object AndroidMediaPacketNormalizer {
         return digest.digest().toHex()
     }
 
+    private fun sha256Bytes(bytes: ByteArray): String =
+        MessageDigest.getInstance("SHA-256").digest(bytes).toHex()
+
     private fun ByteArray.toHex(): String =
         joinToString("") { "%02x".format(it.toInt() and 0xff) }
 
@@ -192,4 +260,15 @@ internal object AndroidMediaPacketNormalizer {
 
     private fun MediaFormat.stringOrNull(key: String): String? =
         if (containsKey(key)) runCatching { getString(key) }.getOrNull() else null
+
+    private fun MediaFormat.byteArrayOrNull(key: String): ByteArray? =
+        if (containsKey(key)) {
+            runCatching {
+                getByteBuffer(key)?.duplicate()?.let { buffer ->
+                    ByteArray(buffer.remaining()).also { buffer.get(it) }
+                }
+            }.getOrNull()
+        } else {
+            null
+        }
 }

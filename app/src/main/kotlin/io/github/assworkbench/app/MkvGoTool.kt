@@ -56,6 +56,7 @@ data class TrackContentDigest(
     val packetCount: Long,
     val firstTimecodeMs: Long?,
     val lastTimecodeMs: Long?,
+    val codecPrivateSha256: String? = null,
 )
 
 class MkvGoTool(private val context: Context) {
@@ -319,8 +320,8 @@ class MkvGoTool(private val context: Context) {
                             "媒体 packet bundle 缺少有效 SHA-256 证据"
                         }
                         val codec = import.sourceCodecId.orEmpty()
-                        require(codec == "A_MPEG/L3") {
-                            "当前 packet audio adapter 只允许 A_MPEG/L3"
+                        require(codec in setOf("A_MPEG/L3", "A_AAC")) {
+                            "当前 packet audio adapter 只允许 A_MPEG/L3 或 A_AAC"
                         }
                         val sampleRate = requireNotNull(import.sampleRate) {
                             "packet audio 缺少 sample rate"
@@ -404,6 +405,8 @@ class MkvGoTool(private val context: Context) {
                 ?: error("mkvgo digest-track 未返回 packet count"),
             firstTimecodeMs = values["first_ms"]?.takeIf { it != "-" }?.toLongOrNull(),
             lastTimecodeMs = values["last_ms"]?.takeIf { it != "-" }?.toLongOrNull(),
+            codecPrivateSha256 = values["codec_private_sha256"]
+                ?.takeIf { it != "-" && it.matches(Regex("[0-9a-f]{64}")) },
         )
     }
 
