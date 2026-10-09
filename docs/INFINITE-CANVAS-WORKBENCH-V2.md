@@ -27,6 +27,17 @@ Tool access is available from the bottom project strip and from the existing bir
 - Layout changes retain existing `.asswb` scene wire format; optional extended fields require compatibility tests.
 - Legacy visual-capture and interaction tests must be reviewed, not reported as passing merely because code compiles.
 
+## Single-experiment UI consolidation — 2026-10-10 (PR #138)
+
+- **Product registry:** `FIXED` remains the standard main UI, `SPATIAL_EXPERIMENTAL` is the sole selectable experiment and still the configured new-session default. Eight older variants have `ARCHIVED` status and are omitted from the chooser. Their legacy persisted `workspace_mode` strings migrate to the infinite canvas without resetting document or ToolInstance data. Their old private code paths remain unreachable until safe removal of source/test dependencies.
+- **Main UI:** a direct action toggles between standard workspace and canvas; the former UI Lab chooser is now a two-layout workspace selector.
+- **Timeline Dock:** a real `ModernTimelinePane` can remain open beneath the focused native editor or board; compact and expanded presentations preserve the same playback model and free the viewport above the dock.
+- **Side Bookmark:** a ToolInstance with `WorkspaceToolPresence.BOOKMARKED` appears on a right-side spatial rail and is no longer duplicated as a world-window. Focusing its bookmark uses the same tool ID and saved world geometry. A contextual command can reverse bookmark status.
+- **Object-first authoring:** native preview long press supplies `PreviewObjectPick` at its frozen playback position. A single reliable candidate changes document Focus explicitly; ambiguous hits use the existing `ObjectCandidatePicker` instead of guessing.
+- **Precision and glass:** Position can enable the real `PrecisionInteractionOverlay`, excluding the ordinary rod overlay while precision is active; world-node opacity now changes actual composited alpha using a persisted 100/75/50/25% cycle. Audio-specific input pass-through remains separate.
+- **Regression migration:** old presentation smoke tests target the two supported modes; legacy presentation-only UI tests have been rewritten to exercise equivalent actions inside the unified canvas. New connected coverage includes live timeline and reversible side bookmarks.
+- **Scope and limits:** This is not removal of every old private Kotlin function, nor parity with all 240 UI experiments. Named canvas islands, fully four-sided docking, global gesture arbitration, complete visual evidence, real-device render/IME performance and generalized multi-writer draft safety remain separately unverified. All newest CI/Emulator results are **Pending** at submission; keep PR Draft.
+
 ## Acceptance
 
 - Spatial zoom switches low-detail cards to close-up native-density live surfaces; zoom does not rescale the live editor's fonts or touch targets.
