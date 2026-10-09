@@ -144,6 +144,7 @@ class SpatialPositionEditingInstrumentedTest {
         assertEquals("geometry:1", vm.state.value.previewOwnerId)
         assertFalse(vm.state.value.canUndo)
         composeRule.onRoot().performTouchInput { up() }
+        composeRule.onNodeWithTag("spatial-quick-preview").performClick()
         composeRule.waitUntil(5_000) { vm.state.value.document != before }
         val changed = vm.state.value.document
         assertNull(vm.state.value.previewDocument)
