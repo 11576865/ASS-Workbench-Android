@@ -192,6 +192,43 @@ class InfiniteCanvasInstrumentedTest {
         composeRule.onNodeWithTag("spatial-native-content-POSITION-primary").assertExists()
     }
 
+
+    @Test fun explicitBirdseyeNavigationCancelsAbandonedToolPickerSelection() {
+        val nodes = listOf(
+            InfiniteCanvasNode("CAPABILITIES:primary"),
+            InfiniteCanvasNode("POSITION:primary", x = 460f),
+            InfiniteCanvasNode("STYLE:primary", x = 920f),
+        )
+        val initial = InfiniteCanvasPersistence.encode(
+            InfiniteCanvasCamera(0f, 0f, 0.85f), nodes)
+        var requestedId by mutableStateOf<String?>(null)
+        composeRule.activityRule.scenario.onActivity { activity ->
+            activity.setContent {
+                MaterialTheme {
+                    InfiniteCanvasHost(
+                        sessionId = 5L, savedScene = initial, onSaveScene = {},
+                        entries = nodes.map { InfiniteCanvasEntry(it.id, it.id) },
+                        gestureOwned = false,
+                        onAddTool = { requestedId = "CAPABILITIES:primary" },
+                        onActivate = {},
+                        onUndo = {}, onRedo = {}, canUndo = false, canRedo = false,
+                        requestedActiveToolId = requestedId,
+                        modifier = Modifier.fillMaxSize(),
+                    ) { id, _ -> Text(id, Modifier.testTag("overview-content-" + id)) }
+                }
+            }
+        }
+        composeRule.onNodeWithTag("spatial-add-tool").performClick()
+        composeRule.onNodeWithTag("spatial-native-content-CAPABILITIES-primary").assertExists()
+        composeRule.onNodeWithTag("spatial-birdseye").performClick()
+        composeRule.onNodeWithTag("spatial-birdseye-node-POSITION-primary")
+            .performScrollTo().performClick()
+        composeRule.onNodeWithTag("spatial-native-content-POSITION-primary").assertExists()
+        composeRule.runOnIdle { requestedId = "STYLE:primary" }
+        composeRule.onNodeWithTag("spatial-native-content-POSITION-primary").assertExists()
+        composeRule.onNodeWithTag("spatial-native-content-STYLE-primary").assertDoesNotExist()
+    }
+
     @Test fun focusedEditorIsNotShrunkByBoardCamera() {
         val fixture = OverviewFixture(listOf(
             InfiniteCanvasNode("preview", x = 8000f, width = 900f),
