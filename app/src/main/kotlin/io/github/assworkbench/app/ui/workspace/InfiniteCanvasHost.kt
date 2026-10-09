@@ -115,6 +115,7 @@ internal fun InfiniteCanvasHost(
             scene = scene.first to (scene.second + additions)
         }
         val beforePicker = pendingToolSelection
+        var pickerOpenedId: String? = null
         if (beforePicker != null) {
             // Newly created and already-existing tools must both be reachable
             // from the directory without returning to a scaled overview.
@@ -128,9 +129,7 @@ internal fun InfiniteCanvasHost(
                 // Opening a previously hidden primary is a genuine reveal.
                 // Do not leave the domain instance hidden while its editor is
                 // apparently active on screen.
-                scene = scene.first to scene.second.map { node ->
-                    if (node.id == opened.id) node.copy(hidden = false) else node
-                }
+                pickerOpenedId = opened.id
                 focusedId = opened.id
                 pendingToolSelection = null
                 if (opened.initiallyHidden) active(opened.id)
@@ -152,6 +151,13 @@ internal fun InfiniteCanvasHost(
             }
         }
         previouslyPresentEntries = ids
+        // Picker navigation wins over the previous HIDDEN presentation flag,
+        // even when domain-presence updates asynchronously in the parent.
+        pickerOpenedId?.let { id ->
+            scene = scene.first to scene.second.map { node ->
+                if (node.id == id) node.copy(hidden = false) else node
+            }
+        }
         if (focusedId != null && entries.none { it.id == focusedId } &&
             focusedId != "CAPABILITIES:primary") focusedId = null
     }
