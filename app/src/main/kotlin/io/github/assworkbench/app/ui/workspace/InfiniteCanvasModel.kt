@@ -155,6 +155,14 @@ internal fun arrangeCanvasNodes(nodes: List<InfiniteCanvasNode>, columns: Int, g
     return nodes.map { relocated[it.id] ?: it }
 }
 
+/** Opacity cycles are deterministic and layout-only; never touch ASS history. */
+internal fun nextCanvasOpacity(alpha: Float): Float = when {
+    !alpha.isFinite() || alpha >= 0.95f -> 0.75f
+    alpha >= 0.65f -> 0.50f
+    alpha >= 0.40f -> 0.25f
+    else -> 1f
+}
+
 internal fun raiseCanvasNode(nodes: List<InfiniteCanvasNode>, id: String): List<InfiniteCanvasNode> {
     val normalized = if ((nodes.maxOfOrNull { it.z } ?: 0) >= 999_999)
         nodes.sortedBy { it.z }.mapIndexed { i, n -> n.copy(z = i + 1) } else nodes
