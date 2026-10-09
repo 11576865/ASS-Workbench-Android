@@ -7,12 +7,55 @@ internal data class InfiniteCanvasCamera(val x: Float = 0f, val y: Float = 0f, v
             copy(x = x + dx, y = y + dy) else this
     fun zoomAt(anchorX: Float, anchorY: Float, nextScale: Float): InfiniteCanvasCamera {
         if (!anchorX.isFinite() || !anchorY.isFinite() || !nextScale.isFinite() || scale <= 0f) return this
-        val z = nextScale.coerceIn(0.25f, 2f)
+        val z = nextScale.coerceIn(0.025f, 2f)
         val nx = anchorX - (anchorX - x) * z / scale
         val ny = anchorY - (anchorY - y) * z / scale
         return if (nx.isFinite() && ny.isFinite()) InfiniteCanvasCamera(nx, ny, z) else this
     }
 }
+
+/**
+ * Fit a set of world-space nodes into the visible board, retaining headroom for
+ * its top command bar and bottom tool strip. Double intermediate math prevents
+ * opposite finite Float coordinates from overflowing a bounding-box subtraction.
+ * The world is not clipped by the viewport; malformed geometry is ignored.
+ */
+internal fun fitCanvasCamera(
+    nodes: List<InfiniteCanvasNode>,
+    viewportWidth: Float,
+    viewportHeight: Float,
+): InfiniteCanvasCamera? {
+    if (!viewportWidth.isFinite() || !viewportHeight.isFinite() ||
+        viewportWidth <= 64f || viewportHeight <= 176f) return null
+    val eligible = nodes.filter {
+        it.x.isFinite() && it.y.isFinite() &&
+            it.width.isFinite() && it.height.isFinite() &&
+            it.width > 0f && it.height > 0f
+    }
+    if (eligible.isEmpty()) return null
+    val left = eligible.minOf { it.x.toDouble() }
+    val top = eligible.minOf { it.y.toDouble() }
+    val right = eligible.maxOf { it.x.toDouble() + it.width.toDouble() }
+    val bottom = eligible.maxOf { it.y.toDouble() + it.height.toDouble() }
+    val extentW = right - left
+    val extentH = bottom - top
+    if (!extentW.isFinite() || !extentH.isFinite() || extentW <= 0.0 || extentH <= 0.0) return null
+    val availableW = (viewportWidth - 32f).toDouble()
+    val availableH = (viewportHeight - 160f).toDouble()
+    val scale = minOf(1.0, availableW / extentW, availableH / extentH).coerceIn(0.025, 2.0)
+    val screenX = 16.0 - left * scale
+    val screenY = 72.0 - top * scale
+    if (!screenX.isFinite() || !screenY.isFinite() ||
+        screenX !in -Float.MAX_VALUE.toDouble()..Float.MAX_VALUE.toDouble() ||
+        screenY !in -Float.MAX_VALUE.toDouble()..Float.MAX_VALUE.toDouble()) return null
+    return InfiniteCanvasCamera(screenX.toFloat(), screenY.toFloat(), scale.toFloat())
+}
+
+/** Approach updates observation, never modifies a node's saved world geometry. */
+internal fun canvasCameraForNode(
+    node: InfiniteCanvasNode, viewportWidth: Float, viewportHeight: Float,
+): InfiniteCanvasCamera =
+    fitCanvasCamera(listOf(node), viewportWidth, viewportHeight) ?: InfiniteCanvasCamera()
 
 internal data class InfiniteCanvasNode(
     val id: String,
@@ -55,7 +98,7 @@ internal object InfiniteCanvasPersistence {
     fun decode(rows: List<String>): Pair<InfiniteCanvasCamera, List<InfiniteCanvasNode>> {
         if (rows.firstOrNull() != "infinite-v1" || rows.size < 2) return InfiniteCanvasCamera() to emptyList()
         val c = rows[1].split(SEP).mapNotNull { it.toFloatOrNull()?.takeIf(Float::isFinite) }
-        if (c.size != 3 || c[2] !in 0.25f..2f) return InfiniteCanvasCamera() to emptyList()
+        if (c.size != 3 || c[2] !in 0.025f..2f) return InfiniteCanvasCamera() to emptyList()
         val nodes = rows.drop(2).mapNotNull { row ->
             val p = row.split(SEP)
             if (p.size != 9 || p[0].isBlank()) return@mapNotNull null
