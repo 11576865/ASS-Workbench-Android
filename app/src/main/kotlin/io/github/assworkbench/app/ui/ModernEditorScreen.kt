@@ -3043,6 +3043,7 @@ private fun SpatialWorkspace(
         }
     } + parameterEntries
     Box(modifier) {
+    Box(modifier) {
     InfiniteCanvasHost(
         sessionId = state.workspaceSessionId,
         savedScene = surfaceController.infiniteSceneForSession(state.workspaceSessionId),
