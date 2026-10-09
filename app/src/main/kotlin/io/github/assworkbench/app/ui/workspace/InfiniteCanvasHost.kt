@@ -30,7 +30,14 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 
-internal data class InfiniteCanvasEntry(val id: String, val title: String, val subtitle: String = "")
+internal data class InfiniteCanvasEntry(
+    val id: String, val title: String, val subtitle: String = "",
+    val canClose: Boolean = false,
+    val canDuplicate: Boolean = false,
+    val canBindEvent: Boolean = false,
+    val pinnedEvent: Boolean = false,
+    val focusEventId: Long? = null,
+)
 
 /**
  * The board and the editor are different interaction layers:
@@ -48,6 +55,9 @@ internal fun InfiniteCanvasHost(
     gestureOwned: Boolean,
     onAddTool: () -> Unit,
     onActivate: (String) -> Unit,
+    onCloseTool: (String) -> Unit = {},
+    onDuplicateTool: (String, Boolean) -> Unit = { _, _ -> },
+    onToggleEventBinding: (String) -> Unit = {},
     onUndo: () -> Unit,
     onRedo: () -> Unit,
     canUndo: Boolean,
@@ -73,7 +83,8 @@ internal fun InfiniteCanvasHost(
     var birdseyeOpen by rememberSaveable(sessionId) { mutableStateOf(false) }
     var toolDrawerOpen by rememberSaveable(sessionId) { mutableStateOf(false) }
     var toolDrawerResident by rememberSaveable(sessionId) { mutableStateOf(false) }
-    var recallOpen by remember { mutableStateOf(false) }
+    var recallOpen by remember(sessionId) { mutableStateOf(false) }
+    var arrangeOpen by remember(sessionId) { mutableStateOf(false) }
     var cardMenuId by remember(sessionId) { mutableStateOf<String?>(null) }
     // A directory selection may asynchronously create a ToolInstance. Carry the
     // invoking set of IDs until the new production tool is actually available.
@@ -112,6 +123,12 @@ internal fun InfiniteCanvasHost(
                 focusedId = opened.id
                 pendingToolSelection = null
             }
+        }
+        val ids = entries.mapTo(mutableSetOf()) { it.id }
+        if (scene.second.any { it.id !in ids }) {
+            // Closed tools leave no orphan saved geometry. Hidden tools remain
+            // in entries and are retained for later recall.
+            scene = scene.first to scene.second.filter { it.id in ids }
         }
         if (focusedId != null && entries.none { it.id == focusedId } &&
             focusedId != "CAPABILITIES:primary") focusedId = null
@@ -156,9 +173,10 @@ internal fun InfiniteCanvasHost(
             if (gestureOwned) return
             val node = scene.second.firstOrNull { it.id == id } ?: return
             if (entries.none { it.id == id }) return
-            val expanded = expandAudioCanvasForFocus(node, 1f, viewportH)
+            // Focus must not silently resize a world node. It only changes
+            // camera observation and reveals a hidden surface.
             val nextScene = canvasCameraForNode(node, viewportW, viewportH) to
-                scene.second.map { if (it.id == id) expanded.copy(hidden = false) else it }
+                scene.second.map { if (it.id == id) it.copy(hidden = false) else it }
             scene = nextScene
             // Publish the newly recalled geometry before activating another tool
             // or dismissing a dialog can recompose the workspace controller.
@@ -192,6 +210,20 @@ internal fun InfiniteCanvasHost(
             focusedId = null
             if (toolDrawerResident) toolDrawerOpen = true
             pendingToolSelection = null
+        }
+        LaunchedEffect(boardMode, toolDrawerResident) {
+            if (boardMode && toolDrawerResident) toolDrawerOpen = true
+        }
+        fun arrange(columns: Int) {
+            if (gestureOwned) return
+            val changed = arrangeCanvasNodes(scene.second, columns)
+            scene = scene.first to changed
+            focusedId = null
+            val shown = changed.filter { !it.hidden && entries.any { entry -> entry.id == it.id } }
+            fitCanvasCamera(shown, viewportW, viewportH)?.let { camera ->
+                scene = camera to changed
+            }
+            arrangeOpen = false
         }
 
         if (birdseyeOpen) CanvasOverviewDialog(
@@ -260,16 +292,16 @@ internal fun InfiniteCanvasHost(
                                     verticalAlignment = Alignment.CenterVertically) {
                                     Row(Modifier.weight(1f).fillMaxHeight()
                                         .testTag("spatial-drag-" + entry.id.replace(':', '-'))
-                                        .pointerInput(entry.id, gestureOwned) {
+                                        .pointerInput(entry.id, gestureOwned, node.layoutLocked) {
                                             detectDragGestures(
-                                                onDragStart = { if (!gestureOwned) moving = liveNode },
+                                                onDragStart = { if (!gestureOwned && !liveNode.layoutLocked) moving = liveNode },
                                                 onDragEnd = {
                                                     if (!gestureOwned) moving?.let(::updateNode)
                                                     moving = null
                                                 },
                                                 onDragCancel = { moving = null },
                                                 onDrag = { change, delta ->
-                                                    if (!gestureOwned) {
+                                                    if (!gestureOwned && !liveNode.layoutLocked) {
                                                         change.consume()
                                                         moving = liveNode.move(
                                                             delta.x / density / scale,
@@ -363,16 +395,16 @@ internal fun InfiniteCanvasHost(
                                 Icon(Icons.Filled.OpenInFull, "调整 " + entry.title + " 大小",
                                     Modifier.align(Alignment.End).size(44.dp)
                                         .testTag("spatial-resize-" + entry.id.replace(':', '-'))
-                                        .pointerInput(entry.id, gestureOwned) {
+                                        .pointerInput(entry.id, gestureOwned, node.layoutLocked) {
                                             detectDragGestures(
-                                                onDragStart = { if (!gestureOwned) moving = liveNode },
+                                                onDragStart = { if (!gestureOwned && !liveNode.layoutLocked) moving = liveNode },
                                                 onDragEnd = {
                                                     if (!gestureOwned) moving?.let(::updateNode)
                                                     moving = null
                                                 },
                                                 onDragCancel = { moving = null },
                                                 onDrag = { change, delta ->
-                                                    if (!gestureOwned) {
+                                                    if (!gestureOwned && !liveNode.layoutLocked) {
                                                         change.consume()
                                                         moving = liveNode.resize(
                                                             delta.x / density / scale,
