@@ -39,6 +39,7 @@ internal data class InfiniteCanvasEntry(
     val canBindEvent: Boolean = false,
     val pinnedEvent: Boolean = false,
     val focusEventId: Long? = null,
+    val initiallyHidden: Boolean = false,
 )
 
 /**
@@ -91,6 +92,7 @@ internal fun InfiniteCanvasHost(
     // A directory selection may asynchronously create a ToolInstance. Carry the
     // invoking set of IDs until the new production tool is actually available.
     var pendingToolSelection by remember(sessionId) { mutableStateOf<Set<String>?>(null) }
+    var previouslyPresentEntries by remember(sessionId) { mutableStateOf<Set<String>?>(null) }
     val contentState = rememberSaveableStateHolder()
     val density = LocalDensity.current.density
     val active by rememberUpdatedState(onActivate)
@@ -106,7 +108,7 @@ internal fun InfiniteCanvasHost(
                     "subtitles" -> InfiniteCanvasNode(item.id, 850f, 30f, 420f, 500f, z = 2)
                     "audio" -> InfiniteCanvasNode(item.id, 80f, 570f, 650f, 190f, z = 3, alpha = 0.2f)
                     else -> InfiniteCanvasNode(item.id, 140f + i * 52f, 140f + i * 52f,
-                        400f, 430f, z = oldMaxZ + i + 1)
+                        400f, 430f, z = oldMaxZ + i + 1, hidden = item.initiallyHidden)
                 }
             }
             scene = scene.first to (scene.second + additions)
@@ -127,11 +129,21 @@ internal fun InfiniteCanvasHost(
             }
         }
         val ids = entries.mapTo(mutableSetOf()) { it.id }
-        if (scene.second.any { it.id !in ids }) {
-            // Closed tools leave no orphan saved geometry. Hidden tools remain
-            // in entries and are retained for later recall.
-            scene = scene.first to scene.second.filter { it.id in ids }
+        // Only a previously live identity disappearing is a close. During
+        // restore the WorkspaceState may hydrate AFTER the saved canvas scene;
+        // never prune those nodes merely because this first frame lacks tools.
+        val closedIds = (previouslyPresentEntries ?: emptySet()) - ids
+        if (closedIds.isNotEmpty() || entries.any { entry ->
+                entry.initiallyHidden && scene.second.any { it.id == entry.id && !it.hidden }
+            }) {
+            scene = scene.first to scene.second.mapNotNull { node ->
+                if (node.id in closedIds) null
+                else if (entries.any { it.id == node.id && it.initiallyHidden })
+                    node.copy(hidden = true)
+                else node
+            }
         }
+        previouslyPresentEntries = ids
         if (focusedId != null && entries.none { it.id == focusedId } &&
             focusedId != "CAPABILITIES:primary") focusedId = null
     }
