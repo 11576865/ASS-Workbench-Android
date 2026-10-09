@@ -49,3 +49,11 @@ Tool access is available from the bottom project strip and from the existing bir
 - Two failures concerned birdseye recall and camera/hidden-node evidence. The focus path now publishes restored scene state before its active-tool callback, and instrumented tests separately assert that the native editor becomes visible.
 - Follow-up commits and regressions are submitted. **Post-repair CI is Pending**; these fixes are not yet presented as confirmed successful.
 - **Not established**: full-device usability, renderer/frame-time benchmarks, 240-UI completion, arbitrary parameter extraction, universal draft ownership, or guaranteed viewport virtualization for very large numbers of concurrently live tools.
+
+## Follow-up execution boundary — 2026-10-09
+
+- Product: pinned `spatial-add-tool` in the bottom command strip, separating it from horizontally scrollable instance tabs. This fixes the loss of a reliably visible tool-directory action on narrow layouts.
+- Product: explicit birdseye/recall focus clears an abandoned tool-picker transaction. A later unrelated `activeInstanceId` update must not redirect the editor.
+- Android instrumentation: `pickerSwitchesToAnAlreadyExistingToolInstance` now checks that the directory affordance is actually displayed; `explicitBirdseyeNavigationCancelsAbandonedToolPickerSelection` covers stale selection invalidation.
+- Verification: new head CI has started, but final outcomes are **Pending CI**, **Pending Emulator**, and **Pending Fontconfig**. Source-code and test submission are not equivalent to emulator PASS.
+- Merge policy: keep PR #138 in Draft until Android Emulator is green, then review visual evidence and user-device acceptance separately.
