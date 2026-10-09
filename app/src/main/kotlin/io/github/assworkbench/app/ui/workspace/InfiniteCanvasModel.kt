@@ -42,7 +42,11 @@ internal fun fitCanvasCamera(
     if (!extentW.isFinite() || !extentH.isFinite() || extentW <= 0.0 || extentH <= 0.0) return null
     val availableW = (viewportWidth - 32f).toDouble()
     val availableH = (viewportHeight - 160f).toDouble()
-    val scale = minOf(1.0, availableW / extentW, availableH / extentH).coerceIn(0.025, 2.0)
+    val requiredScale = minOf(1.0, availableW / extentW, availableH / extentH)
+    // A projection beyond the camera's numerical operating scale is not a real fit.
+    // Callers can open the normalized birdseye map instead of reporting false success.
+    if (!requiredScale.isFinite() || requiredScale < 0.025) return null
+    val scale = requiredScale.coerceAtMost(2.0)
     val screenX = 16.0 - left * scale
     val screenY = 72.0 - top * scale
     if (!screenX.isFinite() || !screenY.isFinite() ||
