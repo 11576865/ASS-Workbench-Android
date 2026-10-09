@@ -2972,6 +2972,7 @@ private fun SpatialWorkspace(
                     WorkspaceBinding.FollowSelection -> "参数投影 · 选择集"
                     is WorkspaceBinding.PinnedEvent -> "参数投影 · 固定 #${projection.binding.eventId}"
                 },
+                canClose = true,
             )
         }
     }
@@ -2981,8 +2982,20 @@ private fun SpatialWorkspace(
         InfiniteCanvasEntry("audio", "音频证据", "波形 / 声谱图 · 与视频同步"),
     ) + visibleTools.mapNotNull { toolInstance ->
         WorkbenchTool.entries.firstOrNull { it.name == toolInstance.toolKey }?.let { tool ->
-            InfiniteCanvasEntry(toolInstance.id, tool.title,
-                if (toolInstance.binding is WorkspaceBinding.PinnedEvent) "固定字幕对象" else "跟随当前选择")
+            val pinned = toolInstance.binding as? WorkspaceBinding.PinnedEvent
+            InfiniteCanvasEntry(
+                id = toolInstance.id, title = tool.title,
+                subtitle = when {
+                    pinned != null -> "读取：固定字幕 #${pinned.eventId} · 写入按工具规则"
+                    toolInstance.binding == WorkspaceBinding.FollowSelection -> "读取：当前选择集"
+                    else -> "读取：跟随当前焦点"
+                },
+                canClose = true,
+                canDuplicate = tool.descriptor.canDuplicate,
+                canBindEvent = tool.descriptor.eventBindable,
+                pinnedEvent = pinned != null,
+                focusEventId = state.focusedEventId,
+            )
         }
     } + parameterEntries
     InfiniteCanvasHost(
@@ -2993,6 +3006,43 @@ private fun SpatialWorkspace(
         gestureOwned = interactionRegistry.activeHandleId != null,
         onAddTool = { onActiveTool(WorkbenchTool.CAPABILITIES) },
         onActivate = { id -> if (visibleTools.any { it.id == id }) onActivateInstance(id) },
+        onCloseTool = { id ->
+            when {
+                workspaceState.tools.any { it.id == id } ->
+                    onWorkspaceStateChange(workspaceState.closeInstance(id))
+                workspaceState.parameterProjections.any { it.id == id } ->
+                    onWorkspaceStateChange(workspaceState.removeParameterProjection(id))
+            }
+        },
+        onDuplicateTool = { id, followFocus ->
+            val original = workspaceState.tools.firstOrNull { it.id == id }
+            val tool = original?.let { instance ->
+                WorkbenchTool.entries.firstOrNull { it.name == instance.toolKey }
+            }
+            if (tool?.descriptor?.canDuplicate == true) {
+                workspaceState.newSibling(id)?.let { sibling ->
+                    val copy = if (followFocus) sibling.copy(binding = WorkspaceBinding.FollowFocus) else sibling
+                    onWorkspaceStateChange(
+                        workspaceState.addInstance(copy).activate(copy.id).withSurfacesHidden(false)
+                    )
+                }
+            }
+        },
+        onToggleEventBinding = { id ->
+            val instance = workspaceState.tools.firstOrNull { it.id == id }
+            val tool = instance?.let { current ->
+                WorkbenchTool.entries.firstOrNull { it.name == current.toolKey }
+            }
+            if (tool?.descriptor?.eventBindable == true && instance != null) {
+                val newBinding = when (instance.binding) {
+                    is WorkspaceBinding.PinnedEvent -> WorkspaceBinding.FollowFocus
+                    else -> state.focusedEventId?.let(WorkspaceBinding::PinnedEvent)
+                }
+                if (newBinding != null) {
+                    onWorkspaceStateChange(workspaceState.updateBinding(id, newBinding))
+                }
+            }
+        },
         onUndo = viewModel::undo,
         onRedo = viewModel::redo,
         canUndo = state.canUndo,
