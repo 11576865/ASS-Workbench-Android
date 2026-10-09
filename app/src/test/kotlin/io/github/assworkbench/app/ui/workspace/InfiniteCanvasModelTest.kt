@@ -91,4 +91,26 @@ class InfiniteCanvasModelTest {
             400f, 800f,
         ))
     }
+    @Test fun offscreenLiveCompositionUsesCameraProjectionWithPrefetch() {
+        val near = InfiniteCanvasNode("preview", x = 0f, y = 0f, width = 300f, height = 220f)
+        val far = InfiniteCanvasNode("audio", x = 10_000f, y = 0f, width = 300f, height = 220f)
+        val camera = InfiniteCanvasCamera(0f, 0f, 1f)
+        assertTrue(shouldComposeCanvasTool(camera, near, 420f, 800f))
+        assertFalse(shouldComposeCanvasTool(camera, far, 420f, 800f))
+        assertTrue(shouldComposeCanvasTool(camera.copy(x = -9_950f), far, 420f, 800f))
+        assertFalse(shouldComposeCanvasTool(camera.copy(x = 1_000f), near, 420f, 800f))
+    }
+
+    @Test fun offscreenVisibilityRejectsInvalidInputsAndHandlesExtremeWorldPositions() {
+        val camera = InfiniteCanvasCamera(0f, 0f, 1f)
+        val node = InfiniteCanvasNode("tool")
+        assertFalse(shouldComposeCanvasTool(camera, node, Float.NaN, 800f))
+        assertFalse(shouldComposeCanvasTool(camera, node, 420f, 800f, -1f))
+        assertFalse(shouldComposeCanvasTool(camera, node.copy(x = Float.POSITIVE_INFINITY), 420f, 800f))
+        assertFalse(shouldComposeCanvasTool(camera, node.copy(x = Float.MAX_VALUE), 420f, 800f))
+        assertFalse(shouldComposeCanvasTool(camera, node.copy(x = -Float.MAX_VALUE), 420f, 800f))
+        assertTrue(shouldComposeCanvasTool(camera, node.copy(x = -128f), 420f, 800f))
+        assertFalse(shouldComposeCanvasTool(camera, node.copy(x = -600f), 420f, 800f))
+    }
+
 }
