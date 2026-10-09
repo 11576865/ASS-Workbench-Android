@@ -152,14 +152,18 @@ class EditorRegressionInstrumentedTest {
     }
 
     @Test
-    fun spatialWorkspaceExposesRealNodesAndNavigationControls() {
+    fun spatialWorkspaceExposesBoardAndNativeEditorWithoutMovingWorldNodes() {
         restoreRecovery()
-
         composeRule.onNodeWithContentDescription("工具和更多操作").performClick()
         composeRule.onNodeWithTag("workspace-mode-toggle").performClick()
         selectUiVariant("ui-variant-use-SPATIAL_EXPERIMENTAL")
 
         composeRule.onNodeWithTag("spatial-workspace").assertIsDisplayed()
+        // A first-time session may open the video at native size; the board is one tap away.
+        if (composeRule.onAllNodesWithTag("spatial-return-to-board")
+                .fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()) {
+            composeRule.onNodeWithTag("spatial-return-to-board").performClick()
+        }
         composeRule.onNodeWithTag("spatial-overview").performClick()
         composeRule.onNodeWithTag("spatial-node-preview").assertIsDisplayed()
         composeRule.onNodeWithTag("spatial-node-subtitles").assertIsDisplayed()
@@ -167,40 +171,24 @@ class EditorRegressionInstrumentedTest {
 
         val previewBeforeRail = composeRule.onNodeWithTag("spatial-node-preview")
             .fetchSemanticsNode().boundsInRoot
-        composeRule.onNodeWithTag("spatial-edge-handle-left")
-            .assertIsDisplayed()
-            .performClick()
-        composeRule.waitUntil(5_000) {
-            composeRule.onAllNodesWithTag("spatial-edge-rail-left", useUnmergedTree = true)
-                .fetchSemanticsNodes(atLeastOneRootRequired = false)
-                .isNotEmpty()
-        }
+        composeRule.onNodeWithTag("spatial-edge-handle-left").performClick()
+        composeRule.onNodeWithTag("spatial-edge-rail-left").assertIsDisplayed()
         val previewAfterRail = composeRule.onNodeWithTag("spatial-node-preview")
             .fetchSemanticsNode().boundsInRoot
         assertEquals(previewBeforeRail, previewAfterRail)
 
-        composeRule.onNodeWithTag("spatial-edge-dismiss-left").performClick()
-        composeRule.waitUntil(5_000) {
-            composeRule.onAllNodesWithTag("spatial-edge-rail-left", useUnmergedTree = true)
-                .fetchSemanticsNodes(atLeastOneRootRequired = false)
-                .isEmpty()
-        }
-
-        composeRule.onNodeWithTag("spatial-edge-handle-left").performClick()
-        composeRule.waitUntil(5_000) {
-            composeRule.onAllNodesWithTag("spatial-edge-rail-left", useUnmergedTree = true)
-                .fetchSemanticsNodes(atLeastOneRootRequired = false)
-                .isNotEmpty()
-        }
         composeRule.onNodeWithTag("spatial-edge-pin-left").performClick()
         composeRule.onNodeWithTag("spatial-edge-entry-subtitles").performClick()
+        composeRule.onNodeWithTag("spatial-focused-editor").assertIsDisplayed()
+        composeRule.onNodeWithTag("spatial-native-content-subtitles").assertExists()
+        composeRule.onNodeWithTag("spatial-return-to-board").performClick()
         composeRule.onNodeWithTag("spatial-edge-rail-left").assertIsDisplayed()
-        composeRule.onNodeWithTag("spatial-node-subtitles").assertIsDisplayed()
         composeRule.onNodeWithTag("spatial-edge-close-left").performClick()
+        composeRule.onNodeWithTag("spatial-node-subtitles").assertIsDisplayed()
 
         composeRule.onNodeWithText("召回").performClick()
         composeRule.onNodeWithTag("spatial-recall-subtitles").performClick()
-        composeRule.onNodeWithTag("spatial-node-subtitles").assertIsDisplayed()
+        composeRule.onNodeWithTag("spatial-native-content-subtitles").assertExists()
     }
 
     @Test fun birdseyeNavigationPreservesSubtitleDocumentAndUndoHistory() {
@@ -217,7 +205,7 @@ class EditorRegressionInstrumentedTest {
         assertEquals(before, viewModel.state.value.document)
         assertEquals(undoBefore, viewModel.state.value.canUndo)
         assertEquals(redoBefore, viewModel.state.value.canRedo)
-        composeRule.onNodeWithTag("spatial-node-audio").assertIsDisplayed()
+        composeRule.onNodeWithTag("spatial-native-content-audio").assertExists()
     }
 
     @Test fun spatialWorkspaceLongPressDragExtractsRotationWithoutEditingAss() =
