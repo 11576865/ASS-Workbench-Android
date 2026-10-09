@@ -4,6 +4,7 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.Button
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -378,6 +379,37 @@ class InfiniteCanvasInstrumentedTest {
         assertEquals(nodes[2], saved.second.last())
         assertTrue(saved.second[1].y > nodes[0].y + nodes[0].height)
         assertEquals(nodes.map { it.z }, saved.second.map { it.z })
+    }
+
+
+    @Test fun semanticZoomDoesNotDestroyNonSaveableEditorDraft() {
+        val initial = InfiniteCanvasPersistence.encode(
+            InfiniteCanvasCamera(0f, 0f, 1f),
+            listOf(InfiniteCanvasNode("subtitles", width = 400f, height = 400f)))
+        composeRule.activityRule.scenario.onActivity { activity ->
+            activity.setContent {
+                MaterialTheme {
+                    InfiniteCanvasHost(
+                        sessionId = 80L, savedScene = initial, onSaveScene = {},
+                        entries = listOf(InfiniteCanvasEntry("subtitles", "字幕")),
+                        gestureOwned = false, onAddTool = {}, onActivate = {},
+                        onUndo = {}, onRedo = {}, canUndo = false, canRedo = false,
+                        modifier = Modifier.fillMaxSize(),
+                    ) { _, _ ->
+                        var draft by remember { mutableIntStateOf(0) }
+                        Button(onClick = { draft++ }, modifier = Modifier.testTag("editor-draft-increment")) {
+                            Text("Draft ${draft}", Modifier.testTag("editor-draft-value"))
+                        }
+                    }
+                }
+            }
+        }
+        composeRule.onNodeWithTag("editor-draft-increment").performClick()
+        composeRule.onNodeWithText("Draft 1").assertExists()
+        composeRule.onNodeWithTag("spatial-zoom-out").performClick()
+        composeRule.onNodeWithTag("spatial-open-subtitles").assertExists()
+        composeRule.onNodeWithTag("spatial-zoom-in").performClick()
+        composeRule.onNodeWithText("Draft 1").assertExists()
     }
 
     @Test fun focusedEditorIsNotShrunkByBoardCamera() {
