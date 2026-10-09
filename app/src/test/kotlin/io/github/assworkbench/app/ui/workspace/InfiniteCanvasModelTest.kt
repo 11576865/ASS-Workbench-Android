@@ -84,5 +84,11 @@ class InfiniteCanvasModelTest {
         )
         assertNull(fitCanvasCamera(listOf(invalid), 400f, 800f))
         assertNull(fitCanvasCamera(listOf(valid), 0f, 800f))
+        // Do not label an enormous layout "fit" when the camera cannot shrink enough.
+        assertNull(fitCanvasCamera(
+            listOf(InfiniteCanvasNode("left", x = -100_000_000f),
+                InfiniteCanvasNode("right", x = 100_000_000f)),
+            400f, 800f,
+        ))
     }
 }
