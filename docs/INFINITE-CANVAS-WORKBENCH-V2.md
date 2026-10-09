@@ -106,3 +106,16 @@ The former focused editor was a full-screen replacement for the canvas. That pre
 - New connected regression exercises the real two-pane composition, reference controls and a non-saveable draft across visibility/size changes.
 
 This does **not** prove native moving-video latency, IME ergonomics on all OEM devices, arbitrary dual-authoring tools, or draft continuity across workspace-session replacement. Automated tests for the latest PR head are **Pending CI/Emulator**, and visual/device acceptance is still outstanding.
+
+## Unified product route and legacy UI retirement — 2026-10-10
+
+User-facing editor presentations now consist of **two** choices: standard main UI (`FIXED`) and the sole experimental infinite canvas (`SPATIAL_EXPERIMENTAL`). `UiVariantRegistry.entries` exposes only those choices, and `ModernEditorScreen` dispatches to only those two production roots. Previously persisted `CANVAS_EXPERIMENTAL`, `PAGER_EXPERIMENTAL`, `PRECISION_LENS_EXPERIMENTAL`, `TOOL_INSTANCES_EXPERIMENTAL`, `GLASS_LAYERED_EXPERIMENTAL`, `SUBTITLE_OBJECT_EXPERIMENTAL`, `EDGE_BOOKMARK_EXPERIMENTAL` and `TIMELINE_DOCK_EXPERIMENTAL` names migrate to infinite canvas at load; former full-screen experimental composables and the obsolete pager root are removed from the main UI source. The existing ASS document, WorkspaceState, ToolInstances/Bindings, and saved scene payloads remain separately owned and are **not** discarded as part of view migration.
+
+Integrated capabilities are implemented on the **existing production surfaces** rather than recreated as parallel tool state:
+- Real `ModernTimelinePane` dock inside infinite canvas (compact or expanded) shares the media clock; stage content respects its reserved height.
+- Side bookmarks use canonical `WorkspaceToolPresence.BOOKMARKED` and retain tool identity, Event bindings and world geometry.
+- Frozen-time video subtitle pick with explicit candidate resolution uses the existing `PreviewObjectPick` and `ObjectCandidatePicker`; ambiguous hits are not silently assigned.
+- The same Position native manipulation and guarded gesture ownership are reused. Direct mobile main/canvas switch is available in the app bar.
+- The native preview+editor split remains available in focused editing; legacy view-switch page structures have been removed.
+
+Acceptance remains granular: source-code route removal is verifiable, but glass background blur/quality modes, every four-edge manipulation mode, and the full historical 240-item experiment ledger are **not** claimed to have one-to-one replacements. The latest Android build, connected tests and visual/device acceptance are pending; do not merge the Draft PR on these source changes alone.
