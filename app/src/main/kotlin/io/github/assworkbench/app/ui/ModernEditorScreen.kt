@@ -2996,6 +2996,7 @@ private fun SpatialWorkspace(
                 pinnedEvent = pinned != null,
                 focusEventId = state.focusedEventId,
                 initiallyHidden = toolInstance.presence == WorkspaceToolPresence.HIDDEN,
+                bookmarked = toolInstance.presence == WorkspaceToolPresence.BOOKMARKED,
             )
         }
     } + parameterEntries
@@ -3035,6 +3036,19 @@ private fun SpatialWorkspace(
                     )
                 }
             }
+        },
+        onToggleBookmark = { id ->
+            workspaceState.tools.firstOrNull { it.id == id }?.let { instance ->
+                val nextPresence = if (instance.presence == WorkspaceToolPresence.BOOKMARKED)
+                    WorkspaceToolPresence.RESIDENT else WorkspaceToolPresence.BOOKMARKED
+                onWorkspaceStateChange(workspaceState.updatePresence(id, nextPresence))
+            }
+        },
+        renderTimeline = { compact ->
+            ModernTimelinePane(
+                state = state, viewModel = viewModel, compact = compact,
+                modifier = Modifier.fillMaxSize(),
+            )
         },
         onToggleEventBinding = { id ->
             val instance = workspaceState.tools.firstOrNull { it.id == id }
