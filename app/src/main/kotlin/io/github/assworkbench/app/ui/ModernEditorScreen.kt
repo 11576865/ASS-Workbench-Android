@@ -144,7 +144,13 @@ fun ModernEditorScreen(
     val surfaceController = rememberWorkbenchSurfaceController()
     val interactionRegistry = rememberInteractionOverlayRegistry()
     var expandedEventId by rememberSaveable { mutableStateOf<Long?>(null) }
-    val eventEditorStateHolder = rememberSaveableStateHolder()
+    // A SaveableStateHolder retains disposed InlineEventEditor buffers. Those keys
+    // are tool/event scoped, so a different project reusing event #1 must never
+    // inherit the previous project's unsaved text. Keep the holder alive across
+    // rotation/compact↔tablet relayout, but replace it at the session boundary.
+    val eventEditorStateHolder = key(state.workspaceSessionId) {
+        rememberSaveableStateHolder()
+    }
     var searchOpen by rememberSaveable { mutableStateOf(false) }
     var openMenu by remember { mutableStateOf(false) }
     var uiVariantLabOpen by rememberSaveable { mutableStateOf(false) }
