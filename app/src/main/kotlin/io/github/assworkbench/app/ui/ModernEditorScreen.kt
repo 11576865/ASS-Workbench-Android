@@ -1044,6 +1044,18 @@ private fun FixedWorkspace(
         }
     }
 
+    // Keep the *same* inspector composition mounted as compact, dual-pane and
+    // three-pane policies relocate it. A plain composable lambda at three
+    // separate call sites disposes the InlineEventEditor subtree mid-transition,
+    // risking loss of a dirty, uncommitted text buffer.
+    //
+    // rememberUpdatedState publishes the current Event/tool callbacks to the
+    // stable movable identity without capturing stale inspector parameters.
+    val latestInspector by rememberUpdatedState(inspector)
+    val movableInspector = remember {
+        movableContentOf<Modifier> { paneModifier -> latestInspector(paneModifier) }
+    }
+
     Column(modifier) {
         Surface(
             tonalElevation = 2.dp,
@@ -1160,7 +1172,7 @@ private fun FixedWorkspace(
                         listPane(Modifier.weight(1f - inspectorFraction).fillMaxHeight())
                     }
                     VerticalDivider()
-                    inspector(Modifier.weight(inspectorFraction).fillMaxHeight())
+                    movableInspector(Modifier.weight(inspectorFraction).fillMaxHeight())
                 }
 
                 WorkbenchLayoutProfile.DUAL_PANE -> Row(Modifier.fillMaxSize()) {
@@ -1175,7 +1187,7 @@ private fun FixedWorkspace(
                         listPane(Modifier.weight(1f).fillMaxWidth())
                     }
                     VerticalDivider()
-                    inspector(Modifier.weight(inspectorFraction).fillMaxHeight())
+                    movableInspector(Modifier.weight(inspectorFraction).fillMaxHeight())
                 }
 
                 WorkbenchLayoutProfile.COMPACT -> Column(Modifier.fillMaxSize()) {
@@ -1203,7 +1215,7 @@ private fun FixedWorkspace(
                     if (compactPage == "LIST") {
                         listPane(Modifier.weight(1f).fillMaxWidth())
                     } else {
-                        inspector(Modifier.weight(1f).fillMaxWidth())
+                        movableInspector(Modifier.weight(1f).fillMaxWidth())
                     }
                 }
             }

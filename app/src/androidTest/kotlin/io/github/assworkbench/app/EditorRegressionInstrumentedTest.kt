@@ -476,6 +476,7 @@ class EditorRegressionInstrumentedTest {
     fun inspectorDraftSurvivesToolSwitchAndRotation() {
         Log.i("AsswbRegression", "rotation:restore-recovery")
         restoreRecovery()
+        val draftSessionId = viewModel.state.value.workspaceSessionId
         Log.i("AsswbRegression", "rotation:open-event")
         eventRow(1L).performClick()
         Log.i("AsswbRegression", "rotation:type-draft")
@@ -530,6 +531,8 @@ class EditorRegressionInstrumentedTest {
             assertTrue("Navigation and inspector must not overlap", navigation.right <= inspector.left || navigation.bottom <= inspector.top)
             composeRule.onNodeWithTag("canvas-workspace").assertDoesNotExist()
             composeRule.onNodeWithTag("preview-divider").assertDoesNotExist()
+            assertEquals("Viewport resizing must not replace the editor document session",
+                draftSessionId, viewModel.state.value.workspaceSessionId)
             assertInspectorDraftStillPresent("tablet-landscape")
             Log.i("AsswbRegression", "rotation:capture-tablet")
             captureLayout("tablet-landscape")
