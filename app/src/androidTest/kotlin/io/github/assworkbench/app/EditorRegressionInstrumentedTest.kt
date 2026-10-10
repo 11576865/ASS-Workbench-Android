@@ -384,6 +384,32 @@ class EditorRegressionInstrumentedTest {
     }
 
     @Test
+    fun rawDraftFromPreviousWorkspaceSessionMustNotLeakIntoSameEventId() {
+        restoreRecovery()
+        val firstSession = viewModel.state.value.workspaceSessionId
+        eventRow(1L).performClick()
+        composeRule.onNodeWithTag("event-raw-1").performTextInput(" PRIOR SESSION")
+        composeRule.onNodeWithTag("event-apply-text-1").assertExists()
+        assertEquals("Recovered line", eventText(1L))
+
+        // Reload an identical fixture as a different project session. The Event
+        // identifier remains 1, but the old project owns its uncommitted draft.
+        composeRule.activityRule.scenario.onActivity { it.restoreDeterministicFixture() }
+        composeRule.waitUntil(10_000) {
+            viewModel.state.value.workspaceSessionId != firstSession &&
+                viewModel.state.value.document.events.size == 2 &&
+                eventText(1L) == "Recovered line"
+        }
+        eventRow(1L).performClick()
+        composeRule.onNodeWithTag("event-raw-1")
+            .assertIsDisplayed()
+            .assertTextContains("Recovered line")
+        // No stale Apply action: the new project's editor is clean, even though
+        // its event ID and canonical text equal those from the previous session.
+        composeRule.onNodeWithTag("event-apply-text-1").assertDoesNotExist()
+    }
+
+    @Test
     fun rawDraftSurvivesActivityRecreation() {
         restoreRecovery()
         // Global search requests LIST once; recreation must restore the later EDITOR page.
@@ -412,6 +438,15 @@ class EditorRegressionInstrumentedTest {
         }
     }
 
+    private fun assertInspectorDraftStillPresent(stage: String) {
+        Log.i("AsswbRegression", "rotation:assert-draft:$stage")
+        // Check both the unsaved payload and the Apply action. Earlier CI logs
+        // ended at "apply-draft" without an assertion exception, obscuring whether
+        // draft loss or commit failure caused this connected-test failure.
+        composeRule.onNodeWithTag("event-raw-1").assertTextContains("WORKBENCH")
+        composeRule.onNodeWithTag("event-apply-text-1").assertExists()
+    }
+
     @Test
     fun inspectorDraftSurvivesToolSwitchAndRotation() {
         Log.i("AsswbRegression", "rotation:restore-recovery")
@@ -426,6 +461,7 @@ class EditorRegressionInstrumentedTest {
         Log.i("AsswbRegression", "rotation:switch-text")
         openTool("TEXT")
         composeRule.onNodeWithTag("event-raw-1").assertIsDisplayed()
+        assertInspectorDraftStillPresent("after-tool-switch")
         Log.i("AsswbRegression", "rotation:request-landscape")
         composeRule.activityRule.scenario.onActivity {
             it.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
@@ -440,6 +476,7 @@ class EditorRegressionInstrumentedTest {
         val listNodes = composeRule.onAllNodesWithTag("subtitle-navigation").fetchSemanticsNodes(atLeastOneRootRequired = false)
         if (listNodes.isNotEmpty()) composeRule.onNodeWithTag("subtitle-navigation").assertIsDisplayed()
         composeRule.onNodeWithTag("event-inspector").assertIsDisplayed()
+        assertInspectorDraftStillPresent("landscape")
         Log.i("AsswbRegression", "rotation:capture-landscape")
         captureLayout("landscape")
         val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
@@ -468,6 +505,7 @@ class EditorRegressionInstrumentedTest {
             assertTrue("Navigation and inspector must not overlap", navigation.right <= inspector.left || navigation.bottom <= inspector.top)
             composeRule.onNodeWithTag("canvas-workspace").assertDoesNotExist()
             composeRule.onNodeWithTag("preview-divider").assertDoesNotExist()
+            assertInspectorDraftStillPresent("tablet-landscape")
             Log.i("AsswbRegression", "rotation:capture-tablet")
             captureLayout("tablet-landscape")
         } finally {
@@ -501,6 +539,7 @@ class EditorRegressionInstrumentedTest {
                 .isNotEmpty()
         }
 
+        assertInspectorDraftStillPresent("after-tablet-reset-and-list-return")
         Log.i("AsswbRegression", "rotation:apply-draft")
         composeRule.onNodeWithTag("event-apply-text-1").performScrollTo().performClick()
         composeRule.waitUntil(5_000) { eventText(1L) == "Recovered line WORKBENCH" }

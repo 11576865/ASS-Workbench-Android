@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "id": "ass-ui-draft-lifecycle-20261010",
+  "goal": "Stabilize ASS-Workbench-Android editor draft persistence and cross-session ownership during tool switches, rotation, and workspace relayout.",
+  "status": "in_progress",
+  "current_work_unit": "Session-scope the Compose SaveableStateHolder and add stage-specific emulator assertions plus cross-session same-event-ID regression.",
+  "completed_units": [
+    "PR #139 corrected canvas camera fit/zoom numerics; merged into active redesign branch as f0179a632bccdbe2494091adea9d08b8a6a66c18.",
+    "Located latest emulator failure (run 37984011960): inspectorDraftSurvivesToolSwitchAndRotation, 1 of 13 instrumentation cases; CI log lacked saved assertion stack."
+  ],
+  "next_units": [
+    "Validate new head with Android CI and emulator, inspect exact failure stage.",
+    "If existing rotation case remains red, investigate whether SaveableStateHolder disposal, tool switching, or inspector restoration owns the unsaved draft; implement evidence-specific fix.",
+    "Verify real-device UI, IME, 240-item ledger separately before promoting project completion."
+  ],
+  "branch": "fix/ass-editor-draft-session-isolation-20261010",
+  "pr": null,
+  "latest_durable_commit": null,
+  "external_validation": {
+    "android_ci": "pending",
+    "emulator": "pending",
+    "device": "pending",
+    "foundry_intake": "pending_dedupe"
+  },
+  "blockers": [
+    "Original rotation failure root cause is not confirmed; new checks are diagnostic, not a demonstrated fix."
+  ],
+  "updated_at": "2026-10-10"
+}
