@@ -187,4 +187,44 @@ class InfiniteCanvasModelTest {
             InfiniteCanvasPersistence.encode(InfiniteCanvasCamera(), listOf(node))).second.single())
     }
 
+    @Test fun viewportHistoryMovesBackAndForwardWithoutTouchingCanvasGeometry() {
+        val initial = InfiniteCanvasCamera(16f, 60f, 0.85f)
+        val distant = InfiniteCanvasCamera(-1800f, 420f, 0.5f)
+        val overview = InfiniteCanvasCamera(200f, 110f, 0.25f)
+        val first = CanvasViewportHistory().visit(initial, distant).visit(distant, overview)
+        assertTrue(first.canBack)
+        assertFalse(first.canForward)
+        val (afterBack, returned) = first.goBack(overview)!!
+        assertEquals(distant, returned)
+        assertTrue(afterBack.canForward)
+        val (afterSecondBack, original) = afterBack.goBack(distant)!!
+        assertEquals(initial, original)
+        val (afterForward, approached) = afterSecondBack.goForward(initial)!!
+        assertEquals(distant, approached)
+        val changedDestination = InfiniteCanvasCamera(90f, 100f, 1f)
+        val branched = afterForward.visit(approached, changedDestination)
+        assertFalse(branched.canForward)
+        assertEquals(approached, branched.goBack(changedDestination)!!.second)
+        assertFalse(CanvasViewportHistory().canBack)
+        assertNull(CanvasViewportHistory().goBack(initial))
+    }
+
+    @Test fun viewportHistoryIsBoundedAndRejectsCorruptRestoredFrames() {
+        val frames = (0..30).map { InfiniteCanvasCamera(it.toFloat(), (-it).toFloat(), 0.85f) }
+        var history = CanvasViewportHistory()
+        frames.zipWithNext().forEach { (from, to) -> history = history.visit(from, to) }
+        assertEquals(CanvasViewportHistory.LIMIT, history.past.size)
+        val roundTrip = CanvasViewportHistoryPersistence.decode(
+            CanvasViewportHistoryPersistence.encode(history))
+        assertEquals(history, roundTrip)
+        assertEquals(frames[14], roundTrip.past.first())
+        val corrupt = CanvasViewportHistoryPersistence.encode(history).toMutableList()
+        corrupt[1] = "NaN,Infinity,0.5"
+        assertEquals(CanvasViewportHistory(), CanvasViewportHistoryPersistence.decode(corrupt))
+        assertEquals(CanvasViewportHistory(), CanvasViewportHistoryPersistence.decode(listOf("bogus")))
+        val invalid = InfiniteCanvasCamera(Float.NaN, 0f, 1f)
+        assertEquals(CanvasViewportHistory(), CanvasViewportHistory().visit(invalid, frames[0]))
+        assertEquals(CanvasViewportHistory(), CanvasViewportHistory().visit(frames[0], invalid))
+    }
+
 }
