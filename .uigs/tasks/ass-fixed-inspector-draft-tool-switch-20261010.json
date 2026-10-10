@@ -2,33 +2,36 @@
   "schema_version": 1,
   "id": "ass-fixed-inspector-draft-tool-switch-20261010",
   "goal": "Preserve an uncommitted fixed-inspector ASS Event text draft during tool switches without merging domain ToolInstances or presenting duplicate Compose saveable keys.",
-  "status": "patch_submitted_pending_external_validation",
-  "source_head": "faf660dd5bff6777aa69b1abe6c6257bebc1a027",
+  "status": "tablet_layout_reparent_repair_submitted_pending_ci",
+  "source_head": "df336e0b187470258f606f9970975bf1b0acfb80",
   "branch": "fix/ass-fixed-inspector-draft-tool-switch-20261010",
   "pr": null,
   "evidence": {
     "prior_emulator_run": 38027904104,
     "prior_emulator_failures": 22,
-    "latest_emulator_run": 38032992080,
-    "latest_emulator_total": 120,
-    "latest_emulator_failures": 12,
+    "latest_emulator_run": 38050733194,
+    "latest_emulator_total": 16,
+    "latest_emulator_failures": 2,
     "failed_test": "inspectorDraftSurvivesToolSwitchAndRotation",
-    "failed_stage": "after-tool-switch (before rotation)"
+    "failed_stage": "tablet-landscape after wm size 1920x1200 and density 160; rawField resets to canonical Recovered line"
   },
   "completed": [
     "Scoped fixed Event inspector to stable fixed-inspector key; kept spatial ToolInstances independently keyed.",
     "Added instrumentation test for TEXT→EFFECTS→TEXT draft preservation and delayed canonical Apply.",
-    "Documented diagnosis, product boundaries and pending CI."
+    "Documented diagnosis, product boundaries and pending CI.",
+    "Inspected latest run 38050733194: same-session dirty TEXT draft survived tool switch and initial landscape but disappeared after resize to tablet layout.",
+    "Changed FixedWorkspace to reuse one movable Inspector content identity across COMPACT/DUAL_PANE/THREE_PANE, with live callback capture via rememberUpdatedState.",
+    "Extended existing strict tablet-layout regression to check document session continuity separately from draft data."
   ],
   "next": [
-    "Run precise-head Android CI, connected tests and native Fontconfig after integrating this patch.",
-    "If draft rotation test remains red, use stage assertions to pinpoint orientation/recreation loss independently.",
-    "Diagnose separate canvas viewport history, hit testing and screenshot failures."
+    "Integrate stacked repair into active #138; check exact-head CI and Android emulator stage assertions.",
+    "If draft persists but a different assertion fails, diagnose independently; do not relax draft assertion.",
+    "Review remaining viewport interaction, visual and IME failures after full suite coverage is restored."
   ],
   "external_validation": {
-    "android_ci": "pending",
-    "android_emulator": "pending",
-    "fontconfig": "pending",
+    "android_ci": "pending-new-head",
+    "android_emulator": "pending-new-head",
+    "fontconfig": "pending-new-head",
     "device": "pending",
     "foundry_intake": "pending_dedupe"
   },
