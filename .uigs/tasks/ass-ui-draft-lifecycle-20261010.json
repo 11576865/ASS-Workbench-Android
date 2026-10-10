@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "id": "ass-ui-draft-lifecycle-20261010",
+  "goal": "Stabilize ASS-Workbench-Android editor draft persistence and cross-session ownership during tool switches, rotation, and workspace relayout.",
+  "status": "reviewable_patch_pending_external_validation",
+  "current_work_unit": "Product PR #140 opened; cross-session isolation and rotation-stage regression submitted; awaiting exact-head Android CI/emulator.",
+  "completed_units": [
+    "PR #139 corrected canvas camera fit/zoom numerics; merged into active redesign branch as f0179a632bccdbe2494091adea9d08b8a6a66c18.",
+    "Located latest emulator failure (run 37984011960): inspectorDraftSurvivesToolSwitchAndRotation, 1 of 13 instrumentation cases; CI log lacked saved assertion stack."
+  ],
+  "next_units": [
+    "Validate new head with Android CI and emulator, inspect exact failure stage.",
+    "If existing rotation case remains red, investigate whether SaveableStateHolder disposal, tool switching, or inspector restoration owns the unsaved draft; implement evidence-specific fix.",
+    "Verify real-device UI, IME, 240-item ledger separately before promoting project completion."
+  ],
+  "branch": "fix/ass-editor-draft-session-isolation-20261010",
+  "pr": 140,
+  "latest_durable_commit": "686d60e98e96cc9598d043557f0767438b75a4d3",
+  "external_validation": {
+    "android_ci": "pending",
+    "emulator": "pending",
+    "device": "pending",
+    "foundry_intake": "pending_dedupe"
+  },
+  "blockers": [
+    "Original rotation regression is not resolved by this source-level fix; stage-specific emulator evidence pending.",
+    "PR #138 is a large ongoing UI redesign and remains unmerged; no device/240-UI acceptance."
+  ],
+  "updated_at": "2026-10-10"
+}

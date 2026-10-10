@@ -122,6 +122,7 @@ class SpatialPositionEditingInstrumentedTest {
                 }
             }
         }
+        composeRule.onNodeWithTag("spatial-quick-preview").performClick()
         composeRule.waitUntil(30_000) {
             diagnostics.get().any { it.contains("Preview subtitle") }
         }

@@ -31,16 +31,31 @@ class PresentationStateSmokeInstrumentedTest {
         get() = composeRule.activity.editorViewModel
 
     @Test
-    fun canvasPreservesCanonicalStateAndExistingHistory() =
-        assertPresentationInvariant("CANVAS_EXPERIMENTAL", "canvas-workspace")
+    fun standardMainPreservesCanonicalStateAndExistingHistory() =
+        assertPresentationInvariant("FIXED", "fixed-workspace")
 
     @Test
-    fun pagerPreservesCanonicalStateAndExistingHistory() =
-        assertPresentationInvariant("PAGER_EXPERIMENTAL", "pager-workspace")
-
-    @Test
-    fun spatialPreservesCanonicalStateAndExistingHistory() =
+    fun unifiedInfiniteCanvasPreservesCanonicalStateAndExistingHistory() =
         assertPresentationInvariant("SPATIAL_EXPERIMENTAL", "spatial-workspace")
+
+    @Test fun mainHeaderSwitchesBetweenOnlyTwoLayoutsWithoutMutatingDocument() {
+        composeRule.activityRule.scenario.onActivity { it.restoreDeterministicFixture() }
+        composeRule.waitUntil(10_000) { viewModel.state.value.document.events.size == 2 }
+        val canonical = viewModel.state.value.document
+        val focus = viewModel.state.value.focusedEventId
+        // A previously restored activity may start in either permitted layout.
+        composeRule.onNodeWithTag("workspace-direct-mode-toggle").performClick()
+        composeRule.waitForIdle()
+        val fixed = composeRule.onAllNodesWithTag("fixed-workspace", useUnmergedTree = true)
+            .fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()
+        val spatial = composeRule.onAllNodesWithTag("spatial-workspace", useUnmergedTree = true)
+            .fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()
+        assertTrue(fixed != spatial)
+        composeRule.onNodeWithTag("workspace-direct-mode-toggle").performClick()
+        composeRule.waitForIdle()
+        assertEquals(canonical, viewModel.state.value.document)
+        assertEquals(focus, viewModel.state.value.focusedEventId)
+    }
 
     @Test fun spatialCameraAndOverlayDoNotEditDocument() {
         composeRule.activityRule.scenario.onActivity { it.restoreDeterministicFixture() }
@@ -48,6 +63,10 @@ class PresentationStateSmokeInstrumentedTest {
         viewModel.focusEvent(1L, seek = false)
         viewModel.updateEventText(1L, "Overlay invariant")
         switchPresentation("SPATIAL_EXPERIMENTAL", "spatial-workspace")
+        if (composeRule.onAllNodesWithTag("spatial-return-to-board")
+                .fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()) {
+            composeRule.onNodeWithTag("spatial-return-to-board").performClick()
+        }
         val document = viewModel.state.value.document
         val selection = viewModel.state.value.focusedEventId
         composeRule.onNodeWithTag("spatial-zoom-out").performClick()
@@ -67,30 +86,6 @@ class PresentationStateSmokeInstrumentedTest {
         viewModel.undo()
         composeRule.waitUntil(5_000) { eventText(1L) == "Recovered line" }
     }
-
-    @Test
-    fun toolInstancesPreserveCanonicalStateAndExistingHistory() =
-        assertPresentationInvariant("TOOL_INSTANCES_EXPERIMENTAL", "tool-instance-workspace")
-
-    @Test
-    fun glassLayeredPreservesCanonicalStateAndExistingHistory() =
-        assertPresentationInvariant("GLASS_LAYERED_EXPERIMENTAL", "glass-layered-workspace")
-
-    @Test
-    fun precisionLensPreservesCanonicalStateAndExistingHistory() =
-        assertPresentationInvariant("PRECISION_LENS_EXPERIMENTAL", "precision-lens-workspace")
-
-    @Test
-    fun subtitleObjectPreservesCanonicalStateAndExistingHistory() =
-        assertPresentationInvariant("SUBTITLE_OBJECT_EXPERIMENTAL", "subtitle-object-workspace")
-
-    @Test
-    fun edgeBookmarkPreservesCanonicalStateAndExistingHistory() =
-        assertPresentationInvariant("EDGE_BOOKMARK_EXPERIMENTAL", "edge-bookmark-workspace")
-
-    @Test
-    fun timelineDockPreservesCanonicalStateAndExistingHistory() =
-        assertPresentationInvariant("TIMELINE_DOCK_EXPERIMENTAL", "timeline-dock-workspace")
 
     private fun assertPresentationInvariant(variant: String, rootTag: String) {
         composeRule.onNodeWithTag("recovery-restore")
@@ -154,10 +149,15 @@ class PresentationStateSmokeInstrumentedTest {
         composeRule.onNodeWithContentDescription("工具和更多操作").performClick()
         composeRule.onNodeWithTag("workspace-mode-toggle").performClick()
         composeRule.onNodeWithTag("ui-variant-lab").assertIsDisplayed()
-        composeRule.onNodeWithTag("ui-variant-use-$variant")
-            .performScrollTo()
-            .assertIsDisplayed()
-            .performClick()
+        val selection = composeRule.onAllNodesWithTag("ui-variant-use-$variant")
+            .fetchSemanticsNodes(atLeastOneRootRequired = false)
+        if (selection.isNotEmpty()) {
+            composeRule.onNodeWithTag("ui-variant-use-$variant")
+                .performScrollTo().assertIsDisplayed().performClick()
+        } else {
+            // The app can already be using the requested default layout.
+            composeRule.onNodeWithText("关闭").performClick()
+        }
 
         composeRule.waitUntil(10_000) {
             composeRule.onAllNodesWithTag(rootTag, useUnmergedTree = true)

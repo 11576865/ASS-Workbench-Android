@@ -54,6 +54,7 @@ class SpatialAudioEvidenceInstrumentedTest {
                 }
             }
         }
+        composeRule.onNodeWithTag("spatial-quick-audio").performClick()
         composeRule.onNodeWithTag("spatial-audio-start").assertTextEquals("6000 ms")
     }
 

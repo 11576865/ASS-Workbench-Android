@@ -49,6 +49,7 @@ import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
@@ -143,7 +144,13 @@ fun ModernEditorScreen(
     val surfaceController = rememberWorkbenchSurfaceController()
     val interactionRegistry = rememberInteractionOverlayRegistry()
     var expandedEventId by rememberSaveable { mutableStateOf<Long?>(null) }
-    val eventEditorStateHolder = rememberSaveableStateHolder()
+    // A SaveableStateHolder retains disposed InlineEventEditor buffers. Those keys
+    // are tool/event scoped, so a different project reusing event #1 must never
+    // inherit the previous project's unsaved text. Keep the holder alive across
+    // rotation/compact↔tablet relayout, but replace it at the session boundary.
+    val eventEditorStateHolder = key(state.workspaceSessionId) {
+        rememberSaveableStateHolder()
+    }
     var searchOpen by rememberSaveable { mutableStateOf(false) }
     var openMenu by remember { mutableStateOf(false) }
     var uiVariantLabOpen by rememberSaveable { mutableStateOf(false) }
@@ -154,8 +161,19 @@ fun ModernEditorScreen(
     var workspaceModeName by rememberSaveable { mutableStateOf(initialWorkspaceModeName) }
     var fixedToolName by rememberSaveable { mutableStateOf(WorkbenchTool.STYLE.name) }
     var fixedNavigationRevision by rememberSaveable { mutableIntStateOf(0) }
+    var spatialFocusRevision by rememberSaveable { mutableIntStateOf(0) }
     var fixedListRequested by rememberSaveable { mutableStateOf(false) }
+    var spatialPrecisionEnabled by rememberSaveable { mutableStateOf(false) }
+    var spatialFocusedSurfaceId by rememberSaveable { mutableStateOf<String?>(null) }
     val workspaceMode = UiVariantRegistry.resolve(workspaceModeName)
+    // SaveState restored from older app versions can still contain retired
+    // experiments. Canonicalize the saved presentation name once; the domain
+    // WorkspaceState and project snapshot are not reset by this migration.
+    LaunchedEffect(workspaceModeName) {
+        if (workspaceModeName != UiVariantRegistry.resolve(workspaceModeName).name) {
+            workspaceModeName = UiVariantRegistry.resolve(workspaceModeName).name
+        }
+    }
     val fixedTool = WorkbenchTool.valueOf(fixedToolName)
 
     LaunchedEffect(state.workspaceSessionId) {
@@ -167,6 +185,8 @@ fun ModernEditorScreen(
             expandedEventId = null
             fixedToolName = WorkbenchTool.STYLE.name
             fixedListRequested = false
+            spatialPrecisionEnabled = false
+            spatialFocusedSurfaceId = null
             workspaceModeName = initialWorkspaceModeName
         }
     }
@@ -237,40 +257,17 @@ fun ModernEditorScreen(
     }
 
     fun openTool(next: WorkbenchTool) {
-        val primaryId = WorkspaceState.primaryInstanceId(next.name)
-        if (workspaceMode == WorkspacePresentationMode.TOOL_INSTANCES_EXPERIMENTAL) {
-            val existing = workspaceState.primary(next.name)
-            workspaceState = if (
-                existing != null &&
-                workspaceState.activeInstanceId == primaryId &&
-                existing.presence == WorkspaceToolPresence.TEMPORARY
-            ) {
-                workspaceState.updatePresence(primaryId, WorkspaceToolPresence.HIDDEN)
-            } else {
-                workspaceState
-                    .openPrimary(next.name, next.descriptor.defaultBinding)
-                    .updatePresence(primaryId, WorkspaceToolPresence.TEMPORARY)
-                    .hideOtherTemporary(primaryId)
-                    .withSurfacesHidden(false)
-            }
-            if (workspaceState.primary(next.name)?.presence == WorkspaceToolPresence.TEMPORARY) {
-                surfaceController.bringToFront(primaryId)
-            }
-            return
-        }
-
         workspaceState = workspaceState.openPrimary(next.name, next.descriptor.defaultBinding)
-        if (workspaceMode == WorkspacePresentationMode.FIXED ||
-            workspaceMode == WorkspacePresentationMode.PAGER_EXPERIMENTAL ||
-            workspaceMode == WorkspacePresentationMode.SPATIAL_EXPERIMENTAL
-        ) {
+        if (workspaceMode == WorkspacePresentationMode.FIXED) {
             fixedListRequested = next == WorkbenchTool.SUBTITLES
             fixedNavigationRevision += 1
             if (!fixedListRequested) fixedToolName = next.name
-            return
+        } else {
+            // A main-toolbar command is a real navigation request. Creating
+            // ToolInstance state alone is not sufficient to show its editor.
+            fixedToolName = next.name
+            spatialFocusRevision += 1
         }
-        workspaceState = workspaceState.withSurfacesHidden(false)
-        surfaceController.bringToFront(primaryId)
     }
 
     fun openPositionTarget(eventId: Long) {
@@ -282,15 +279,14 @@ fun ModernEditorScreen(
         fixedListRequested = false
         fixedNavigationRevision += 1
         fixedToolName = toolKey
-        if (workspaceMode == WorkspacePresentationMode.CANVAS_EXPERIMENTAL) {
-            workspaceState = workspaceState.withSurfacesHidden(false)
-            workspaceState.activeInstanceId?.let { id -> surfaceController.bringToFront(id) }
+        if (workspaceMode == WorkspacePresentationMode.SPATIAL_EXPERIMENTAL) {
+            spatialFocusRevision += 1
         }
     }
 
     fun selectWorkspaceMode(next: WorkspacePresentationMode) {
         if (next == workspaceMode) return
-        if (workspaceMode == WorkspacePresentationMode.CANVAS_EXPERIMENTAL) {
+        if (workspaceMode == WorkspacePresentationMode.SPATIAL_EXPERIMENTAL) {
             workspaceState.activeInstanceId
                 ?.let { id -> workspaceState.tools.firstOrNull { it.id == id }?.toolKey }
                 ?.let { key -> WorkbenchTool.entries.firstOrNull { it.name == key } }
@@ -313,9 +309,8 @@ fun ModernEditorScreen(
     ) {
         Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
-            androidx.compose.animation.AnimatedVisibility(
-                visible = workspaceMode == WorkspacePresentationMode.FIXED || !workspaceState.surfacesHidden
-            ) {
+            // File, project, history and workspace navigation are never gated
+            // by hiding floating tools or opening a spatial authoring pane.
             ModernAppBar(
                 state = state,
                 viewModel = viewModel,
@@ -323,7 +318,7 @@ fun ModernEditorScreen(
                 searchOpen = searchOpen,
                 onSearchToggle = {
                     searchOpen = !searchOpen
-                    if (searchOpen || workspaceMode == WorkspacePresentationMode.CANVAS_EXPERIMENTAL) {
+                    if (searchOpen) {
                         openTool(WorkbenchTool.SUBTITLES)
                     }
                 },
@@ -359,6 +354,13 @@ fun ModernEditorScreen(
                 onTool = ::openTool,
                 workspaceMode = workspaceMode,
                 onOpenUiVariantLab = { uiVariantLabOpen = true },
+                onToggleWorkspaceMode = {
+                    selectWorkspaceMode(
+                        if (workspaceMode == WorkspacePresentationMode.FIXED)
+                            WorkspacePresentationMode.SPATIAL_EXPERIMENTAL
+                        else WorkspacePresentationMode.FIXED
+                    )
+                },
                 onOpenProject = {
                     if (state.dirty) {
                         destructiveWorkspaceAction = DestructiveWorkspaceAction.OPEN_PROJECT
@@ -371,7 +373,6 @@ fun ModernEditorScreen(
                 appearance = appearance,
                 onAppearanceChange = onAppearanceChange,
             )
-            }
 
             if (uiVariantLabOpen) {
                 UiVariantLabDialog(
@@ -534,44 +535,19 @@ fun ModernEditorScreen(
                     onCloseSearch = { searchOpen = false; viewModel.setQuery("") },
                     modifier = Modifier.weight(1f).fillMaxWidth().testTag("fixed-workspace"),
                 )
-            } else if (workspaceMode == WorkspacePresentationMode.PAGER_EXPERIMENTAL) {
-                PagerWorkspace(
-                    state = state,
-                    viewModel = viewModel,
-                    issues = issues,
-                    activeTool = fixedTool,
-                    instance = workspaceState.activeForTool(fixedTool.name)
-                        ?: WorkspaceToolInstance(
-                            id = WorkspaceState.primaryInstanceId(fixedTool.name),
-                            toolKey = fixedTool.name,
-                            binding = fixedTool.descriptor.defaultBinding,
-                        ),
-                    onActiveTool = { tool ->
-                        fixedToolName = tool.name
-                        workspaceState = workspaceState
-                            .openPrimary(tool.name, tool.descriptor.defaultBinding)
-                            .activate(WorkspaceState.primaryInstanceId(tool.name))
-                    },
-                    expandedEventId = expandedEventId,
-                    onExpandedChange = { expandedEventId = it },
-                    onImportFont = onImportFont,
-                    onSaveMkv = onSaveMkv,
-                    eventEditorStateHolder = eventEditorStateHolder,
-                    onOpenVideo = onOpenReferenceVideo,
-                    rendererEnabled = rendererEnabled,
-                    onEnableRenderer = onEnableRenderer,
-                    onEditEventPosition = ::openPositionTarget,
-                    searchOpen = searchOpen,
-                    onCloseSearch = { searchOpen = false; viewModel.setQuery("") },
-                    modifier = Modifier.weight(1f).fillMaxWidth().testTag("pager-workspace"),
-                )
-            } else if (workspaceMode == WorkspacePresentationMode.SPATIAL_EXPERIMENTAL) {
+            } else {
                 SpatialWorkspace(
                     surfaceController = surfaceController,
                     workspaceState = workspaceState,
                     onWorkspaceStateChange = { workspaceState = it },
                     interactionRegistry = interactionRegistry,
                     positionEditEventId = positionEditEventId,
+                    precisionEnabled = spatialPrecisionEnabled,
+                    onTogglePrecision = { spatialPrecisionEnabled = !spatialPrecisionEnabled },
+                    requestedFocusRevision = spatialFocusRevision,
+                    onFocusedSurfaceChange = { id ->
+                        if (spatialFocusedSurfaceId != id) spatialFocusedSurfaceId = id
+                    },
                     onActivateInstance = { id ->
                         workspaceState = workspaceState.activate(id)
                         workspaceState.tools.firstOrNull { it.id == id }?.let { fixedToolName = it.toolKey }
@@ -586,12 +562,7 @@ fun ModernEditorScreen(
                             toolKey = fixedTool.name,
                             binding = fixedTool.descriptor.defaultBinding,
                         ),
-                    onActiveTool = { tool ->
-                        fixedToolName = tool.name
-                        workspaceState = workspaceState
-                            .openPrimary(tool.name, tool.descriptor.defaultBinding)
-                            .activate(WorkspaceState.primaryInstanceId(tool.name))
-                    },
+                    onActiveTool = ::openTool,
                     expandedEventId = expandedEventId,
                     onExpandedChange = { expandedEventId = it },
                     onImportFont = onImportFont,
@@ -605,255 +576,8 @@ fun ModernEditorScreen(
                     onCloseSearch = { searchOpen = false; viewModel.setQuery("") },
                     modifier = Modifier.weight(1f).fillMaxWidth().testTag("spatial-workspace"),
                 )
-            } else if (workspaceMode == WorkspacePresentationMode.TOOL_INSTANCES_EXPERIMENTAL) {
-                ToolInstanceWorkspace(
-                    state = state,
-                    viewModel = viewModel,
-                    issues = issues,
-                    workspaceState = workspaceState,
-                    onWorkspaceStateChange = { workspaceState = it },
-                    surfaceController = surfaceController,
-                    expandedEventId = expandedEventId,
-                    onExpandedChange = { expandedEventId = it },
-                    onImportFont = onImportFont,
-                    onSaveMkv = onSaveMkv,
-                    eventEditorStateHolder = eventEditorStateHolder,
-                    onOpenVideo = onOpenReferenceVideo,
-                    rendererEnabled = rendererEnabled,
-                    onEnableRenderer = onEnableRenderer,
-                    onOpenTool = ::openTool,
-                    searchOpen = searchOpen,
-                    onCloseSearch = { searchOpen = false; viewModel.setQuery("") },
-                    modifier = Modifier.weight(1f).fillMaxWidth().testTag("tool-instance-workspace"),
-                )
-            } else if (workspaceMode == WorkspacePresentationMode.GLASS_LAYERED_EXPERIMENTAL) {
-                GlassLayeredWorkspace(
-                    state = state,
-                    viewModel = viewModel,
-                    issues = issues,
-                    workspaceState = workspaceState,
-                    onWorkspaceStateChange = { workspaceState = it },
-                    expandedEventId = expandedEventId,
-                    onExpandedChange = { expandedEventId = it },
-                    onImportFont = onImportFont,
-                    onSaveMkv = onSaveMkv,
-                    eventEditorStateHolder = eventEditorStateHolder,
-                    onOpenVideo = onOpenReferenceVideo,
-                    rendererEnabled = rendererEnabled,
-                    onEnableRenderer = onEnableRenderer,
-                    onOpenTool = ::openTool,
-                    onEditEventPosition = ::openPositionTarget,
-                    modifier = Modifier.weight(1f).fillMaxWidth().testTag("glass-layered-workspace"),
-                )
-            } else if (workspaceMode == WorkspacePresentationMode.PRECISION_LENS_EXPERIMENTAL) {
-                PrecisionLensWorkspace(
-                    state = state,
-                    viewModel = viewModel,
-                    issues = issues,
-                    onOpenVideo = onOpenReferenceVideo,
-                    rendererEnabled = rendererEnabled,
-                    onEnableRenderer = onEnableRenderer,
-                    interactionRegistry = interactionRegistry,
-                    modifier = Modifier.weight(1f).fillMaxWidth().testTag("precision-lens-workspace"),
-                )
-            } else if (workspaceMode == WorkspacePresentationMode.EDGE_BOOKMARK_EXPERIMENTAL) {
-                EdgeBookmarkWorkspace(
-                    state = state,
-                    viewModel = viewModel,
-                    issues = issues,
-                    workspaceState = workspaceState,
-                    onWorkspaceStateChange = { workspaceState = it },
-                    expandedEventId = expandedEventId,
-                    onExpandedChange = { expandedEventId = it },
-                    onImportFont = onImportFont,
-                    onSaveMkv = onSaveMkv,
-                    eventEditorStateHolder = eventEditorStateHolder,
-                    onOpenVideo = onOpenReferenceVideo,
-                    rendererEnabled = rendererEnabled,
-                    onEnableRenderer = onEnableRenderer,
-                    modifier = Modifier.weight(1f).fillMaxWidth().testTag("edge-bookmark-workspace"),
-                )
-            } else if (workspaceMode == WorkspacePresentationMode.TIMELINE_DOCK_EXPERIMENTAL) {
-                TimelineDockWorkspace(
-                    state = state,
-                    viewModel = viewModel,
-                    onOpenVideo = onOpenReferenceVideo,
-                    rendererEnabled = rendererEnabled,
-                    onEnableRenderer = onEnableRenderer,
-                    modifier = Modifier.weight(1f).fillMaxWidth().testTag("timeline-dock-workspace"),
-                )
-            } else if (workspaceMode == WorkspacePresentationMode.SUBTITLE_OBJECT_EXPERIMENTAL) {
-                SubtitleObjectWorkspace(
-                    state = state,
-                    viewModel = viewModel,
-                    issues = issues,
-                    workspaceState = workspaceState,
-                    onWorkspaceStateChange = { workspaceState = it },
-                    expandedEventId = expandedEventId,
-                    onExpandedChange = { expandedEventId = it },
-                    onImportFont = onImportFont,
-                    onSaveMkv = onSaveMkv,
-                    eventEditorStateHolder = eventEditorStateHolder,
-                    onOpenVideo = onOpenReferenceVideo,
-                    rendererEnabled = rendererEnabled,
-                    onEnableRenderer = onEnableRenderer,
-                    modifier = Modifier.weight(1f).fillMaxWidth().testTag("subtitle-object-workspace"),
-                )
-            } else BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().testTag("canvas-workspace")) {
-                val viewportWidth = maxWidth.value
-                val viewportHeight = maxHeight.value
-                WorkbenchPreview(
-                    state, viewModel, if (workspaceState.surfacesHidden) null else positionEditEventId,
-                    onOpenReferenceVideo, { openTool(WorkbenchTool.TIMELINE) },
-                    rendererEnabled, onEnableRenderer,
-                    onEditEventPosition = ::openPositionTarget,
-                    interactionRegistry = if (workspaceState.surfacesHidden) null else interactionRegistry,
-                    viewportGesturesEnabled = positionEditEventId == null || workspaceState.surfacesHidden,
-                    modifier = Modifier.fillMaxSize().testTag("preview-workspace"),
-                )
-                workspaceState.tools.forEachIndexed { index, instance ->
-                    val surfaceTool = WorkbenchTool.entries.firstOrNull { it.name == instance.toolKey }
-                        ?: return@forEachIndexed
-                    val groupIds = surfaceController.tabGroup(instance.id)
-                    val activeTabId = surfaceController.activeTab(instance.id)
-                    val visible = !workspaceState.surfacesHidden && activeTabId == instance.id
-                    val tabTitles = groupIds.mapNotNull { groupId ->
-                        workspaceState.tools.firstOrNull { it.id == groupId }?.let { grouped ->
-                            WorkbenchTool.entries.firstOrNull { it.name == grouped.toolKey }?.let { groupedTool ->
-                                groupId to groupedTool.title
-                            }
-                        }
-                    }
-                    val eventBound = surfaceTool.descriptor.eventBindable
-                    val bindingState = instance.resolveUiBinding(editorUiState)
-                    val bindingLabel = if (eventBound) {
-                        when (val binding = instance.binding) {
-                            WorkspaceBinding.FollowFocus ->
-                                editorUiState.focus.eventId?.let { "跟随 #$it" } ?: "跟随焦点"
-                            WorkspaceBinding.FollowSelection -> "跟随选择"
-                            is WorkspaceBinding.PinnedEvent ->
-                                if (bindingState.unresolvedPinnedEventId != null) {
-                                    "固定 #${binding.eventId} · 已失效"
-                                } else {
-                                    "固定 #${binding.eventId}"
-                                }
-                        }
-                    } else {
-                        null
-                    }
-                    val isPrimary = instance.id == WorkspaceState.primaryInstanceId(surfaceTool.name)
-                    val tagId = if (isPrimary) surfaceTool.name else instance.id.replace(':', '-')
-
-                    FloatingWorkbenchSurface(
-                        id = instance.id,
-                        testTagId = tagId,
-                        title = surfaceTool.title,
-                        bindingLabel = bindingLabel,
-                        bindingPinned = instance.binding is WorkspaceBinding.PinnedEvent,
-                        visible = visible,
-                        controller = surfaceController,
-                        initialOffset = Offset.Zero,
-                        initialGeometry = when (surfaceTool) {
-                            WorkbenchTool.SUBTITLES -> SurfaceGeometry(
-                                x = (viewportWidth - 326f).coerceAtLeast(0f), y = 12f,
-                                width = 310f, height = (viewportHeight - 24f).coerceIn(160f, 620f),
-                            )
-                            WorkbenchTool.CAPABILITIES -> SurfaceGeometry(12f, 12f, 320f,
-                                (viewportHeight - 24f).coerceIn(160f, 620f))
-                            else -> surfaceTool.initialGeometry(16f + (index % 3) * 24f, 16f + (index % 4) * 20f)
-                        },
-                        onActivate = {
-                            workspaceState = workspaceState.activate(instance.id)
-                        },
-                        onToggleBinding = if (eventBound) {
-                            {
-                                val next = when (instance.binding) {
-                                    is WorkspaceBinding.PinnedEvent -> WorkspaceBinding.FollowFocus
-                                    else -> state.focusedEventId
-                                        ?.let { WorkspaceBinding.PinnedEvent(it) }
-                                        ?: instance.binding
-                                }
-                                workspaceState = workspaceState
-                                    .updateBinding(instance.id, next)
-                                    .activate(instance.id)
-                            }
-                        } else {
-                            null
-                        },
-                        tabTitles = tabTitles,
-                        onSelectTab = { tabId ->
-                            surfaceController.activateTab(tabId)
-                            workspaceState = workspaceState.activate(tabId)
-                        },
-                        onDuplicate = if (surfaceTool.descriptor.canDuplicate) {
-                            {
-                                workspaceState.newSibling(instance.id)?.let { sibling ->
-                                    workspaceState = workspaceState
-                                        .addInstance(sibling)
-                                        .activate(sibling.id)
-                                        .withSurfacesHidden(false)
-                                    surfaceController.bringToFront(sibling.id)
-                                }
-                            }
-                        } else {
-                            null
-                        },
-                        onClose = {
-                            if (surfaceTool == WorkbenchTool.TEXT) expandedEventId = null
-                            val survivingTabId = surfaceController.remove(instance.id)
-                            workspaceState = workspaceState.closeInstance(instance.id).let { closed ->
-                                val activated = survivingTabId
-                                    ?.takeIf { survivor -> closed.tools.any { it.id == survivor } }
-                                    ?.let(closed::activate)
-                                    ?: closed
-                                if (activated.tools.isEmpty()) activated.withSurfacesHidden(true) else activated
-                            }
-                        },
-                        modifier = Modifier.fillMaxSize(),
-                    ) {
-                        FloatingToolContent(
-                            instance = instance,
-                            tool = surfaceTool,
-                            state = state,
-                            viewModel = viewModel,
-                            issues = issues,
-                            expandedEventId = expandedEventId,
-                            onExpandedChange = { expandedEventId = it },
-                            onImportFont = onImportFont,
-                            onSaveMkv = onSaveMkv,
-                        eventEditorStateHolder = eventEditorStateHolder,
-                        onOpenTool = { next ->
-                            workspaceState = workspaceState.closeInstance(WorkspaceState.primaryInstanceId(WorkbenchTool.CAPABILITIES.name))
-                            openTool(next)
-                        },
-                        onCloseText = {
-                            expandedEventId = null
-                            workspaceState = workspaceState.closeInstance(WorkspaceState.primaryInstanceId(WorkbenchTool.TEXT.name))
-                        },
-                        searchOpen = searchOpen,
-                        onCloseSearch = { searchOpen = false; viewModel.setQuery("") },
-                    )
-                    }
-                }
-
-                Surface(
-                    modifier = Modifier.align(Alignment.BottomStart).padding(start = 12.dp, bottom = 44.dp).zIndex(10000f),
-                    shape = RoundedCornerShape(18.dp),
-                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        TextButton(onClick = { openTool(WorkbenchTool.CAPABILITIES) }, modifier = Modifier.testTag("workspace-tools")) {
-                            Icon(Icons.Filled.Apps, null, Modifier.size(18.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text("工具")
-                        }
-                        if (workspaceState.tools.isNotEmpty()) TooltipIconButton(
-                            if (workspaceState.surfacesHidden) "呼回全部浮层" else "隐藏全部浮层", ::toggleAllSurfaces,
-                        ) { Icon(if (workspaceState.surfacesHidden) Icons.Filled.Layers else Icons.Filled.LayersClear, null) }
-                    }
-                }
             }
+
         }
 
         WindowInteractionOverlay(
@@ -862,18 +586,11 @@ fun ModernEditorScreen(
             onScaleLockedChange = viewModel::setGeometryScaleLocked,
             scaleSnapStep = state.geometryScaleSnapStep,
             onScaleSnapStepChange = viewModel::setGeometryScaleSnapStep,
-            visible = when (workspaceMode) {
-                WorkspacePresentationMode.FIXED -> fixedTool == WorkbenchTool.POSITION
-                WorkspacePresentationMode.CANVAS_EXPERIMENTAL -> !workspaceState.surfacesHidden
-                WorkspacePresentationMode.PAGER_EXPERIMENTAL -> false
-                WorkspacePresentationMode.SPATIAL_EXPERIMENTAL -> fixedTool == WorkbenchTool.POSITION
-                WorkspacePresentationMode.PRECISION_LENS_EXPERIMENTAL -> false
-                WorkspacePresentationMode.TOOL_INSTANCES_EXPERIMENTAL -> false
-                WorkspacePresentationMode.GLASS_LAYERED_EXPERIMENTAL -> false
-                WorkspacePresentationMode.SUBTITLE_OBJECT_EXPERIMENTAL -> false
-                WorkspacePresentationMode.EDGE_BOOKMARK_EXPERIMENTAL -> false
-                WorkspacePresentationMode.TIMELINE_DOCK_EXPERIMENTAL -> false
-            },
+            visible = if (workspaceMode == WorkspacePresentationMode.FIXED)
+                fixedTool == WorkbenchTool.POSITION
+            else fixedTool == WorkbenchTool.POSITION && !spatialPrecisionEnabled &&
+                (spatialFocusedSurfaceId == "preview" ||
+                    spatialFocusedSurfaceId?.startsWith("POSITION:") == true),
             modifier = Modifier.fillMaxSize().testTag("interaction-overlay"),
         )
         PrecisionInteractionOverlay(
@@ -882,1908 +599,16 @@ fun ModernEditorScreen(
             onScaleLockedChange = viewModel::setGeometryScaleLocked,
             scaleSnapStep = state.geometryScaleSnapStep,
             onScaleSnapStepChange = viewModel::setGeometryScaleSnapStep,
-            visible = workspaceMode == WorkspacePresentationMode.PRECISION_LENS_EXPERIMENTAL,
+            visible = workspaceMode == WorkspacePresentationMode.SPATIAL_EXPERIMENTAL &&
+                spatialPrecisionEnabled && fixedTool == WorkbenchTool.POSITION &&
+                (spatialFocusedSurfaceId == "preview" ||
+                    spatialFocusedSurfaceId?.startsWith("POSITION:") == true),
             modifier = Modifier.fillMaxSize(),
         )
+
         }
     }
 }
-}
-
-@Composable
-private fun GlassLayeredWorkspace(
-    state: EditorState,
-    viewModel: EditorViewModel,
-    issues: List<AssQcIssue>,
-    workspaceState: WorkspaceState,
-    onWorkspaceStateChange: (WorkspaceState) -> Unit,
-    expandedEventId: Long?,
-    onExpandedChange: (Long?) -> Unit,
-    onImportFont: () -> Unit,
-    onSaveMkv: () -> Unit,
-    eventEditorStateHolder: SaveableStateHolder,
-    onOpenVideo: () -> Unit,
-    rendererEnabled: Boolean,
-    onEnableRenderer: () -> Unit,
-    onOpenTool: (WorkbenchTool) -> Unit,
-    onEditEventPosition: (Long) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val systemBlurAvailable = rememberSystemBackdropBlurEnabled()
-    var alpha by rememberSaveable { mutableFloatStateOf(0.72f) }
-    var blurDp by rememberSaveable { mutableFloatStateOf(24f) }
-    var performanceModeName by rememberSaveable { mutableStateOf(GlassPerformanceMode.AUTO.name) }
-    val performanceMode = GlassPerformanceMode.valueOf(performanceModeName)
-    val materials = remember { mutableStateMapOf<String, GlassMaterial>() }
-    val offsets = remember { mutableStateMapOf<String, IntOffset>() }
-
-    val editorUiState = state.toEditorUiState()
-
-    Box(modifier.background(MaterialTheme.colorScheme.surfaceContainerLowest)) {
-        WorkbenchPreview(
-            state = state,
-            viewModel = viewModel,
-            positionEditEventId = null,
-            onOpenVideo = onOpenVideo,
-            onOpenTimeline = { onOpenTool(WorkbenchTool.TIMELINE) },
-            rendererEnabled = rendererEnabled,
-            onEnableRenderer = onEnableRenderer,
-            onEditEventPosition = onEditEventPosition,
-            viewportGesturesEnabled = true,
-            modifier = Modifier.fillMaxSize().testTag("glass-preview"),
-        )
-
-        workspaceState.tools.forEachIndexed { index, instance ->
-            val tool = WorkbenchTool.entries.firstOrNull { it.name == instance.toolKey }
-                ?: return@forEachIndexed
-            val active = workspaceState.activeInstanceId == instance.id
-            val material = materials[instance.id] ?: GlassMaterial.FROSTED
-            val plan = resolveGlassRenderPlan(
-                material = material,
-                requestedAlpha = alpha,
-                requestedBlurDp = blurDp,
-                performanceMode = performanceMode,
-                systemBackdropBlurAvailable = systemBlurAvailable,
-                activeLayer = active,
-                deemphasized = workspaceState.activeInstanceId != null && !active,
-            )
-            val bindingState = instance.resolveUiBinding(editorUiState)
-            val bindingLabel = when (val binding = instance.binding) {
-                WorkspaceBinding.FollowFocus ->
-                    editorUiState.focus.eventId?.let { "跟随 #$it" } ?: "跟随焦点"
-                WorkspaceBinding.FollowSelection ->
-                    if (editorUiState.selection.eventIds.isEmpty()) "跟随选择"
-                    else "选择 ${editorUiState.selection.eventIds.size} 条"
-                is WorkspaceBinding.PinnedEvent ->
-                    if (bindingState.unresolvedPinnedEventId != null) {
-                        "固定 #${binding.eventId} · 已失效"
-                    } else {
-                        "固定 #${binding.eventId}"
-                    }
-            }
-            val offset = offsets.getOrPut(instance.id) {
-                IntOffset(
-                    x = 18 + (index % 3) * 54,
-                    y = 96 + (index % 4) * 62,
-                )
-            }
-
-            GlassToolWindow(
-                id = instance.id,
-                title = tool.title,
-                subtitle = "${material.label} · $bindingLabel" +
-                    if (plan.degraded) " · 模糊降级" else "",
-                visible = !workspaceState.surfacesHidden &&
-                    instance.presence != WorkspaceToolPresence.HIDDEN &&
-                    instance.presence != WorkspaceToolPresence.BOOKMARKED,
-                active = active,
-                width = if (tool == WorkbenchTool.TIMELINE) 420.dp else 360.dp,
-                height = if (tool == WorkbenchTool.TIMELINE) 420.dp else 500.dp,
-                offset = offset,
-                renderPlan = plan,
-                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                onOffsetChange = { offsets[instance.id] = it },
-                onActivate = {
-                    onWorkspaceStateChange(workspaceState.activate(instance.id))
-                },
-                onCycleMaterial = {
-                    materials[instance.id] = material.next()
-                },
-                onClose = {
-                    materials.remove(instance.id)
-                    offsets.remove(instance.id)
-                    onWorkspaceStateChange(workspaceState.closeInstance(instance.id))
-                },
-            ) {
-                FloatingToolContent(
-                    instance = instance,
-                    tool = tool,
-                    state = state,
-                    viewModel = viewModel,
-                    issues = issues,
-                    expandedEventId = expandedEventId,
-                    onExpandedChange = onExpandedChange,
-                    onImportFont = onImportFont,
-                    onSaveMkv = onSaveMkv,
-                    eventEditorStateHolder = eventEditorStateHolder,
-                    onOpenTool = onOpenTool,
-                    onCloseText = { onExpandedChange(null) },
-                    searchOpen = false,
-                    onCloseSearch = {},
-                )
-            }
-        }
-
-        Surface(
-            modifier = Modifier.align(Alignment.BottomCenter)
-                .padding(8.dp)
-                .testTag("glass-control-deck"),
-            shape = RoundedCornerShape(24.dp),
-            tonalElevation = 5.dp,
-            color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.94f),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-        ) {
-            Column(
-                Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                Row(
-                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    AssistChip(
-                        onClick = { onOpenTool(WorkbenchTool.CAPABILITIES) },
-                        label = { Text("工具") },
-                        leadingIcon = { Icon(Icons.Filled.Apps, null, Modifier.size(18.dp)) },
-                        modifier = Modifier.testTag("glass-open-tools"),
-                    )
-                    listOf(
-                        WorkbenchTool.STYLE,
-                        WorkbenchTool.POSITION,
-                        WorkbenchTool.TIMELINE,
-                        WorkbenchTool.SUBTITLES,
-                    ).forEach { tool ->
-                        AssistChip(
-                            onClick = { onOpenTool(tool) },
-                            label = { Text(tool.title) },
-                        )
-                    }
-                    AssistChip(
-                        onClick = {
-                            onWorkspaceStateChange(
-                                workspaceState.withSurfacesHidden(!workspaceState.surfacesHidden)
-                            )
-                        },
-                        label = { Text(if (workspaceState.surfacesHidden) "显示各层" else "隐藏各层") },
-                        leadingIcon = {
-                            Icon(
-                                if (workspaceState.surfacesHidden) Icons.Filled.Layers
-                                else Icons.Filled.LayersClear,
-                                null,
-                                Modifier.size(18.dp),
-                            )
-                        },
-                    )
-                }
-
-                Row(
-                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    GlassPerformanceMode.entries.forEach { mode ->
-                        FilterChip(
-                            selected = performanceMode == mode,
-                            onClick = { performanceModeName = mode.name },
-                            label = { Text(mode.label) },
-                            modifier = Modifier.testTag("glass-performance-" + mode.name),
-                        )
-                    }
-                    Text(
-                        if (systemBlurAvailable) "系统背景模糊：可用" else "系统背景模糊：不可用，磨砂将降级",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = if (systemBlurAvailable) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        },
-                    )
-                }
-
-                Row(
-                    Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text("透明度", style = MaterialTheme.typography.labelSmall, modifier = Modifier.width(54.dp))
-                    Slider(
-                        value = alpha,
-                        onValueChange = { alpha = it },
-                        valueRange = 0.25f..0.95f,
-                        modifier = Modifier.weight(1f).testTag("glass-alpha"),
-                    )
-                    Text("${(alpha * 100).roundToInt()}%", style = MaterialTheme.typography.labelSmall)
-                }
-                Row(
-                    Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text("模糊", style = MaterialTheme.typography.labelSmall, modifier = Modifier.width(54.dp))
-                    Slider(
-                        value = blurDp,
-                        onValueChange = { blurDp = it },
-                        valueRange = 0f..42f,
-                        enabled = performanceMode != GlassPerformanceMode.LOW_COST,
-                        modifier = Modifier.weight(1f).testTag("glass-blur"),
-                    )
-                    Text("${blurDp.roundToInt()}dp", style = MaterialTheme.typography.labelSmall)
-                }
-
-                Row(
-                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
-                        .testTag("glass-layer-overview"),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    workspaceState.tools.forEach { instance ->
-                        val tool = WorkbenchTool.entries.firstOrNull { it.name == instance.toolKey }
-                            ?: return@forEach
-                        FilterChip(
-                            selected = workspaceState.activeInstanceId == instance.id,
-                            onClick = {
-                                onWorkspaceStateChange(workspaceState.activate(instance.id))
-                            },
-                            label = {
-                                Text(
-                                    tool.title + " · " +
-                                        (materials[instance.id] ?: GlassMaterial.FROSTED).label
-                                )
-                            },
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ToolInstanceWorkspace(
-    state: EditorState,
-    viewModel: EditorViewModel,
-    issues: List<AssQcIssue>,
-    workspaceState: WorkspaceState,
-    onWorkspaceStateChange: (WorkspaceState) -> Unit,
-    surfaceController: WorkbenchSurfaceController,
-    expandedEventId: Long?,
-    onExpandedChange: (Long?) -> Unit,
-    onImportFont: () -> Unit,
-    onSaveMkv: () -> Unit,
-    eventEditorStateHolder: SaveableStateHolder,
-    onOpenVideo: () -> Unit,
-    rendererEnabled: Boolean,
-    onEnableRenderer: () -> Unit,
-    onOpenTool: (WorkbenchTool) -> Unit,
-    searchOpen: Boolean,
-    onCloseSearch: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val editorUiState = state.toEditorUiState()
-    val temporaryIds = workspaceState.tools
-        .filter { it.presence == WorkspaceToolPresence.TEMPORARY }
-        .map { it.id }
-        .toSet()
-
-    fun hideTemporaryTools() {
-        var next = workspaceState
-        temporaryIds.forEach { id ->
-            next = next.updatePresence(id, WorkspaceToolPresence.HIDDEN)
-        }
-        onWorkspaceStateChange(next)
-    }
-
-    Box(
-        modifier
-            .background(MaterialTheme.colorScheme.surfaceContainerLowest)
-            .pointerInput(temporaryIds) {
-                detectTapGestures(onTap = { hideTemporaryTools() })
-            }
-    ) {
-        WorkbenchPreview(
-            state = state,
-            viewModel = viewModel,
-            positionEditEventId = null,
-            onOpenVideo = onOpenVideo,
-            onOpenTimeline = { onOpenTool(WorkbenchTool.TIMELINE) },
-            rendererEnabled = rendererEnabled,
-            onEnableRenderer = onEnableRenderer,
-            viewportGesturesEnabled = true,
-            modifier = Modifier.fillMaxSize().testTag("tool-instance-preview"),
-        )
-
-        workspaceState.tools.forEachIndexed { index, instance ->
-            val tool = WorkbenchTool.entries.firstOrNull { it.name == instance.toolKey }
-                ?: return@forEachIndexed
-            val groupIds = surfaceController.tabGroup(instance.id)
-            val activeTabId = surfaceController.activeTab(instance.id)
-            val visible = instance.presence != WorkspaceToolPresence.HIDDEN &&
-                instance.presence != WorkspaceToolPresence.BOOKMARKED &&
-                activeTabId == instance.id
-            val bindingState = instance.resolveUiBinding(editorUiState)
-            val bindingLabel = when (val binding = instance.binding) {
-                WorkspaceBinding.FollowFocus ->
-                    editorUiState.focus.eventId?.let { "跟随焦点 · #$it" } ?: "跟随焦点"
-                WorkspaceBinding.FollowSelection ->
-                    if (editorUiState.selection.eventIds.isEmpty()) "跟随选择 · 空"
-                    else "跟随选择 · ${editorUiState.selection.eventIds.size} 条"
-                is WorkspaceBinding.PinnedEvent ->
-                    if (bindingState.unresolvedPinnedEventId != null) {
-                        "固定 #${binding.eventId} · 已失效"
-                    } else {
-                        "固定 #${binding.eventId}"
-                    }
-            }
-            val tabTitles = groupIds.mapNotNull { id ->
-                workspaceState.tools.firstOrNull { it.id == id }?.let { grouped ->
-                    WorkbenchTool.entries.firstOrNull { it.name == grouped.toolKey }
-                        ?.let { groupedTool -> id to groupedTool.title }
-                }
-            }
-            val tagId = instance.id.replace(':', '-')
-
-            FloatingWorkbenchSurface(
-                id = instance.id,
-                testTagId = tagId,
-                title = tool.title + if (instance.id.endsWith(":primary")) "" else " · " + instance.id.substringAfterLast(':'),
-                bindingLabel = bindingLabel,
-                bindingPinned = instance.binding is WorkspaceBinding.PinnedEvent,
-                visible = visible,
-                controller = surfaceController,
-                initialOffset = Offset.Zero,
-                initialGeometry = tool.initialGeometry(
-                    18f + (index % 4) * 34f,
-                    24f + (index % 5) * 30f,
-                ),
-                onActivate = {
-                    onWorkspaceStateChange(workspaceState.activate(instance.id))
-                },
-                onToggleBinding = if (tool.descriptor.eventBindable) {
-                    {
-                        val nextBinding = when (instance.binding) {
-                            is WorkspaceBinding.PinnedEvent -> WorkspaceBinding.FollowFocus
-                            else -> state.focusedEventId
-                                ?.let(WorkspaceBinding::PinnedEvent)
-                                ?: WorkspaceBinding.FollowFocus
-                        }
-                        onWorkspaceStateChange(
-                            workspaceState.updateBinding(instance.id, nextBinding).activate(instance.id)
-                        )
-                    }
-                } else null,
-                onDuplicate = if (tool.descriptor.canDuplicate) {
-                    {
-                        workspaceState.newSibling(instance.id)?.let { sibling ->
-                            val copy = sibling.copy(
-                                presence = WorkspaceToolPresence.RESIDENT,
-                                contentDensity = instance.contentDensity,
-                            )
-                            onWorkspaceStateChange(
-                                workspaceState.addInstance(copy).activate(copy.id)
-                            )
-                            surfaceController.bringToFront(copy.id, tool.initialGeometry(52f, 58f))
-                        }
-                    }
-                } else null,
-                onDuplicateFollowFocus = if (tool.descriptor.canDuplicate) {
-                    {
-                        workspaceState.newSibling(instance.id)?.let { sibling ->
-                            val copy = sibling.copy(
-                                binding = WorkspaceBinding.FollowFocus,
-                                presence = WorkspaceToolPresence.RESIDENT,
-                                contentDensity = instance.contentDensity,
-                            )
-                            onWorkspaceStateChange(
-                                workspaceState.addInstance(copy).activate(copy.id)
-                            )
-                            surfaceController.bringToFront(copy.id, tool.initialGeometry(72f, 74f))
-                        }
-                    }
-                } else null,
-                presenceLabel = instance.presence.label,
-                contentDensityLabel = instance.contentDensity.label,
-                onToggleResident = {
-                    val nextPresence = if (instance.presence == WorkspaceToolPresence.RESIDENT) {
-                        WorkspaceToolPresence.TEMPORARY
-                    } else {
-                        WorkspaceToolPresence.RESIDENT
-                    }
-                    onWorkspaceStateChange(
-                        workspaceState.updatePresence(instance.id, nextPresence)
-                    )
-                },
-                onBookmark = {
-                    onWorkspaceStateChange(
-                        workspaceState.updatePresence(instance.id, WorkspaceToolPresence.BOOKMARKED)
-                    )
-                },
-                onCycleContentDensity = {
-                    onWorkspaceStateChange(workspaceState.cycleContentDensity(instance.id))
-                },
-                onRelink = editorUiState.focus.eventId
-                    ?.takeIf { bindingState.unresolvedPinnedEventId != null }
-                    ?.let { focusId ->
-                        {
-                            onWorkspaceStateChange(
-                                workspaceState
-                                    .updateBinding(
-                                        instance.id,
-                                        WorkspaceBinding.PinnedEvent(focusId),
-                                    )
-                                    .activate(instance.id)
-                            )
-                        }
-                    },
-                tabTitles = tabTitles,
-                onSelectTab = { tabId ->
-                    surfaceController.activateTab(tabId)
-                    onWorkspaceStateChange(workspaceState.activate(tabId))
-                },
-                onClose = {
-                    val surviving = surfaceController.remove(instance.id)
-                    var next = workspaceState.closeInstance(instance.id)
-                    if (surviving != null) next = next.activate(surviving)
-                    onWorkspaceStateChange(next)
-                },
-                modifier = Modifier.fillMaxSize(),
-            ) {
-                val baseDensity = LocalDensity.current
-                val factor = when (instance.contentDensity) {
-                    ToolContentDensity.COMPACT -> 0.86f
-                    ToolContentDensity.STANDARD -> 1f
-                    ToolContentDensity.PRECISION -> 1.12f
-                }
-                CompositionLocalProvider(
-                    LocalDensity provides Density(
-                        density = baseDensity.density * factor,
-                        fontScale = baseDensity.fontScale,
-                    )
-                ) {
-                    FloatingToolContent(
-                        instance = instance,
-                        tool = tool,
-                        state = state,
-                        viewModel = viewModel,
-                        issues = issues,
-                        expandedEventId = expandedEventId,
-                        onExpandedChange = onExpandedChange,
-                        onImportFont = onImportFont,
-                        onSaveMkv = onSaveMkv,
-                        eventEditorStateHolder = eventEditorStateHolder,
-                        onOpenTool = onOpenTool,
-                        onCloseText = { onExpandedChange(null) },
-                        searchOpen = searchOpen,
-                        onCloseSearch = onCloseSearch,
-                    )
-                }
-            }
-        }
-
-        val bookmarked = workspaceState.tools.filter {
-            it.presence == WorkspaceToolPresence.BOOKMARKED
-        }
-        if (bookmarked.isNotEmpty()) {
-            Column(
-                Modifier.align(Alignment.CenterEnd)
-                    .padding(end = 6.dp)
-                    .testTag("tool-bookmark-rail"),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-                horizontalAlignment = Alignment.End,
-            ) {
-                bookmarked.forEach { instance ->
-                    val tool = WorkbenchTool.entries.firstOrNull { it.name == instance.toolKey }
-                        ?: return@forEach
-                    AssistChip(
-                        onClick = {
-                            val next = workspaceState
-                                .updatePresence(instance.id, WorkspaceToolPresence.RESIDENT)
-                                .activate(instance.id)
-                            onWorkspaceStateChange(next)
-                            surfaceController.bringToFront(instance.id, tool.initialGeometry(44f, 44f))
-                        },
-                        label = { Text(tool.title) },
-                        leadingIcon = { Icon(Icons.Filled.Bookmark, null, Modifier.size(18.dp)) },
-                        modifier = Modifier.testTag("tool-bookmark-" + instance.id.replace(':', '-')),
-                    )
-                }
-            }
-        }
-
-        val hidden = workspaceState.tools.filter {
-            it.presence == WorkspaceToolPresence.HIDDEN
-        }
-        Surface(
-            modifier = Modifier.align(Alignment.BottomCenter).padding(10.dp),
-            shape = RoundedCornerShape(22.dp),
-            tonalElevation = 5.dp,
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        ) {
-            Row(
-                Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                AssistChip(
-                    onClick = { onOpenTool(WorkbenchTool.CAPABILITIES) },
-                    label = { Text("工具") },
-                    leadingIcon = { Icon(Icons.Filled.Apps, null, Modifier.size(18.dp)) },
-                    modifier = Modifier.testTag("tool-instance-directory"),
-                )
-                if (temporaryIds.isNotEmpty()) {
-                    AssistChip(
-                        onClick = ::hideTemporaryTools,
-                        label = { Text("收回临时") },
-                        leadingIcon = { Icon(Icons.Filled.KeyboardHide, null, Modifier.size(18.dp)) },
-                        modifier = Modifier.testTag("tool-hide-temporary"),
-                    )
-                }
-                hidden.forEach { instance ->
-                    val tool = WorkbenchTool.entries.firstOrNull { it.name == instance.toolKey }
-                        ?: return@forEach
-                    AssistChip(
-                        onClick = {
-                            val next = workspaceState
-                                .updatePresence(instance.id, WorkspaceToolPresence.TEMPORARY)
-                                .hideOtherTemporary(instance.id)
-                                .activate(instance.id)
-                            onWorkspaceStateChange(next)
-                            surfaceController.bringToFront(instance.id, tool.initialGeometry(34f, 42f))
-                        },
-                        label = { Text(tool.title) },
-                        leadingIcon = { Icon(Icons.Filled.Visibility, null, Modifier.size(18.dp)) },
-                        modifier = Modifier.testTag("tool-hidden-" + instance.id.replace(':', '-')),
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun PrecisionLensWorkspace(
-    state: EditorState,
-    viewModel: EditorViewModel,
-    issues: List<AssQcIssue>,
-    onOpenVideo: () -> Unit,
-    rendererEnabled: Boolean,
-    onEnableRenderer: () -> Unit,
-    interactionRegistry: InteractionOverlayRegistry,
-    modifier: Modifier = Modifier,
-) {
-    val focusedEvent = state.focusedEventId?.let { id ->
-        state.document.events.firstOrNull { it.id == id }
-    }
-    val geometry = focusedEvent?.let { AssGeometrySemantic.inspect(it.text) }
-    val unsupportedReason = focusedEvent?.let {
-        when {
-            geometry?.positionMode == AssPositionMode.CONFLICT ->
-                "当前 Event 同时包含 pos 与 move，直接位置操控已受限；可继续使用 org / 旋转，或转到 Raw / 数值编辑。"
-            geometry?.positionMode == AssPositionMode.MOVE && geometry.move == null ->
-                "move 语义无法可靠解析；保留 Raw 编辑入口。"
-            else -> null
-        }
-    }
-
-    Column(modifier.background(MaterialTheme.colorScheme.surfaceContainerLowest)) {
-        Surface(
-            Modifier.fillMaxWidth(),
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-            tonalElevation = 3.dp,
-        ) {
-            Row(
-                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp, vertical = 5.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                Text("精密几何", style = MaterialTheme.typography.titleSmall)
-                state.document.events.take(16).forEach { event ->
-                    FilterChip(
-                        selected = event.id == state.focusedEventId,
-                        onClick = { viewModel.focusEvent(event.id, seek = true) },
-                        label = { Text("#${event.id}") },
-                    )
-                }
-                if (state.document.events.size > 16) {
-                    Text("+${state.document.events.size - 16}", style = MaterialTheme.typography.labelSmall)
-                }
-            }
-        }
-
-        Box(Modifier.weight(1f).fillMaxWidth()) {
-            WorkbenchPreview(
-                state = state,
-                viewModel = viewModel,
-                positionEditEventId = state.focusedEventId,
-                onOpenVideo = onOpenVideo,
-                onOpenTimeline = {},
-                rendererEnabled = rendererEnabled,
-                onEnableRenderer = onEnableRenderer,
-                interactionRegistry = interactionRegistry,
-                viewportGesturesEnabled = false,
-                modifier = Modifier.fillMaxSize().testTag("precision-preview"),
-            )
-
-            if (focusedEvent == null) {
-                Surface(
-                    modifier = Modifier.align(Alignment.Center)
-                        .padding(18.dp)
-                        .testTag("precision-empty-state"),
-                    shape = RoundedCornerShape(22.dp),
-                    color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.96f),
-                ) {
-                    Column(
-                        Modifier.padding(16.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        Text("先选择一条字幕", style = MaterialTheme.typography.titleMedium)
-                        Text(
-                            "选择后直接出现位置、旋转、缩放、倾斜与 org 操纵杆。",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-            }
-
-            unsupportedReason?.let { message ->
-                Surface(
-                    modifier = Modifier.align(Alignment.BottomCenter)
-                        .padding(10.dp)
-                        .fillMaxWidth(0.92f)
-                        .testTag("precision-unsupported-reason"),
-                    shape = RoundedCornerShape(18.dp),
-                    color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.96f),
-                ) {
-                    Row(
-                        Modifier.padding(10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        Icon(Icons.Filled.Info, null)
-                        Text(message, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
-                    }
-                }
-            }
-        }
-
-        focusedEvent?.let { event ->
-            Surface(
-                Modifier.fillMaxWidth().testTag("precision-object-strip"),
-                color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                tonalElevation = 3.dp,
-            ) {
-                Row(
-                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp, vertical = 5.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Text("#${event.id} · ${event.style} · L${event.layer}", style = MaterialTheme.typography.labelLarge)
-                    Text(event.start.toAss() + " — " + event.end.toAss(), style = MaterialTheme.typography.labelSmall)
-                    AssistChip(
-                        onClick = { viewModel.setGeometryScaleLocked(!state.geometryScaleLocked) },
-                        label = { Text(if (state.geometryScaleLocked) "XY 缩放锁定" else "XY 独立缩放") },
-                    )
-                    AssistChip(
-                        onClick = {
-                            val next = when (state.geometryScaleSnapStep?.toInt()) {
-                                null -> 5.0
-                                5 -> 10.0
-                                10 -> 25.0
-                                else -> null
-                            }
-                            viewModel.setGeometryScaleSnapStep(next)
-                        },
-                        label = {
-                            Text(
-                                state.geometryScaleSnapStep?.let { "缩放吸附 ${it.toInt()}%" }
-                                    ?: "缩放吸附关闭"
-                            )
-                        },
-                    )
-                    AssistChip(
-                        onClick = { viewModel.clearTransientPreview() },
-                        label = { Text("清临时预览") },
-                    )
-                    AssistChip(
-                        onClick = { viewModel.focusEvent(event.id, seek = false) },
-                        label = { Text("保持对象焦点") },
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun TimelineDockWorkspace(
-    state: EditorState,
-    viewModel: EditorViewModel,
-    onOpenVideo: () -> Unit,
-    rendererEnabled: Boolean,
-    onEnableRenderer: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    var expanded by rememberSaveable { mutableStateOf(false) }
-    var extentFraction by rememberSaveable {
-        mutableFloatStateOf(TimelineDockPolicy.DEFAULT_EXTENT_FRACTION)
-    }
-    val expandedState = rememberUpdatedState(expanded)
-    val extentState = rememberUpdatedState(extentFraction)
-
-    BoxWithConstraints(modifier.background(MaterialTheme.colorScheme.surfaceContainerLowest)) {
-        val viewportHeightPx = with(LocalDensity.current) { maxHeight.toPx() }.coerceAtLeast(1f)
-        val compactHeight = minOf(124.dp, maxHeight * 0.28f)
-        val timelineHeight = if (expanded) {
-            maxOf(compactHeight, maxHeight * extentFraction)
-        } else {
-            compactHeight
-        }
-
-        Column(Modifier.fillMaxSize()) {
-            WorkbenchPreview(
-                state = state,
-                viewModel = viewModel,
-                positionEditEventId = null,
-                onOpenVideo = onOpenVideo,
-                onOpenTimeline = { expanded = true },
-                rendererEnabled = rendererEnabled,
-                onEnableRenderer = onEnableRenderer,
-                viewportGesturesEnabled = true,
-                modifier = Modifier.weight(1f).fillMaxWidth().testTag("timeline-dock-preview"),
-            )
-
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(36.dp)
-                    .pointerInput(viewportHeightPx) {
-                        var dragTravelPx = 0f
-                        var dragExtent = TimelineDockPolicy.DEFAULT_EXTENT_FRACTION
-                        var dragStartedExpanded = false
-                        detectVerticalDragGestures(
-                            onDragStart = {
-                                dragTravelPx = 0f
-                                dragExtent = extentState.value
-                                dragStartedExpanded = expandedState.value
-                            },
-                            onVerticalDrag = { change, dragAmount ->
-                                change.consume()
-                                dragTravelPx += dragAmount
-                                if (dragAmount < 0f) expanded = true
-                                dragExtent = TimelineDockPolicy.resize(
-                                    current = dragExtent,
-                                    deltaFraction = -dragAmount / viewportHeightPx,
-                                )
-                                extentFraction = dragExtent
-                            },
-                            onDragEnd = {
-                                expanded = TimelineDockPolicy.expansionAfterDrag(
-                                    current = dragStartedExpanded,
-                                    dragFractionY = dragTravelPx / viewportHeightPx,
-                                )
-                                if (expanded) {
-                                    extentFraction = TimelineDockPolicy.snap(dragExtent)
-                                }
-                            },
-                        )
-                    }
-                    .testTag("timeline-dock-handle"),
-                tonalElevation = 3.dp,
-                color = MaterialTheme.colorScheme.surfaceContainerHigh,
-            ) {
-                Row(
-                    Modifier.fillMaxSize().padding(horizontal = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Icon(Icons.Filled.DragHandle, null, Modifier.size(18.dp))
-                    Text(
-                        if (expanded) "时间轴 · 展开" else "时间轴 · 紧凑常驻",
-                        style = MaterialTheme.typography.labelLarge,
-                        modifier = Modifier.weight(1f),
-                    )
-                    Text(
-                        "${(extentFraction * 100).roundToInt()}%",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    IconButton(
-                        onClick = { expanded = !expanded },
-                        modifier = Modifier.testTag("timeline-dock-toggle"),
-                    ) {
-                        Icon(
-                            if (expanded) Icons.Filled.ExpandMore else Icons.Filled.ExpandLess,
-                            if (expanded) "收拢时间轴" else "展开时间轴",
-                        )
-                    }
-                }
-            }
-
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .height(timelineHeight)
-                    .testTag("timeline-dock-pane")
-            ) {
-                ModernTimelinePane(
-                    state = state,
-                    viewModel = viewModel,
-                    modifier = Modifier.fillMaxSize(),
-                    compact = !expanded,
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun EdgeBookmarkWorkspace(
-    state: EditorState,
-    viewModel: EditorViewModel,
-    issues: List<AssQcIssue>,
-    workspaceState: WorkspaceState,
-    onWorkspaceStateChange: (WorkspaceState) -> Unit,
-    expandedEventId: Long?,
-    onExpandedChange: (Long?) -> Unit,
-    onImportFont: () -> Unit,
-    onSaveMkv: () -> Unit,
-    eventEditorStateHolder: SaveableStateHolder,
-    onOpenVideo: () -> Unit,
-    rendererEnabled: Boolean,
-    onEnableRenderer: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    var edgeState by remember {
-        mutableStateOf(
-            EdgeWorkspaceState(
-                left = EdgePanelState(open = false, resident = false, extentFraction = 0.36f),
-                right = EdgePanelState(open = true, resident = false, extentFraction = 0.40f),
-                top = EdgePanelState(open = false, resident = false, extentFraction = 0.28f),
-                bottom = EdgePanelState(open = false, resident = true, extentFraction = 0.34f),
-                bookmarks = listOf(
-                    EdgeBookmark(
-                        instanceId = WorkspaceState.primaryInstanceId(WorkbenchTool.SUBTITLES.name),
-                        toolKey = WorkbenchTool.SUBTITLES.name,
-                        side = EdgeDockSide.LEFT,
-                        groupName = "导航",
-                        order = 0,
-                    ),
-                    EdgeBookmark(
-                        instanceId = WorkspaceState.primaryInstanceId(WorkbenchTool.STYLE.name),
-                        toolKey = WorkbenchTool.STYLE.name,
-                        side = EdgeDockSide.RIGHT,
-                        groupName = "排版",
-                        order = 0,
-                    ),
-                ),
-                activeBookmarkId = WorkspaceState.primaryInstanceId(WorkbenchTool.STYLE.name),
-            )
-        )
-    }
-    var bookmarkInfo by remember { mutableStateOf<EdgeBookmark?>(null) }
-
-    LaunchedEffect(Unit) {
-        var next = workspaceState
-        next = next.openPrimary(WorkbenchTool.SUBTITLES.name, WorkbenchTool.SUBTITLES.descriptor.defaultBinding)
-        next = next.openPrimary(WorkbenchTool.STYLE.name, WorkbenchTool.STYLE.descriptor.defaultBinding)
-        onWorkspaceStateChange(next.activate(WorkspaceState.primaryInstanceId(WorkbenchTool.STYLE.name)))
-    }
-
-    fun sideFor(tool: WorkbenchTool): EdgeDockSide = when (tool.group) {
-        WorkbenchToolGroup.NAVIGATION,
-        WorkbenchToolGroup.RESOURCES,
-        WorkbenchToolGroup.VALIDATION -> EdgeDockSide.LEFT
-        WorkbenchToolGroup.TIME -> EdgeDockSide.BOTTOM
-        WorkbenchToolGroup.PROJECT -> EdgeDockSide.TOP
-        else -> EdgeDockSide.RIGHT
-    }
-
-    fun openEdgeTool(tool: WorkbenchTool) {
-        val id = WorkspaceState.primaryInstanceId(tool.name)
-        val side = sideFor(tool)
-        val nextWorkspace = workspaceState
-            .openPrimary(tool.name, tool.descriptor.defaultBinding)
-            .activate(id)
-        onWorkspaceStateChange(nextWorkspace)
-        edgeState = edgeState
-            .addOrActivateBookmark(id, tool.name, side)
-            .updatePanel(side, edgeState.panel(side).copy(open = true))
-    }
-
-    fun activeInstance(): WorkspaceToolInstance? {
-        val bookmark = edgeState.activeBookmarkId
-            ?.let { id -> edgeState.bookmarks.firstOrNull { it.instanceId == id } }
-            ?: return null
-        return workspaceState.tools.firstOrNull { it.id == bookmark.instanceId }
-            ?: WorkspaceToolInstance(
-                id = bookmark.instanceId,
-                toolKey = bookmark.toolKey,
-                binding = WorkbenchTool.valueOf(bookmark.toolKey).descriptor.defaultBinding,
-            )
-    }
-
-    BoxWithConstraints(modifier.background(MaterialTheme.colorScheme.surfaceContainerLowest)) {
-        val viewportWidthPx = with(LocalDensity.current) { maxWidth.toPx() }.coerceAtLeast(1f)
-        val viewportHeightPx = with(LocalDensity.current) { maxHeight.toPx() }.coerceAtLeast(1f)
-
-        WorkbenchPreview(
-            state = state,
-            viewModel = viewModel,
-            positionEditEventId = null,
-            onOpenVideo = onOpenVideo,
-            onOpenTimeline = { edgeState = edgeState.updatePanel(EdgeDockSide.BOTTOM, edgeState.bottom.copy(open = true)) },
-            rendererEnabled = rendererEnabled,
-            onEnableRenderer = onEnableRenderer,
-            viewportGesturesEnabled = true,
-            modifier = Modifier.fillMaxSize().testTag("edge-preview"),
-        )
-
-        EdgeBookmarkRail(
-            side = EdgeDockSide.LEFT,
-            bookmarks = edgeState.bookmarks.filter { it.side == EdgeDockSide.LEFT },
-            activeId = edgeState.activeBookmarkId,
-            onActivate = { bookmark ->
-                edgeState = edgeState.copy(activeBookmarkId = bookmark.instanceId)
-                    .updatePanel(EdgeDockSide.LEFT, edgeState.left.copy(open = true))
-                onWorkspaceStateChange(workspaceState.activate(bookmark.instanceId))
-            },
-            onLongPress = { bookmarkInfo = it },
-            onMove = { id, delta ->
-                edgeState = edgeState.moveBookmark(id, EdgeDockSide.LEFT, delta)
-            },
-            onCrossSide = { id ->
-                edgeState = edgeState.moveBookmark(id, EdgeDockSide.RIGHT)
-            },
-            modifier = Modifier.align(Alignment.CenterStart).testTag("edge-bookmark-left"),
-        )
-
-        EdgeBookmarkRail(
-            side = EdgeDockSide.RIGHT,
-            bookmarks = edgeState.bookmarks.filter { it.side == EdgeDockSide.RIGHT },
-            activeId = edgeState.activeBookmarkId,
-            onActivate = { bookmark ->
-                edgeState = edgeState.copy(activeBookmarkId = bookmark.instanceId)
-                    .updatePanel(EdgeDockSide.RIGHT, edgeState.right.copy(open = true))
-                onWorkspaceStateChange(workspaceState.activate(bookmark.instanceId))
-            },
-            onLongPress = { bookmarkInfo = it },
-            onMove = { id, delta ->
-                edgeState = edgeState.moveBookmark(id, EdgeDockSide.RIGHT, delta)
-            },
-            onCrossSide = { id ->
-                edgeState = edgeState.moveBookmark(id, EdgeDockSide.LEFT)
-            },
-            modifier = Modifier.align(Alignment.CenterEnd).testTag("edge-bookmark-right"),
-        )
-
-        EdgeHandle(
-            side = EdgeDockSide.TOP,
-            open = edgeState.top.open,
-            resident = edgeState.top.resident,
-            label = "项目",
-            icon = Icons.Filled.FolderOpen,
-            onToggle = { edgeState = edgeState.togglePanel(EdgeDockSide.TOP) },
-            onToggleResident = { edgeState = edgeState.toggleResident(EdgeDockSide.TOP) },
-            onDragFraction = { delta ->
-                edgeState = edgeState.resizePanel(EdgeDockSide.TOP, delta / viewportHeightPx)
-            },
-            onDragEnd = { edgeState = edgeState.snapPanel(EdgeDockSide.TOP) },
-            modifier = Modifier.align(Alignment.TopCenter).testTag("edge-handle-top"),
-        )
-
-        EdgeHandle(
-            side = EdgeDockSide.BOTTOM,
-            open = edgeState.bottom.open,
-            resident = edgeState.bottom.resident,
-            label = "时间",
-            icon = Icons.Filled.Timeline,
-            onToggle = { edgeState = edgeState.togglePanel(EdgeDockSide.BOTTOM) },
-            onToggleResident = { edgeState = edgeState.toggleResident(EdgeDockSide.BOTTOM) },
-            onDragFraction = { delta ->
-                edgeState = edgeState.resizePanel(EdgeDockSide.BOTTOM, -delta / viewportHeightPx)
-            },
-            onDragEnd = { edgeState = edgeState.snapPanel(EdgeDockSide.BOTTOM) },
-            modifier = Modifier.align(Alignment.BottomCenter).testTag("edge-handle-bottom"),
-        )
-
-        EdgeHandle(
-            side = EdgeDockSide.LEFT,
-            open = edgeState.left.open,
-            resident = edgeState.left.resident,
-            label = "导航",
-            icon = Icons.Filled.MenuOpen,
-            onToggle = { edgeState = edgeState.togglePanel(EdgeDockSide.LEFT) },
-            onToggleResident = { edgeState = edgeState.toggleResident(EdgeDockSide.LEFT) },
-            onDragFraction = { delta ->
-                edgeState = edgeState.resizePanel(EdgeDockSide.LEFT, delta / viewportWidthPx)
-            },
-            onDragEnd = { edgeState = edgeState.snapPanel(EdgeDockSide.LEFT) },
-            modifier = Modifier.align(Alignment.CenterStart).padding(start = 50.dp).testTag("edge-handle-left"),
-        )
-
-        EdgeHandle(
-            side = EdgeDockSide.RIGHT,
-            open = edgeState.right.open,
-            resident = edgeState.right.resident,
-            label = "参数",
-            icon = Icons.Filled.Tune,
-            onToggle = { edgeState = edgeState.togglePanel(EdgeDockSide.RIGHT) },
-            onToggleResident = { edgeState = edgeState.toggleResident(EdgeDockSide.RIGHT) },
-            onDragFraction = { delta ->
-                edgeState = edgeState.resizePanel(EdgeDockSide.RIGHT, -delta / viewportWidthPx)
-            },
-            onDragEnd = { edgeState = edgeState.snapPanel(EdgeDockSide.RIGHT) },
-            modifier = Modifier.align(Alignment.CenterEnd).padding(end = 50.dp).testTag("edge-handle-right"),
-        )
-
-        if (edgeState.top.open) {
-            EdgeLayerPanel(
-                side = EdgeDockSide.TOP,
-                extentFraction = edgeState.top.extentFraction,
-                resident = edgeState.top.resident,
-                onClose = { edgeState = edgeState.updatePanel(EdgeDockSide.TOP, edgeState.top.copy(open = false)) },
-                modifier = Modifier.align(Alignment.TopCenter).testTag("edge-layer-top"),
-            ) {
-                ProjectPane(state, viewModel, onSaveMkv, Modifier.fillMaxSize())
-            }
-        }
-
-        if (edgeState.bottom.open) {
-            EdgeLayerPanel(
-                side = EdgeDockSide.BOTTOM,
-                extentFraction = edgeState.bottom.extentFraction,
-                resident = edgeState.bottom.resident,
-                onClose = { edgeState = edgeState.updatePanel(EdgeDockSide.BOTTOM, edgeState.bottom.copy(open = false)) },
-                modifier = Modifier.align(Alignment.BottomCenter).testTag("edge-layer-bottom"),
-            ) {
-                ModernTimelinePane(state, viewModel, Modifier.fillMaxSize())
-            }
-        }
-
-        if (edgeState.left.open) {
-            EdgeLayerPanel(
-                side = EdgeDockSide.LEFT,
-                extentFraction = edgeState.left.extentFraction,
-                resident = edgeState.left.resident,
-                onClose = { edgeState = edgeState.updatePanel(EdgeDockSide.LEFT, edgeState.left.copy(open = false)) },
-                modifier = Modifier.align(Alignment.CenterStart).padding(start = 50.dp).testTag("edge-layer-left"),
-            ) {
-                Column(Modifier.fillMaxSize()) {
-                    Text("对象 / 样式 / 资源 / 问题", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(10.dp))
-                    Row(
-                        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        listOf(
-                            WorkbenchTool.SUBTITLES,
-                            WorkbenchTool.STYLE,
-                            WorkbenchTool.FONTS,
-                            WorkbenchTool.QC,
-                        ).forEach { tool ->
-                            AssistChip(
-                                onClick = { openEdgeTool(tool) },
-                                label = { Text(tool.title) },
-                            )
-                        }
-                    }
-                    val instance = activeInstance()
-                    val tool = instance?.let { WorkbenchTool.entries.firstOrNull { candidate -> candidate.name == it.toolKey } }
-                    if (instance != null && tool != null && sideFor(tool) == EdgeDockSide.LEFT) {
-                        FloatingToolContent(
-                            instance = instance,
-                            tool = tool,
-                            state = state,
-                            viewModel = viewModel,
-                            issues = issues,
-                            expandedEventId = expandedEventId,
-                            onExpandedChange = onExpandedChange,
-                            onImportFont = onImportFont,
-                            onSaveMkv = onSaveMkv,
-                            eventEditorStateHolder = eventEditorStateHolder,
-                            onOpenTool = ::openEdgeTool,
-                            onCloseText = { onExpandedChange(null) },
-                            searchOpen = false,
-                            onCloseSearch = {},
-                        )
-                    } else {
-                        Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                            Text("从左侧书签或导航入口选择工具")
-                        }
-                    }
-                }
-            }
-        }
-
-        if (edgeState.right.open) {
-            EdgeLayerPanel(
-                side = EdgeDockSide.RIGHT,
-                extentFraction = edgeState.right.extentFraction,
-                resident = edgeState.right.resident,
-                onClose = { edgeState = edgeState.updatePanel(EdgeDockSide.RIGHT, edgeState.right.copy(open = false)) },
-                modifier = Modifier.align(Alignment.CenterEnd).padding(end = 50.dp).testTag("edge-layer-right"),
-            ) {
-                Column(Modifier.fillMaxSize()) {
-                    Text("参数工具", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(10.dp))
-                    Row(
-                        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        listOf(
-                            WorkbenchTool.STYLE,
-                            WorkbenchTool.POSITION,
-                            WorkbenchTool.EFFECTS,
-                            WorkbenchTool.TEXT,
-                        ).forEach { tool ->
-                            AssistChip(
-                                onClick = { openEdgeTool(tool) },
-                                label = { Text(tool.title) },
-                            )
-                        }
-                    }
-                    val instance = activeInstance()
-                    val tool = instance?.let { WorkbenchTool.entries.firstOrNull { candidate -> candidate.name == it.toolKey } }
-                    if (instance != null && tool != null && sideFor(tool) == EdgeDockSide.RIGHT) {
-                        FloatingToolContent(
-                            instance = instance,
-                            tool = tool,
-                            state = state,
-                            viewModel = viewModel,
-                            issues = issues,
-                            expandedEventId = expandedEventId,
-                            onExpandedChange = onExpandedChange,
-                            onImportFont = onImportFont,
-                            onSaveMkv = onSaveMkv,
-                            eventEditorStateHolder = eventEditorStateHolder,
-                            onOpenTool = ::openEdgeTool,
-                            onCloseText = { onExpandedChange(null) },
-                            searchOpen = false,
-                            onCloseSearch = {},
-                        )
-                    } else {
-                        Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                            Text("从右侧书签或参数入口选择工具")
-                        }
-                    }
-                }
-            }
-        }
-
-        bookmarkInfo?.let { bookmark ->
-            val tool = WorkbenchTool.entries.firstOrNull { it.name == bookmark.toolKey }
-            val instance = workspaceState.tools.firstOrNull { it.id == bookmark.instanceId }
-            AlertDialog(
-                onDismissRequest = { bookmarkInfo = null },
-                title = { Text(tool?.title ?: bookmark.toolKey) },
-                text = {
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text("实例：${bookmark.instanceId}")
-                        Text("分组：${bookmark.groupName.ifBlank { "未分组" }}")
-                        Text(
-                            when (val binding = instance?.binding) {
-                                WorkspaceBinding.FollowFocus -> "绑定：跟随焦点"
-                                WorkspaceBinding.FollowSelection -> "绑定：跟随选择"
-                                is WorkspaceBinding.PinnedEvent -> "绑定：Event #${binding.eventId}"
-                                null -> "绑定：实例尚未打开"
-                            }
-                        )
-                        Text("长按拖动书签可排序；横向拖过轨道可移动到另一侧。")
-                    }
-                },
-                confirmButton = {
-                    TextButton(onClick = { bookmarkInfo = null }) { Text("关闭") }
-                },
-            )
-        }
-    }
-}
-
-@Composable
-private fun EdgeBookmarkRail(
-    side: EdgeDockSide,
-    bookmarks: List<EdgeBookmark>,
-    activeId: String?,
-    onActivate: (EdgeBookmark) -> Unit,
-    onLongPress: (EdgeBookmark) -> Unit,
-    onMove: (String, Int) -> Unit,
-    onCrossSide: (String) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val ordered = bookmarks.sortedBy { it.order }
-    Surface(
-        modifier = modifier.width(50.dp),
-        shape = RoundedCornerShape(if (side == EdgeDockSide.LEFT) 0.dp else 18.dp),
-        tonalElevation = 4.dp,
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-    ) {
-        Column(
-            Modifier.fillMaxWidth().padding(vertical = 6.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            val grouped = ordered.groupBy { it.toolKey }
-            grouped.forEach { (toolKey, group) ->
-                val active = group.firstOrNull { it.instanceId == activeId } ?: group.first()
-                val tool = WorkbenchTool.entries.firstOrNull { it.name == toolKey }
-                Box(
-                    Modifier
-                        .size(42.dp)
-                        .combinedClickable(
-                            onClick = { onActivate(active) },
-                            onLongClick = { onLongPress(active) },
-                        )
-                        .pointerInput(active.instanceId, active.order, active.side) {
-                            var totalX = 0f
-                            var totalY = 0f
-                            detectDragGesturesAfterLongPress(
-                                onDragStart = { onLongPress(active) },
-                                onDrag = { change, delta ->
-                                    change.consume()
-                                    totalX += delta.x
-                                    totalY += delta.y
-                                },
-                                onDragEnd = {
-                                    if (kotlin.math.abs(totalX) > 70f) {
-                                        onCrossSide(active.instanceId)
-                                    } else if (kotlin.math.abs(totalY) > 36f) {
-                                        onMove(active.instanceId, if (totalY > 0f) 1 else -1)
-                                    }
-                                },
-                            )
-                        }
-                        .testTag("edge-bookmark-" + active.instanceId.replace(':', '-')),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        when (tool) {
-                            WorkbenchTool.SUBTITLES -> Icons.Filled.Subtitles
-                            WorkbenchTool.STYLE -> Icons.Filled.FormatColorText
-                            WorkbenchTool.POSITION -> Icons.Filled.OpenWith
-                            WorkbenchTool.TIMELINE -> Icons.Filled.Timeline
-                            WorkbenchTool.FONTS -> Icons.Filled.FontDownload
-                            WorkbenchTool.QC -> Icons.Filled.FactCheck
-                            else -> Icons.Filled.Apps
-                        },
-                        contentDescription = tool?.title ?: toolKey,
-                        tint = if (activeId == active.instanceId) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        },
-                    )
-                    if (group.size > 1) {
-                        Surface(
-                            modifier = Modifier.align(Alignment.TopEnd),
-                            shape = RoundedCornerShape(8.dp),
-                            color = MaterialTheme.colorScheme.primaryContainer,
-                        ) {
-                            Text(
-                                group.size.toString(),
-                                style = MaterialTheme.typography.labelSmall,
-                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun EdgeHandle(
-    side: EdgeDockSide,
-    open: Boolean,
-    resident: Boolean,
-    label: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    onToggle: () -> Unit,
-    onToggleResident: () -> Unit,
-    onDragFraction: (Float) -> Unit,
-    onDragEnd: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Surface(
-        modifier = modifier
-            .pointerInput(side) {
-                detectDragGestures(
-                    onDrag = { change, delta ->
-                        change.consume()
-                        onDragFraction(
-                            if (side == EdgeDockSide.LEFT || side == EdgeDockSide.RIGHT) delta.x else delta.y
-                        )
-                    },
-                    onDragEnd = onDragEnd,
-                    onDragCancel = onDragEnd,
-                )
-            },
-        shape = RoundedCornerShape(18.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerHighest,
-        tonalElevation = 5.dp,
-        border = BorderStroke(
-            1.dp,
-            if (open) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
-        ),
-    ) {
-        Row(
-            Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(2.dp),
-        ) {
-            IconButton(
-                onClick = onToggle,
-                modifier = Modifier
-                    .size(38.dp)
-                    .testTag("edge-toggle-" + side.name.lowercase()),
-            ) {
-                Icon(icon, contentDescription = if (open) "收起$label" else "展开$label")
-            }
-            Text(label, style = MaterialTheme.typography.labelSmall)
-            IconButton(onClick = onToggleResident, modifier = Modifier.size(34.dp)) {
-                Icon(
-                    if (resident) Icons.Filled.PushPin else Icons.Filled.PushPin,
-                    contentDescription = if (resident) "取消驻留$label" else "驻留$label",
-                    tint = if (resident) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun EdgeLayerPanel(
-    side: EdgeDockSide,
-    extentFraction: Float,
-    resident: Boolean,
-    onClose: () -> Unit,
-    modifier: Modifier = Modifier,
-    content: @Composable () -> Unit,
-) {
-    BoxWithConstraints(modifier.fillMaxSize()) {
-        val panelModifier = when (side) {
-            EdgeDockSide.LEFT, EdgeDockSide.RIGHT ->
-                Modifier.fillMaxHeight().width(maxWidth * extentFraction)
-            EdgeDockSide.TOP, EdgeDockSide.BOTTOM ->
-                Modifier.fillMaxWidth().height(maxHeight * extentFraction)
-        }
-        Surface(
-            modifier = panelModifier,
-            shape = RoundedCornerShape(20.dp),
-            tonalElevation = if (resident) 5.dp else 8.dp,
-            shadowElevation = if (resident) 3.dp else 8.dp,
-            color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = if (resident) 0.98f else 0.94f),
-            border = BorderStroke(
-                1.dp,
-                if (resident) MaterialTheme.colorScheme.primary.copy(alpha = 0.55f)
-                else MaterialTheme.colorScheme.outlineVariant,
-            ),
-        ) {
-            Column(Modifier.fillMaxSize()) {
-                Row(
-                    Modifier.fillMaxWidth().height(42.dp).padding(horizontal = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(Icons.Filled.DragHandle, null)
-                    Text(
-                        if (resident) "驻留边层" else "临时边层",
-                        style = MaterialTheme.typography.labelMedium,
-                        modifier = Modifier.weight(1f).padding(start = 6.dp),
-                    )
-                    IconButton(onClick = onClose, modifier = Modifier.size(36.dp)) {
-                        Icon(Icons.Filled.Close, "关闭边层")
-                    }
-                }
-                HorizontalDivider()
-                Box(Modifier.weight(1f).fillMaxWidth()) { content() }
-            }
-        }
-    }
-}
-
-@Composable
-private fun SubtitleObjectWorkspace(
-    state: EditorState,
-    viewModel: EditorViewModel,
-    issues: List<AssQcIssue>,
-    workspaceState: WorkspaceState,
-    onWorkspaceStateChange: (WorkspaceState) -> Unit,
-    expandedEventId: Long?,
-    onExpandedChange: (Long?) -> Unit,
-    onImportFont: () -> Unit,
-    onSaveMkv: () -> Unit,
-    eventEditorStateHolder: SaveableStateHolder,
-    onOpenVideo: () -> Unit,
-    rendererEnabled: Boolean,
-    onEnableRenderer: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val playbackPositionMs by viewModel.playbackPositionMs.collectAsState()
-    var frozenPick by remember { mutableStateOf<PreviewObjectPick?>(null) }
-    var selectedObjectId by rememberSaveable { mutableStateOf<Long?>(state.focusedEventId) }
-    var referenceObjectId by rememberSaveable { mutableStateOf<Long?>(null) }
-    var activeToolName by rememberSaveable { mutableStateOf<String?>(null) }
-    var relationOpen by rememberSaveable { mutableStateOf(false) }
-    var candidatePickerOpen by remember { mutableStateOf(false) }
-
-    val selectedEvent = selectedObjectId?.let { id ->
-        state.document.events.firstOrNull { it.id == id }
-    }
-    val selectedCandidate = frozenPick?.candidates?.firstOrNull { it.eventId == selectedObjectId }
-
-    fun selectObject(id: Long, pick: PreviewObjectPick? = frozenPick) {
-        if (state.document.events.none { it.id == id }) return
-        selectedObjectId = id
-        frozenPick = pick
-        candidatePickerOpen = false
-        viewModel.focusEvent(id, seek = false)
-    }
-
-    fun acceptPick(pick: PreviewObjectPick) {
-        frozenPick = pick
-        val reliable = pick.candidates.filter { it.confidence != PreviewTargetConfidence.UNRESOLVED }
-        if (pick.candidates.size == 1 && reliable.size == 1) {
-            selectObject(pick.candidates.single().eventId, pick)
-        } else {
-            candidatePickerOpen = true
-        }
-    }
-
-    fun openObjectTool(tool: WorkbenchTool) {
-        val id = selectedObjectId ?: return
-        viewModel.focusEvent(id, seek = false)
-        val next = if (tool.descriptor.supportsPinnedEvent) {
-            workspaceState.openPinnedEvent(tool.name, id)
-        } else {
-            workspaceState.openPrimary(tool.name, tool.descriptor.defaultBinding)
-        }
-        onWorkspaceStateChange(next)
-        activeToolName = tool.name
-    }
-
-    val activeTool = activeToolName?.let { key ->
-        WorkbenchTool.entries.firstOrNull { it.name == key }
-    }
-    val activeInstance = activeTool?.let { tool ->
-        workspaceState.activeForTool(tool.name)
-            ?: WorkspaceToolInstance(
-                id = WorkspaceState.primaryInstanceId(tool.name),
-                toolKey = tool.name,
-                binding = if (tool.descriptor.supportsPinnedEvent && selectedObjectId != null) {
-                    WorkspaceBinding.PinnedEvent(selectedObjectId!!)
-                } else {
-                    tool.descriptor.defaultBinding
-                },
-            )
-    }
-
-    BoxWithConstraints(
-        modifier.background(MaterialTheme.colorScheme.surfaceContainerLowest)
-    ) {
-        if (state.project.videoUri != null) {
-            WorkbenchPreview(
-                state = state,
-                viewModel = viewModel,
-                positionEditEventId = null,
-                onOpenVideo = onOpenVideo,
-                onOpenTimeline = { openObjectTool(WorkbenchTool.TIMELINE) },
-                rendererEnabled = rendererEnabled,
-                onEnableRenderer = onEnableRenderer,
-                viewportGesturesEnabled = true,
-                onObjectLongPress = ::acceptPick,
-                modifier = Modifier.fillMaxSize().testTag("object-preview"),
-            )
-        } else {
-            ScriptObjectCanvas(
-                state = state,
-                positionMs = frozenPick?.frozenPositionMs ?: playbackPositionMs,
-                selectedEventId = selectedObjectId,
-                onObjectPick = ::acceptPick,
-                onOpenVideo = onOpenVideo,
-                modifier = Modifier.fillMaxSize().testTag("object-script-canvas"),
-            )
-        }
-
-        selectedEvent?.let { event ->
-            val fractionX = selectedCandidate?.anchor?.let {
-                (it.x / state.document.playResX.coerceAtLeast(1)).toFloat()
-            } ?: frozenPick?.viewportFractionX ?: 0.5f
-            val fractionY = selectedCandidate?.anchor?.let {
-                (it.y / state.document.playResY.coerceAtLeast(1)).toFloat()
-            } ?: frozenPick?.viewportFractionY ?: 0.72f
-            val hudX = (maxWidth * fractionX.coerceIn(0.08f, 0.80f))
-            val hudY = (maxHeight * fractionY.coerceIn(0.10f, 0.72f))
-
-            Surface(
-                modifier = Modifier
-                    .offset(x = hudX, y = hudY)
-                    .widthIn(max = 320.dp)
-                    .testTag("object-capability-hud"),
-                shape = RoundedCornerShape(22.dp),
-                color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.96f),
-                tonalElevation = 5.dp,
-                shadowElevation = 8.dp,
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.55f)),
-            ) {
-                Column(
-                    Modifier.padding(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    Row(
-                        Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Column(Modifier.weight(1f)) {
-                            Text(
-                                "#${event.id} · ${event.style} · L${event.layer}",
-                                style = MaterialTheme.typography.labelLarge,
-                            )
-                            Text(
-                                "${event.start.toAss()} — ${event.end.toAss()}",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                        if (state.selectedEventIds.isNotEmpty()) {
-                            AssistChip(
-                                onClick = {},
-                                enabled = false,
-                                label = { Text("${state.selectedEventIds.size} 选中") },
-                            )
-                        }
-                    }
-                    Row(
-                        Modifier.horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        ObjectCapabilityButton("文字", Icons.Filled.TextFields) { openObjectTool(WorkbenchTool.TEXT) }
-                        ObjectCapabilityButton("字体", Icons.Filled.FontDownload) { openObjectTool(WorkbenchTool.FONTS) }
-                        ObjectCapabilityButton("排版", Icons.Filled.FormatColorText) { openObjectTool(WorkbenchTool.STYLE) }
-                        ObjectCapabilityButton("位置", Icons.Filled.OpenWith) { openObjectTool(WorkbenchTool.POSITION) }
-                        ObjectCapabilityButton("旋转", Icons.Filled.RotateRight) { openObjectTool(WorkbenchTool.POSITION) }
-                        ObjectCapabilityButton("时间", Icons.Filled.Timeline) { openObjectTool(WorkbenchTool.TIMELINE) }
-                        ObjectCapabilityButton("效果", Icons.Filled.AutoAwesome) { openObjectTool(WorkbenchTool.EFFECTS) }
-                        ObjectCapabilityButton("Raw", Icons.Filled.Code) { openObjectTool(WorkbenchTool.TEXT) }
-                        ObjectCapabilityButton("检查", Icons.Filled.FactCheck) { openObjectTool(WorkbenchTool.QC) }
-                    }
-                    Row(
-                        Modifier.horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        FilterChip(
-                            selected = event.id in state.selectedEventIds,
-                            onClick = { viewModel.toggleSelected(event.id) },
-                            label = { Text("多选") },
-                            leadingIcon = { Icon(Icons.Filled.SelectAll, null, Modifier.size(18.dp)) },
-                            modifier = Modifier.testTag("object-multiselect"),
-                        )
-                        FilterChip(
-                            selected = referenceObjectId == event.id,
-                            onClick = {
-                                referenceObjectId = if (referenceObjectId == event.id) null else event.id
-                            },
-                            label = { Text("固定参考") },
-                            leadingIcon = { Icon(Icons.Filled.PushPin, null, Modifier.size(18.dp)) },
-                            modifier = Modifier.testTag("object-reference-pin"),
-                        )
-                        AssistChip(
-                            onClick = { relationOpen = !relationOpen },
-                            label = { Text("关系") },
-                            leadingIcon = { Icon(Icons.Filled.AccountTree, null, Modifier.size(18.dp)) },
-                            modifier = Modifier.testTag("object-relations"),
-                        )
-                    }
-                }
-            }
-        }
-
-        if (state.selectedEventIds.size > 1) {
-            Surface(
-                modifier = Modifier.align(Alignment.TopCenter)
-                    .padding(top = 8.dp)
-                    .testTag("object-group-controls"),
-                shape = RoundedCornerShape(20.dp),
-                color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.96f),
-                tonalElevation = 4.dp,
-            ) {
-                Row(
-                    Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(2.dp),
-                ) {
-                    Text("${state.selectedEventIds.size} 个对象", style = MaterialTheme.typography.labelLarge)
-                    IconButton(onClick = { viewModel.nudgeSelectedObjects(-8.0, 0.0) }) {
-                        Icon(Icons.Filled.ArrowBack, "选中对象左移")
-                    }
-                    IconButton(onClick = { viewModel.nudgeSelectedObjects(8.0, 0.0) }) {
-                        Icon(Icons.Filled.ArrowForward, "选中对象右移")
-                    }
-                    IconButton(onClick = { viewModel.nudgeSelectedObjects(0.0, -8.0) }) {
-                        Icon(Icons.Filled.ArrowUpward, "选中对象上移")
-                    }
-                    IconButton(onClick = { viewModel.nudgeSelectedObjects(0.0, 8.0) }) {
-                        Icon(Icons.Filled.ArrowDownward, "选中对象下移")
-                    }
-                    TextButton(onClick = { openObjectTool(WorkbenchTool.BATCH) }) { Text("统一参数") }
-                    TextButton(onClick = viewModel::clearSelection) { Text("清除") }
-                }
-            }
-        }
-
-        referenceObjectId?.let { refId ->
-            val ref = state.document.events.firstOrNull { it.id == refId }
-            if (ref != null && ref.id != selectedObjectId) {
-                Surface(
-                    modifier = Modifier.align(Alignment.TopStart)
-                        .padding(8.dp)
-                        .fillMaxWidth(0.62f)
-                        .testTag("object-reference-card"),
-                    color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.94f),
-                    shape = RoundedCornerShape(18.dp),
-                ) {
-                    Row(
-                        Modifier.padding(10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Icon(Icons.Filled.PushPin, null)
-                        Column(Modifier.weight(1f).padding(horizontal = 8.dp)) {
-                            Text("参考对象 #${ref.id} · ${ref.style}", style = MaterialTheme.typography.labelLarge)
-                            Text(
-                                AssInlineSyntax.visibleText(ref.text).take(56),
-                                style = MaterialTheme.typography.bodySmall,
-                                maxLines = 1,
-                            )
-                        }
-                        TextButton(onClick = { selectObject(ref.id) }) { Text("转到") }
-                    }
-                }
-            }
-        }
-
-        frozenPick?.let { pick ->
-            Surface(
-                modifier = Modifier.align(Alignment.BottomStart)
-                    .padding(8.dp)
-                    .testTag("object-frozen-time"),
-                color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.92f),
-                shape = RoundedCornerShape(16.dp),
-            ) {
-                Text(
-                    "命中冻结：${SubTime(pick.frozenPositionMs).toAss()}",
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                    style = MaterialTheme.typography.labelMedium,
-                )
-            }
-        }
-
-        if (candidatePickerOpen) {
-            ObjectCandidatePicker(
-                pick = frozenPick,
-                document = state.document,
-                onSelect = { selectObject(it, frozenPick) },
-                onDismiss = { candidatePickerOpen = false },
-                modifier = Modifier.align(Alignment.Center).testTag("object-candidate-picker"),
-            )
-        }
-
-        if (relationOpen && selectedEvent != null) {
-            ObjectRelationPanel(
-                document = state.document,
-                event = selectedEvent,
-                onFocusEvent = { id -> selectObject(id) },
-                onOpenStyle = { openObjectTool(WorkbenchTool.STYLE) },
-                onDismiss = { relationOpen = false },
-                modifier = Modifier.align(Alignment.CenterEnd)
-                    .fillMaxHeight(0.78f)
-                    .fillMaxWidth(0.78f)
-                    .testTag("object-relation-panel"),
-            )
-        }
-
-        if (activeTool != null && activeInstance != null) {
-            Surface(
-                modifier = Modifier.align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .fillMaxHeight(0.48f)
-                    .testTag("object-tool-panel"),
-                shape = RoundedCornerShape(topStart = 26.dp, topEnd = 26.dp),
-                color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                tonalElevation = 6.dp,
-                shadowElevation = 8.dp,
-            ) {
-                Column(Modifier.fillMaxSize()) {
-                    Row(
-                        Modifier.fillMaxWidth().height(46.dp).padding(horizontal = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            activeTool.title + (selectedObjectId?.let { " · #$it" } ?: ""),
-                            style = MaterialTheme.typography.titleSmall,
-                            modifier = Modifier.weight(1f),
-                        )
-                        IconButton(onClick = { activeToolName = null }) {
-                            Icon(Icons.Filled.Close, "关闭对象工具")
-                        }
-                    }
-                    HorizontalDivider()
-                    FloatingToolContent(
-                        instance = activeInstance,
-                        tool = activeTool,
-                        state = state,
-                        viewModel = viewModel,
-                        issues = issues,
-                        expandedEventId = expandedEventId,
-                        onExpandedChange = onExpandedChange,
-                        onImportFont = onImportFont,
-                        onSaveMkv = onSaveMkv,
-                        eventEditorStateHolder = eventEditorStateHolder,
-                        onOpenTool = ::openObjectTool,
-                        onCloseText = { activeToolName = null },
-                        searchOpen = false,
-                        onCloseSearch = {},
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ObjectCapabilityButton(
-    label: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    onClick: () -> Unit,
-) {
-    AssistChip(
-        onClick = onClick,
-        label = { Text(label) },
-        leadingIcon = { Icon(icon, null, Modifier.size(18.dp)) },
-    )
-}
-
-@Composable
-private fun ScriptObjectCanvas(
-    state: EditorState,
-    positionMs: Long,
-    selectedEventId: Long?,
-    onObjectPick: (PreviewObjectPick) -> Unit,
-    onOpenVideo: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    BoxWithConstraints(
-        modifier.background(MaterialTheme.colorScheme.surfaceContainerLowest)
-            .pointerInput(state.document, positionMs) {
-                detectTapGestures(
-                    onLongPress = { offset ->
-                        val x = offset.x / size.width.coerceAtLeast(1) * state.document.playResX
-                        val y = offset.y / size.height.coerceAtLeast(1) * state.document.playResY
-                        val candidates = PreviewTargetResolver.candidates(
-                            document = state.document,
-                            positionMs = positionMs,
-                            x = x.toDouble(),
-                            y = y.toDouble(),
-                        )
-                        onObjectPick(
-                            PreviewObjectPick(
-                                frozenPositionMs = positionMs,
-                                playX = x.toDouble(),
-                                playY = y.toDouble(),
-                                viewportFractionX = offset.x / size.width.coerceAtLeast(1),
-                                viewportFractionY = offset.y / size.height.coerceAtLeast(1),
-                                candidates = candidates,
-                            )
-                        )
-                    }
-                )
-            }
-    ) {
-        Canvas(Modifier.fillMaxSize()) {
-            val gridColor = Color.Gray.copy(alpha = 0.20f)
-            val centerColor = Color.Gray.copy(alpha = 0.46f)
-            for (i in 1 until 10) {
-                val x = size.width * i / 10f
-                drawLine(gridColor, Offset(x, 0f), Offset(x, size.height), 1f)
-            }
-            for (i in 1 until 10) {
-                val y = size.height * i / 10f
-                drawLine(gridColor, Offset(0f, y), Offset(size.width, y), 1f)
-            }
-            drawLine(centerColor, Offset(size.width / 2f, 0f), Offset(size.width / 2f, size.height), 2f)
-            drawLine(centerColor, Offset(0f, size.height / 2f), Offset(size.width, size.height / 2f), 2f)
-        }
-
-        Text(
-            "脚本坐标 ${state.document.playResX} × ${state.document.playResY} · 无视频对象模式",
-            modifier = Modifier.align(Alignment.TopCenter).padding(10.dp),
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-
-        val active = state.document.activeEvents(SubTime(positionMs))
-        active.forEach { event ->
-            val candidate = PreviewTargetResolver.candidates(
-                document = state.document,
-                positionMs = positionMs,
-                x = state.document.playResX / 2.0,
-                y = state.document.playResY / 2.0,
-                limit = state.document.events.size.coerceAtLeast(1),
-            ).firstOrNull { it.eventId == event.id }
-            val anchor = candidate?.anchor ?: return@forEach
-            val x = maxWidth * (anchor.x / state.document.playResX.coerceAtLeast(1)).toFloat().coerceIn(0f, 0.92f)
-            val y = maxHeight * (anchor.y / state.document.playResY.coerceAtLeast(1)).toFloat().coerceIn(0f, 0.92f)
-            Surface(
-                modifier = Modifier.offset(x, y)
-                    .combinedClickable(
-                        onClick = {
-                            onObjectPick(
-                                PreviewObjectPick(
-                                    frozenPositionMs = positionMs,
-                                    playX = anchor.x,
-                                    playY = anchor.y,
-                                    viewportFractionX = (anchor.x / state.document.playResX.coerceAtLeast(1)).toFloat(),
-                                    viewportFractionY = (anchor.y / state.document.playResY.coerceAtLeast(1)).toFloat(),
-                                    candidates = listOfNotNull(candidate),
-                                )
-                            )
-                        },
-                        onLongClick = {
-                            val candidates = PreviewTargetResolver.candidates(
-                                state.document,
-                                positionMs,
-                                anchor.x,
-                                anchor.y,
-                            )
-                            onObjectPick(
-                                PreviewObjectPick(
-                                    positionMs,
-                                    anchor.x,
-                                    anchor.y,
-                                    (anchor.x / state.document.playResX.coerceAtLeast(1)).toFloat(),
-                                    (anchor.y / state.document.playResY.coerceAtLeast(1)).toFloat(),
-                                    candidates,
-                                )
-                            )
-                        },
-                    )
-                    .testTag("script-object-${event.id}"),
-                shape = RoundedCornerShape(12.dp),
-                color = if (event.id == selectedEventId) {
-                    MaterialTheme.colorScheme.primaryContainer
-                } else {
-                    MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.90f)
-                },
-                border = BorderStroke(
-                    1.dp,
-                    if (event.id == selectedEventId) MaterialTheme.colorScheme.primary
-                    else MaterialTheme.colorScheme.outlineVariant,
-                ),
-            ) {
-                Text(
-                    "#${event.id} " + AssInlineSyntax.visibleText(event.text).take(36),
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
-                    style = MaterialTheme.typography.labelSmall,
-                    maxLines = 1,
-                )
-            }
-        }
-
-        TextButton(
-            onClick = onOpenVideo,
-            modifier = Modifier.align(Alignment.BottomEnd).padding(8.dp),
-        ) {
-            Icon(Icons.Filled.Movie, null, Modifier.size(18.dp))
-            Spacer(Modifier.width(4.dp))
-            Text("加入参考视频")
-        }
-    }
 }
 
 @Composable
@@ -2867,72 +692,6 @@ private fun ObjectCandidatePicker(
     }
 }
 
-@Composable
-private fun ObjectRelationPanel(
-    document: AssDocument,
-    event: AssEvent,
-    onFocusEvent: (Long) -> Unit,
-    onOpenStyle: () -> Unit,
-    onDismiss: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val references = remember(document.events, event.style) {
-        document.events.filter { it.style == event.style }
-    }
-    Surface(
-        modifier = modifier,
-        shape = RoundedCornerShape(topStart = 26.dp, bottomStart = 26.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        tonalElevation = 7.dp,
-        shadowElevation = 9.dp,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-    ) {
-        Column(Modifier.fillMaxSize().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Filled.AccountTree, null)
-                Text("对象关系", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f).padding(start = 8.dp))
-                IconButton(onClick = onDismiss) { Icon(Icons.Filled.Close, "关闭对象关系") }
-            }
-            Surface(
-                modifier = Modifier.fillMaxWidth().clickable(onClick = onOpenStyle),
-                color = MaterialTheme.colorScheme.primaryContainer,
-                shape = RoundedCornerShape(16.dp),
-            ) {
-                Column(Modifier.padding(10.dp)) {
-                    Text("Event #${event.id} → Style ${event.style}", style = MaterialTheme.typography.labelLarge)
-                    Text(
-                        "共享 Style 被 ${references.size} 个 Event 引用；事件级 override 仍属于各自 Event Text。",
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                }
-            }
-            Text("引用同一 Style 的 Event", style = MaterialTheme.typography.titleSmall)
-            LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                items(references, key = { it.id }) { ref ->
-                    Surface(
-                        modifier = Modifier.fillMaxWidth().clickable { onFocusEvent(ref.id) },
-                        shape = RoundedCornerShape(14.dp),
-                        color = if (ref.id == event.id) {
-                            MaterialTheme.colorScheme.secondaryContainer
-                        } else {
-                            MaterialTheme.colorScheme.surfaceContainer
-                        },
-                    ) {
-                        Column(Modifier.padding(8.dp)) {
-                            Text("#${ref.id} · L${ref.layer}", style = MaterialTheme.typography.labelLarge)
-                            Text(
-                                AssInlineSyntax.visibleText(ref.text).take(70),
-                                maxLines = 2,
-                                style = MaterialTheme.typography.bodySmall,
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun SpatialWorkspace(
@@ -2941,6 +700,10 @@ private fun SpatialWorkspace(
     onWorkspaceStateChange: (WorkspaceState) -> Unit,
     interactionRegistry: InteractionOverlayRegistry,
     positionEditEventId: Long?,
+    precisionEnabled: Boolean,
+    onTogglePrecision: () -> Unit,
+    requestedFocusRevision: Int,
+    onFocusedSurfaceChange: (String?) -> Unit,
     onActivateInstance: (String) -> Unit,
     state: EditorState,
     viewModel: EditorViewModel,
@@ -2961,6 +724,23 @@ private fun SpatialWorkspace(
     onCloseSearch: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    var pendingObjectPick by remember(state.workspaceSessionId) { mutableStateOf<PreviewObjectPick?>(null) }
+    val selectCanvasObject: (Long) -> Unit = { id ->
+        if (state.document.events.any { it.id == id }) {
+            viewModel.focusEvent(id, seek = false)
+            pendingObjectPick = null
+        }
+    }
+    val pickCanvasObject: (PreviewObjectPick) -> Unit = { pick ->
+        val reliable = pick.candidates.filter {
+            it.confidence != PreviewTargetConfidence.UNRESOLVED
+        }
+        if (pick.candidates.size == 1 && reliable.size == 1) {
+            selectCanvasObject(pick.candidates.single().eventId)
+        } else {
+            pendingObjectPick = pick
+        }
+    }
     val visibleTools = workspaceState.tools.filter { it.presence != WorkspaceToolPresence.HIDDEN }
     val parameterEntries = workspaceState.parameterProjections.mapNotNull { projection ->
         WorkspaceParameterCatalog.find(projection.descriptorKey)?.let { descriptor ->
@@ -2972,6 +752,7 @@ private fun SpatialWorkspace(
                     WorkspaceBinding.FollowSelection -> "参数投影 · 选择集"
                     is WorkspaceBinding.PinnedEvent -> "参数投影 · 固定 #${projection.binding.eventId}"
                 },
+                canClose = true,
             )
         }
     }
@@ -2979,12 +760,27 @@ private fun SpatialWorkspace(
         InfiniteCanvasEntry("preview", "视频", "实时视频 / ASS"),
         InfiniteCanvasEntry("subtitles", "字幕", "选择 / 文本"),
         InfiniteCanvasEntry("audio", "音频证据", "波形 / 声谱图 · 与视频同步"),
-    ) + visibleTools.mapNotNull { toolInstance ->
+    ) + workspaceState.tools.mapNotNull { toolInstance ->
         WorkbenchTool.entries.firstOrNull { it.name == toolInstance.toolKey }?.let { tool ->
-            InfiniteCanvasEntry(toolInstance.id, tool.title,
-                if (toolInstance.binding is WorkspaceBinding.PinnedEvent) "固定字幕对象" else "跟随当前选择")
+            val pinned = toolInstance.binding as? WorkspaceBinding.PinnedEvent
+            InfiniteCanvasEntry(
+                id = toolInstance.id, title = tool.title,
+                subtitle = when {
+                    pinned != null -> "读取：固定字幕 #${pinned.eventId} · 写入按工具规则"
+                    toolInstance.binding == WorkspaceBinding.FollowSelection -> "读取：当前选择集"
+                    else -> "读取：跟随当前焦点"
+                },
+                canClose = true,
+                canDuplicate = tool.descriptor.canDuplicate,
+                canBindEvent = tool.descriptor.eventBindable,
+                pinnedEvent = pinned != null,
+                focusEventId = state.focusedEventId,
+                initiallyHidden = toolInstance.presence == WorkspaceToolPresence.HIDDEN,
+                bookmarked = toolInstance.presence == WorkspaceToolPresence.BOOKMARKED,
+            )
         }
     } + parameterEntries
+    Box(modifier) {
     InfiniteCanvasHost(
         sessionId = state.workspaceSessionId,
         savedScene = surfaceController.infiniteSceneForSession(state.workspaceSessionId),
@@ -2992,12 +788,74 @@ private fun SpatialWorkspace(
         entries = entries,
         gestureOwned = interactionRegistry.activeHandleId != null,
         onAddTool = { onActiveTool(WorkbenchTool.CAPABILITIES) },
-        onActivate = { id -> if (visibleTools.any { it.id == id }) onActivateInstance(id) },
+        onActivate = { id ->
+            val instance = workspaceState.tools.firstOrNull { it.id == id }
+            if (instance?.presence == WorkspaceToolPresence.HIDDEN) {
+                onWorkspaceStateChange(
+                    workspaceState.updatePresence(id, WorkspaceToolPresence.TEMPORARY).activate(id)
+                )
+            } else if (instance != null) onActivateInstance(id)
+        },
+        onCloseTool = { id ->
+            when {
+                workspaceState.tools.any { it.id == id } ->
+                    onWorkspaceStateChange(workspaceState.closeInstance(id))
+                workspaceState.parameterProjections.any { it.id == id } ->
+                    onWorkspaceStateChange(workspaceState.removeParameterProjection(id))
+            }
+        },
+        onDuplicateTool = { id, followFocus ->
+            val original = workspaceState.tools.firstOrNull { it.id == id }
+            val tool = original?.let { instance ->
+                WorkbenchTool.entries.firstOrNull { it.name == instance.toolKey }
+            }
+            if (tool?.descriptor?.canDuplicate == true) {
+                workspaceState.newSibling(id)?.let { sibling ->
+                    val copy = if (followFocus) sibling.copy(binding = WorkspaceBinding.FollowFocus) else sibling
+                    onWorkspaceStateChange(
+                        workspaceState.addInstance(copy).activate(copy.id).withSurfacesHidden(false)
+                    )
+                }
+            }
+        },
+        precisionEnabled = precisionEnabled,
+        onTogglePrecision = onTogglePrecision,
+        onFocusedSurfaceChange = onFocusedSurfaceChange,
+        onToggleBookmark = { id ->
+            workspaceState.tools.firstOrNull { it.id == id }?.let { instance ->
+                val nextPresence = if (instance.presence == WorkspaceToolPresence.BOOKMARKED)
+                    WorkspaceToolPresence.RESIDENT else WorkspaceToolPresence.BOOKMARKED
+                onWorkspaceStateChange(workspaceState.updatePresence(id, nextPresence))
+            }
+        },
+        renderTimeline = { compact ->
+            ModernTimelinePane(
+                state = state, viewModel = viewModel, compact = compact,
+                modifier = Modifier.fillMaxSize(),
+            )
+        },
+        onToggleEventBinding = { id ->
+            val instance = workspaceState.tools.firstOrNull { it.id == id }
+            val tool = instance?.let { current ->
+                WorkbenchTool.entries.firstOrNull { it.name == current.toolKey }
+            }
+            if (tool?.descriptor?.eventBindable == true && instance != null) {
+                val newBinding = when (instance.binding) {
+                    is WorkspaceBinding.PinnedEvent -> WorkspaceBinding.FollowFocus
+                    else -> state.focusedEventId?.let(WorkspaceBinding::PinnedEvent)
+                }
+                if (newBinding != null) {
+                    onWorkspaceStateChange(workspaceState.updateBinding(id, newBinding))
+                }
+            }
+        },
         onUndo = viewModel::undo,
         onRedo = viewModel::redo,
         canUndo = state.canUndo,
         canRedo = state.canRedo,
-        modifier = modifier,
+        requestedActiveToolId = workspaceState.activeInstanceId,
+        requestedFocusRevision = requestedFocusRevision,
+        modifier = Modifier.fillMaxSize(),
     ) { id, interactive ->
         when (id) {
             "preview" -> WorkbenchPreview(
@@ -3009,6 +867,7 @@ private fun SpatialWorkspace(
                 onEditEventPosition = onEditEventPosition,
                 interactionRegistry = if (activeTool == WorkbenchTool.POSITION) interactionRegistry else null,
                 viewportGesturesEnabled = activeTool != WorkbenchTool.POSITION,
+                onObjectLongPress = if (activeTool == WorkbenchTool.POSITION) null else pickCanvasObject,
                 modifier = Modifier.fillMaxSize(),
             )
             "subtitles" -> Column(Modifier.fillMaxSize()) {
@@ -3044,7 +903,7 @@ private fun SpatialWorkspace(
                         modifier = Modifier.fillMaxSize(),
                     )
                 } else {
-                    visibleTools.firstOrNull { it.id == id }?.let { toolInstance ->
+                    workspaceState.tools.firstOrNull { it.id == id }?.let { toolInstance ->
                         val tool = WorkbenchTool.entries.firstOrNull { it.name == toolInstance.toolKey }
                             ?: return@let
                         FloatingToolContent(
@@ -3069,200 +928,17 @@ private fun SpatialWorkspace(
             }
         }
     }
-}
-
-private enum class PagerWorkspacePage(val title: String) {
-    SUBTITLES("字幕"),
-    PREVIEW("预览"),
-    TOOL("工具"),
-}
-
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-private fun PagerWorkspace(
-    state: EditorState,
-    viewModel: EditorViewModel,
-    issues: List<AssQcIssue>,
-    activeTool: WorkbenchTool,
-    instance: WorkspaceToolInstance,
-    onActiveTool: (WorkbenchTool) -> Unit,
-    expandedEventId: Long?,
-    onExpandedChange: (Long?) -> Unit,
-    onImportFont: () -> Unit,
-    onSaveMkv: () -> Unit,
-    eventEditorStateHolder: SaveableStateHolder,
-    onOpenVideo: () -> Unit,
-    rendererEnabled: Boolean,
-    onEnableRenderer: () -> Unit,
-    onEditEventPosition: (Long) -> Unit,
-    searchOpen: Boolean,
-    onCloseSearch: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val pages = PagerWorkspacePage.entries
-    val pagerState = rememberPagerState(initialPage = PagerWorkspacePage.PREVIEW.ordinal) {
-        pages.size
+    pendingObjectPick?.let { pick ->
+        // Ambiguous hits are never silently retargeted to Focus.
+        ObjectCandidatePicker(
+            pick = pick,
+            document = state.document,
+            onSelect = selectCanvasObject,
+            onDismiss = { pendingObjectPick = null },
+            modifier = Modifier.align(Alignment.Center).fillMaxWidth(0.94f)
+                .testTag("spatial-object-candidate-picker"),
+        )
     }
-    val scope = rememberCoroutineScope()
-
-    fun showPage(page: PagerWorkspacePage) {
-        scope.launch { pagerState.animateScrollToPage(page.ordinal) }
-    }
-
-    fun selectTool(tool: WorkbenchTool) {
-        if (tool == WorkbenchTool.SUBTITLES) {
-            showPage(PagerWorkspacePage.SUBTITLES)
-            return
-        }
-        onActiveTool(tool)
-        showPage(PagerWorkspacePage.TOOL)
-    }
-
-    var lastActiveTool by remember { mutableStateOf(activeTool) }
-    LaunchedEffect(activeTool) {
-        if (activeTool != lastActiveTool) {
-            pagerState.animateScrollToPage(PagerWorkspacePage.TOOL.ordinal)
-            lastActiveTool = activeTool
-        }
-    }
-
-    Column(modifier) {
-        HorizontalPager(
-            state = pagerState,
-            modifier = Modifier.weight(1f).fillMaxWidth(),
-            beyondViewportPageCount = 1,
-        ) { pageIndex ->
-            when (pages[pageIndex]) {
-                PagerWorkspacePage.SUBTITLES -> {
-                    Column(Modifier.fillMaxSize().testTag("pager-page-subtitles")) {
-                        if (searchOpen) {
-                            SearchStrip(state.query, viewModel::setQuery, onCloseSearch)
-                        }
-                        EventWorkspace(
-                            state = state,
-                            viewModel = viewModel,
-                            issuesByEvent = issues.groupBy { it.eventId },
-                            expandedEventId = expandedEventId,
-                            onExpandedChange = { next ->
-                                onExpandedChange(next)
-                                if (next != null) {
-                                    onActiveTool(WorkbenchTool.TEXT)
-                                    showPage(PagerWorkspacePage.TOOL)
-                                }
-                            },
-                            onTool = ::selectTool,
-                            eventEditorStateHolder = eventEditorStateHolder,
-                            tool = WorkbenchTool.TEXT,
-                            modifier = Modifier.fillMaxSize(),
-                        ) { }
-                    }
-                }
-
-                PagerWorkspacePage.PREVIEW -> {
-                    WorkbenchPreview(
-                        state = state,
-                        viewModel = viewModel,
-                        positionEditEventId = null,
-                        onOpenVideo = onOpenVideo,
-                        onOpenTimeline = {
-                            onActiveTool(WorkbenchTool.TIMELINE)
-                            showPage(PagerWorkspacePage.TOOL)
-                        },
-                        rendererEnabled = rendererEnabled,
-                        onEnableRenderer = onEnableRenderer,
-                        onEditEventPosition = { eventId ->
-                            onEditEventPosition(eventId)
-                            onActiveTool(WorkbenchTool.POSITION)
-                            showPage(PagerWorkspacePage.TOOL)
-                        },
-                        viewportGesturesEnabled = true,
-                        modifier = Modifier.fillMaxSize().testTag("pager-page-preview"),
-                    )
-                }
-
-                PagerWorkspacePage.TOOL -> {
-                    Column(Modifier.fillMaxSize().testTag("pager-page-tool")) {
-                        Surface(
-                            tonalElevation = 2.dp,
-                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                        ) {
-                            Row(
-                                Modifier.fillMaxWidth()
-                                    .horizontalScroll(rememberScrollState())
-                                    .padding(horizontal = 8.dp, vertical = 4.dp),
-                                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                AssistChip(
-                                    onClick = { selectTool(WorkbenchTool.CAPABILITIES) },
-                                    label = { Text("全部工具") },
-                                    leadingIcon = { Icon(Icons.Filled.Apps, null, Modifier.size(18.dp)) },
-                                    modifier = Modifier.testTag("pager-all-tools"),
-                                )
-                                WorkbenchTool.entries
-                                    .filter {
-                                        it.group == activeTool.group &&
-                                            it != WorkbenchTool.SUBTITLES &&
-                                            it != WorkbenchTool.CAPABILITIES
-                                    }
-                                    .forEach { tool ->
-                                        FilterChip(
-                                            selected = tool == activeTool,
-                                            onClick = { selectTool(tool) },
-                                            label = { Text(tool.title) },
-                                            modifier = Modifier.testTag("pager-tool-" + tool.name),
-                                        )
-                                    }
-                            }
-                        }
-                        FloatingToolContent(
-                            instance = instance,
-                            tool = activeTool,
-                            state = state,
-                            viewModel = viewModel,
-                            issues = issues,
-                            expandedEventId = expandedEventId,
-                            onExpandedChange = onExpandedChange,
-                            onImportFont = onImportFont,
-                            onSaveMkv = onSaveMkv,
-                            eventEditorStateHolder = eventEditorStateHolder,
-                            onOpenTool = ::selectTool,
-                            onCloseText = {
-                                onExpandedChange(null)
-                                showPage(PagerWorkspacePage.SUBTITLES)
-                            },
-                            searchOpen = searchOpen,
-                            onCloseSearch = onCloseSearch,
-                        )
-                    }
-                }
-            }
-        }
-
-        NavigationBar(
-            modifier = Modifier.fillMaxWidth().testTag("pager-navigation"),
-            tonalElevation = 3.dp,
-        ) {
-            pages.forEach { page ->
-                val selected = pagerState.currentPage == page.ordinal
-                NavigationBarItem(
-                    selected = selected,
-                    onClick = { showPage(page) },
-                    icon = {
-                        Icon(
-                            when (page) {
-                                PagerWorkspacePage.SUBTITLES -> Icons.Filled.Subtitles
-                                PagerWorkspacePage.PREVIEW -> Icons.Filled.Movie
-                                PagerWorkspacePage.TOOL -> Icons.Filled.Tune
-                            },
-                            contentDescription = page.title,
-                        )
-                    },
-                    label = { Text(page.title) },
-                    modifier = Modifier.testTag("pager-nav-" + page.name),
-                )
-            }
-        }
     }
 }
 
@@ -3356,12 +1032,28 @@ private fun FixedWorkspace(
                 onImportFont = onImportFont,
                 onSaveMkv = onSaveMkv,
                 eventEditorStateHolder = eventEditorStateHolder,
+                // One fixed inspector switches among tool instances while
+                // editing the same Event. Its uncommitted draft belongs to
+                // this stable inspector slot, not the active ToolInstance ID.
+                draftSaveableScope = "fixed-inspector",
                 onOpenTool = ::selectTool,
                 onCloseText = { onExpandedChange(null); compactPage = "LIST" },
                 searchOpen = searchOpen,
                 onCloseSearch = onCloseSearch,
             )
         }
+    }
+
+    // Keep the *same* inspector composition mounted as compact, dual-pane and
+    // three-pane policies relocate it. A plain composable lambda at three
+    // separate call sites disposes the InlineEventEditor subtree mid-transition,
+    // risking loss of a dirty, uncommitted text buffer.
+    //
+    // rememberUpdatedState publishes the current Event/tool callbacks to the
+    // stable movable identity without capturing stale inspector parameters.
+    val latestInspector by rememberUpdatedState(inspector)
+    val movableInspector = remember {
+        movableContentOf<Modifier> { paneModifier -> latestInspector(paneModifier) }
     }
 
     Column(modifier) {
@@ -3480,7 +1172,7 @@ private fun FixedWorkspace(
                         listPane(Modifier.weight(1f - inspectorFraction).fillMaxHeight())
                     }
                     VerticalDivider()
-                    inspector(Modifier.weight(inspectorFraction).fillMaxHeight())
+                    movableInspector(Modifier.weight(inspectorFraction).fillMaxHeight())
                 }
 
                 WorkbenchLayoutProfile.DUAL_PANE -> Row(Modifier.fillMaxSize()) {
@@ -3495,7 +1187,7 @@ private fun FixedWorkspace(
                         listPane(Modifier.weight(1f).fillMaxWidth())
                     }
                     VerticalDivider()
-                    inspector(Modifier.weight(inspectorFraction).fillMaxHeight())
+                    movableInspector(Modifier.weight(inspectorFraction).fillMaxHeight())
                 }
 
                 WorkbenchLayoutProfile.COMPACT -> Column(Modifier.fillMaxSize()) {
@@ -3523,7 +1215,7 @@ private fun FixedWorkspace(
                     if (compactPage == "LIST") {
                         listPane(Modifier.weight(1f).fillMaxWidth())
                     } else {
-                        inspector(Modifier.weight(1f).fillMaxWidth())
+                        movableInspector(Modifier.weight(1f).fillMaxWidth())
                     }
                 }
             }
@@ -3655,6 +1347,10 @@ private fun FloatingToolContent(
     onCloseText: () -> Unit,
     searchOpen: Boolean,
     onCloseSearch: () -> Unit,
+    // Fixed inspector: a single mutually exclusive presentation slot.
+    // Spatial instances keep separate scope keys so concurrent editors
+    // targeting one Event do not register duplicate saveable providers.
+    draftSaveableScope: String? = null,
     onExtractParameter: ((
         WorkspaceParameterDescriptor,
         WorkspaceParameterPresentation,
@@ -3703,7 +1399,9 @@ private fun FloatingToolContent(
                     Text("#${event.id} · ${tool.title}", style = MaterialTheme.typography.titleSmall)
                     if (tool == WorkbenchTool.TEXT) IconButton(onClick = onCloseText,
                         modifier = Modifier.testTag("event-collapse-${event.id}")) { Icon(Icons.Filled.Close, "收起正文工具") }
-                    eventEditorStateHolder.SaveableStateProvider("${instance.id}-${event.id}") {
+                    eventEditorStateHolder.SaveableStateProvider(
+                        "${draftSaveableScope ?: instance.id}-${event.id}"
+                    ) {
                         InlineEventEditor(
                             event = event,
                             styleName = event.style,
@@ -3862,6 +1560,7 @@ private fun ModernAppBar(
     onTool: (WorkbenchTool) -> Unit,
     workspaceMode: WorkspacePresentationMode,
     onOpenUiVariantLab: () -> Unit,
+    onToggleWorkspaceMode: () -> Unit,
     onOpenProject: () -> Unit,
     onSaveProject: () -> Unit,
     onExportSrt: () -> Unit,
@@ -3870,6 +1569,7 @@ private fun ModernAppBar(
 ) {
     val uiState = state.toEditorUiState()
     val uiActions = remember(viewModel) { EditorViewModelUiActions(viewModel) }
+    val compactToolbar = LocalConfiguration.current.screenWidthDp < 480
     var moreMenuOpen by remember { mutableStateOf(false) }
     Surface(tonalElevation = 2.dp) {
         Row(
@@ -3902,9 +1602,26 @@ private fun ModernAppBar(
                 ) {
                     Icon(if (searchOpen) Icons.Filled.Close else Icons.Filled.Search, null)
                 }
+                IconButton(
+                    onClick = onToggleWorkspaceMode,
+                    modifier = Modifier.size(40.dp).testTag("workspace-direct-mode-toggle"),
+                ) {
+                    Icon(
+                        if (workspaceMode == WorkspacePresentationMode.FIXED)
+                            Icons.Filled.DashboardCustomize else Icons.Filled.Dashboard,
+                        contentDescription = if (workspaceMode == WorkspacePresentationMode.FIXED)
+                            "切换至无限画布" else "切换至标准工作台",
+                    )
+                }
                 TooltipIconButton("保存", onSave, enabled = uiState.document.subtitleLoaded) { Icon(Icons.Filled.Save, null) }
-                TooltipIconButton("撤销", uiActions::undo, enabled = uiState.history.canUndo) { Icon(Icons.Filled.Undo, null) }
-                TooltipIconButton("重做", uiActions::redo, enabled = uiState.history.canRedo) { Icon(Icons.Filled.Redo, null) }
+                if (!compactToolbar) {
+                    TooltipIconButton("撤销", uiActions::undo, enabled = uiState.history.canUndo) {
+                        Icon(Icons.Filled.Undo, null)
+                    }
+                    TooltipIconButton("重做", uiActions::redo, enabled = uiState.history.canRedo) {
+                        Icon(Icons.Filled.Redo, null)
+                    }
+                }
                 Box {
                     TooltipIconButton("打开文件 / 工程", onOpenMenu) { Icon(Icons.Filled.FolderOpen, null) }
                     DropdownMenu(expanded = openMenu, onDismissRequest = onDismissMenu) {
@@ -3920,13 +1637,22 @@ private fun ModernAppBar(
                 Box {
                     TooltipIconButton("工具和更多操作", { moreMenuOpen = true }) { Icon(Icons.Filled.MoreVert, null) }
                     DropdownMenu(expanded = moreMenuOpen, onDismissRequest = { moreMenuOpen = false }) {
+                        if (compactToolbar) {
+                            DropdownMenuItem(text = { Text("撤销") }, enabled = uiState.history.canUndo,
+                                onClick = { moreMenuOpen = false; uiActions.undo() },
+                                modifier = Modifier.testTag("toolbar-menu-undo"))
+                            DropdownMenuItem(text = { Text("重做") }, enabled = uiState.history.canRedo,
+                                onClick = { moreMenuOpen = false; uiActions.redo() },
+                                modifier = Modifier.testTag("toolbar-menu-redo"))
+                            HorizontalDivider()
+                        }
                         DropdownMenuItem(text = { Text("字体管理") }, leadingIcon = { Icon(Icons.Filled.FontDownload, null) }, onClick = { moreMenuOpen = false; onTool(WorkbenchTool.FONTS) })
                         DropdownMenuItem(text = { Text("质量检查") }, leadingIcon = { Icon(Icons.Filled.ErrorOutline, null) }, onClick = { moreMenuOpen = false; onTool(WorkbenchTool.QC) })
                         DropdownMenuItem(text = { Text("项目") }, leadingIcon = { Icon(Icons.Filled.Info, null) }, onClick = { moreMenuOpen = false; onTool(WorkbenchTool.PROJECT) })
                         DropdownMenuItem(text = { Text("诊断") }, leadingIcon = { Icon(Icons.Filled.Tune, null) }, onClick = { moreMenuOpen = false; onTool(WorkbenchTool.DIAGNOSTICS) })
                         Divider()
                         DropdownMenuItem(
-                            text = { Text("UI 实验室 · " + workspaceMode.title) },
+                            text = { Text("工作区布局 · " + workspaceMode.title) },
                             leadingIcon = { Icon(Icons.Filled.ViewCarousel, null) },
                             onClick = { moreMenuOpen = false; onOpenUiVariantLab() },
                             modifier = Modifier.testTag("workspace-mode-toggle"),

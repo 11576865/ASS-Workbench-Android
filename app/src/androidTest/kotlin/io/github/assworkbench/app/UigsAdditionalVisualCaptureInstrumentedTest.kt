@@ -18,11 +18,11 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * Production-rendered evidence for the Canvas workspace itself.
+ * Production-rendered evidence for the one supported infinite-canvas experiment.
  *
  * Runtime-backed renderer/interaction evidence and the richer ToolInstance
  * binding/geometry evidence are owned by their dedicated capture tests on main.
- * This fixture closes only the remaining Canvas presentation evidence gap.
+ * Archived Canvas presentation is not an available UI; capture the spatial board.
  */
 @RunWith(AndroidJUnit4::class)
 class UigsAdditionalVisualCaptureInstrumentedTest {
@@ -36,9 +36,15 @@ class UigsAdditionalVisualCaptureInstrumentedTest {
     fun captureCanvasWorkspaceFixtureLandscape() {
         restoreFixture()
         openFixedTool(WorkbenchTool.POSITION)
-        switchPresentation("CANVAS_EXPERIMENTAL", "canvas-workspace")
-        composeRule.onNodeWithTag("canvas-workspace", useUnmergedTree = true).assertIsDisplayed()
-        captureDisplay("ASS.CANVAS.WORKSPACE.FIXTURE_LANDSCAPE.png")
+        switchPresentation("SPATIAL_EXPERIMENTAL", "spatial-workspace")
+        if (composeRule.onAllNodesWithTag("spatial-return-to-board")
+                .fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()) {
+            composeRule.onNodeWithTag("spatial-return-to-board").performClick()
+        }
+        composeRule.onNodeWithTag("spatial-overview").performClick()
+        composeRule.onNodeWithTag("spatial-node-preview").assertIsDisplayed()
+        composeRule.onNodeWithTag("spatial-node-subtitles").assertIsDisplayed()
+        captureDisplay("ASS.INFINITE_CANVAS.WORKSPACE.FIXTURE_LANDSCAPE.png")
     }
 
     private fun restoreFixture() {
