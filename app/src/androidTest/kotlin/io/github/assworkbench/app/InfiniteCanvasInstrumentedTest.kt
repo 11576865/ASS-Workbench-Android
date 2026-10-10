@@ -12,6 +12,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTouchInput
@@ -61,6 +62,45 @@ class InfiniteCanvasInstrumentedTest {
         assertEquals(fixture.nodes, fixture.saved.second)
         assertNotEquals(InfiniteCanvasCamera(0f, 0f, 0.25f), fixture.saved.first)
         composeRule.onNodeWithTag("overview-content-preview").assertExists()
+    }
+
+
+    @Test fun birdseyeSearchAndHiddenFilterRecallTheCorrectTool() {
+        val fixture = OverviewFixture(listOf(
+            InfiniteCanvasNode("preview"),
+            InfiniteCanvasNode("subtitles", x = 8_000f, hidden = true),
+            InfiniteCanvasNode("audio", x = 16_000f, hidden = true),
+        ))
+        showOverviewFixture(fixture)
+        val original = fixture.nodes
+        composeRule.onNodeWithTag("spatial-birdseye").performClick()
+        composeRule.onNodeWithTag("spatial-birdseye-search").performTextInput("SUB")
+        composeRule.onNodeWithTag("spatial-birdseye-node-subtitles").assertExists()
+        composeRule.onNodeWithTag("spatial-birdseye-node-preview").assertDoesNotExist()
+        composeRule.onNodeWithTag("spatial-birdseye-node-audio").assertDoesNotExist()
+        composeRule.onNodeWithTag("spatial-birdseye-filter-hidden").performClick()
+        composeRule.onNodeWithTag("spatial-birdseye-node-subtitles").assertExists()
+        composeRule.onNodeWithTag("spatial-birdseye-clear-search").performClick()
+        composeRule.onNodeWithTag("spatial-birdseye-node-audio").assertExists()
+        composeRule.onNodeWithTag("spatial-birdseye-node-preview").assertDoesNotExist()
+        composeRule.onNodeWithTag("spatial-birdseye-node-subtitles").performScrollTo().performClick()
+        composeRule.onNodeWithTag("spatial-native-content-subtitles").assertExists()
+        assertEquals(original[0], fixture.saved.second[0])
+        assertEquals(original[1].copy(hidden = false), fixture.saved.second[1])
+        assertEquals(original[2], fixture.saved.second[2])
+    }
+
+    @Test fun birdseyeSearchNoResultsExplainsHowToRecover() {
+        val fixture = OverviewFixture(listOf(InfiniteCanvasNode("preview")))
+        showOverviewFixture(fixture)
+        composeRule.onNodeWithTag("spatial-birdseye").performClick()
+        composeRule.onNodeWithTag("spatial-birdseye-search").performTextInput("not-a-tool")
+        composeRule.onNodeWithTag("spatial-birdseye-no-results").assertExists()
+        composeRule.onNodeWithTag("spatial-birdseye-node-preview").assertDoesNotExist()
+        composeRule.onNodeWithTag("spatial-birdseye-clear-search").performClick()
+        composeRule.onNodeWithTag("spatial-birdseye-node-preview").assertExists()
+        composeRule.onNodeWithTag("spatial-birdseye-no-results").assertDoesNotExist()
+        assertEquals(fixture.nodes, fixture.saved.second)
     }
 
     @Test fun ownedRodGestureBlocksMapAndListNavigation() {
