@@ -119,3 +119,13 @@ Integrated capabilities are implemented on the **existing production surfaces** 
 - The native preview+editor split remains available in focused editing; legacy view-switch page structures have been removed.
 
 Acceptance remains granular: source-code route removal is verifiable, but glass background blur/quality modes, every four-edge manipulation mode, and the full historical 240-item experiment ledger are **not** claimed to have one-to-one replacements. The latest Android build, connected tests and visual/device acceptance are pending; do not merge the Draft PR on these source changes alone.
+
+## Spatial navigation recovery and offscreen wayfinding — 2026-10-10
+
+The now-unified canvas needs navigation that remains intelligible after opening far-away tools and preserving many windows outside the viewport:
+
+- **Viewport Back / Forward:** top-board actions `spatial-viewport-back` and `spatial-viewport-forward` restore recent camera viewpoints (x/y/scale). History is bounded to 16 meaningful camera jumps and survives Activity saved-state restoration within the same workspace session. Explicit focus/recall, overview, arrange and +/- zoom commands create history; per-frame touch pan/pinch does not. A new jump after Back invalidates its Forward branch.
+- **Directional discovery:** at most one `spatial-offscreen-{left,right,top,bottom}` action on each board edge. The nearest visible offscreen world node is labelled, with a count for other nodes in that direction. Clicking it focuses the real tool and records a navigable return point. Entirely hidden nodes belong to Recall; BOOKMARKED tools belong to the bookmark rail. The camera/world intersection and distance calculations use Double and guard invalid dimensions.
+- The direction controls avoid the bottom timeline and right bookmark rail, and suppress the left cue while the left drawer is open. The camera history does **not** enter ASS Undo or change persisted node world geometry.
+- Pure model tests cover history branch/limit/restore corruption, extreme signed world coordinates, cue grouping and hidden exclusion; connected Android tests cover far-node Back/Forward and right-edge recall.
+- **Acceptance state:** code and regressions have been submitted on PR #138, but exact-head CI/emulator, real-device edge-touch/occlusion and full Visual Evidence are pending. Rows 007–008 in the 240 UI ledger reflect branch-level Partial rather than merged-main Implemented.
