@@ -23,6 +23,129 @@ internal data class InfiniteCanvasCamera(val x: Float = 0f, val y: Float = 0f, v
 }
 
 /**
+ * Browser-style history for intentional viewport jumps.
+ *
+ * Camera history is presentation-only: it never participates in document Undo
+ * or writes tool-node geometry. Continuous pan/pinch updates are NOT recorded;
+ * the next explicit jump captures the camera reached by those gestures.
+ */
+internal data class CanvasViewportHistory(
+    val past: List<InfiniteCanvasCamera> = emptyList(),
+    val future: List<InfiniteCanvasCamera> = emptyList(),
+) {
+    val canBack: Boolean get() = past.isNotEmpty()
+    val canForward: Boolean get() = future.isNotEmpty()
+
+    fun visit(current: InfiniteCanvasCamera, next: InfiniteCanvasCamera): CanvasViewportHistory {
+        if (!current.isValidViewport() || !next.isValidViewport() || current == next) return this
+        return copy(past = (past + current).takeLast(LIMIT), future = emptyList())
+    }
+
+    fun goBack(current: InfiniteCanvasCamera): Pair<CanvasViewportHistory, InfiniteCanvasCamera>? {
+        if (!current.isValidViewport() || past.isEmpty()) return null
+        return copy(past = past.dropLast(1),
+            future = (future + current).takeLast(LIMIT)) to past.last()
+    }
+
+    fun goForward(current: InfiniteCanvasCamera): Pair<CanvasViewportHistory, InfiniteCanvasCamera>? {
+        if (!current.isValidViewport() || future.isEmpty()) return null
+        return copy(past = (past + current).takeLast(LIMIT),
+            future = future.dropLast(1)) to future.last()
+    }
+
+    companion object { const val LIMIT = 16 }
+}
+
+private fun InfiniteCanvasCamera.isValidViewport(): Boolean =
+    x.isFinite() && y.isFinite() && scale.isFinite() && scale in 0.025f..2f
+
+/** Safe, bounded Activity-state restoration; never decode malformed camera frames. */
+internal object CanvasViewportHistoryPersistence {
+    private fun serialize(c: InfiniteCanvasCamera): String =
+        listOf(c.x, c.y, c.scale).joinToString(",")
+
+    private fun parse(raw: String): InfiniteCanvasCamera? {
+        val values = raw.split(",").map { it.toFloatOrNull() }
+        if (values.size != 3 || values.any { it == null }) return null
+        val c = InfiniteCanvasCamera(values[0]!!, values[1]!!, values[2]!!)
+        return c.takeIf { it.isValidViewport() }
+    }
+
+    fun encode(value: CanvasViewportHistory): List<String> =
+        listOf(value.past.size.toString()) +
+            value.past.takeLast(CanvasViewportHistory.LIMIT).map(::serialize) +
+            value.future.takeLast(CanvasViewportHistory.LIMIT).map(::serialize)
+
+    fun decode(raw: List<String>): CanvasViewportHistory {
+        val boundary = raw.firstOrNull()?.toIntOrNull() ?: return CanvasViewportHistory()
+        if (boundary !in 0..CanvasViewportHistory.LIMIT ||
+            raw.size - boundary - 1 !in 0..CanvasViewportHistory.LIMIT) return CanvasViewportHistory()
+        val past = raw.drop(1).take(boundary).mapNotNull(::parse)
+        val future = raw.drop(boundary + 1).mapNotNull(::parse)
+        if (past.size != boundary || future.size != raw.size - boundary - 1) return CanvasViewportHistory()
+        return CanvasViewportHistory(past, future)
+    }
+}
+
+/** Edge cues only report genuinely offscreen visible world nodes, not hidden cards. */
+internal enum class CanvasEdge { LEFT, RIGHT, TOP, BOTTOM }
+
+internal data class CanvasEdgeCue(
+    val side: CanvasEdge,
+    val nearestNodeId: String,
+    val count: Int,
+)
+
+/**
+ * Group offscreen surfaces into at most four touch targets instead of placing
+ * overlapping chips for every tool. Choose the nearest node in each direction.
+ * Calculations stay in Double because saved world positions may approach Float
+ * limits, especially in a near-infinite canvas.
+ */
+internal fun canvasEdgeCues(
+    camera: InfiniteCanvasCamera,
+    nodes: List<InfiniteCanvasNode>,
+    viewportWidth: Float,
+    viewportHeight: Float,
+): List<CanvasEdgeCue> {
+    if (!camera.isValidViewport() ||
+        !viewportWidth.isFinite() || !viewportHeight.isFinite() ||
+        viewportWidth <= 0f || viewportHeight <= 0f) return emptyList()
+    val w = viewportWidth.toDouble()
+    val h = viewportHeight.toDouble()
+    val scale = camera.scale.toDouble()
+    data class Candidate(val id: String, val side: CanvasEdge, val distance: Double)
+    val candidates = nodes.mapNotNull { node ->
+        if (node.hidden || !node.x.isFinite() || !node.y.isFinite() ||
+            !node.width.isFinite() || !node.height.isFinite() ||
+            node.width <= 0f || node.height <= 0f) return@mapNotNull null
+        val l = camera.x.toDouble() + node.x.toDouble() * scale
+        val t = camera.y.toDouble() + node.y.toDouble() * scale
+        val r = l + node.width.toDouble() * scale
+        val b = t + node.height.toDouble() * scale
+        if (r >= 0.0 && b >= 0.0 && l <= w && t <= h) return@mapNotNull null
+        val leftDistance = if (r < 0.0) -r / w else 0.0
+        val rightDistance = if (l > w) (l - w) / w else 0.0
+        val topDistance = if (b < 0.0) -b / h else 0.0
+        val bottomDistance = if (t > h) (t - h) / h else 0.0
+        val horizontal = maxOf(leftDistance, rightDistance)
+        val vertical = maxOf(topDistance, bottomDistance)
+        val side = if (horizontal >= vertical) {
+            if (leftDistance > 0.0) CanvasEdge.LEFT else CanvasEdge.RIGHT
+        } else {
+            if (topDistance > 0.0) CanvasEdge.TOP else CanvasEdge.BOTTOM
+        }
+        val distance = maxOf(horizontal, vertical)
+        if (!distance.isFinite() || distance <= 0.0) null
+        else Candidate(node.id, side, distance)
+    }
+    return CanvasEdge.entries.mapNotNull { side ->
+        val sorted = candidates.filter { it.side == side }.sortedBy { it.distance }
+        sorted.firstOrNull()?.let { CanvasEdgeCue(side, it.id, sorted.size) }
+    }
+}
+
+/**
  * Fit a set of world-space nodes into the visible board, retaining headroom for
  * its top command bar and bottom tool strip. Double intermediate math prevents
  * opposite finite Float coordinates from overflowing a bounding-box subtraction.

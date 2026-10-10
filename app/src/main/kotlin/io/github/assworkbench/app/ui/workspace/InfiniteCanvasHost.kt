@@ -81,6 +81,13 @@ internal fun InfiniteCanvasHost(
         save = { InfiniteCanvasPersistence.encode(it.first, it.second) },
         restore = { InfiniteCanvasPersistence.decode(it) },
     )
+    val viewportHistorySaver = listSaver<CanvasViewportHistory, String>(
+        save = CanvasViewportHistoryPersistence::encode,
+        restore = CanvasViewportHistoryPersistence::decode,
+    )
+    var viewportHistory by rememberSaveable(sessionId, stateSaver = viewportHistorySaver) {
+        mutableStateOf(CanvasViewportHistory())
+    }
     var scene by rememberSaveable(sessionId, stateSaver = saver) {
         mutableStateOf(
             if (savedScene.isEmpty()) InfiniteCanvasCamera(16f, 60f, 0.85f) to emptyList()
@@ -204,6 +211,30 @@ internal fun InfiniteCanvasHost(
             }
         }
         val boardMode = focused == null
+        fun navigateToCamera(next: InfiniteCanvasCamera) {
+            if (scene.first != next) {
+                viewportHistory = viewportHistory.visit(scene.first, next)
+                scene = next to scene.second
+            }
+        }
+        fun goToPreviousViewport() {
+            if (gestureOwned) return
+            viewportHistory.goBack(scene.first)?.let { (history, camera) ->
+                viewportHistory = history
+                scene = camera to scene.second
+                focusedId = null
+                pendingToolSelection = null
+            }
+        }
+        fun goToNextViewport() {
+            if (gestureOwned) return
+            viewportHistory.goForward(scene.first)?.let { (history, camera) ->
+                viewportHistory = history
+                scene = camera to scene.second
+                focusedId = null
+                pendingToolSelection = null
+            }
+        }
         BackHandler(enabled = !gestureOwned && focused != null && !birdseyeOpen) {
             focusedId = null
             if (toolDrawerResident) toolDrawerOpen = true
@@ -220,7 +251,9 @@ internal fun InfiniteCanvasHost(
             if (entries.none { it.id == id }) return
             // Focus must not silently resize a world node. It only changes
             // camera observation and reveals a hidden surface.
-            val nextScene = canvasCameraForNode(node, viewportW, viewportH) to
+            val targetCamera = canvasCameraForNode(node, viewportW, viewportH)
+            viewportHistory = viewportHistory.visit(scene.first, targetCamera)
+            val nextScene = targetCamera to
                 scene.second.map { if (it.id == id) it.copy(hidden = false) else it }
             scene = nextScene
             // Publish the newly recalled geometry before activating another tool
@@ -255,7 +288,7 @@ internal fun InfiniteCanvasHost(
             }
             val fitted = fitCanvasCamera(shown, viewportW, viewportH)
             if (fitted != null) {
-                scene = fitted to scene.second
+                navigateToCamera(fitted)
             } else if (shown.isNotEmpty()) {
                 // A scene spanning extreme coordinates cannot truthfully fit at
                 // the camera's minimum zoom; birdseye remains fully reachable.
@@ -279,7 +312,7 @@ internal fun InfiniteCanvasHost(
             focusedId = null
             val shown = changed.filter { !it.hidden && entries.any { entry -> entry.id == it.id } }
             val fitted = fitCanvasCamera(shown, viewportW, viewportH)
-            if (fitted != null) scene = fitted to changed
+            if (fitted != null) navigateToCamera(fitted)
             else if (shown.isNotEmpty()) birdseyeOpen = true
             arrangeOpen = false
         }
@@ -882,6 +915,55 @@ internal fun InfiniteCanvasHost(
             }
         }
 
+        // Minimal direction-aware edge navigation: no constellation of
+        // overlapping offscreen buttons and no invisible-world traversal.
+        // Hidden tools remain in Recall; BOOKMARKED tools live in their rail.
+        if (boardMode) {
+            val cues = canvasEdgeCues(
+                camera,
+                nodes.filter { node ->
+                    entries.any { entry -> entry.id == node.id && !entry.bookmarked }
+                },
+                viewportW, viewportH,
+            )
+            cues.forEach { cue ->
+                if (cue.side != CanvasEdge.LEFT || !toolDrawerOpen) {
+                    val target = entries.firstOrNull { it.id == cue.nearestNodeId }
+                    val align = when (cue.side) {
+                        CanvasEdge.LEFT -> Alignment.CenterStart
+                        CanvasEdge.RIGHT -> Alignment.CenterEnd
+                        CanvasEdge.TOP -> Alignment.TopCenter
+                        CanvasEdge.BOTTOM -> Alignment.BottomCenter
+                    }
+                    val margins = when (cue.side) {
+                        CanvasEdge.LEFT -> Modifier.padding(start = 8.dp)
+                        CanvasEdge.RIGHT -> Modifier.padding(
+                            end = if (entries.any { it.bookmarked }) 76.dp else 8.dp)
+                        CanvasEdge.TOP -> Modifier.padding(top = 64.dp)
+                        CanvasEdge.BOTTOM -> Modifier.padding(bottom = dockHeight + 68.dp)
+                    }
+                    FilledTonalButton(
+                        onClick = { focus(cue.nearestNodeId) },
+                        enabled = !gestureOwned && target != null,
+                        modifier = Modifier.align(align).then(margins)
+                            .zIndex(1_000_018f)
+                            .testTag("spatial-offscreen-" + cue.side.name.lowercase()),
+                    ) {
+                        Icon(when (cue.side) {
+                            CanvasEdge.LEFT -> Icons.Filled.ArrowBack
+                            CanvasEdge.RIGHT -> Icons.Filled.ArrowForward
+                            CanvasEdge.TOP -> Icons.Filled.ArrowUpward
+                            CanvasEdge.BOTTOM -> Icons.Filled.ArrowDownward
+                        }, null, Modifier.size(18.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text((target?.title ?: "工具") +
+                            if (cue.count > 1) " +${cue.count - 1}" else "",
+                            maxLines = 1)
+                    }
+                }
+            }
+        }
+
         // The timeline is a persistent *real* editor surface owned by this
         // workspace, not a separate presentation mode or a detached media clock.
         if (timelineDockVisible) Surface(
@@ -922,6 +1004,16 @@ internal fun InfiniteCanvasHost(
                         style = MaterialTheme.typography.titleSmall)
                     TextButton(onClick = ::overview, enabled = !gestureOwned,
                         modifier = Modifier.testTag("spatial-overview")) { Text("总览") }
+                    IconButton(onClick = ::goToPreviousViewport,
+                        enabled = !gestureOwned && viewportHistory.canBack,
+                        modifier = Modifier.testTag("spatial-viewport-back")) {
+                        Icon(Icons.Filled.ArrowBack, "返回上一画布视角")
+                    }
+                    IconButton(onClick = ::goToNextViewport,
+                        enabled = !gestureOwned && viewportHistory.canForward,
+                        modifier = Modifier.testTag("spatial-viewport-forward")) {
+                        Icon(Icons.Filled.ArrowForward, "前进下一画布视角")
+                    }
                     TextButton(onClick = { timelineDockVisible = !timelineDockVisible },
                         enabled = !gestureOwned, modifier = Modifier.testTag("spatial-timeline-toggle")) {
                         Text(if (timelineDockVisible) "收起时间轴" else "时间轴")
@@ -951,8 +1043,8 @@ internal fun InfiniteCanvasHost(
                     }
                     IconButton(enabled = !gestureOwned,
                         onClick = {
-                            scene = scene.first.zoomAt(viewportW / 2f, viewportH / 2f,
-                                scene.first.scale / 1.2f) to scene.second
+                            navigateToCamera(scene.first.zoomAt(viewportW / 2f, viewportH / 2f,
+                                scene.first.scale / 1.2f))
                         }, modifier = Modifier.testTag("spatial-zoom-out")) {
                         Icon(Icons.Filled.Remove, "缩小画布")
                     }
@@ -960,8 +1052,8 @@ internal fun InfiniteCanvasHost(
                         style = MaterialTheme.typography.labelSmall)
                     IconButton(enabled = !gestureOwned,
                         onClick = {
-                            scene = scene.first.zoomAt(viewportW / 2f, viewportH / 2f,
-                                scene.first.scale * 1.2f) to scene.second
+                            navigateToCamera(scene.first.zoomAt(viewportW / 2f, viewportH / 2f,
+                                scene.first.scale * 1.2f))
                         }, modifier = Modifier.testTag("spatial-zoom-in")) {
                         Icon(Icons.Filled.Add, "放大画布")
                     }
