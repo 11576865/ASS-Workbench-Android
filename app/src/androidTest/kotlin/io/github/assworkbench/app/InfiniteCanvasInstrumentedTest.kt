@@ -234,6 +234,43 @@ class InfiniteCanvasInstrumentedTest {
     }
 
 
+    @Test fun pickerDoesNotStealFocusFromStalePreexistingActiveInstance() {
+        val nodes = listOf(
+            InfiniteCanvasNode("CAPABILITIES:primary"),
+            InfiniteCanvasNode("POSITION:primary", x = 460f),
+            InfiniteCanvasNode("STYLE:primary", x = 920f),
+        )
+        val initial = InfiniteCanvasPersistence.encode(
+            InfiniteCanvasCamera(0f, 0f, 0.85f), nodes)
+        var activeId by mutableStateOf<String?>("POSITION:primary")
+        composeRule.activityRule.scenario.onActivity { activity ->
+            activity.setContent {
+                MaterialTheme {
+                    InfiniteCanvasHost(
+                        sessionId = 104L, savedScene = initial, onSaveScene = {},
+                        entries = nodes.map { InfiniteCanvasEntry(it.id, it.id) },
+                        gestureOwned = false,
+                        // Simulate an asynchronous parent that has not yet
+                        // published the directory's domain activation.
+                        onAddTool = {},
+                        onActivate = {},
+                        onUndo = {}, onRedo = {}, canUndo = false, canRedo = false,
+                        requestedActiveToolId = activeId,
+                        modifier = Modifier.fillMaxSize(),
+                    ) { id, _ -> Text(id, Modifier.testTag("overview-content-" + id)) }
+                }
+            }
+        }
+        composeRule.onNodeWithTag("spatial-add-tool").performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("spatial-native-content-CAPABILITIES-primary").assertExists()
+        composeRule.onNodeWithTag("spatial-native-content-POSITION-primary").assertDoesNotExist()
+        // An actual activation, unlike the stale snapshot, switches native tool.
+        composeRule.runOnIdle { activeId = "CAPABILITIES:primary" }
+        composeRule.runOnIdle { activeId = "STYLE:primary" }
+        composeRule.onNodeWithTag("spatial-native-content-STYLE-primary").assertExists()
+    }
+
     @Test fun explicitBirdseyeNavigationCancelsAbandonedToolPickerSelection() {
         val nodes = listOf(
             InfiniteCanvasNode("CAPABILITIES:primary"),
