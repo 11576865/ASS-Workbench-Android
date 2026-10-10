@@ -115,6 +115,10 @@ internal fun InfiniteCanvasHost(
     // A directory selection may asynchronously create a ToolInstance. Carry the
     // invoking set of IDs until the new production tool is actually available.
     var pendingToolSelection by remember(sessionId) { mutableStateOf<Set<String>?>(null) }
+    // A picker must wait for a *new* domain activation. Re-reading an already
+    // active tool ID from before opening the directory is not a selection.
+    var pickerOriginActiveId by remember(sessionId) { mutableStateOf<String?>(null) }
+    var pickerSawDirectoryActive by remember(sessionId) { mutableStateOf(false) }
     var previouslyPresentEntries by remember(sessionId) { mutableStateOf<Set<String>?>(null) }
     var consumedFocusRevision by remember(sessionId) { mutableIntStateOf(requestedFocusRevision) }
     // Saveable providers belong to a *rendered slot*, not merely a tool ID:
@@ -143,11 +147,14 @@ internal fun InfiniteCanvasHost(
         val beforePicker = pendingToolSelection
         var pickerOpenedId: String? = null
         if (beforePicker != null) {
+            if (requestedActiveToolId == "CAPABILITIES:primary") pickerSawDirectoryActive = true
             // Newly created and already-existing tools must both be reachable
             // from the directory without returning to a scaled overview.
-            val selected = requestedActiveToolId?.let { id ->
-                entries.firstOrNull { it.id == id && it.id != "CAPABILITIES:primary" }
-            }
+            val selected = requestedActiveToolId
+                ?.takeIf { it != pickerOriginActiveId || pickerSawDirectoryActive }
+                ?.let { id ->
+                    entries.firstOrNull { it.id == id && it.id != "CAPABILITIES:primary" }
+                }
             val added = entries.lastOrNull {
                 it.id !in beforePicker && it.id != "CAPABILITIES:primary"
             }
@@ -158,6 +165,8 @@ internal fun InfiniteCanvasHost(
                 pickerOpenedId = opened.id
                 focusedId = opened.id
                 pendingToolSelection = null
+                pickerOriginActiveId = null
+                pickerSawDirectoryActive = false
                 if (opened.initiallyHidden) active(opened.id)
             }
         }
@@ -195,6 +204,8 @@ internal fun InfiniteCanvasHost(
     }
     fun showToolPicker() {
         if (gestureOwned) return
+        pickerOriginActiveId = requestedActiveToolId
+        pickerSawDirectoryActive = requestedActiveToolId == "CAPABILITIES:primary"
         pendingToolSelection = entries.mapTo(mutableSetOf()) { it.id }
         scene = scene.first to scene.second.map {
             if (it.id == "CAPABILITIES:primary") it.copy(hidden = false) else it
