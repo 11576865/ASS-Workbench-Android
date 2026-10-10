@@ -638,6 +638,9 @@ internal fun InfiniteCanvasHost(
             Surface(Modifier.fillMaxSize()
                 .padding(bottom = dockHeight)
                 .padding(start = if (toolDrawerResident) railWidth else 0.dp)
+                // Bookmark rail owns a real touch region; the focused editor
+                // must not place sliders/fields beneath it.
+                .padding(end = if (entries.any { it.bookmarked }) 68.dp else 0.dp)
                 .testTag("spatial-focused-editor"),
                 color = MaterialTheme.colorScheme.surface) {
                 Column {
