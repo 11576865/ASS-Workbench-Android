@@ -4,6 +4,28 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class InfiniteCanvasModelTest {
+
+    @Test fun canvasSaveableSlotsCannotReuseKeysAcrossConcurrentRepresentations() {
+        val session = 86L
+        val keys = listOf(
+            canvasSaveableContentKey(session, CanvasContentRole.BOARD, "preview"),
+            canvasSaveableContentKey(session, CanvasContentRole.FOCUSED, "preview"),
+            canvasSaveableContentKey(session, CanvasContentRole.FOCUSED, "audio"),
+            canvasSaveableContentKey(session, CanvasContentRole.FOCUSED_LAYER, "audio", "preview"),
+            canvasSaveableContentKey(session, CanvasContentRole.FOCUSED_LAYER, "preview", "audio"),
+            canvasSaveableContentKey(session, CanvasContentRole.REFERENCE, "preview", "TEXT:primary"),
+            canvasSaveableContentKey(session, CanvasContentRole.REFERENCE, "preview", "STYLE:primary"),
+            canvasSaveableContentKey(session, CanvasContentRole.FOCUSED, "TEXT:primary"),
+        )
+        assertEquals(keys.size, keys.toSet().size)
+        assertEquals(keys[0], canvasSaveableContentKey(session, CanvasContentRole.BOARD, "preview"))
+        assertNotEquals(keys[0], canvasSaveableContentKey(session + 1, CanvasContentRole.BOARD, "preview"))
+        assertNotEquals(keys[1], canvasSaveableContentKey(session, CanvasContentRole.FOCUSED, "audio"))
+        assertNotEquals(
+            canvasSaveableContentKey(session, CanvasContentRole.FOCUSED_LAYER, "preview", "audio"),
+            canvasSaveableContentKey(session, CanvasContentRole.FOCUSED_LAYER, "preview", "subtitles"))
+    }
+
     @Test fun recalledAudioReservesUsableScreenHeightForSignalAndControls() {
         val node = expandAudioCanvasForFocus(InfiniteCanvasNode("audio", width = 650f, height = 190f), 0.5f, 700f)
         assertEquals(480f, node.height, 0f)

@@ -1,6 +1,24 @@
 package io.github.assworkbench.app.ui.workspace
 
 /** Presentation coordinates are world dp; they never carry ASS parameter values. */
+/** A rendering slot is not a second authority over the domain tool. */
+internal enum class CanvasContentRole { BOARD, FOCUSED, FOCUSED_LAYER, REFERENCE }
+
+/**
+ * A SaveableStateHolder rejects two *simultaneously composed* providers with
+ * the same key. Tool IDs alone are insufficient when spatial board/focused/
+ * layered/reference presentations overlap during responsive navigation.
+ *
+ * Keep content ownership explicit: stage and optional focused owner disambiguate
+ * UI composition only; they do not fork ToolInstance, ASS state or Undo.
+ */
+internal fun canvasSaveableContentKey(
+    sessionId: Long,
+    role: CanvasContentRole,
+    contentId: String,
+    ownerId: String = "",
+): String = "${sessionId}/${role.name}/${ownerId}/${contentId}"
+
 internal data class InfiniteCanvasCamera(val x: Float = 0f, val y: Float = 0f, val scale: Float = 1f) {
     fun pan(dx: Float, dy: Float): InfiniteCanvasCamera =
         if (dx.isFinite() && dy.isFinite() && (x + dx).isFinite() && (y + dy).isFinite())
