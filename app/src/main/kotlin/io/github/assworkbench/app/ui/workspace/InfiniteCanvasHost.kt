@@ -915,6 +915,55 @@ internal fun InfiniteCanvasHost(
             }
         }
 
+        // Minimal direction-aware edge navigation: no constellation of
+        // overlapping offscreen buttons and no invisible-world traversal.
+        // Hidden tools remain in Recall; BOOKMARKED tools live in their rail.
+        if (boardMode) {
+            val cues = canvasEdgeCues(
+                camera,
+                nodes.filter { node ->
+                    entries.any { entry -> entry.id == node.id && !entry.bookmarked }
+                },
+                viewportW, viewportH,
+            )
+            cues.forEach { cue ->
+                if (cue.side != CanvasEdge.LEFT || !toolDrawerOpen) {
+                    val target = entries.firstOrNull { it.id == cue.nearestNodeId }
+                    val align = when (cue.side) {
+                        CanvasEdge.LEFT -> Alignment.CenterStart
+                        CanvasEdge.RIGHT -> Alignment.CenterEnd
+                        CanvasEdge.TOP -> Alignment.TopCenter
+                        CanvasEdge.BOTTOM -> Alignment.BottomCenter
+                    }
+                    val margins = when (cue.side) {
+                        CanvasEdge.LEFT -> Modifier.padding(start = 8.dp)
+                        CanvasEdge.RIGHT -> Modifier.padding(
+                            end = if (entries.any { it.bookmarked }) 76.dp else 8.dp)
+                        CanvasEdge.TOP -> Modifier.padding(top = 64.dp)
+                        CanvasEdge.BOTTOM -> Modifier.padding(bottom = dockHeight + 68.dp)
+                    }
+                    FilledTonalButton(
+                        onClick = { focus(cue.nearestNodeId) },
+                        enabled = !gestureOwned && target != null,
+                        modifier = Modifier.align(align).then(margins)
+                            .zIndex(1_000_018f)
+                            .testTag("spatial-offscreen-" + cue.side.name.lowercase()),
+                    ) {
+                        Icon(when (cue.side) {
+                            CanvasEdge.LEFT -> Icons.Filled.ArrowBack
+                            CanvasEdge.RIGHT -> Icons.Filled.ArrowForward
+                            CanvasEdge.TOP -> Icons.Filled.ArrowUpward
+                            CanvasEdge.BOTTOM -> Icons.Filled.ArrowDownward
+                        }, null, Modifier.size(18.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text((target?.title ?: "工具") +
+                            if (cue.count > 1) " +${cue.count - 1}" else "",
+                            maxLines = 1)
+                    }
+                }
+            }
+        }
+
         // The timeline is a persistent *real* editor surface owned by this
         // workspace, not a separate presentation mode or a detached media clock.
         if (timelineDockVisible) Surface(
