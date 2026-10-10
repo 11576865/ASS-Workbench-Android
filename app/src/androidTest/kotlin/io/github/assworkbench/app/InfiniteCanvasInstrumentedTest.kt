@@ -611,6 +611,47 @@ class InfiniteCanvasInstrumentedTest {
         assertEquals(nodes, saved.second)
     }
 
+
+    @Test fun explicitBirdseyeJumpHasIndependentViewportBackAndForward() {
+        val nodes = listOf(
+            InfiniteCanvasNode("preview", x = 0f, width = 380f, height = 300f),
+            InfiniteCanvasNode("subtitles", x = 12_000f, y = 200f, width = 400f, height = 420f),
+        )
+        val startingCamera = InfiniteCanvasCamera(0f, 0f, 0.7f)
+        val initial = InfiniteCanvasPersistence.encode(startingCamera, nodes)
+        var saved = InfiniteCanvasPersistence.decode(initial)
+        var undoCount = 0
+        composeRule.activityRule.scenario.onActivity { activity ->
+            activity.setContent {
+                MaterialTheme {
+                    InfiniteCanvasHost(
+                        sessionId = 120L, savedScene = initial,
+                        onSaveScene = { saved = InfiniteCanvasPersistence.decode(it) },
+                        entries = nodes.map { InfiniteCanvasEntry(it.id, it.id) },
+                        gestureOwned = false, onAddTool = {}, onActivate = {},
+                        onUndo = { undoCount++ }, onRedo = {}, canUndo = true,
+                        canRedo = false, modifier = Modifier.fillMaxSize(),
+                    ) { id, _ -> Text(id, Modifier.testTag("history-content-" + id)) }
+                }
+            }
+        }
+        composeRule.onNodeWithTag("spatial-birdseye").performClick()
+        composeRule.onNodeWithTag("spatial-birdseye-node-subtitles")
+            .performScrollTo().performClick()
+        composeRule.onNodeWithTag("spatial-native-content-subtitles").assertExists()
+        composeRule.onNodeWithTag("spatial-return-to-board").performClick()
+        composeRule.onNodeWithTag("spatial-viewport-back")
+            .performScrollTo().performClick()
+        composeRule.waitForIdle()
+        assertEquals(startingCamera, saved.first)
+        composeRule.onNodeWithTag("spatial-viewport-forward")
+            .performScrollTo().performClick()
+        composeRule.waitForIdle()
+        assertNotEquals(startingCamera, saved.first)
+        assertEquals(nodes, saved.second)
+        assertEquals(0, undoCount)
+    }
+
     @Test fun focusedEditorIsNotShrunkByBoardCamera() {
         val fixture = OverviewFixture(listOf(
             InfiniteCanvasNode("preview", x = 8000f, width = 900f),
