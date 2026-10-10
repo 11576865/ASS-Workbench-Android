@@ -227,4 +227,37 @@ class InfiniteCanvasModelTest {
         assertEquals(CanvasViewportHistory(), CanvasViewportHistory().visit(frames[0], invalid))
     }
 
+    @Test fun edgeCuesChooseNearestVisibleWorldToolPerDirection() {
+        val nodes = listOf(
+            InfiniteCanvasNode("left", -600f, 250f),
+            InfiniteCanvasNode("right-nearest", 700f, 250f),
+            InfiniteCanvasNode("right-far", 7000f, 250f),
+            InfiniteCanvasNode("top", 100f, -800f),
+            InfiniteCanvasNode("bottom", 100f, 1200f),
+            InfiniteCanvasNode("partly-visible", 350f, 80f),
+            InfiniteCanvasNode("hidden", 800f, hidden = true),
+        )
+        val cues = canvasEdgeCues(InfiniteCanvasCamera(), nodes, 400f, 700f)
+        assertEquals(CanvasEdge.entries.toList(), cues.map { it.side })
+        assertEquals("left", cues.first { it.side == CanvasEdge.LEFT }.nearestNodeId)
+        val right = cues.first { it.side == CanvasEdge.RIGHT }
+        assertEquals("right-nearest", right.nearestNodeId)
+        assertEquals(2, right.count)
+        assertEquals("top", cues.first { it.side == CanvasEdge.TOP }.nearestNodeId)
+        assertEquals("bottom", cues.first { it.side == CanvasEdge.BOTTOM }.nearestNodeId)
+        assertEquals(4, cues.size)
+    }
+
+    @Test fun edgeCuesRejectInvalidViewportAndHandleExtremeWorldCoordinates() {
+        val node = InfiniteCanvasNode("far", x = Float.MAX_VALUE)
+        val camera = InfiniteCanvasCamera(0f, 0f, 1f)
+        assertEquals(CanvasEdge.RIGHT,
+            canvasEdgeCues(camera, listOf(node), 400f, 700f).single().side)
+        assertTrue(canvasEdgeCues(camera, listOf(node), Float.NaN, 700f).isEmpty())
+        assertTrue(canvasEdgeCues(InfiniteCanvasCamera(scale = Float.NaN),
+            listOf(node), 400f, 700f).isEmpty())
+        assertTrue(canvasEdgeCues(camera,
+            listOf(node.copy(hidden = true)), 400f, 700f).isEmpty())
+    }
+
 }
