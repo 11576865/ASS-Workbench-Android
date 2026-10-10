@@ -189,7 +189,9 @@ internal fun InfiniteCanvasHost(
     }
 
     fun updateNode(node: InfiniteCanvasNode) {
-        scene = scene.first to scene.second.map { if (it.id == node.id) node else it }
+        val next = scene.first to scene.second.map { if (it.id == node.id) node else it }
+        scene = next
+        onSaveScene(InfiniteCanvasPersistence.encode(next.first, next.second))
     }
     fun showToolPicker() {
         if (gestureOwned) return
@@ -219,14 +221,18 @@ internal fun InfiniteCanvasHost(
         fun navigateToCamera(next: InfiniteCanvasCamera) {
             if (scene.first != next) {
                 viewportHistory = viewportHistory.visit(scene.first, next)
-                scene = next to scene.second
+                val nextScene = next to scene.second
+                scene = nextScene
+                onSaveScene(InfiniteCanvasPersistence.encode(nextScene.first, nextScene.second))
             }
         }
         fun goToPreviousViewport() {
             if (gestureOwned) return
             viewportHistory.goBack(scene.first)?.let { (history, camera) ->
                 viewportHistory = history
-                scene = camera to scene.second
+                val next = camera to scene.second
+                scene = next
+                onSaveScene(InfiniteCanvasPersistence.encode(next.first, next.second))
                 focusedId = null
                 pendingToolSelection = null
             }
@@ -314,6 +320,7 @@ internal fun InfiniteCanvasHost(
             if (gestureOwned) return
             val changed = arrangeCanvasNodes(scene.second, columns)
             scene = scene.first to changed
+            onSaveScene(InfiniteCanvasPersistence.encode(scene.first, changed))
             focusedId = null
             val shown = changed.filter { !it.hidden && entries.any { entry -> entry.id == it.id } }
             val fitted = fitCanvasCamera(shown, viewportW, viewportH)
@@ -513,10 +520,11 @@ internal fun InfiniteCanvasHost(
                                     // changes LOD. A compact card merely masks drawing and input;
                                     // it must not destroy uncommitted non-saveable drafts.
                                     Box(Modifier.weight(1f).fillMaxWidth()) {
-                                        Box(Modifier
-                                            .then(if (compact) Modifier.requiredSize(
-                                                node.width.dp, (node.height - 92f).coerceAtLeast(160f).dp,
-                                            ) else Modifier.fillMaxSize())
+                                        // A masked native editor retains its composition
+                                        // without expanding the compact card beyond its
+                                        // viewport. World dimensions belong to the node,
+                                        // not to an invisible composition subtree.
+                                        Box(Modifier.fillMaxSize()
                                             .alpha(if (compact) 0f else 1f)
                                             .then(if (compact) Modifier.clearAndSetSemantics { } else Modifier)
                                             .testTag("spatial-live-" + entry.id.replace(':', '-'))) {
