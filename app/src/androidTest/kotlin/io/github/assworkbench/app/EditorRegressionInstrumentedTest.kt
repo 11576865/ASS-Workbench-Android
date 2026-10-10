@@ -447,6 +447,26 @@ class EditorRegressionInstrumentedTest {
         composeRule.onNodeWithTag("event-apply-text-1").assertExists()
     }
 
+
+    @Test
+    fun fixedInspectorSharesUncommittedEventDraftAcrossToolInstances() {
+        restoreRecovery()
+        eventRow(1L).performClick()
+        composeRule.onNodeWithTag("event-raw-1").performTextInput(" SWITCH")
+        composeRule.onNodeWithTag("event-raw-1").assertTextContains("SWITCH")
+        // Switching to Effects removes the TEXT provider but must not
+        // create a new draft owner for the same fixed Event inspector.
+        openTool("EFFECTS")
+        composeRule.onNodeWithTag("fixed-inspector").assertIsDisplayed()
+        assertEquals("Recovered line", eventText(1L))
+        openTool("TEXT")
+        composeRule.onNodeWithTag("event-raw-1").assertTextContains("SWITCH")
+        composeRule.onNodeWithTag("event-apply-text-1").assertExists()
+        assertEquals("Recovered line", eventText(1L))
+        composeRule.onNodeWithTag("event-apply-text-1").performScrollTo().performClick()
+        composeRule.waitUntil(10_000) { eventText(1L) == "Recovered line SWITCH" }
+    }
+
     @Test
     fun inspectorDraftSurvivesToolSwitchAndRotation() {
         Log.i("AsswbRegression", "rotation:restore-recovery")

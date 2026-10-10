@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "id": "ass-fixed-inspector-draft-tool-switch-20261010",
+  "goal": "Preserve an uncommitted fixed-inspector ASS Event text draft during tool switches without merging domain ToolInstances or presenting duplicate Compose saveable keys.",
+  "status": "patch_submitted_pending_external_validation",
+  "source_head": "faf660dd5bff6777aa69b1abe6c6257bebc1a027",
+  "branch": "fix/ass-fixed-inspector-draft-tool-switch-20261010",
+  "pr": null,
+  "evidence": {
+    "prior_emulator_run": 38027904104,
+    "prior_emulator_failures": 22,
+    "latest_emulator_run": 38032992080,
+    "latest_emulator_total": 120,
+    "latest_emulator_failures": 12,
+    "failed_test": "inspectorDraftSurvivesToolSwitchAndRotation",
+    "failed_stage": "after-tool-switch (before rotation)"
+  },
+  "completed": [
+    "Scoped fixed Event inspector to stable fixed-inspector key; kept spatial ToolInstances independently keyed.",
+    "Added instrumentation test for TEXT→EFFECTS→TEXT draft preservation and delayed canonical Apply.",
+    "Documented diagnosis, product boundaries and pending CI."
+  ],
+  "next": [
+    "Run precise-head Android CI, connected tests and native Fontconfig after integrating this patch.",
+    "If draft rotation test remains red, use stage assertions to pinpoint orientation/recreation loss independently.",
+    "Diagnose separate canvas viewport history, hit testing and screenshot failures."
+  ],
+  "external_validation": {
+    "android_ci": "pending",
+    "android_emulator": "pending",
+    "fontconfig": "pending",
+    "device": "pending",
+    "foundry_intake": "pending_dedupe"
+  },
+  "updated_at": "2026-10-10"
+}
