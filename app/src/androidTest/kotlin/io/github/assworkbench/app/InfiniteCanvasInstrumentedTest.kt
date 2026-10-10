@@ -721,6 +721,9 @@ class InfiniteCanvasInstrumentedTest {
         composeRule.onNodeWithTag("spatial-birdseye-node-subtitles")
             .performScrollTo().performClick()
         composeRule.onNodeWithTag("spatial-native-content-subtitles").assertExists()
+        composeRule.waitForIdle()
+        val visitedCamera = saved.first
+        assertNotEquals("Birdseye focus should publish a distinct destination", startingCamera, visitedCamera)
         composeRule.onNodeWithTag("spatial-return-to-board").performClick()
         composeRule.onNodeWithTag("spatial-viewport-back")
             .performScrollTo().performClick()
@@ -729,7 +732,9 @@ class InfiniteCanvasInstrumentedTest {
         composeRule.onNodeWithTag("spatial-viewport-forward")
             .performScrollTo().performClick()
         composeRule.waitForIdle()
-        assertNotEquals(startingCamera, saved.first)
+        // Check durable scene publication, not just internal scene mutation or
+        // a weaker "not equal to start" condition.
+        assertEquals(visitedCamera, saved.first)
         assertEquals(nodes, saved.second)
         assertEquals(0, undoCount)
     }

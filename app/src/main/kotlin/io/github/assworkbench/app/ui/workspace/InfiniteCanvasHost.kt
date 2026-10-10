@@ -252,7 +252,11 @@ internal fun InfiniteCanvasHost(
             if (gestureOwned) return
             viewportHistory.goForward(scene.first)?.let { (history, camera) ->
                 viewportHistory = history
-                scene = camera to scene.second
+                val next = camera to scene.second
+                scene = next
+                // Forward must publish the same durable camera update as an
+                // explicit visit or Back; otherwise the saved scene stays stale.
+                onSaveScene(InfiniteCanvasPersistence.encode(next.first, next.second))
                 focusedId = null
                 pendingToolSelection = null
             }
