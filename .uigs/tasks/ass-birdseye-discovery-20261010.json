@@ -3,11 +3,12 @@
   "id": "ass-birdseye-discovery-20261010",
   "goal": "Deliver usable tool discovery and reliable hidden ToolInstance navigation in the ASS Workbench spatial birdseye without mutating canvas/domain state.",
   "status": "work_unit_complete_pending_external_validation",
-  "current_work_unit": "Feature PR #141 merged latest parent redesign 8bd6c40364ade3cee7bebd96543b6b8e82b5d7fa while preserving all parent tests; no feature-specific CI or device PASS claimed.",
+  "current_work_unit": "Original PR #138 exact-head CI 38025645578/45581/45592 all stopped at the same Kotlin compile error in InfiniteCanvasHost.kt:85, not a UI assertion; patch saver receiver type here before integrating PR #141.",
   "completed_units": [
     "Reviewed existing birdseye CanvasOverviewDialog and map/recall interaction on PR #138 head 92ccaba3cb1d36eea6cbc31144d14d464aff3e15.",
     "Submitted search, hidden-only filter, no-results, accurate filtered map hit-testing and four regressions.",
-    "Stacked PR #141 created and integrated parent branch changes by merge commit 0efee8100c549102410d4ed1cde900c0c124ddc9; kept parent camera-history connected test."
+    "Stacked PR #141 created and integrated parent branch changes by merge commit 0efee8100c549102410d4ed1cde900c0c124ddc9; kept parent camera-history connected test.",
+    "Located compile blocker from three product CI logs on parent 8bd6c40364ade3cee7bebd96543b6b8e82b5d7fa: CanvasViewportHistoryPersistence::encode cannot satisfy listSaver SaverScope save receiver."
   ],
   "next_units": [
     "Merge PR #141 into PR #138 only after independently reviewing parent emulator status and running updated-head tests.",
@@ -24,8 +25,8 @@
     "foundry_intake": "PR #33 opened, exact-head CI pending; existing spatial camera Candidate extended"
   },
   "blockers": [
-    "Parent canvas redesign is still unmerged Draft; external CI on standalone stacked PR is not guaranteed.",
-    "Existing rotation/draft emulator check remains separate and pending."
+    "Compilation blocker patched in branch, pending verification on integration head.",
+    "Parent canvas redesign remains Draft; draft/rotation and real-device visual acceptance separately unresolved."
   ],
   "updated_at": "2026-10-10"
 }

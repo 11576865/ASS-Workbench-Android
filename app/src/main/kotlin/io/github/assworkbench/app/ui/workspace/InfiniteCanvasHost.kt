@@ -82,7 +82,9 @@ internal fun InfiniteCanvasHost(
         restore = { InfiniteCanvasPersistence.decode(it) },
     )
     val viewportHistorySaver = listSaver<CanvasViewportHistory, String>(
-        save = CanvasViewportHistoryPersistence::encode,
+        // listSaver's save lambda has a SaverScope receiver; a bare function
+        // reference has no such receiver and is not applicable in Kotlin.
+        save = { value -> CanvasViewportHistoryPersistence.encode(value) },
         restore = CanvasViewportHistoryPersistence::decode,
     )
     var viewportHistory by rememberSaveable(sessionId, stateSaver = viewportHistorySaver) {
