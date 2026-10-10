@@ -6,11 +6,19 @@ internal data class InfiniteCanvasCamera(val x: Float = 0f, val y: Float = 0f, v
         if (dx.isFinite() && dy.isFinite() && (x + dx).isFinite() && (y + dy).isFinite())
             copy(x = x + dx, y = y + dy) else this
     fun zoomAt(anchorX: Float, anchorY: Float, nextScale: Float): InfiniteCanvasCamera {
-        if (!anchorX.isFinite() || !anchorY.isFinite() || !nextScale.isFinite() || scale <= 0f) return this
+        if (!anchorX.isFinite() || !anchorY.isFinite() || !nextScale.isFinite() ||
+            !scale.isFinite() || scale <= 0f) return this
         val z = nextScale.coerceIn(0.025f, 2f)
-        val nx = anchorX - (anchorX - x) * z / scale
-        val ny = anchorY - (anchorY - y) * z / scale
-        return if (nx.isFinite() && ny.isFinite()) InfiniteCanvasCamera(nx, ny, z) else this
+        // Float subtraction can overflow for two finite opposite-end world offsets.
+        // Compute the affine anchor projection in Double, then check Float storage.
+        val ratio = z.toDouble() / scale.toDouble()
+        val nx = anchorX.toDouble() - (anchorX.toDouble() - x.toDouble()) * ratio
+        val ny = anchorY.toDouble() - (anchorY.toDouble() - y.toDouble()) * ratio
+        val finiteRange = -Float.MAX_VALUE.toDouble()..Float.MAX_VALUE.toDouble()
+        return if (nx.isFinite() && ny.isFinite() &&
+            nx in finiteRange && ny in finiteRange) {
+            InfiniteCanvasCamera(nx.toFloat(), ny.toFloat(), z)
+        } else this
     }
 }
 
@@ -47,8 +55,10 @@ internal fun fitCanvasCamera(
     // Callers can open the normalized birdseye map instead of reporting false success.
     if (!requiredScale.isFinite() || requiredScale < 0.025) return null
     val scale = requiredScale.coerceAtMost(2.0)
-    val screenX = 16.0 - left * scale
-    val screenY = 72.0 - top * scale
+    // Center the fitted world inside its usable viewport, not against the
+    // top-left margin. Preserve 16dp horizontal and 72/88dp vertical chrome.
+    val screenX = 16.0 + (availableW - extentW * scale) / 2.0 - left * scale
+    val screenY = 72.0 + (availableH - extentH * scale) / 2.0 - top * scale
     if (!screenX.isFinite() || !screenY.isFinite() ||
         screenX !in -Float.MAX_VALUE.toDouble()..Float.MAX_VALUE.toDouble() ||
         screenY !in -Float.MAX_VALUE.toDouble()..Float.MAX_VALUE.toDouble()) return null
