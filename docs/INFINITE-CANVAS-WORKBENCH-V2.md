@@ -129,3 +129,16 @@ The now-unified canvas needs navigation that remains intelligible after opening 
 - The direction controls avoid the bottom timeline and right bookmark rail, and suppress the left cue while the left drawer is open. The camera history does **not** enter ASS Undo or change persisted node world geometry.
 - Pure model tests cover history branch/limit/restore corruption, extreme signed world coordinates, cue grouping and hidden exclusion; connected Android tests cover far-node Back/Forward and right-edge recall.
 - **Acceptance state:** code and regressions have been submitted on PR #138, but exact-head CI/emulator, real-device edge-touch/occlusion and full Visual Evidence are pending. Rows 007–008 in the 240 UI ledger reflect branch-level Partial rather than merged-main Implemented.
+
+## 2026-10-10 emulator triage: 120 tests / 12 failures — repair follow-up
+
+The previous complete Emulator Regression run `38032992080` at `faf660dd` reported **120 tests, 12 failures** (Android CI and Fontconfig both succeeded). The failures are not treated as an approved test waiver:
+
+- Two historical visual fixtures still selected retired `CANVAS_EXPERIMENTAL` or `TOOL_INSTANCES_EXPERIMENTAL`; capture paths now exercise `SPATIAL_EXPERIMENTAL`, including native tools, identity-preserving duplication and spatial geometry.
+- The compact semantic-zoom editor used `requiredSize(worldWidth, worldHeight)` inside a small masked card, potentially letting invisible content expand its measurement and obscure the summary hit target. The production host now retains its live composition at the actual card's measured size instead.
+- Explicit node lock, arrangement, viewport navigation and overview now invoke the scene persistence callback immediately on commit, while the regular side effect still covers continuous canvas gestures; separate ASS document Undo history remains unchanged. Follow-up tests read committed scenes, not speculative recomposition.
+- The frequently used Hide command moved to the top of both contextual menus and gained stable `spatial-hide-*` IDs. A resident left tool rail now remains visible even if its transient open flag is reset during focused navigation.
+- The formerly failing rotation regression printed the correct `EditableText` payload while `assertTextContains` rejected it; its guard now checks the native editable semantics property and still rejects actual loss of the unsaved draft.
+- Regression entrypoints for hide/lock now use visible native focused-editor controls, rather than guessing about far-offscreen board menu placement.
+
+**Current-head Android CI/Emulator/Fontconfig are Pending.** These are repair hypotheses and submitted tests, not confirmation that the twelve failures are closed; the PR remains Draft until reliable connected tests and visual-device acceptance are obtained.
