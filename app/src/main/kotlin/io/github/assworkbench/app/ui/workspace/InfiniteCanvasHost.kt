@@ -117,7 +117,10 @@ internal fun InfiniteCanvasHost(
     var pendingToolSelection by remember(sessionId) { mutableStateOf<Set<String>?>(null) }
     var previouslyPresentEntries by remember(sessionId) { mutableStateOf<Set<String>?>(null) }
     var consumedFocusRevision by remember(sessionId) { mutableIntStateOf(requestedFocusRevision) }
-    val contentState = rememberSaveableStateHolder()
+    // Saveable providers belong to a *rendered slot*, not merely a tool ID:
+    // the board, focused stage, layered media and reference viewport can be
+    // concurrently composed while navigation or movable content settles.
+    val contentState = key(sessionId) { rememberSaveableStateHolder() }
     val density = LocalDensity.current.density
     val active by rememberUpdatedState(onActivate)
 
@@ -517,7 +520,7 @@ internal fun InfiniteCanvasHost(
                                             .alpha(if (compact) 0f else 1f)
                                             .then(if (compact) Modifier.clearAndSetSemantics { } else Modifier)
                                             .testTag("spatial-live-" + entry.id.replace(':', '-'))) {
-                                            contentState.SaveableStateProvider(sessionId.toString() + "/" + entry.id) {
+                                            contentState.SaveableStateProvider(canvasSaveableContentKey(sessionId, CanvasContentRole.BOARD, entry.id)) {
                                                 content(entry.id, !node.passthrough)
                                             }
                                         }
@@ -529,7 +532,7 @@ internal fun InfiniteCanvasHost(
                                     Box(Modifier.weight(1f).fillMaxWidth()
                                         .background(MaterialTheme.colorScheme.surface.copy(alpha = node.alpha))
                                         .testTag("spatial-live-" + entry.id.replace(':', '-'))) {
-                                        contentState.SaveableStateProvider(sessionId.toString() + "/" + entry.id) {
+                                        contentState.SaveableStateProvider(canvasSaveableContentKey(sessionId, CanvasContentRole.BOARD, entry.id)) {
                                             content(entry.id, !node.passthrough)
                                         }
                                     }
@@ -760,25 +763,25 @@ internal fun InfiniteCanvasHost(
                             // Audio/video is a real layered editing surface, not a flattened card.
                             // Keep actual renderer and waveform on their existing clock and callbacks.
                             if (entry.id == "audio" && preview != null) {
-                                contentState.SaveableStateProvider(sessionId.toString() + "/preview") {
+                                contentState.SaveableStateProvider(canvasSaveableContentKey(sessionId, CanvasContentRole.FOCUSED_LAYER, "preview", entry.id)) {
                                     liveContent("preview", true)
                                 }
                                 Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth()
                                     .height(liveNode.height.coerceIn(160f, 460f).dp)
                                     .background(MaterialTheme.colorScheme.surface.copy(alpha = liveNode.alpha))) {
-                                    contentState.SaveableStateProvider(sessionId.toString() + "/audio") {
+                                    contentState.SaveableStateProvider(canvasSaveableContentKey(sessionId, CanvasContentRole.FOCUSED_LAYER, "audio", entry.id)) {
                                         liveContent("audio", !liveNode.passthrough)
                                     }
                                 }
                             } else {
-                                contentState.SaveableStateProvider(sessionId.toString() + "/" + entry.id) {
+                                contentState.SaveableStateProvider(canvasSaveableContentKey(sessionId, CanvasContentRole.FOCUSED, entry.id)) {
                                     liveContent(entry.id, !liveNode.passthrough)
                                 }
                                 if (entry.id == "preview" && audio != null) {
                                     Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth()
                                         .height(audio.height.coerceIn(160f, 460f).dp)
                                         .background(MaterialTheme.colorScheme.surface.copy(alpha = audio.alpha))) {
-                                        contentState.SaveableStateProvider(sessionId.toString() + "/audio") {
+                                        contentState.SaveableStateProvider(canvasSaveableContentKey(sessionId, CanvasContentRole.FOCUSED_LAYER, "audio", entry.id)) {
                                             liveContent("audio", !audio.passthrough)
                                         }
                                     }
@@ -831,7 +834,7 @@ internal fun InfiniteCanvasHost(
                             val referencePane: @Composable (Modifier) -> Unit = { paneModifier ->
                                 Box(paneModifier.background(MaterialTheme.colorScheme.surfaceContainerLow)
                                     .testTag("spatial-reference-preview")) {
-                                    contentState.SaveableStateProvider(sessionId.toString() + "/preview") {
+                                    contentState.SaveableStateProvider(canvasSaveableContentKey(sessionId, CanvasContentRole.REFERENCE, "preview", entry.id)) {
                                         content("preview", true)
                                     }
                                 }
