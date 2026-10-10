@@ -443,7 +443,12 @@ class EditorRegressionInstrumentedTest {
         // Check both the unsaved payload and the Apply action. Earlier CI logs
         // ended at "apply-draft" without an assertion exception, obscuring whether
         // draft loss or commit failure caused this connected-test failure.
-        composeRule.onNodeWithTag("event-raw-1").assertTextContains("WORKBENCH")
+        val draftText = composeRule.onNodeWithTag("event-raw-1")
+            .fetchSemanticsNode().config.getOrNull(
+                androidx.compose.ui.semantics.SemanticsProperties.EditableText,
+            )?.text
+        assertTrue("Uncommitted raw draft must still contain WORKBENCH after $stage: $draftText",
+            draftText?.contains("WORKBENCH") == true)
         composeRule.onNodeWithTag("event-apply-text-1").assertExists()
     }
 
@@ -798,8 +803,9 @@ class EditorRegressionInstrumentedTest {
             composeRule.onNodeWithTag("spatial-return-to-board").performClick()
         }
         val before = viewModel.state.value.document
+        composeRule.onNodeWithTag("spatial-quick-preview").performClick()
         composeRule.onNodeWithTag("spatial-menu-preview").performClick()
-        composeRule.onNodeWithText("收回工具").performClick()
+        composeRule.onNodeWithTag("spatial-hide-preview").performClick()
         composeRule.onNodeWithTag("spatial-birdseye").performClick()
         composeRule.onNodeWithTag("spatial-birdseye-node-preview").performScrollTo().performClick()
         composeRule.onNodeWithTag("spatial-native-content-preview").assertExists()
@@ -815,6 +821,7 @@ class EditorRegressionInstrumentedTest {
                 .fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()) {
             composeRule.onNodeWithTag("spatial-return-to-board").performClick()
         }
+        composeRule.onNodeWithTag("spatial-quick-preview").performClick()
         composeRule.onNodeWithTag("spatial-menu-preview").performClick()
         composeRule.onNodeWithTag("spatial-layout-lock-preview").performClick()
         composeRule.activityRule.scenario.recreate()
