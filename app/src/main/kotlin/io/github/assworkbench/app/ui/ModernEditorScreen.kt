@@ -1032,6 +1032,10 @@ private fun FixedWorkspace(
                 onImportFont = onImportFont,
                 onSaveMkv = onSaveMkv,
                 eventEditorStateHolder = eventEditorStateHolder,
+                // One fixed inspector switches among tool instances while
+                // editing the same Event. Its uncommitted draft belongs to
+                // this stable inspector slot, not the active ToolInstance ID.
+                draftSaveableScope = "fixed-inspector",
                 onOpenTool = ::selectTool,
                 onCloseText = { onExpandedChange(null); compactPage = "LIST" },
                 searchOpen = searchOpen,
@@ -1331,6 +1335,10 @@ private fun FloatingToolContent(
     onCloseText: () -> Unit,
     searchOpen: Boolean,
     onCloseSearch: () -> Unit,
+    // Fixed inspector: a single mutually exclusive presentation slot.
+    // Spatial instances keep separate scope keys so concurrent editors
+    // targeting one Event do not register duplicate saveable providers.
+    draftSaveableScope: String? = null,
     onExtractParameter: ((
         WorkspaceParameterDescriptor,
         WorkspaceParameterPresentation,
@@ -1379,7 +1387,9 @@ private fun FloatingToolContent(
                     Text("#${event.id} · ${tool.title}", style = MaterialTheme.typography.titleSmall)
                     if (tool == WorkbenchTool.TEXT) IconButton(onClick = onCloseText,
                         modifier = Modifier.testTag("event-collapse-${event.id}")) { Icon(Icons.Filled.Close, "收起正文工具") }
-                    eventEditorStateHolder.SaveableStateProvider("${instance.id}-${event.id}") {
+                    eventEditorStateHolder.SaveableStateProvider(
+                        "${draftSaveableScope ?: instance.id}-${event.id}"
+                    ) {
                         InlineEventEditor(
                             event = event,
                             styleName = event.style,
