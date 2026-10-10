@@ -2,25 +2,26 @@
   "schema_version": 1,
   "id": "ass-birdseye-discovery-20261010",
   "goal": "Deliver usable tool discovery and reliable hidden ToolInstance navigation in the ASS Workbench spatial birdseye without mutating canvas/domain state.",
-  "status": "reviewable_patch_pending_ci",
-  "current_work_unit": "PR #141 opened and durable; birdseye search / hidden-only recall patch and four tests submitted for review.",
+  "status": "work_unit_complete_pending_external_validation",
+  "current_work_unit": "Feature PR #141 merged latest parent redesign 8bd6c40364ade3cee7bebd96543b6b8e82b5d7fa while preserving all parent tests; no feature-specific CI or device PASS claimed.",
   "completed_units": [
     "Reviewed existing birdseye CanvasOverviewDialog and map/recall interaction on PR #138 head 92ccaba3cb1d36eea6cbc31144d14d464aff3e15.",
-    "Submitted search, hidden-only filter, no-results, accurate filtered map hit-testing and four regressions."
+    "Submitted search, hidden-only filter, no-results, accurate filtered map hit-testing and four regressions.",
+    "Stacked PR #141 created and integrated parent branch changes by merge commit 0efee8100c549102410d4ed1cde900c0c124ddc9; kept parent camera-history connected test."
   ],
   "next_units": [
-    "Review stacked PR and integrate after current parent emulator run completes.",
+    "Merge PR #141 into PR #138 only after independently reviewing parent emulator status and running updated-head tests.",
     "Run Android CI and emulator regression for the exact integrated commit.",
     "Review device/IME/touch accessibility and large-instance performance; inspect 240 UI ledger before declaring closure."
   ],
   "branch": "feat/ass-birdseye-search-recall-20261010",
   "pr": 141,
-  "latest_durable_commit": "6a7270992cbd7f1d5772eebd1b327aa74cadfe45",
+  "latest_durable_commit": "0efee8100c549102410d4ed1cde900c0c124ddc9",
   "external_validation": {
     "android_ci": "pending",
     "emulator": "pending",
     "visual_device": "pending",
-    "foundry_intake": "dedupe_identified_pending_write"
+    "foundry_intake": "PR #33 opened, exact-head CI pending; existing spatial camera Candidate extended"
   },
   "blockers": [
     "Parent canvas redesign is still unmerged Draft; external CI on standalone stacked PR is not guaranteed.",
