@@ -634,6 +634,12 @@ class InfiniteCanvasInstrumentedTest {
         composeRule.onNodeWithTag("spatial-menu-STYLE-primary").performClick()
         composeRule.onNodeWithTag("spatial-bookmark-STYLE-primary").performClick()
         composeRule.onNodeWithTag("spatial-bookmark-rail").assertExists()
+        val railBounds = composeRule.onNodeWithTag("spatial-bookmark-rail")
+            .fetchSemanticsNode().boundsInRoot
+        val editorBounds = composeRule.onNodeWithTag("spatial-focused-editor")
+            .fetchSemanticsNode().boundsInRoot
+        assertTrue("Bookmark rail must not cover native editor controls",
+            editorBounds.right <= railBounds.left + 1f)
         composeRule.onNodeWithTag("spatial-return-to-board").performClick()
         composeRule.onNodeWithTag("spatial-node-STYLE-primary").assertDoesNotExist()
         composeRule.onNodeWithTag("spatial-bookmark-open-STYLE-primary").performClick()
