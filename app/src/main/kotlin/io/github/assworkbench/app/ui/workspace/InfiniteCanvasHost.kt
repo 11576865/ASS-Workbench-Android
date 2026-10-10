@@ -437,6 +437,12 @@ internal fun InfiniteCanvasHost(
                                         ) {
                                             DropdownMenuItem(text = { Text("打开编辑器") },
                                                 onClick = { focus(entry.id) })
+                                            DropdownMenuItem(text = { Text("收回工具") },
+                                                modifier = Modifier.testTag("spatial-hide-" + entry.id.replace(':', '-')),
+                                                onClick = {
+                                                    updateNode(node.copy(hidden = true))
+                                                    cardMenuId = null
+                                                })
                                             DropdownMenuItem(text = { Text("提升层级") },
                                                 onClick = {
                                                     scene = scene.first to raiseCanvasNode(scene.second, entry.id)
@@ -496,8 +502,7 @@ internal fun InfiniteCanvasHost(
                                         cardMenuId = null
                                     },
                                 )
-                                DropdownMenuItem(text = { Text("收回工具") },
-                                                onClick = { updateNode(node.copy(hidden = true)); cardMenuId = null })
+
                                             DropdownMenuItem(
                                                 text = { Text(if (node.alpha < 1f) "恢复实底" else "透明叠加") },
                                                 onClick = {
@@ -610,7 +615,7 @@ internal fun InfiniteCanvasHost(
                 }
             }
             // Compact discoverability handle; the drawer is an optional list, not a second editor.
-            if (!toolDrawerOpen) FilledTonalIconButton(
+            if (!toolDrawerOpen && !toolDrawerResident) FilledTonalIconButton(
                 onClick = { toolDrawerOpen = true },
                 modifier = Modifier.align(Alignment.CenterStart).zIndex(1_000_012f)
                     .testTag("spatial-edge-handle-left"),
@@ -621,7 +626,7 @@ internal fun InfiniteCanvasHost(
             val (entry, node) = focused!!
             Surface(Modifier.fillMaxSize()
                 .padding(bottom = dockHeight)
-                .padding(start = if (toolDrawerOpen && toolDrawerResident) railWidth else 0.dp)
+                .padding(start = if (toolDrawerResident) railWidth else 0.dp)
                 .testTag("spatial-focused-editor"),
                 color = MaterialTheme.colorScheme.surface) {
                 Column {
@@ -687,6 +692,13 @@ internal fun InfiniteCanvasHost(
                             }
                             DropdownMenu(expanded = cardMenuId == entry.id,
                                 onDismissRequest = { cardMenuId = null }) {
+                                DropdownMenuItem(text = { Text("收回工具") },
+                                    modifier = Modifier.testTag("spatial-hide-" + entry.id.replace(':', '-')),
+                                    onClick = {
+                                        updateNode(node.copy(hidden = true))
+                                        focusedId = null
+                                        cardMenuId = null
+                                    })
                                 if (viewportW < 460f) {
                                     DropdownMenuItem(text = { Text("撤销字幕编辑") }, enabled = canUndo,
                                         onClick = { onUndo(); cardMenuId = null })
@@ -730,11 +742,7 @@ internal fun InfiniteCanvasHost(
                                         cardMenuId = null
                                         pendingToolSelection = null
                                     })
-                                DropdownMenuItem(text = { Text("收回工具") }, onClick = {
-                                    updateNode(node.copy(hidden = true))
-                                    focusedId = null
-                                    cardMenuId = null
-                                })
+
                                 DropdownMenuItem(text = { Text(if (node.alpha < 1f) "恢复实底" else "透明叠加") },
                                     onClick = {
                                         updateNode(node.copy(alpha = if (node.alpha < 1f) 1f else 0.2f))
@@ -870,7 +878,7 @@ internal fun InfiniteCanvasHost(
 
         // A resident tool directory is a shared overlay, not a board-only
         // surface: pinning it keeps tool switching available while editing.
-            if (toolDrawerOpen) Surface(
+            if (toolDrawerOpen || toolDrawerResident) Surface(
                 modifier = Modifier.align(Alignment.CenterStart).fillMaxHeight()
                     .padding(bottom = dockHeight).width(railWidth)
                     .zIndex(1_000_020f).testTag("spatial-edge-rail-left"),
