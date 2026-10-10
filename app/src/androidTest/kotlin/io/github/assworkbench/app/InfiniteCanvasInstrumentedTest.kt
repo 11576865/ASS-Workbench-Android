@@ -652,6 +652,40 @@ class InfiniteCanvasInstrumentedTest {
         assertEquals(0, undoCount)
     }
 
+
+    @Test fun offscreenEdgeCueApproachesToolAndViewportBackRecoversWhereIWas() {
+        val nodes = listOf(
+            InfiniteCanvasNode("preview", width = 380f, height = 300f),
+            InfiniteCanvasNode("audio", x = 9_000f, y = 100f, width = 420f, height = 300f),
+        )
+        val startingCamera = InfiniteCanvasCamera(0f, 0f, 0.85f)
+        val initial = InfiniteCanvasPersistence.encode(startingCamera, nodes)
+        var saved = InfiniteCanvasPersistence.decode(initial)
+        composeRule.activityRule.scenario.onActivity { activity ->
+            activity.setContent {
+                MaterialTheme {
+                    InfiniteCanvasHost(
+                        sessionId = 121L, savedScene = initial,
+                        onSaveScene = { saved = InfiniteCanvasPersistence.decode(it) },
+                        entries = nodes.map { InfiniteCanvasEntry(it.id, it.id) },
+                        gestureOwned = false, onAddTool = {}, onActivate = {},
+                        onUndo = {}, onRedo = {}, canUndo = false, canRedo = false,
+                        modifier = Modifier.fillMaxSize(),
+                    ) { id, _ -> Text(id, Modifier.testTag("edge-cue-content-" + id)) }
+                }
+            }
+        }
+        composeRule.onNodeWithTag("spatial-offscreen-right").assertIsDisplayed().performClick()
+        composeRule.onNodeWithTag("spatial-native-content-audio").assertExists()
+        composeRule.onNodeWithTag("spatial-return-to-board").performClick()
+        composeRule.onNodeWithTag("spatial-viewport-back")
+            .performScrollTo().performClick()
+        composeRule.waitForIdle()
+        assertEquals(startingCamera, saved.first)
+        assertEquals(nodes, saved.second)
+        composeRule.onNodeWithTag("spatial-offscreen-right").assertExists()
+    }
+
     @Test fun focusedEditorIsNotShrunkByBoardCamera() {
         val fixture = OverviewFixture(listOf(
             InfiniteCanvasNode("preview", x = 8000f, width = 900f),
