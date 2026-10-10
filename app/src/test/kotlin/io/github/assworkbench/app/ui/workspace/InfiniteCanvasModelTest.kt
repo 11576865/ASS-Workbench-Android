@@ -23,6 +23,30 @@ class InfiniteCanvasModelTest {
         assertEquals((330f - camera.x) / camera.scale, (330f - next.x) / next.scale, 0.001f)
         assertEquals((240f - camera.y) / camera.scale, (240f - next.y) / next.scale, 0.001f)
     }
+    @Test fun zoomAcrossOppositeFiniteFloatOffsetsDoesNotOverflowIntermediateArithmetic() {
+        val camera = InfiniteCanvasCamera(x = -Float.MAX_VALUE, y = 0f, scale = 1f)
+        val next = camera.zoomAt(Float.MAX_VALUE, 0f, 0.025f)
+        assertEquals(0.025f, next.scale, 0f)
+        assertTrue(next.x.isFinite())
+        assertTrue(next.x > 0f)
+        assertTrue(next.x < Float.MAX_VALUE)
+        // A mathematical result outside Float camera storage must still fail closed.
+        val unrepresentable = InfiniteCanvasCamera(x = Float.MAX_VALUE, scale = 1f)
+        assertEquals(unrepresentable, unrepresentable.zoomAt(-Float.MAX_VALUE, 0f, 2f))
+    }
+
+    @Test fun overviewCentersNativeScaleToolInsideReservedNavigationArea() {
+        val node = InfiniteCanvasNode("editor", x = 120f, y = -90f, width = 320f, height = 240f)
+        val camera = fitCanvasCamera(listOf(node), viewportWidth = 900f, viewportHeight = 720f)!!
+        assertEquals(1f, camera.scale, 0f)
+        val centerX = camera.x + (node.x + node.width / 2f) * camera.scale
+        val centerY = camera.y + (node.y + node.height / 2f) * camera.scale
+        assertEquals(450f, centerX, 0.001f)
+        assertEquals(72f + (720f - 160f) / 2f, centerY, 0.001f)
+        assertEquals(120f, node.x, 0f)
+        assertEquals(-90f, node.y, 0f)
+    }
+
     @Test fun nodesCanMoveOutsideTheViewportAndResizeHasOnlyMinimumBounds() {
         val node = InfiniteCanvasNode("video", 20f, 30f, 480f, 300f)
         assertEquals(-1980f, node.move(-2000f, 0f).x, 0f)
