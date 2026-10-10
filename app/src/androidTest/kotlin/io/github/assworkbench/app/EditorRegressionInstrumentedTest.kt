@@ -445,7 +445,7 @@ class EditorRegressionInstrumentedTest {
         // draft loss or commit failure caused this connected-test failure.
         val draftText = composeRule.onNodeWithTag("event-raw-1")
             .fetchSemanticsNode().config[
-                androidx.compose.ui.semantics.SemanticsProperties.EditableText,
+                androidx.compose.ui.semantics.SemanticsProperties.EditableText
             ].text
         assertTrue("Uncommitted raw draft must still contain WORKBENCH after $stage: $draftText",
             draftText?.contains("WORKBENCH") == true)
