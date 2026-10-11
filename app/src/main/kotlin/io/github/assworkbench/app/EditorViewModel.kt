@@ -2,6 +2,7 @@ package io.github.assworkbench.app
 
 import android.app.Application
 import android.net.Uri
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.assworkbench.container.MatroskaReader
@@ -9,6 +10,7 @@ import io.github.assworkbench.container.MatroskaScanResult
 import io.github.assworkbench.container.MatroskaTrackKind
 import io.github.assworkbench.domain.AssCodec
 import io.github.assworkbench.domain.AssDocument
+import io.github.assworkbench.domain.SubtitleFilterState
 import io.github.assworkbench.domain.AssDocumentEditing
 import io.github.assworkbench.domain.AssRoundTripVerifier
 import io.github.assworkbench.domain.AssTextDecoder
@@ -61,7 +63,7 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.concurrent.atomic.AtomicLong
 
-class EditorViewModel(application: Application) : AndroidViewModel(application) {
+class EditorViewModel(application: Application, private val savedStateHandle: SavedStateHandle = SavedStateHandle()) : AndroidViewModel(application) {
     private val app get() = getApplication<Application>()
     private val history = StartupProbe.stage(application, "viewmodel_history") {
         UndoHistory(AssDocument(), limit = 80)
@@ -101,6 +103,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             project = io.github.assworkbench.domain.SubtitleProject(),
             recoveryAvailable = recoveryStore.exists(),
             recoveryLabel = recoveryStore.label(),
+            subtitleFilter = SubtitleFilterState.restore(savedStateHandle.get<ArrayList<String>>("subtitle-filter")),
         )
     )
     val state: StateFlow<EditorState> = _state.asStateFlow()
@@ -129,7 +132,8 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         containerBaselineScan = null
         val epoch = workspaceEpoch.incrementAndGet()
         if (resetProjectFonts) fontStore.beginProjectFontSession(epoch, refresh = false)
-        _state.update { it.copy(workspaceSessionId = epoch) }
+        savedStateHandle["subtitle-filter"] = arrayListOf<String>()
+        _state.update { it.copy(workspaceSessionId = epoch, subtitleFilter = SubtitleFilterState()) }
         return epoch
     }
 
@@ -2457,7 +2461,19 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         return true
     }
 
-    fun setQuery(value: String) = _state.update { it.copy(query = value) }
+    fun setQuery(value: String) = setSubtitleFilter(_state.value.subtitleFilter.copy(quickText = value))
+
+    fun setSubtitleFilter(value: SubtitleFilterState) {
+        savedStateHandle["subtitle-filter"] = ArrayList(value.save())
+        _state.update { it.copy(subtitleFilter = value, selectionAnchorId = null) }
+    }
+
+    fun clearSubtitleFilter() = setSubtitleFilter(SubtitleFilterState())
+
+    fun selectAllFilteredEvents() = _state.update { state ->
+        state.copy(selectedEventIds = state.filteredEvents.mapTo(linkedSetOf()) { it.id },
+            selectionAnchorId = null, status = "已替换选择为 ${state.filteredEvents.size} 条筛选结果。")
+    }
 
     fun toggleSelected(id: Long) {
         _state.update {
@@ -2552,18 +2568,13 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
 
     private fun focusRelativeFilteredEvent(direction: Int) {
         val snapshot = _state.value
-        val events = snapshot.filteredEvents
-        if (events.isEmpty()) {
+        val targetId = snapshot.subtitleFilter.relativeTarget(snapshot.document.events,
+            snapshot.selectedEventIds, snapshot.focusedEventId, direction)
+        if (targetId == null) {
             _state.update { it.copy(status = "当前筛选没有可导航的字幕。") }
             return
         }
-        val currentIndex = events.indexOfFirst { it.id == snapshot.focusedEventId }
-        val targetIndex = when {
-            currentIndex < 0 && direction >= 0 -> 0
-            currentIndex < 0 -> events.lastIndex
-            else -> (currentIndex + direction).coerceIn(0, events.lastIndex)
-        }
-        focusEvent(events[targetIndex].id, seek = true)
+        focusEvent(targetId, seek = true)
     }
 
     fun alignSelectedStartToPlayback() {

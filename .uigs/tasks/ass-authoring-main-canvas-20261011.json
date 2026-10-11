@@ -2,8 +2,8 @@
   "schema_version": 1,
   "id": "ass-authoring-main-canvas-20261011",
   "goal": "Improve subtitle authoring efficiency, redesign main UI and refine infinite canvas UI.",
-  "status": "canvas_chrome_and_capability_audit_implemented_native_validation_pending",
-  "current_work_unit": "Historical UI capability mapping and narrow focused-canvas action/navigation chrome.",
+  "status": "shared_subtitle_filter_source_implemented_native_validation_pending",
+  "current_work_unit": "Shared subtitle filter, stable result navigation and explicit selection replacement in both UI hosts.",
   "completed_units": [
     "Read current repository protocol, prior task and source checkpoint 69ad5c076c8695fae15c59b01cd391a647bb8652.",
     "User selected subtitle authoring efficiency as the new-capability priority.",
@@ -19,32 +19,37 @@
     "Independent source review addressed insufficient scroll range and primary-instance reset; domain JVM 217/217 and catalog/layout 13/13 pass.",
     "Mapped eight retired modes to current consumers; recorded concrete four-edge/glass/dock/tab/continuous-timeline gaps.",
     "Separated focused canvas title navigation from scrolling task actions; resident/bookmark rails no longer compress title/action width.",
-    "Source review addressed dual-rail width and real-overflow regression; canvas/overview/registry JVM33/33 pass."
+    "Source review addressed dual-rail width and real-overflow regression; canvas/overview/registry JVM33/33 pass.",
+    "Implemented session-owned literal quick/field/kind/selected filters and saved-state serialization; workspace replacement clears filters.",
+    "Connected main/canvas subtitle navigation to shared result controls; excluded-focus locate is explicit; navigation retains selection.",
+    "Independent source review found short-pane filter overflow; introduced shared dialog/inline height policy with 2 RED-to-GREEN tests.",
+    "Full domain JVM226/226 plus navigation-layout2/2; production Android regressions added but unexecuted locally."
   ],
   "next_units": [
-    "Implement shared subtitle filters and result-to-edit workflow, then explicit batch scope previews.",
+    "Implement explicit batch scope and before/after previews; triage readable emulator failures with native evidence.",
     "Unify remaining professional-tool draft ownership and conflict expression.",
     "Recover historical capability gaps in separately bounded units; validate native CI/IME/visual results."
   ],
   "branch": "redesign/infinite-canvas-workbench-v2",
   "pr": 138,
-  "latest_durable_commit": "fb3953f24a1654aa24666fa43d0b7920fab84fbf",
+  "latest_durable_commit": "6a6d2799dd1f8118e5cc1a28f1d8bce8fdd554f8",
   "checkpoint_location": "The commit containing this updated record is the source checkpoint; latest_durable_commit identifies the inspected baseline.",
   "external_validation": {
     "baseline_android_ci": "success:38117186072",
     "baseline_emulator": "failure:38117186042; detailed logs unavailable",
     "baseline_fontconfig": "success:38117186058",
-    "proposed_product_changes": "source implemented; canvas JVM33/33; native320dp dual-rail/overflow regression pending",
+    "proposed_product_changes": "source implemented; domain226/226 and layout2/2; Android pending",
     "real_device_visual_ime": "pending",
     "uigs_intake": "Pending; source audit Candidate retained in .uigs/intake-pending/2026-10-11-task-category-host-audit.md",
-    "android_ci": "in_progress:38142464433 at baseline fb3953f2",
-    "emulator": "in_progress:38142464426 at baseline fb3953f2; earlier 38135092606 failed, logs unavailable",
-    "fontconfig": "in_progress:38142464464 at baseline fb3953f2"
+    "android_ci": "baseline success:38143106983",
+    "emulator": "baseline failure:38143106952; full-suite deadline124 plus four named UI failures; focused projections22 pass",
+    "fontconfig": "baseline success:38143106937"
   },
   "blockers": [
-    "No local Android SDK; no native compile, screenshot or connected-test pass claimed.",
-    "Baseline emulator 38117186042 failed; log retrieval Transport closed, assertion/root cause still unknown.",
-    "Draft PR #138 remains unmerged; full 240 UI and device/IME acceptance not complete."
+    "No local Android SDK; native compile, connected tests, visual/IME acceptance Pending.",
+    "Baseline emulator logs available: full-suite timeout and named navigation/visibility/touch failures remain unresolved.",
+    "Actual Activity/process saved-state restoration chain remains unverified.",
+    "Draft PR #138 remains unmerged; full 240 UI and historical capability parity not complete."
   ],
-  "updated_at": "2026-10-11"
+  "updated_at": "2026-10-12"
 }

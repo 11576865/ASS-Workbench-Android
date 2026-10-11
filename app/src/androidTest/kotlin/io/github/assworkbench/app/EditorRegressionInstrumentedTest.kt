@@ -86,6 +86,74 @@ class EditorRegressionInstrumentedTest {
         composeRule.waitForIdle()
     }
 
+    @Test fun sharedSubtitleFilterNavigatesResultsWithoutChangingSelectionOrDocumentAcrossHosts() {
+        restoreRecovery()
+        val before = viewModel.state.value
+        composeRule.runOnIdle {
+            viewModel.focusEvent(1L, seek = false)
+            viewModel.toggleSelected(1L)
+        }
+        composeRule.onNodeWithContentDescription("搜索").performClick()
+        if (composeRule.onAllNodesWithTag("subtitle-filter-open-dialog").fetchSemanticsNodes().isNotEmpty()) {
+            composeRule.onNodeWithTag("subtitle-filter-open-dialog").performScrollTo().performClick()
+        }
+        composeRule.onNodeWithTag("subtitle-filter-quick").performTextReplacement("Second")
+        hideKeyboard()
+        if (composeRule.onAllNodesWithTag("subtitle-filter-dialog-done").fetchSemanticsNodes().isNotEmpty()) {
+            composeRule.onNodeWithTag("subtitle-filter-dialog-done").performClick()
+        }
+        composeRule.onNodeWithTag("subtitle-focus-excluded").assertExists()
+        composeRule.runOnIdle {
+            assertEquals(listOf(2L), viewModel.state.value.filteredEvents.map { it.id })
+            assertEquals(1L, viewModel.state.value.focusedEventId)
+        }
+        composeRule.onNodeWithTag("subtitle-result-next").performScrollTo().performClick()
+        composeRule.runOnIdle {
+            assertEquals(2L, viewModel.state.value.focusedEventId)
+            assertEquals(setOf(1L), viewModel.state.value.selectedEventIds)
+        }
+        composeRule.onNodeWithTag("subtitle-result-select-all").performScrollTo().performClick()
+        composeRule.runOnIdle { assertEquals(setOf(2L), viewModel.state.value.selectedEventIds) }
+        composeRule.onNodeWithContentDescription("关闭搜索").performClick()
+        switchToUnifiedCanvas()
+        openTool("SUBTITLES")
+        composeRule.onNodeWithTag("subtitle-results").assertExists()
+        composeRule.runOnIdle {
+            assertEquals("Second", viewModel.state.value.query)
+            assertEquals(listOf(2L), viewModel.state.value.filteredEvents.map { it.id })
+            viewModel.focusEvent(1L, seek = false)
+        }
+        composeRule.onNodeWithTag("subtitle-focus-excluded").assertExists()
+        composeRule.onNodeWithTag("subtitle-result-locate").performScrollTo().performClick()
+        composeRule.runOnIdle {
+            assertEquals(io.github.assworkbench.domain.SubtitleFilterState(), viewModel.state.value.subtitleFilter)
+            assertEquals(1L, viewModel.state.value.focusedEventId)
+            assertEquals(setOf(2L), viewModel.state.value.selectedEventIds)
+            assertEquals(before.document, viewModel.state.value.document)
+            assertEquals(before.dirty, viewModel.state.value.dirty)
+            assertEquals(before.canUndo, viewModel.state.value.canUndo)
+        }
+    }
+
+    @Test fun subtitleFilterSavedStateRestoresConditionsAndProjectReplacementClearsThem() {
+        restoreRecovery()
+        composeRule.runOnIdle {
+            val handle = androidx.lifecycle.SavedStateHandle()
+            val first = EditorViewModel(application, handle)
+            val filter = io.github.assworkbench.domain.SubtitleFilterState(
+                quickText = "line", actor = "Alice", kind = io.github.assworkbench.domain.SubtitleEventKind.COMMENT,
+                selectedOnly = true)
+            first.setSubtitleFilter(filter)
+            val restoredHandle = androidx.lifecycle.SavedStateHandle(mapOf(
+                "subtitle-filter" to handle.get<ArrayList<String>>("subtitle-filter")))
+            val restored = EditorViewModel(application, restoredHandle)
+            assertEquals(filter, restored.state.value.subtitleFilter)
+            restored.newSubtitleProject()
+            assertEquals(io.github.assworkbench.domain.SubtitleFilterState(), restored.state.value.subtitleFilter)
+            assertEquals(io.github.assworkbench.domain.SubtitleFilterState(), EditorViewModel(application, restoredHandle).state.value.subtitleFilter)
+        }
+    }
+
     @Test fun fixedTaskNavigationAndExternalToolCommandKeepTheRequestedEditorConsistent() {
         restoreRecovery()
         eventRow(1L).performClick()

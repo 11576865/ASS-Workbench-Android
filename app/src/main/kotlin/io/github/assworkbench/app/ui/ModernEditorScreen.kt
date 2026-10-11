@@ -535,7 +535,7 @@ fun ModernEditorScreen(
                     interactionRegistry = interactionRegistry,
                     onEditEventPosition = ::openPositionTarget,
                     searchOpen = searchOpen,
-                    onCloseSearch = { searchOpen = false; viewModel.setQuery("") },
+                    onCloseSearch = { searchOpen = false },
                     modifier = Modifier.weight(1f).fillMaxWidth().testTag("fixed-workspace"),
                 )
             } else {
@@ -582,7 +582,7 @@ fun ModernEditorScreen(
                     onEnableRenderer = onEnableRenderer,
                     onEditEventPosition = ::openPositionTarget,
                     searchOpen = searchOpen,
-                    onCloseSearch = { searchOpen = false; viewModel.setQuery("") },
+                    onCloseSearch = { searchOpen = false },
                     modifier = Modifier.weight(1f).fillMaxWidth().testTag("spatial-workspace"),
                 )
             }
@@ -880,8 +880,8 @@ private fun SpatialWorkspace(
                 onObjectLongPress = if (activeTool == WorkbenchTool.POSITION) null else pickCanvasObject,
                 modifier = Modifier.fillMaxSize(),
             )
-            "subtitles" -> Column(Modifier.fillMaxSize()) {
-                if (searchOpen) SearchStrip(state.query, viewModel::setQuery, onCloseSearch)
+            "subtitles" -> SubtitleNavigationHost(state.subtitleFilter, searchOpen,
+                viewModel::setSubtitleFilter, onCloseSearch, Modifier.fillMaxSize()) {
                 EventWorkspace(
                     state = state, viewModel = viewModel,
                     issuesByEvent = issues.groupBy { it.eventId },
@@ -891,7 +891,7 @@ private fun SpatialWorkspace(
                         if (next != null) onActiveTool(WorkbenchTool.TEXT)
                     },
                     onTool = onActiveTool, eventEditorStateHolder = eventEditorStateHolder,
-                    tool = WorkbenchTool.TEXT, modifier = Modifier.fillMaxSize(),
+                    tool = WorkbenchTool.TEXT, modifier = Modifier.weight(1f),
                 ) { }
             }
             "audio" -> InfiniteAudioEvidence(state, viewModel, interactive)
@@ -991,8 +991,8 @@ private fun FixedWorkspace(
     }
 
     val listPane: @Composable (Modifier) -> Unit = { paneModifier ->
-        Column(paneModifier) {
-            if (searchOpen) SearchStrip(state.query, viewModel::setQuery, onCloseSearch)
+        SubtitleNavigationHost(state.subtitleFilter, searchOpen,
+            viewModel::setSubtitleFilter, onCloseSearch, paneModifier) {
             EventWorkspace(
                 state = state,
                 viewModel = viewModel,
@@ -1335,8 +1335,8 @@ private fun FloatingToolContent(
         editorUiState = editorUiState,
     )
     when (tool) {
-        WorkbenchTool.SUBTITLES -> Column(Modifier.fillMaxSize()) {
-            if (searchOpen) SearchStrip(state.query, viewModel::setQuery, onCloseSearch)
+        WorkbenchTool.SUBTITLES -> SubtitleNavigationHost(state.subtitleFilter, searchOpen,
+            viewModel::setSubtitleFilter, onCloseSearch, Modifier.fillMaxSize()) {
             EventWorkspace(state, viewModel, issues.groupBy { it.eventId }, expandedEventId,
                 { next ->
                     onExpandedChange(next)
@@ -1669,16 +1669,6 @@ private fun TooltipIconButton(
     }
 }
 
-@Composable
-private fun SearchStrip(query: String, onQuery: (String) -> Unit, onClose: () -> Unit) {
-    Surface(tonalElevation = 1.dp) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = WorkbenchDimens.Small, vertical = WorkbenchDimens.Micro), verticalAlignment = Alignment.CenterVertically) {
-            OutlinedTextField(query, onQuery, placeholder = { Text("搜索正文 / Actor / Style") }, singleLine = true, modifier = Modifier.weight(1f))
-            IconButton(onClick = onClose) { Icon(Icons.Filled.Close, "关闭") }
-        }
-    }
-}
-
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun EventWorkspace(
@@ -1697,11 +1687,12 @@ private fun EventWorkspace(
     val uiActions = remember(viewModel) { EditorViewModelUiActions(viewModel) }
     val selectionMode = uiState.selection.eventIds.isNotEmpty()
     val listState = rememberLazyListState()
+    var locateRevision by remember { mutableIntStateOf(0) }
     // Expanded rows leave composition when they are collapsed or when focus moves.
     // Keep their uncommitted input buffers in a holder owned by the workspace so
     // collapse/switch/scroll does not destroy drafts before "应用正文".
     val rangeScrollScope = rememberCoroutineScope()
-    LaunchedEffect(uiState.focus.eventId, state.filteredEvents) {
+    LaunchedEffect(uiState.focus.eventId, state.filteredEvents, locateRevision) {
         val focusedId = uiState.focus.eventId
         val index = state.filteredEvents.indexOfFirst { it.id == focusedId }
         if (index >= 0 && !listState.isScrollInProgress) {
@@ -1715,16 +1706,21 @@ private fun EventWorkspace(
     Column(listModifier.background(MaterialTheme.colorScheme.surface).testTag("subtitle-navigation")) {
         Row(Modifier.fillMaxWidth().height(WorkbenchDimens.PaneHeaderHeight).padding(horizontal = WorkbenchDimens.Small), verticalAlignment = Alignment.CenterVertically) {
             Text(if (selectionMode) "选择模式" else "字幕", style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
-            Text(if (state.query.isBlank()) "${state.document.events.size}" else "${state.filteredEvents.size}/${state.document.events.size}", style = MaterialTheme.typography.labelSmall)
-            if (!selectionMode && state.filteredEvents.isNotEmpty()) {
-                TooltipIconButton("上一条筛选结果", viewModel::focusPreviousFilteredEvent) {
-                    Icon(Icons.Filled.KeyboardArrowUp, null)
-                }
-                TooltipIconButton("下一条筛选结果", viewModel::focusNextFilteredEvent) {
-                    Icon(Icons.Filled.KeyboardArrowDown, null)
-                }
-            }
+            Text(if (state.subtitleFilter.isActive) "筛选中" else "全部", style = MaterialTheme.typography.labelSmall)
         }
+        SubtitleResultsBar(
+            total = state.document.events.size, matched = state.filteredEvents.size,
+            selected = state.selectedEventIds.size,
+            excludedFocus = state.focusedEventId != null && state.filteredEvents.none { it.id == state.focusedEventId },
+            hasFocus = state.document.events.any { it.id == state.focusedEventId },
+            onPrevious = viewModel::focusPreviousFilteredEvent, onNext = viewModel::focusNextFilteredEvent,
+            onSelectAll = viewModel::selectAllFilteredEvents,
+            onLocate = {
+                if (state.filteredEvents.none { it.id == state.focusedEventId }) viewModel.clearSubtitleFilter()
+                locateRevision++
+            },
+            onClear = viewModel::clearSubtitleFilter,
+        )
         Divider()
         LazyColumn(
             state = listState,
