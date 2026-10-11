@@ -1,6 +1,7 @@
 package io.github.assworkbench.app
 
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import android.content.pm.ActivityInfo
@@ -85,32 +86,46 @@ class EditorRegressionInstrumentedTest {
         composeRule.waitForIdle()
     }
 
-    @Test fun fixedNavigationAndExternalToolCommandKeepTheRequestedGroupConsistent() {
+    @Test fun fixedTaskNavigationAndExternalToolCommandKeepTheRequestedEditorConsistent() {
         restoreRecovery()
-        if (composeRule.onAllNodesWithTag("spatial-workspace", useUnmergedTree = true)
-                .fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()) {
-            composeRule.onNodeWithTag("workspace-direct-mode-toggle").performClick()
-        }
         eventRow(1L).performClick()
         openTool("STYLE")
         composeRule.onNodeWithTag("fixed-preview-density").assertIsDisplayed()
         val before = viewModel.state.value.document
-        composeRule.onNodeWithTag("fixed-group-NAVIGATION").performScrollTo().performClick()
-        composeRule.onNodeWithTag("fixed-group-NAVIGATION").assertIsSelected()
+        composeRule.onNodeWithTag("fixed-tool-SUBTITLES").performScrollTo().performClick()
         composeRule.onNodeWithTag("fixed-tool-SUBTITLES").assertIsSelected()
-        composeRule.onNodeWithTag("fixed-tool-STYLE").assertDoesNotExist()
+        composeRule.onNodeWithTag("fixed-tool-STYLE").assertIsNotSelected()
         composeRule.onNodeWithTag("fixed-preview-density").assertIsDisplayed()
-        // Global commands must leave the list navigation group too.
         composeRule.onNodeWithContentDescription("工具和更多操作").performClick()
         composeRule.onNodeWithText("字体管理").performClick()
-        composeRule.onNodeWithTag("fixed-group-RESOURCES").performScrollTo().assertIsSelected()
-        composeRule.onNodeWithTag("fixed-tool-FONTS").assertIsSelected()
-        composeRule.onNodeWithTag("fixed-tool-SUBTITLES").assertDoesNotExist()
+        composeRule.onNodeWithTag("fixed-inspector").assertIsDisplayed()
+        composeRule.onNodeWithTag("fixed-tool-SUBTITLES").assertIsNotSelected()
         openTool("TEXT")
         composeRule.onNodeWithTag("event-collapse-1").performClick()
-        composeRule.onNodeWithTag("fixed-group-NAVIGATION").performScrollTo().assertIsSelected()
         composeRule.onNodeWithTag("fixed-tool-SUBTITLES").assertIsSelected()
         assertEquals(before, viewModel.state.value.document)
+    }
+
+    @Test fun eventTextDraftFollowsTheSameToolAcrossMainAndCanvasWithoutImplicitCommit() {
+        restoreRecovery()
+        eventRow(1L).performClick()
+        val before = viewModel.state.value.document
+        composeRule.onNodeWithTag("event-raw-1").performTextInput(" CROSS")
+        hideKeyboard()
+        composeRule.onNodeWithTag("workspace-direct-mode-toggle").performClick()
+        openTool("TEXT")
+        assertEquals("Recovered line CROSS", rawDraftText(1L))
+        assertEquals(before, viewModel.state.value.document)
+        composeRule.onNodeWithTag("event-raw-1").performTextInput(" HOST")
+        hideKeyboard()
+        composeRule.onNodeWithTag("workspace-direct-mode-toggle").performClick()
+        openTool("TEXT")
+        assertEquals("Recovered line CROSS HOST", rawDraftText(1L))
+        assertEquals(before, viewModel.state.value.document)
+        composeRule.onNodeWithTag("event-apply-text-1").performScrollTo().performClick()
+        composeRule.waitUntil(10_000) { eventText(1L) == "Recovered line CROSS HOST" }
+        composeRule.runOnIdle { viewModel.undo() }
+        composeRule.waitUntil(10_000) { viewModel.state.value.document == before }
     }
 
     @Test
@@ -486,14 +501,14 @@ class EditorRegressionInstrumentedTest {
         restoreRecovery()
         eventRow(1L).performClick()
         composeRule.onNodeWithTag("event-raw-1").performTextInput(" SWITCH")
-        composeRule.onNodeWithTag("event-raw-1").assertTextContains("SWITCH")
+        assertEquals("Recovered line SWITCH", rawDraftText(1L))
         // Switching to Effects removes the TEXT provider but must not
         // create a new draft owner for the same fixed Event inspector.
         openTool("EFFECTS")
         composeRule.onNodeWithTag("fixed-inspector").assertIsDisplayed()
         assertEquals("Recovered line", eventText(1L))
         openTool("TEXT")
-        composeRule.onNodeWithTag("event-raw-1").assertTextContains("SWITCH")
+        assertEquals("Recovered line SWITCH", rawDraftText(1L))
         composeRule.onNodeWithTag("event-apply-text-1").assertExists()
         assertEquals("Recovered line", eventText(1L))
         composeRule.onNodeWithTag("event-apply-text-1").performScrollTo().performClick()
@@ -1184,11 +1199,7 @@ class EditorRegressionInstrumentedTest {
             .fetchSemanticsNodes(atLeastOneRootRequired = false)
         if (fixedWorkspace.isEmpty()) return
 
-        val navigationGroups = composeRule.onAllNodesWithTag("fixed-group-NAVIGATION", useUnmergedTree = true)
-            .fetchSemanticsNodes(atLeastOneRootRequired = false)
-        if (navigationGroups.isNotEmpty()) {
-            composeRule.onNodeWithTag("fixed-group-NAVIGATION").performScrollTo().performClick()
-        }
+        composeRule.onNodeWithTag("fixed-tool-SUBTITLES").performScrollTo().performClick()
         val pages = composeRule.onAllNodesWithTag("fixed-page-list", useUnmergedTree = true)
             .fetchSemanticsNodes(atLeastOneRootRequired = false)
         if (pages.isNotEmpty()) {
@@ -1237,8 +1248,6 @@ class EditorRegressionInstrumentedTest {
                 showFixedSubtitleList()
                 return
             }
-            val group = WorkbenchTool.valueOf(name).group
-            composeRule.onNodeWithTag("fixed-group-${group.name}").performScrollTo().performClick()
             val fixedTool = composeRule.onAllNodesWithTag("fixed-tool-$name", useUnmergedTree = true)
                 .fetchSemanticsNodes(atLeastOneRootRequired = false)
             if (fixedTool.isNotEmpty()) {
@@ -1246,6 +1255,12 @@ class EditorRegressionInstrumentedTest {
                 composeRule.waitForIdle()
                 return
             }
+            composeRule.onNodeWithTag("fixed-tool-CAPABILITIES").performClick()
+            composeRule.onNodeWithTag("tool-search").performTextReplacement(name)
+            hideKeyboard()
+            composeRule.onNodeWithTag("tool-$name").performScrollTo().performClick()
+            composeRule.waitForIdle()
+            return
         }
         composeRule.onNodeWithTag("workspace-tools").performClick()
         composeRule.onNodeWithTag("tool-search").performTextReplacement(name)
@@ -1253,6 +1268,11 @@ class EditorRegressionInstrumentedTest {
         composeRule.onNodeWithTag("tool-$name").performScrollTo().performClick()
         composeRule.waitForIdle()
     }
+
+    private fun rawDraftText(id: Long): String =
+        composeRule.onNodeWithTag("event-raw-$id").fetchSemanticsNode().config[
+            androidx.compose.ui.semantics.SemanticsProperties.EditableText
+        ].text
 
     private fun eventText(id: Long): String =
         viewModel.state.value.document.events.first { it.id == id }.text

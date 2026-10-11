@@ -5,6 +5,12 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class WorkbenchToolCatalogTest {
+    @Test fun mainAuthoringTasksHaveStableOrderAndKeepTheCompleteDirectory() {
+        assertEquals(listOf(WorkbenchTool.SUBTITLES, WorkbenchTool.TEXT, WorkbenchTool.STYLE,
+            WorkbenchTool.TIMELINE, WorkbenchTool.CAPABILITIES), mainAuthoringTools())
+        assertEquals(5, mainAuthoringTools().distinct().size)
+    }
+
     @Test fun subtitleNavigationDoesNotOfferThePreviousInspectorTools() {
         assertEquals(listOf(WorkbenchTool.SUBTITLES), fixedNavigationTools(WorkbenchToolGroup.NAVIGATION))
     }

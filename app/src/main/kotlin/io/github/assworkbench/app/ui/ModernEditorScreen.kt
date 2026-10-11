@@ -175,6 +175,10 @@ fun ModernEditorScreen(
         }
     }
     val fixedTool = WorkbenchTool.valueOf(fixedToolName)
+    val eventTextDraftStore = rememberEventTextDraftStore(state.workspaceSessionId)
+    LaunchedEffect(eventTextDraftStore, state.document.events.map { it.id }) {
+        eventTextDraftStore.retainEvents(state.document.events.mapTo(linkedSetOf()) { it.id })
+    }
 
     LaunchedEffect(state.workspaceSessionId) {
         if (workspaceState.sessionId != state.workspaceSessionId) {
@@ -302,6 +306,7 @@ fun ModernEditorScreen(
     }
 
     MaterialTheme(colorScheme = workbenchColors(appearance)) {
+    CompositionLocalProvider(LocalEventTextDraftStore provides eventTextDraftStore) {
     Surface(
         modifier = Modifier.fillMaxSize(),
         color = MaterialTheme.colorScheme.background,
@@ -539,7 +544,13 @@ fun ModernEditorScreen(
                 SpatialWorkspace(
                     surfaceController = surfaceController,
                     workspaceState = workspaceState,
-                    onWorkspaceStateChange = { workspaceState = it },
+                    onWorkspaceStateChange = { next ->
+                        val remaining = next.tools.mapTo(hashSetOf()) { it.id }
+                        workspaceState.tools.filterNot { it.id in remaining }.forEach {
+                            eventTextDraftStore.removeInstance(it.id)
+                        }
+                        workspaceState = next
+                    },
                     interactionRegistry = interactionRegistry,
                     positionEditEventId = positionEditEventId,
                     precisionEnabled = spatialPrecisionEnabled,
@@ -609,6 +620,7 @@ fun ModernEditorScreen(
         }
     }
 }
+    }
 }
 
 @Composable
@@ -988,8 +1000,6 @@ private fun FixedWorkspace(
     var previewDensityName by rememberSaveable { mutableStateOf(PreviewDensity.FULL.name) }
     val requestedPreview = runCatching { PreviewDensity.valueOf(previewDensityName) }
         .getOrDefault(PreviewDensity.FULL)
-    val navigationGroup = if (navigationGroupRequested) WorkbenchToolGroup.NAVIGATION else activeTool.group
-    val fixedTools = fixedNavigationTools(navigationGroup)
 
     fun selectTool(tool: WorkbenchTool) {
         navigationGroupRequested = false
@@ -1064,79 +1074,18 @@ private fun FixedWorkspace(
     }
 
     Column(modifier) {
-        Surface(
-            tonalElevation = 2.dp,
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        ) {
-            Column {
-                Row(
-                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 6.dp),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    WorkbenchToolGroup.entries.forEach { group ->
-                        FilterChip(
-                            selected = if (group == WorkbenchToolGroup.NAVIGATION) {
-                                navigationGroupRequested
-                            } else {
-                                !navigationGroupRequested && activeTool.group == group
-                            },
-                            onClick = {
-                                if (group == WorkbenchToolGroup.NAVIGATION) {
-                                    navigationGroupRequested = true
-                                    compactPage = "LIST"
-                                } else {
-                                    WorkbenchTool.entries
-                                        .firstOrNull { it.group == group && it != WorkbenchTool.SUBTITLES }
-                                        ?.let(::selectTool)
-                                }
-                            },
-                            label = { Text(group.title) },
-                            modifier = Modifier.testTag("fixed-group-" + group.name),
-                        )
-                    }
-                }
-                Row(
-                    Modifier.fillMaxWidth().padding(horizontal = 6.dp),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    key(navigationGroup) {
-                        Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()),
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                            verticalAlignment = Alignment.CenterVertically) {
-                            fixedTools.forEach { tool ->
-                                FilterChip(
-                                    selected = if (tool == WorkbenchTool.SUBTITLES) navigationGroupRequested
-                                        else !navigationGroupRequested && tool == activeTool,
-                                    onClick = {
-                                        if (tool == WorkbenchTool.SUBTITLES) {
-                                            navigationGroupRequested = true
-                                            compactPage = "LIST"
-                                        } else selectTool(tool)
-                                    },
-                                    label = { Text(tool.title) },
-                                    modifier = Modifier.testTag("fixed-tool-" + tool.name),
-                                )
-                            }
-                        }
-                    }
-                    FilterChip(
-                        selected = requestedPreview != PreviewDensity.HIDDEN,
-                        onClick = { previewDensityName = requestedPreview.next().name },
-                        label = { Text("预览 · " + requestedPreview.label) },
-                        leadingIcon = {
-                            Icon(
-                                if (requestedPreview == PreviewDensity.HIDDEN) Icons.Filled.VisibilityOff
-                                else Icons.Filled.Visibility,
-                                null,
-                                Modifier.size(18.dp),
-                            )
-                        },
-                        modifier = Modifier.testTag("fixed-preview-density"),
-                    )
-                }
-            }
-        }
+        WorkbenchTaskBar(
+            activeTool = activeTool,
+            listRequested = navigationGroupRequested,
+            requestedPreview = requestedPreview,
+            onTool = { tool ->
+                if (tool == WorkbenchTool.SUBTITLES) {
+                    navigationGroupRequested = true
+                    compactPage = "LIST"
+                } else selectTool(tool)
+            },
+            onPreview = { previewDensityName = requestedPreview.next().name },
+        )
 
         BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
             val density = LocalDensity.current
@@ -1427,6 +1376,7 @@ private fun FloatingToolContent(
                             viewModel = viewModel,
                             onTool = onOpenTool,
                             activeSection = tool,
+                            draftOwnerId = instance.id,
                         )
                     }
                 }
@@ -1975,30 +1925,25 @@ private fun InlineEventEditor(
     viewModel: EditorViewModel,
     onTool: (WorkbenchTool) -> Unit,
     activeSection: WorkbenchTool = WorkbenchTool.TEXT,
+    draftOwnerId: String? = null,
 ) {
     // Inline edit buffers are saveable so a configuration change does not
     // silently discard text that has not yet been committed to the canonical Event.
     var startText by rememberSaveable(event.id, event.start.millis) { mutableStateOf(event.start.toAss()) }
     var endText by rememberSaveable(event.id, event.end.millis) { mutableStateOf(event.end.toAss()) }
-    var rawField by rememberSaveable(event.id, stateSaver = TextFieldValue.Saver) {
-        mutableStateOf(TextFieldValue(event.text, TextRange(event.text.length)))
+    val draftStore = LocalEventTextDraftStore.current
+    val rawDraft = remember(draftStore, draftOwnerId, event.id) {
+        draftStore.obtain(draftOwnerId, event.id, event.text)
     }
-    var rawBaseText by rememberSaveable(event.id) { mutableStateOf(event.text) }
+    var rawField by rawDraft::value
+    var rawBaseText by rawDraft::baseText
     var layerText by rememberSaveable(event.id, event.layer) { mutableStateOf(event.layer.toString()) }
     var actorText by rememberSaveable(event.id, event.name) { mutableStateOf(event.name) }
     var comment by rememberSaveable(event.id, event.comment) { mutableStateOf(event.comment) }
     val playbackPositionMs by viewModel.playbackPositionMs.collectAsState()
 
-    LaunchedEffect(event.text) {
-        when {
-            event.text == rawField.text -> rawBaseText = event.text
-            rawField.text == rawBaseText -> {
-                val cursor = rawField.selection.start.coerceIn(0, event.text.length)
-                rawField = TextFieldValue(event.text, TextRange(cursor))
-                rawBaseText = event.text
-            }
-            else -> Unit // Preserve the unsaved draft; UI below exposes the conflict explicitly.
-        }
+    LaunchedEffect(rawDraft, event.text) {
+        rawDraft.reconcile(event.text)
     }
 
     if (activeSection == WorkbenchTool.TEXT) {

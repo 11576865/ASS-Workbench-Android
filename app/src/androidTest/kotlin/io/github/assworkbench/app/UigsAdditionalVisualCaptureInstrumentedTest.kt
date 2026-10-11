@@ -8,6 +8,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTextReplacement
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.assworkbench.app.ui.WorkbenchTool
@@ -66,13 +67,17 @@ class UigsAdditionalVisualCaptureInstrumentedTest {
     }
 
     private fun openFixedTool(tool: WorkbenchTool) {
-        composeRule.onNodeWithTag("fixed-group-${tool.group.name}")
-            .performScrollTo()
-            .performClick()
+        composeRule.onNodeWithTag("fixed-tool-CAPABILITIES").performClick()
         composeRule.waitForIdle()
-        composeRule.onNodeWithTag("fixed-tool-${tool.name}")
-            .performScrollTo()
-            .performClick()
+        if (tool != WorkbenchTool.CAPABILITIES) {
+            composeRule.onNodeWithTag("tool-search").performTextReplacement(tool.name)
+            composeRule.activityRule.scenario.onActivity { activity ->
+                activity.getSystemService(android.view.inputmethod.InputMethodManager::class.java)
+                    .hideSoftInputFromWindow(activity.window.decorView.windowToken, 0)
+            }
+            composeRule.waitForIdle()
+            composeRule.onNodeWithTag("tool-${tool.name}").performScrollTo().performClick()
+        }
         composeRule.waitForIdle()
         composeRule.onNodeWithTag("fixed-inspector", useUnmergedTree = true).assertIsDisplayed()
     }

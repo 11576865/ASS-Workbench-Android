@@ -2,35 +2,40 @@
   "schema_version": 1,
   "id": "ass-authoring-main-canvas-20261011",
   "goal": "Improve subtitle authoring efficiency, redesign main UI and refine infinite canvas UI.",
-  "status": "proposed_design_awaiting_user_review",
-  "current_work_unit": "Code-grounded written design and durable continuation record.",
+  "status": "work_unit_complete_pending_external_validation",
+  "current_work_unit": "Session-owned Event Text drafts shared by fixed/spatial hosts and stable main authoring task strip.",
   "completed_units": [
     "Read current repository protocol, prior task and source checkpoint 69ad5c076c8695fae15c59b01cd391a647bb8652.",
     "User selected subtitle authoring efficiency as the new-capability priority.",
-    "Read current fixed/spatial/search/selection implementation and prepared written design."
+    "Read current fixed/spatial/search/selection implementation and prepared written design.",
+    "User approved revised unified-core/multiple-UI direction; retained both presentation routes.",
+    "Implemented session-owned raw draft buffers, conflict reconciliation, cursor restoration and independent-owner cleanup.",
+    "Replaced fixed two-row navigation with stable task strip and pinned complete directory/preview controls.",
+    "Updated connected cross-host regression and production visual capture navigation; independent review addressed owner cleanup boundary.",
+    "Local full domain JVM 217/217, catalog/adaptive 9/9 and artifact/whitespace checks passed."
   ],
   "next_units": [
-    "User reviews the proposed design; then write implementation plan.",
-    "Retrieve exact baseline emulator failure details; log tool failed and root cause remains unknown.",
-    "Implement unified subtitle filtering and result operations as the first product work unit.",
-    "Redesign main chrome, refine canvas focused chrome, then scoped batch preview in separate units."
+    "Read exact pushed-head Android CI/Emulator/Fontconfig once; inspect failures before further implementation.",
+    "Implement unified subtitle filtering and result operations in both hosts.",
+    "Continue main layout and canvas focused-toolbar redesign using production screenshot evidence.",
+    "Implement scoped batch preview and canonical transaction guards."
   ],
   "branch": "redesign/infinite-canvas-workbench-v2",
   "pr": 138,
-  "latest_durable_commit": "69ad5c076c8695fae15c59b01cd391a647bb8652",
-  "checkpoint_location": "The commit adding this record and docs/superpowers/specs/2026-10-11-ass-authoring-main-canvas-design.md is the design checkpoint; latest_durable_commit identifies the inspected product baseline.",
+  "latest_durable_commit": "900f505ad8fc532d9203795120558da3f4db8c51",
+  "checkpoint_location": "The commit containing this updated record is the source checkpoint; latest_durable_commit identifies the inspected baseline.",
   "external_validation": {
     "baseline_android_ci": "success:38117186072",
     "baseline_emulator": "failure:38117186042; detailed logs unavailable",
     "baseline_fontconfig": "success:38117186058",
-    "proposed_product_changes": "not_implemented",
+    "proposed_product_changes": "source_implemented; Android compilation/instrumentation pending",
     "real_device_visual_ime": "pending",
-    "uigs_intake": "deduplicated; no new verified reusable knowledge in this design-only unit"
+    "uigs_intake": "Pending: automatic approval review rejected cross-repository Foundry write; deduplicated packet retained at .uigs/intake-pending/2026-10-11-shared-drafts.md"
   },
   "blockers": [
-    "Written design requires review before product implementation under brainstorming skill.",
-    "Baseline emulator root cause unknown; failed log tool must not be treated as diagnosis.",
-    "Draft PR #138 remains unmerged; no new device/visual acceptance established."
+    "No local Android SDK; no native compile, screenshot or connected-test pass claimed.",
+    "Baseline emulator 38117186042 failed; log retrieval Transport closed, assertion/root cause still unknown.",
+    "Draft PR #138 remains unmerged; full 240 UI and device/IME acceptance not complete."
   ],
   "updated_at": "2026-10-11"
 }

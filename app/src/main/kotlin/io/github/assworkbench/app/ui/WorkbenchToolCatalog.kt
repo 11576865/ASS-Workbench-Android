@@ -121,3 +121,9 @@ internal enum class PositionSection(val title: String) {
     CLIP("矩形裁剪"),
     STYLE_LAYOUT("Style 布局"),
 }
+
+/** Frequent authoring tasks; every other capability remains in the complete directory. */
+internal fun mainAuthoringTools(): List<WorkbenchTool> = listOf(
+    WorkbenchTool.SUBTITLES, WorkbenchTool.TEXT, WorkbenchTool.STYLE,
+    WorkbenchTool.TIMELINE, WorkbenchTool.CAPABILITIES,
+)
