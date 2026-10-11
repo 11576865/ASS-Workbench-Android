@@ -15,7 +15,7 @@
   ],
   "branch": "redesign/infinite-canvas-workbench-v2",
   "pr": 138,
-  "latest_durable_commit": "0f420f6920f59a8627def8a60113569a5093fcc4",
+  "latest_durable_commit": "714f3e12f787d412a80f8607f68cf2b11dc79fad",
   "external_validation": {
     "android_ci": "pending",
     "emulator": "pending",
