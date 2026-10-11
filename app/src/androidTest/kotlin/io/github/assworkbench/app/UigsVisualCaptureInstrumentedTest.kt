@@ -94,7 +94,8 @@ class UigsVisualCaptureInstrumentedTest {
             composeRule.onNodeWithTag("tool-${tool.name}").performScrollTo().performClick()
         }
         composeRule.waitForIdle()
-        composeRule.onNodeWithTag("fixed-inspector", useUnmergedTree = true).assertIsDisplayed()
+        composeRule.onNodeWithTag(if (tool == WorkbenchTool.CAPABILITIES) "fixed-tool-directory"
+            else "fixed-inspector", useUnmergedTree = true).assertIsDisplayed()
     }
 
     private fun captureDisplay(fileName: String) {

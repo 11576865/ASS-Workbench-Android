@@ -28,6 +28,7 @@ internal fun WorkbenchTaskBar(
     requestedPreview: PreviewDensity,
     onTool: (WorkbenchTool) -> Unit,
     onPreview: () -> Unit,
+    onDirectory: () -> Unit,
 ) {
     Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh, tonalElevation = 2.dp) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 6.dp),
@@ -35,23 +36,18 @@ internal fun WorkbenchTaskBar(
             verticalAlignment = Alignment.CenterVertically) {
             Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                mainAuthoringTools().filterNot { it == WorkbenchTool.CAPABILITIES }.forEach { tool ->
+                WorkbenchTask.entries.filterNot { it == WorkbenchTask.OTHER }.forEach { task ->
                     FilterChip(
-                        selected = if (tool == WorkbenchTool.SUBTITLES) listRequested
-                            else !listRequested && activeTool == tool,
-                        onClick = { onTool(tool) },
-                        label = { Text(when (tool) {
-                            WorkbenchTool.SUBTITLES -> "字幕"
-                            WorkbenchTool.STYLE -> "排版"
-                            WorkbenchTool.TIMELINE -> "时间"
-                            else -> tool.title
-                        }) },
-                        modifier = Modifier.testTag("fixed-tool-${tool.name}"),
+                        selected = if (task == WorkbenchTask.SUBTITLES) listRequested
+                            else !listRequested && activeTool.task == task,
+                        onClick = { onTool(task.toolFor(activeTool)) },
+                        label = { Text(task.title) },
+                        modifier = Modifier.testTag("fixed-tool-${task.defaultTool.name}"),
                     )
                 }
             }
-            FilterChip(selected = !listRequested && activeTool == WorkbenchTool.CAPABILITIES,
-                onClick = { onTool(WorkbenchTool.CAPABILITIES) }, label = { Text("工具") },
+            FilterChip(selected = !listRequested && activeTool.task == WorkbenchTask.OTHER,
+                onClick = onDirectory, label = { Text("工具") },
                 modifier = Modifier.testTag("fixed-tool-CAPABILITIES"))
             FilterChip(selected = requestedPreview != PreviewDensity.HIDDEN,
                 onClick = onPreview,

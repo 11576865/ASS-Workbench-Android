@@ -55,3 +55,17 @@
 - Final review: independent-owner cleanup and native editable-text assertion corrected; no Android execution inferred.
 - Task 3: source checkpoint ready; external CI and Foundry processing asynchronous.
 - Remaining filters/batch/layout changes continue from durable task state, not from a project-complete claim.
+
+## Recheck continuation: compact content flow and navigation correction
+
+Authorized scope follows the user's “继续” and docs/MAIN-CANVAS-RECHECK-2026-10-11.md.
+
+- [x] Add category/specialized-tool retention and bounded compact-body tests (missing implementation RED, then GREEN).
+- [x] Separate task category from tool identity; preserve active sibling on same-task selection.
+- [x] Replace compact fixed reference compression with extendable flow, adjustable preview, finite pane constraints.
+- [x] Consolidate list/editor navigation in session-root state; independent tool directory preserves editing context on dismiss.
+- [x] Update production connected/visual helpers and add directory/flow/category regression scenarios.
+- [x] Run domain 217/217 and catalog/layout 13/13; independent review fixed identified source issues.
+- [ ] Native CI/IME/visual acceptance; failed baseline emulator root cause requires accessible evidence.
+
+Bounded unit evidence: docs/MAIN-CONTENT-FLOW-2026-10-11.md. Remaining migration parity, filters, batch and canvas chrome continue from task record.

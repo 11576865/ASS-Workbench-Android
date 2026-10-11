@@ -127,3 +127,26 @@ internal fun mainAuthoringTools(): List<WorkbenchTool> = listOf(
     WorkbenchTool.SUBTITLES, WorkbenchTool.TEXT, WorkbenchTool.STYLE,
     WorkbenchTool.TIMELINE, WorkbenchTool.CAPABILITIES,
 )
+
+/** Navigation tasks are broader than persisted tool identities. */
+internal enum class WorkbenchTask(val title: String, val defaultTool: WorkbenchTool) {
+    SUBTITLES("字幕", WorkbenchTool.SUBTITLES),
+    TEXT("正文", WorkbenchTool.TEXT),
+    TYPESETTING("排版", WorkbenchTool.STYLE),
+    TIME("时间", WorkbenchTool.TIMELINE),
+    EFFECTS("效果", WorkbenchTool.EFFECTS),
+    OTHER("工具", WorkbenchTool.CAPABILITIES);
+
+    fun toolFor(current: WorkbenchTool): WorkbenchTool =
+        if (current.task == this) current else defaultTool
+}
+
+internal val WorkbenchTool.task: WorkbenchTask
+    get() = when (group) {
+        WorkbenchToolGroup.NAVIGATION -> WorkbenchTask.SUBTITLES
+        WorkbenchToolGroup.TEXT_EVENT -> WorkbenchTask.TEXT
+        WorkbenchToolGroup.TYPESETTING -> WorkbenchTask.TYPESETTING
+        WorkbenchToolGroup.TIME -> WorkbenchTask.TIME
+        WorkbenchToolGroup.EFFECTS -> WorkbenchTask.EFFECTS
+        else -> WorkbenchTask.OTHER
+    }

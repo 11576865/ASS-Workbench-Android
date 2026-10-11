@@ -623,6 +623,45 @@ class EditorRegressionInstrumentedTest {
         captureLayout("portrait")
     }
 
+    @Test fun compactContentFlowCanScrollPreviewOutWithoutLosingDirtyText() {
+        restoreRecovery()
+        eventRow(1L).performScrollTo().performClick()
+        openTool("TEXT")
+        val before = viewModel.state.value.document
+        composeRule.onNodeWithTag("event-raw-1").performScrollTo().performTextReplacement("flow draft")
+        hideKeyboard()
+        val compact = composeRule.onAllNodesWithTag("fixed-content-flow")
+            .fetchSemanticsNodes(atLeastOneRootRequired = false)
+        if (compact.isNotEmpty()) {
+            composeRule.onNodeWithTag("fixed-preview-size").performScrollTo().assertIsDisplayed()
+            composeRule.onNodeWithTag("fixed-inspector").performScrollTo().assertIsDisplayed()
+            val preview = composeRule.onNodeWithTag("preview-workspace").fetchSemanticsNode().boundsInRoot
+            val flow = composeRule.onNodeWithTag("fixed-content-flow").fetchSemanticsNode().boundsInRoot
+            assertTrue("Preview can leave the editor viewport", preview.bottom <= flow.top + 1f)
+        }
+        assertEquals("flow draft", rawDraftText(1L))
+        assertEquals(before, viewModel.state.value.document)
+    }
+
+    @Test fun independentDirectoryDismissalPreservesDirtyTextAndTaskContext() {
+        restoreRecovery()
+        eventRow(1L).performScrollTo().performClick()
+        openTool("TEXT")
+        val before = viewModel.state.value.document
+        composeRule.onNodeWithTag("event-raw-1").performScrollTo().performTextReplacement("directory draft")
+        hideKeyboard()
+        composeRule.onNodeWithTag("fixed-tool-CAPABILITIES").performClick()
+        composeRule.onNodeWithTag("fixed-tool-directory").assertIsDisplayed()
+        composeRule.onNodeWithTag("fixed-directory-close").performClick()
+        composeRule.onNodeWithTag("event-raw-1").performScrollTo().assertIsDisplayed()
+        assertEquals("directory draft", rawDraftText(1L))
+        assertEquals(before, viewModel.state.value.document)
+        openTool("POSITION")
+        composeRule.onNodeWithTag("fixed-tool-STYLE").assertIsSelected().performClick()
+        composeRule.onNodeWithTag("position-section-PLACEMENT").performScrollTo().assertIsDisplayed()
+        assertEquals(before, viewModel.state.value.document)
+    }
+
     @Test
     fun groupedNavigationAndGeometrySectionsPreserveDocument() {
         restoreRecovery()
@@ -639,12 +678,9 @@ class EditorRegressionInstrumentedTest {
         }
         captureLayout("grouped-geometry")
         openTool("TEXT")
-        val compactList = composeRule.onAllNodesWithTag("fixed-page-list").fetchSemanticsNodes(atLeastOneRootRequired = false)
-        if (compactList.isNotEmpty()) {
-            composeRule.onNodeWithTag("fixed-page-list").performClick()
-            eventRow(1L).assertIsDisplayed().performClick()
-            composeRule.onNodeWithTag("event-raw-1").assertIsDisplayed()
-        }
+        showFixedSubtitleList()
+        eventRow(1L).performScrollTo().performClick()
+        composeRule.onNodeWithTag("event-raw-1").performScrollTo().assertIsDisplayed()
         assertEquals(before, viewModel.state.value.document)
     }
 
@@ -1200,11 +1236,6 @@ class EditorRegressionInstrumentedTest {
         if (fixedWorkspace.isEmpty()) return
 
         composeRule.onNodeWithTag("fixed-tool-SUBTITLES").performScrollTo().performClick()
-        val pages = composeRule.onAllNodesWithTag("fixed-page-list", useUnmergedTree = true)
-            .fetchSemanticsNodes(atLeastOneRootRequired = false)
-        if (pages.isNotEmpty()) {
-            composeRule.onNodeWithTag("fixed-page-list").performClick()
-        }
         composeRule.waitUntil(10_000) {
             composeRule.onAllNodesWithTag("subtitle-navigation", useUnmergedTree = true)
                 .fetchSemanticsNodes(atLeastOneRootRequired = false)
@@ -1246,13 +1277,6 @@ class EditorRegressionInstrumentedTest {
         if (fixedWorkspace) {
             if (name == "SUBTITLES") {
                 showFixedSubtitleList()
-                return
-            }
-            val fixedTool = composeRule.onAllNodesWithTag("fixed-tool-$name", useUnmergedTree = true)
-                .fetchSemanticsNodes(atLeastOneRootRequired = false)
-            if (fixedTool.isNotEmpty()) {
-                composeRule.onNodeWithTag("fixed-tool-$name").performScrollTo().performClick()
-                composeRule.waitForIdle()
                 return
             }
             composeRule.onNodeWithTag("fixed-tool-CAPABILITIES").performClick()

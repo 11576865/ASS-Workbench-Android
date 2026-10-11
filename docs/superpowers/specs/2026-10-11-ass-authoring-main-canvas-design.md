@@ -30,18 +30,18 @@
 
 ## 4. 主 UI 信息架构
 
-全局顶栏只负责项目名称/未保存状态、保存、主界面/画布切换和文件/全局命令。局部任务栏负责“字幕、排版、时间、更多工具”，每个入口有文字。工具目录仍能访问完整专业能力，不删除旧工具。
+全局顶栏只负责项目名称/未保存状态、保存、主界面/画布切换和文件/全局命令。局部任务栏负责“字幕、正文、排版、时间、效果、工具”，每个入口有文字。工具目录仍能访问完整专业能力，不删除旧工具。
 
 主工作区按实际可用宽高重排：
 
 | 场景 | 呈现 |
 | --- | --- |
-| 手机窄窗口 | 视频参考区 + 字幕列表或编辑器；列表/编辑切换固定可达，当前对象上下文紧邻编辑内容 |
+| 手机窄窗口 | 可延伸的内容流，视频参考可调大小并滚出视口；列表/编辑由统一任务栏切换，子列表与编辑器有有限测量边界 |
 | 中宽窗口 | 字幕导航与编辑区并排；视频参考可折叠 |
 | 平板宽窗口 | 字幕导航、真实视频预览、编辑器三栏 |
 | IME 或短窗口 | 减少参考画面占用；保留编辑正文、应用/取消、列表返回入口，不重新生成编辑实例 |
 
-“更多工具”打开有分组与搜索的目录，选择后替换局部编辑任务，不再要求连续横向滚动两行工具芯片。保留现有预览密度入口，但用清楚的状态文字表达“显示/紧凑/隐藏”。未载入字幕时显示真实打开/新建动作；未载入视频不阻断 ASS 编辑。
+“工具”独立打开有分组与搜索的目录；打开、搜索、关闭不替换当前工具，实际选择后切换局部编辑任务，不再要求连续横向滚动两行工具芯片。保留现有预览密度入口，但用清楚的状态文字表达“显示/紧凑/隐藏”。未载入字幕时显示真实打开/新建动作；未载入视频不阻断 ASS 编辑。
 
 当前字幕上下文显示序号、时间、Style、Actor、已选数量；只有在相关工具支持时展示绑定和明确写入目标。只读绑定不得被误写为批量作用域。单条编辑常用操作为应用、上一条/下一条，不能通过导航默默提交草稿。
 
@@ -107,3 +107,7 @@ UIGS Intake：本轮提出设计并核实已有边界；Foundry 已有空间相�
 ## 11. 已批准后的实施顺序修订
 
 先解决跨 Host 正文草稿所有权，再重组主界面任务导航。这一单元保留两种布局、所有目录入口及世界几何；不声明时间、元数据和所有专业工具草稿已完成全局迁移。筛选和批量范围按后续独立单元推进。用户已批准实施，无需重复设计确认。
+
+
+## 2026-10-11 Recheck correction
+TaskCategory and persisted ToolInstance are distinct. Selection follows tool category, not exact default-tool equality. Reselecting the current category keeps its specialized tool, instance and binding. Narrow layout follows constitution 8.2: body extends beyond the screen, preview size is adjustable and can scroll out, nested tool panes retain finite constraints. Only one root-owned list/editor navigation state exists. These source changes do not establish retired-layout capability parity or complete shared ownership of all professional-tool drafts.

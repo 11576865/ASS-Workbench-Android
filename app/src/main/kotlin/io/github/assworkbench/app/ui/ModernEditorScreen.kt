@@ -160,7 +160,6 @@ fun ModernEditorScreen(
     val context = LocalContext.current
     var workspaceModeName by rememberSaveable { mutableStateOf(initialWorkspaceModeName) }
     var fixedToolName by rememberSaveable { mutableStateOf(WorkbenchTool.STYLE.name) }
-    var fixedNavigationRevision by rememberSaveable { mutableIntStateOf(0) }
     var spatialFocusRevision by rememberSaveable { mutableIntStateOf(0) }
     var fixedListRequested by rememberSaveable { mutableStateOf(false) }
     var spatialPrecisionEnabled by rememberSaveable { mutableStateOf(false) }
@@ -264,7 +263,6 @@ fun ModernEditorScreen(
         workspaceState = workspaceState.openPrimary(next.name, next.descriptor.defaultBinding)
         if (workspaceMode == WorkspacePresentationMode.FIXED) {
             fixedListRequested = next == WorkbenchTool.SUBTITLES
-            fixedNavigationRevision += 1
             if (!fixedListRequested) fixedToolName = next.name
         } else {
             // A main-toolbar command is a real navigation request. Creating
@@ -281,7 +279,6 @@ fun ModernEditorScreen(
         workspaceState = workspaceState.openPinnedEvent(toolKey, eventId)
 
         fixedListRequested = false
-        fixedNavigationRevision += 1
         fixedToolName = toolKey
         if (workspaceMode == WorkspacePresentationMode.SPATIAL_EXPERIMENTAL) {
             spatialFocusRevision += 1
@@ -518,9 +515,10 @@ fun ModernEditorScreen(
                             toolKey = fixedTool.name,
                             binding = fixedTool.descriptor.defaultBinding,
                         ),
-                    navigationRevision = fixedNavigationRevision,
                     listRequested = fixedListRequested,
+                    onListRequested = { fixedListRequested = it },
                     onActiveTool = { tool ->
+                        fixedListRequested = false
                         fixedToolName = tool.name
                         workspaceState = workspaceState
                             .openPrimary(tool.name, tool.descriptor.defaultBinding)
@@ -961,8 +959,8 @@ private fun FixedWorkspace(
     issues: List<AssQcIssue>,
     activeTool: WorkbenchTool,
     instance: WorkspaceToolInstance,
-    navigationRevision: Int,
     listRequested: Boolean,
+    onListRequested: (Boolean) -> Unit,
     onActiveTool: (WorkbenchTool) -> Unit,
     expandedEventId: Long?,
     onExpandedChange: (Long?) -> Unit,
@@ -978,33 +976,18 @@ private fun FixedWorkspace(
     onCloseSearch: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    var compactPage by rememberSaveable { mutableStateOf("LIST") }
-    var navigationGroupRequested by rememberSaveable { mutableStateOf(false) }
-    var lastActiveTool by remember { mutableStateOf(activeTool) }
-    LaunchedEffect(activeTool) {
-        if (activeTool != lastActiveTool) {
-            compactPage = "EDITOR"
-            navigationGroupRequested = false
-        }
-        lastActiveTool = activeTool
-    }
-    var consumedNavigationRevision by rememberSaveable { mutableIntStateOf(0) }
-    LaunchedEffect(navigationRevision) {
-        if (navigationRevision != consumedNavigationRevision) {
-            compactPage = if (listRequested) "LIST" else "EDITOR"
-            navigationGroupRequested = listRequested
-            consumedNavigationRevision = navigationRevision
-        }
-    }
+    // Navigation is session-root state; reopening this host preserves the chosen task.
+    var directoryOpen by rememberSaveable { mutableStateOf(false) }
+    var previewScale by rememberSaveable { mutableFloatStateOf(1f) }
 
     var previewDensityName by rememberSaveable { mutableStateOf(PreviewDensity.FULL.name) }
     val requestedPreview = runCatching { PreviewDensity.valueOf(previewDensityName) }
         .getOrDefault(PreviewDensity.FULL)
 
     fun selectTool(tool: WorkbenchTool) {
-        navigationGroupRequested = false
-        compactPage = "EDITOR"
-        onActiveTool(tool)
+        onListRequested(false)
+        // Reselecting a task must not activate a different primary/sibling instance.
+        if (tool != activeTool) onActiveTool(tool)
     }
 
     val listPane: @Composable (Modifier) -> Unit = { paneModifier ->
@@ -1052,8 +1035,7 @@ private fun FixedWorkspace(
                 onOpenTool = ::selectTool,
                 onCloseText = {
                     onExpandedChange(null)
-                    compactPage = "LIST"
-                    navigationGroupRequested = true
+                    onListRequested(true)
                 },
                 searchOpen = searchOpen,
                 onCloseSearch = onCloseSearch,
@@ -1076,15 +1058,15 @@ private fun FixedWorkspace(
     Column(modifier) {
         WorkbenchTaskBar(
             activeTool = activeTool,
-            listRequested = navigationGroupRequested,
+            listRequested = listRequested,
             requestedPreview = requestedPreview,
             onTool = { tool ->
                 if (tool == WorkbenchTool.SUBTITLES) {
-                    navigationGroupRequested = true
-                    compactPage = "LIST"
+                    onListRequested(true)
                 } else selectTool(tool)
             },
             onPreview = { previewDensityName = requestedPreview.next().name },
+            onDirectory = { directoryOpen = true },
         )
 
         BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
@@ -1157,37 +1139,49 @@ private fun FixedWorkspace(
                     movableInspector(Modifier.weight(inspectorFraction).fillMaxHeight())
                 }
 
-                WorkbenchLayoutProfile.COMPACT -> Column(Modifier.fillMaxSize()) {
-                    Row(
-                        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        FilterChip(
-                            compactPage == "LIST",
-                            { compactPage = "LIST"; navigationGroupRequested = true },
-                            { Text("字幕列表") },
-                            modifier = Modifier.testTag("fixed-page-list"),
-                        )
-                        FilterChip(
-                            compactPage == "EDITOR",
-                            { compactPage = "EDITOR"; navigationGroupRequested = false },
-                            { Text(activeTool.title) },
-                            modifier = Modifier.testTag("fixed-page-editor"),
-                        )
-                    }
-                    if (previewVisible) {
-                        preview(Modifier.fillMaxWidth().height(policy.previewHeightDp.dp))
-                        HorizontalDivider()
-                    }
-                    if (compactPage == "LIST") {
-                        listPane(Modifier.weight(1f).fillMaxWidth())
-                    } else {
-                        movableInspector(Modifier.weight(1f).fillMaxWidth())
+                WorkbenchLayoutProfile.COMPACT -> {
+                    val body = CompactWorkspaceBody.resolve(maxHeight.value, policy.previewHeightDp,
+                        imeVisible, previewScale)
+                    // Preview can leave the viewport instead of permanently compressing the editor.
+                    // Each nested scrolling tool receives finite constraints.
+                    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())
+                        .testTag("fixed-content-flow")) {
+                        if (previewVisible) {
+                            preview(Modifier.fillMaxWidth().height(body.previewHeightDp.dp))
+                            Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically) {
+                                Text("预览大小", style = MaterialTheme.typography.labelSmall)
+                                Slider(value = previewScale, onValueChange = { previewScale = it },
+                                    valueRange = 0.75f..1.5f,
+                                    modifier = Modifier.weight(1f).testTag("fixed-preview-size"))
+                            }
+                            HorizontalDivider()
+                        }
+                        val paneModifier = Modifier.fillMaxWidth().height(body.editorHeightDp.dp)
+                        if (listRequested) listPane(paneModifier) else movableInspector(paneModifier)
                     }
                 }
             }
         }
     }
+    if (directoryOpen) {
+        AlertDialog(
+            onDismissRequest = { directoryOpen = false },
+            title = { Text("工具目录") },
+            text = {
+                WorkspaceToolDirectory(onOpenTool = { tool ->
+                    directoryOpen = false
+                    selectTool(tool)
+                }, modifier = Modifier.fillMaxWidth().height(420.dp).testTag("fixed-tool-directory"))
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { directoryOpen = false },
+                    modifier = Modifier.testTag("fixed-directory-close")) { Text("关闭") }
+            },
+        )
+    }
+
 }
 
 @Composable

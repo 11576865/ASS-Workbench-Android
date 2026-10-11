@@ -102,3 +102,19 @@ internal object AdaptiveWorkspacePolicy {
         }
     }
 }
+
+/** A bounded child editor inside a scrollable compact body; never measure a LazyColumn at infinity. */
+internal data class CompactWorkspaceBody(val previewHeightDp: Float, val editorHeightDp: Float) {
+    companion object {
+        fun resolve(viewportHeightDp: Float, basePreviewHeightDp: Float, imeVisible: Boolean,
+                    previewScale: Float = 1f): CompactWorkspaceBody {
+            val viewport = viewportHeightDp.coerceAtLeast(0f)
+            val preview = if (basePreviewHeightDp <= 0f) 0f else {
+                val requested = basePreviewHeightDp * previewScale.coerceIn(0.75f, 1.5f)
+                if (imeVisible) requested.coerceAtMost(112f) else requested
+            }
+            val minimumEditor = if (imeVisible) 240f else 360f
+            return CompactWorkspaceBody(preview, viewport.coerceAtLeast(minimumEditor))
+        }
+    }
+}
