@@ -59,3 +59,9 @@ Evidence: production `InfiniteCanvasHost`, `TimelineDockPolicy`7/7 (3 existing +
 ## Nested layout receiver compile evidence / Pending
 
 99cd725a nativeCI all three workflows failed at the same Compose app compile, before touch assertions. `maxHeight` remained lexically visible inside nested RowScope but Kotlin DSL scope marking prevented its implicit receiver access. Capture primitive viewport height at the original BoxWithConstraints boundary before handing it into nested gesture callbacks. Pure policy tests and static review did not establish compilation of this integration. This is an added source/CI evidence case in existing evidence-identity intake; repair Android result Pending, no Canonical promotion or rejected destination write retry.
+
+## Per-attempt instrumentation evidence / Pending
+
+Dedup searched local Foundry candidates for stale/instrumentation/XML/evidence identity; related evidence-identity families exist, append this source case rather than promote Canonical. Source2afe2e9c emulator failed but log transport closed twice; no assertion content was retrieved. XML size is an observed diagnostic output issue, not proven transport root cause.
+
+Review reproduced stale result attribution: if a new attempt fails before writing XML, a shared result directory can report the prior attempt's testcase under the new attempt. Archive raw results first, clear the live directory before the next attempt, fail closed on isolation failure, and isolate repeated runner invocations. Bounded summaries retain every failure identity and link truncated traces to raw files; missing XML is not passing evidence. Tools9/9, native diagnostic result Pending. Source docs/EMULATOR-DIAGNOSTICS-2026-10-12.md. External destination write remains Pending after prior automatic cross-repository rejection; no retry or Canonical promotion.

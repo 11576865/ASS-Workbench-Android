@@ -2,8 +2,8 @@
   "schema_version": 1,
   "id": "ass-authoring-main-canvas-20261011",
   "goal": "Improve subtitle authoring efficiency, redesign main UI and refine infinite canvas UI.",
-  "status": "timeline_dsl_receiver_compile_repair_pending",
-  "current_work_unit": "Repair nested Compose DSL receiver access in continuous timeline handle",
+  "status": "emulator_failure_diagnostics_pending_native",
+  "current_work_unit": "Bound instrumentation failure summaries and preserve isolated per-attempt raw evidence",
   "completed_units": [
     "Read current repository protocol, prior task and source checkpoint 69ad5c076c8695fae15c59b01cd391a647bb8652.",
     "User selected subtitle authoring efficiency as the new-capability priority.",
@@ -38,27 +38,30 @@
     "Parent6eec59ac Android CI38163363710 success; nullable pagination delegate compile blocker resolved in actual Android build.",
     "Restored continuous timeline dock handle, nearby-only snap, cancel and safe viewport projection without writing preferred height during temporary constraints.",
     "Independent source review found no Critical/Important; policy7/7 including3 existing tests, native two-test additions pending.",
-    "Read all99cd725a failure logs; app compile blocked by implicit maxHeight inside RowScope, fixed with outer local Float capture; policy7/7 rerun."
+    "Read all99cd725a failure logs; app compile blocked by implicit maxHeight inside RowScope, fixed with outer local Float capture; policy7/7 rerun.",
+    "Exact2afe2e9c Android CI38165660471 and Fontconfig38165660491 passed; Emulator38165660505 failed, two log retrievals returned Transport closed without assertion details.",
+    "Added bounded failure/error XML summary, immutable raw per-attempt archives and one-day manual-only artifact; review caught stale XML attribution and repeat-run archive collision, both corrected.",
+    "Diagnostic tools9/9 RED-to-GREEN; runner deadlines, full-suite gate, Gradle failure propagation, screenshot chunk output and product assertions retained."
   ],
   "next_units": [
-    "Read exact-head Android compile/emulator results and resolve blockers before further UI work.",
+    "Read exact diagnostic-head native results; identify emulator failure from bounded summaries before further product fixes.",
     "Inspect production native UI screenshots/IME/font scaling; continue main/canvas layout improvements based on evidence.",
     "Restore remaining historical interaction capabilities and stable process/session recovery."
   ],
   "branch": "redesign/infinite-canvas-workbench-v2",
   "pr": 138,
-  "latest_durable_commit": "99cd725a688885d8077b211fc38ac292a7f6fbf7",
+  "latest_durable_commit": "2afe2e9cbfb30217a69ab16593ade7fe3e014301",
   "checkpoint_location": "The commit containing this updated record is the source checkpoint; latest_durable_commit identifies the inspected baseline.",
   "external_validation": {
     "baseline_android_ci": "success:38117186072",
     "baseline_emulator": "failure:38117186042; detailed logs unavailable",
     "baseline_fontconfig": "success:38117186058",
-    "proposed_product_changes": "timeline policy7/7; domain244/244 prior unchanged; Android new head pending",
+    "proposed_product_changes": "timeline policy7/7; domain244/244 prior unchanged; diagnostic tools9/9; diagnostic head native pending",
     "real_device_visual_ime": "pending",
     "uigs_intake": "Pending; source audit Candidate retained in .uigs/intake-pending/2026-10-11-task-category-host-audit.md",
-    "android_ci": "99cd725a failure:38164245586 app:compileDebugKotlin implicit maxHeight; repair pending",
-    "emulator": "99cd725a failure:38164245566 compileDebugKotlin, no connected assertions executed",
-    "fontconfig": "99cd725a failure:38164245565 APK app compile; native build/release-gate tests success"
+    "android_ci": "2afe2e9c success:38165660471; Compose DSL compile blocker resolved",
+    "emulator": "2afe2e9c failure:38165660505; job114547572877; assertion details unavailable, log transport closed twice",
+    "fontconfig": "2afe2e9c success:38165660491"
   },
   "blockers": [
     "No local Android SDK; native compile, connected tests, visual/IME acceptance Pending.",

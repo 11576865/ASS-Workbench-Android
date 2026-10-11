@@ -25,3 +25,7 @@
 读取真实日志：Android CI38164245586/job114543365738、Emulator38164245566/job114543389897、Fontconfig38164245565/job114543431269均失败于app:compileDebugKotlin。报错为InfiniteCanvasHost1037/1050/1054/1055：`val maxHeight: Dp cannot be called in this context with an implicit receiver`。Emulator没有执行新增触控回归，不把它描述为触控断言失败。Fontconfig原生库和release-gate unit tests已通过，APK被同一app源码编译错误阻断。
 
 根因：抓手位于嵌套RowScope/PointerInputScope，Kotlin DSL作用域标记限制隐式读取外层BoxWithConstraints.maxHeight。改在外层先捕获`dockViewportHeightDp`，传给pointerInput keys和全部canvas*回调；窗口高度变化仍改变key并取消候选。原有策略、手势与断言保持。7policy重新编译执行通过，独立源码复核与新提交Android结果分别登记，不用纯Kotlin策略测试代替Compose编译证明。此前静态审查漏掉该错误，不能由“无Critical/Important”推定可构建。
+
+## 2afe2e9c 原生结果
+
+Android CI38165660471与Fontconfig38165660491通过，Compose DSL编译阻断已在实际Android构建解除。Emulator38165660505/job114547572877失败；完整日志两次读取均返回Transport closed，没有收到断言内容，不能据此认定为触控、超时或某个新增测试失败。工作流没有可下载artifact。诊断输出改进见docs/EMULATOR-DIAGNOSTICS-2026-10-12.md；时间轴设备验收与合并仍未完成。

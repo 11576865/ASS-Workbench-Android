@@ -5,6 +5,7 @@ import subprocess
 import signal
 import tempfile
 import unittest
+import xml.etree.ElementTree as ET
 
 CLASSES = [
     "io.github.assworkbench.app.WorkspaceParameterProjectionInstrumentedTest",
@@ -16,7 +17,7 @@ SCRIPT = Path(__file__).with_name("run_emulator_regression.sh").resolve()
 
 
 class EmulatorRegressionRunnerTest(unittest.TestCase):
-    def run_gate(self, failure, hang=False):
+    def run_gate(self, failure, hang=False, omit_results=False):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / "gradle").write_text('''#!/usr/bin/env python3
@@ -25,6 +26,15 @@ from pathlib import Path
 arg = next((x for x in sys.argv if x.startswith("-Pandroid.testInstrumentationRunnerArguments.class=")), "suite")
 with Path(os.environ["TEST_RUN_LOG"]).open("a") as log:
     log.write(arg + "\\n")
+import xml.etree.ElementTree as ET
+results = Path("app/build/outputs/androidTest-results/connected")
+results.mkdir(parents=True, exist_ok=True)
+suite = ET.Element("testsuite", tests="1")
+case = ET.SubElement(suite, "testcase", classname="Fixture", name=arg)
+if os.environ.get("TEST_FAILURE") == arg:
+    ET.SubElement(case, "failure", message="fixture failure").text = "Fixture stack trace"
+if os.environ.get("TEST_OMIT_RESULTS") != arg:
+    ET.ElementTree(suite).write(results / "TEST-fixture.xml", encoding="unicode")
 if os.environ.get("TEST_HANG") == arg:
     import time
     time.sleep(30)
@@ -37,6 +47,7 @@ sys.exit(7 if os.environ.get("TEST_FAILURE") == arg else 0)
             env = dict(os.environ, PATH=str(root) + os.pathsep + os.environ["PATH"],
                        TEST_RUN_LOG=str(log), TEST_FAILURE="" if hang else failure,
                        TEST_HANG=failure if hang else "",
+                       TEST_OMIT_RESULTS=failure if omit_results else "",
                        ASSWB_INITIAL_TEST_TIMEOUT="2s", ASSWB_FOCUSED_TEST_TIMEOUT="2s",
                        ASSWB_SUITE_TEST_TIMEOUT="2s")
             process = subprocess.Popen(["bash", str(SCRIPT)], cwd=root, env=env,
@@ -48,7 +59,11 @@ sys.exit(7 if os.environ.get("TEST_FAILURE") == arg else 0)
                 os.killpg(process.pid, signal.SIGKILL)
                 process.communicate()
                 status = None
-            return status, log.read_text().splitlines()
+            calls = log.read_text().splitlines()
+            archived = sorted((root / "diagnostics/instrumentation").glob("run-*/attempt-*/TEST-fixture.xml"))
+            expected_results = [call for call in calls if not (omit_results and call == failure)]
+            self.assertEqual(expected_results, [ET.parse(path).getroot().find("testcase").get("name") for path in archived])
+            return status, calls
 
     def test_each_projection_class_has_an_independent_run_before_full_suite(self):
         status, calls = self.run_gate("")
@@ -62,6 +77,12 @@ sys.exit(7 if os.environ.get("TEST_FAILURE") == arg else 0)
                 status, calls = self.run_gate(failure)
                 self.assertEqual(expected, calls)
                 self.assertEqual(7, status)
+
+    def test_failed_attempt_without_xml_does_not_relabel_previous_results(self):
+        failure = "-Pandroid.testInstrumentationRunnerArguments.class=" + CLASSES[1]
+        status, calls = self.run_gate(failure, omit_results=True)
+        self.assertEqual(7, status)
+        self.assertEqual(5, len(calls))
 
     def test_hung_attempt_is_bounded_and_all_remaining_attempts_run(self):
         expected = ["-Pandroid.testInstrumentationRunnerArguments.class=" + c for c in CLASSES] + ["suite"]

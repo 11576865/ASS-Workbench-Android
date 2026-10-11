@@ -111,5 +111,14 @@ jobs:
           RESULT_DIR="app/build/outputs/androidTest-results/connected"
           if [ -d "$RESULT_DIR" ]; then
             find "$RESULT_DIR" -maxdepth 3 -type f -print
-            grep -R "tests=" "$RESULT_DIR" || true
+            python3 tools/summarize_instrumentation.py "$RESULT_DIR"
           fi
+
+      - name: Upload one-day manual emulator diagnostics
+        if: always() && github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: asswb-emulator-diagnostics
+          path: diagnostics/instrumentation
+          if-no-files-found: warn
+          retention-days: 1
