@@ -31,3 +31,11 @@ Narrow navigation checks must include optional resident/bookmark rails and actua
 Dedup search in Foundry inbox for batch / preview baseline found related evidence-identity and operation ownership observations, no identical batch case. Source observation: adding a result scope can accidentally replace a preexisting full-document default. Explicit scope identity, resolved target IDs and a baseline/session checked review receipt prevent unintended scope enlargement or stale commits; document default preservation has deterministic coverage. Full change review must show raw ASS changes because visible text can be unchanged by tag edits.
 
 Evidence: docs/BATCH-REVIEW-2026-10-12.md, AssBatchReviewTest, source diff from0e8d849a; domain235/235. Android connected/visual evidence Pending. Candidate/source case only, no native usability conclusion or Canonical promotion. External intake remains Pending under the prior cross-repository automatic-review rejection; no rejected write retry.
+
+## Same-session batch draft ownership / Pending
+
+Source-only case: observable inputs/preview ownership must use tool instance identity across presentations; separate rememberSaveable providers preserve independent Host values rather than one shared draft. New batch store preserves owner values and reviewed result, primitive snapshot deliberately omits review authority.
+
+Restore caveat: an in-memory session epoch starting at1 is not stable process/project identity. Rejecting mismatched snapshots protects boundaries but cannot substantiate killed-process restoration. Activity recreation retaining a VM is not a killed-process test. This is a scoped source observation, not Canonical.
+
+Dedup: existing Foundry spatial owner/session and evidence identity families searched; append source case here. Evidence domain243/243; Android/process/visual Pending. Destination write remains Pending under prior automatic cross-repository rejection; no retry.

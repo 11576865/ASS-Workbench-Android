@@ -1142,6 +1142,51 @@ class EditorRegressionInstrumentedTest {
         }
     }
 
+    @Test fun batchDraftAndReviewedPreviewFollowSameInstanceAcrossMainAndCanvas() {
+        restoreRecovery()
+        val before = viewModel.state.value.document
+        composeRule.runOnIdle { viewModel.setQuery("Second") }
+        openTool("BATCH")
+        composeRule.onNodeWithTag("batch-scope-RESULTS").performClick()
+        composeRule.onNodeWithTag("batch-actor-action").performScrollTo().performTextReplacement("SHARED_BATCH")
+        hideKeyboard()
+        composeRule.onNodeWithTag("batch-preview-explicit").performScrollTo().performClick()
+        composeRule.onNodeWithTag("batch-review-commit").performScrollTo().assertIsEnabled()
+        switchToUnifiedCanvas()
+        openTool("BATCH")
+        composeRule.onNodeWithTag("batch-scope-RESULTS").performScrollTo().assertIsSelected()
+        composeRule.onNodeWithTag("batch-scope-count").assertTextContains("作用范围 1 条")
+        composeRule.onNodeWithTag("batch-actor-action").performScrollTo().assertTextContains("SHARED_BATCH")
+        composeRule.onNodeWithTag("batch-review-commit").performScrollTo().assertIsEnabled()
+        composeRule.runOnIdle { assertEquals(before, viewModel.state.value.document) }
+        composeRule.onNodeWithTag("batch-review-commit").performClick()
+        composeRule.runOnIdle {
+            assertEquals("SHARED_BATCH", viewModel.state.value.document.events.first { it.id == 2L }.name)
+            viewModel.undo()
+            assertEquals(before, viewModel.state.value.document)
+        }
+    }
+
+    @Test fun batchSearchLiteralInputsRestoreButReviewedCommitRequiresFreshPrecheckAfterRecreation() {
+        restoreRecovery()
+        openTool("BATCH")
+        composeRule.onNodeWithTag("batch-scope-DOCUMENT").performClick()
+        composeRule.onNodeWithTag("search-pattern").performScrollTo().performTextReplacement("Second")
+        composeRule.onNodeWithTag("search-replacement").performScrollTo().performTextReplacement("RESTORED_SEARCH")
+        hideKeyboard()
+        composeRule.onNodeWithTag("search-review-preview").performScrollTo().performClick()
+        composeRule.onNodeWithTag("search-review-commit").performScrollTo().assertIsEnabled()
+        val before = viewModel.state.value.document
+        composeRule.activityRule.scenario.recreate()
+        composeRule.waitForIdle()
+        viewModel = composeRule.activity.editorViewModel
+        openTool("BATCH")
+        composeRule.onNodeWithTag("search-pattern").performScrollTo().assertTextContains("Second")
+        composeRule.onNodeWithTag("search-replacement").performScrollTo().assertTextContains("RESTORED_SEARCH")
+        composeRule.onNodeWithTag("search-review-commit").performScrollTo().assertIsNotEnabled()
+        composeRule.runOnIdle { assertEquals(before, viewModel.state.value.document) }
+    }
+
     @Test fun reviewedBatchCommitsOneUndoAndRejectsStaleBaselineAndSession() {
         restoreRecovery()
         composeRule.runOnIdle {

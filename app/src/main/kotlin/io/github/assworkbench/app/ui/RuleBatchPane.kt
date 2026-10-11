@@ -6,7 +6,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
@@ -20,49 +19,49 @@ import io.github.assworkbench.domain.*
 internal fun RuleBatchPane(
     state: EditorState,
     viewModel: EditorViewModel,
+    instanceId: String,
     modifier: Modifier = Modifier,
 ) {
     val uiState = state.toEditorUiState()
-    var scopeName by rememberSaveable(state.workspaceSessionId) {
-        mutableStateOf(AssBatchScope.default(uiState.batch.defaultScope == EditorUiBatchDefaultScope.SELECTION).name)
-    }
+    val draftEntry = LocalBatchAuthoringDraftStore.current.obtain(instanceId)
+    var scopeName by draftEntry.text("rule.scope", AssBatchScope.default(uiState.batch.defaultScope == EditorUiBatchDefaultScope.SELECTION).name)
     val scope = AssBatchScope.entries.firstOrNull { it.name == scopeName } ?: AssBatchScope.RESULTS
     val scopeIds = remember(state.document.events, state.selectedEventIds, state.subtitleFilter, scope) {
         scope.eventIds(state.document.events, state.selectedEventIds, state.subtitleFilter).toSet()
     }
-    var styleFilter by rememberSaveable { mutableStateOf("") }
-    var textFilter by rememberSaveable { mutableStateOf("") }
-    var actorFilter by rememberSaveable { mutableStateOf("") }
-    var layerFilter by rememberSaveable { mutableStateOf("") }
-    var tagFilter by rememberSaveable { mutableStateOf("") }
-    var commentFilter by rememberSaveable { mutableStateOf("ALL") }
-    var rawRegexFilter by rememberSaveable { mutableStateOf("") }
-    var durationMin by rememberSaveable { mutableStateOf("") }
-    var durationMax by rememberSaveable { mutableStateOf("") }
+    var styleFilter by draftEntry.text("rule.styleFilter", "")
+    var textFilter by draftEntry.text("rule.textFilter", "")
+    var actorFilter by draftEntry.text("rule.actorFilter", "")
+    var layerFilter by draftEntry.text("rule.layerFilter", "")
+    var tagFilter by draftEntry.text("rule.tagFilter", "")
+    var commentFilter by draftEntry.text("rule.commentFilter", "ALL")
+    var rawRegexFilter by draftEntry.text("rule.rawRegexFilter", "")
+    var durationMin by draftEntry.text("rule.durationMin", "")
+    var durationMax by draftEntry.text("rule.durationMax", "")
 
-    var shiftText by rememberSaveable { mutableStateOf("") }
-    var styleText by rememberSaveable { mutableStateOf("") }
-    var layerText by rememberSaveable { mutableStateOf("") }
-    var actorText by rememberSaveable { mutableStateOf("") }
-    var marginL by rememberSaveable { mutableStateOf("") }
-    var marginR by rememberSaveable { mutableStateOf("") }
-    var marginV by rememberSaveable { mutableStateOf("") }
-    var findText by rememberSaveable { mutableStateOf("") }
-    var replaceText by rememberSaveable { mutableStateOf("") }
-    var commentAction by rememberSaveable { mutableStateOf("KEEP") }
-    var regexFind by rememberSaveable { mutableStateOf("") }
-    var regexReplace by rememberSaveable { mutableStateOf("") }
-    var regexRaw by rememberSaveable { mutableStateOf(false) }
-    var timingOrigin by rememberSaveable { mutableStateOf("0") }
-    var timingNumerator by rememberSaveable { mutableStateOf("") }
-    var timingDenominator by rememberSaveable { mutableStateOf("") }
-    var overridePropertyName by rememberSaveable { mutableStateOf(AssTransformVisualProperty.BORDER.name) }
-    var overrideValue by rememberSaveable { mutableStateOf("") }
+    var shiftText by draftEntry.text("rule.shiftText", "")
+    var styleText by draftEntry.text("rule.styleText", "")
+    var layerText by draftEntry.text("rule.layerText", "")
+    var actorText by draftEntry.text("rule.actorText", "")
+    var marginL by draftEntry.text("rule.marginL", "")
+    var marginR by draftEntry.text("rule.marginR", "")
+    var marginV by draftEntry.text("rule.marginV", "")
+    var findText by draftEntry.text("rule.findText", "")
+    var replaceText by draftEntry.text("rule.replaceText", "")
+    var commentAction by draftEntry.text("rule.commentAction", "KEEP")
+    var regexFind by draftEntry.text("rule.regexFind", "")
+    var regexReplace by draftEntry.text("rule.regexReplace", "")
+    var regexRaw by draftEntry.flag("rule.regexRaw", false)
+    var timingOrigin by draftEntry.text("rule.timingOrigin", "0")
+    var timingNumerator by draftEntry.text("rule.timingNumerator", "")
+    var timingDenominator by draftEntry.text("rule.timingDenominator", "")
+    var overridePropertyName by draftEntry.text("rule.overridePropertyName", AssTransformVisualProperty.BORDER.name)
+    var overrideValue by draftEntry.text("rule.overrideValue", "")
 
-    var karaokeRevealEnabled by rememberSaveable { mutableStateOf(false) }
-    var karaokeRevealMs by rememberSaveable { mutableStateOf("160") }
-    var karaokeRevealBlur by rememberSaveable { mutableStateOf("3.5") }
-    var karaokeRevealAccel by rememberSaveable { mutableStateOf("") }
+    var karaokeRevealEnabled by draftEntry.flag("rule.karaokeRevealEnabled", false)
+    var karaokeRevealMs by draftEntry.text("rule.karaokeRevealMs", "160")
+    var karaokeRevealBlur by draftEntry.text("rule.karaokeRevealBlur", "3.5")
+    var karaokeRevealAccel by draftEntry.text("rule.karaokeRevealAccel", "")
 
     val parsedKaraokeRevealMs = karaokeRevealMs.toLongOrNull()
     val parsedKaraokeRevealBlur = karaokeRevealBlur.toDoubleOrNull()
@@ -271,12 +270,9 @@ internal fun RuleBatchPane(
     }
     val recipe = recipeResult?.getOrNull()
     val recipeError = recipeResult?.exceptionOrNull()?.message
-    var explicitReview by remember(state.workspaceSessionId, state.document, recipe) {
-        mutableStateOf<AssBatchReview?>(null)
-    }
-    var explicitPreviewError by remember(state.workspaceSessionId, state.document, recipe) {
-        mutableStateOf<String?>(null)
-    }
+    val draftPreview = draftEntry.preview("rule", state.document, scopeIds)
+    val explicitReview = draftPreview?.review
+    val explicitPreviewError = draftPreview?.error
     val preview = explicitReview?.preview
     val previewError = batchInputError ?: recipeError ?: explicitPreviewError
     val previewPending = previewError == null && recipe != null && preview == null
@@ -455,8 +451,7 @@ internal fun RuleBatchPane(
             onClick = {
                 val currentRecipe = recipe ?: return@OutlinedButton
                 val result = runCatching { AssBatchReview.create(state.document, currentRecipe, state.workspaceSessionId) }
-                explicitReview = result.getOrNull()
-                explicitPreviewError = result.exceptionOrNull()?.message
+                draftEntry.record("rule", state.document, scopeIds, result)
             },
             enabled = batchInputError == null && recipeError == null && recipe != null,
             modifier = Modifier.fillMaxWidth().testTag("batch-preview-explicit"),
@@ -482,7 +477,7 @@ internal fun RuleBatchPane(
             }
             preview != null -> {
                 explicitReview?.let { review ->
-                    BatchReviewResults(review, "batch-preview") { viewModel.focusEvent(it, seek = false) }
+                    BatchReviewResults(review, "batch-preview", draftEntry.page("rule")) { viewModel.focusEvent(it, seek = false) }
                 }
             }
         }
@@ -492,6 +487,6 @@ internal fun RuleBatchPane(
             modifier = Modifier.fillMaxWidth().testTag("batch-review-commit"),
         ) { Text("应用已预览的 ${preview?.changedEventIds?.size ?: 0} 条 · 一个事务") }
 
-        SemanticSearchReplacePane(state, viewModel, scopeIds)
+        SemanticSearchReplacePane(state, viewModel, scopeIds, draftEntry)
     }
 }

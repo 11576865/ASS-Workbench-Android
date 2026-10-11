@@ -175,6 +175,10 @@ fun ModernEditorScreen(
     }
     val fixedTool = WorkbenchTool.valueOf(fixedToolName)
     val eventTextDraftStore = rememberEventTextDraftStore(state.workspaceSessionId)
+    val batchAuthoringDraftStore = rememberBatchAuthoringDraftStore(state.workspaceSessionId)
+    LaunchedEffect(batchAuthoringDraftStore, state.document, state.selectedEventIds, state.subtitleFilter) {
+        batchAuthoringDraftStore.reconcile(state.document, state.selectedEventIds, state.subtitleFilter)
+    }
     LaunchedEffect(eventTextDraftStore, state.document.events.map { it.id }) {
         eventTextDraftStore.retainEvents(state.document.events.mapTo(linkedSetOf()) { it.id })
     }
@@ -303,7 +307,7 @@ fun ModernEditorScreen(
     }
 
     MaterialTheme(colorScheme = workbenchColors(appearance)) {
-    CompositionLocalProvider(LocalEventTextDraftStore provides eventTextDraftStore) {
+    CompositionLocalProvider(LocalEventTextDraftStore provides eventTextDraftStore, LocalBatchAuthoringDraftStore provides batchAuthoringDraftStore) {
     Surface(
         modifier = Modifier.fillMaxSize(),
         color = MaterialTheme.colorScheme.background,
@@ -546,6 +550,7 @@ fun ModernEditorScreen(
                         val remaining = next.tools.mapTo(hashSetOf()) { it.id }
                         workspaceState.tools.filterNot { it.id in remaining }.forEach {
                             eventTextDraftStore.removeInstance(it.id)
+                            batchAuthoringDraftStore.removeInstance(it.id)
                         }
                         workspaceState = next
                     },
@@ -1409,7 +1414,7 @@ private fun FloatingToolContent(
         WorkbenchTool.FONTS -> FontManagerPane(state, viewModel, onImportFont, Modifier.fillMaxSize())
         WorkbenchTool.QC -> AdvancedQcPane(state, viewModel, Modifier.fillMaxSize())
         WorkbenchTool.BATCH -> ScopedToolPane(editScope) { paneModifier ->
-            RuleBatchPane(state, viewModel, paneModifier)
+            RuleBatchPane(state, viewModel, instance.id, paneModifier)
         }
         WorkbenchTool.PROJECT -> ProjectPane(state, viewModel, onSaveMkv, Modifier.fillMaxSize())
         WorkbenchTool.DIAGNOSTICS -> DiagnosticsPane(state, viewModel, Modifier.fillMaxSize())

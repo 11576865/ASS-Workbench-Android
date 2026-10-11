@@ -2,8 +2,8 @@
   "schema_version": 1,
   "id": "ass-authoring-main-canvas-20261011",
   "goal": "Improve subtitle authoring efficiency, redesign main UI and refine infinite canvas UI.",
-  "status": "batch_review_source_implemented_native_validation_pending",
-  "current_work_unit": "Explicit scopes and reviewed batch/search replacement transactions in both hosts",
+  "status": "shared_batch_drafts_source_implemented_native_validation_pending",
+  "current_work_unit": "Same-session ToolInstance-owned batch inputs, reviewed previews and page continuity across main/canvas",
   "completed_units": [
     "Read current repository protocol, prior task and source checkpoint 69ad5c076c8695fae15c59b01cd391a647bb8652.",
     "User selected subtitle authoring efficiency as the new-capability priority.",
@@ -26,25 +26,28 @@
     "Full domain JVM226/226 plus navigation-layout2/2; production Android regressions added but unexecuted locally.",
     "Explicit selection/results/intersection/document scopes; default intent preserved and empty scope fails closed.",
     "Rule and AssSearchReplace preview share immutable baseline/session reviewed commit, paged full changes and focus-only recall.",
-    "Independent source review fixed default scope and missing locate; domain235/235; Android regression additions pending."
+    "Independent source review fixed default scope and missing locate; domain235/235; Android regression additions pending.",
+    "Session-root observable batch draft store shares all literal rule/search inputs and reviewed previews by ToolInstance, closes clean up owner.",
+    "Same-session primitive snapshot restores parameters only; reviewed authorization requires fresh precheck; full domain243/243.",
+    "Independent review identified process/session mismatch, recorded outside completed scope; page cache no longer retains old document receipts."
   ],
   "next_units": [
-    "Read exact-head Android CI and emulator results; triage historical native failures using logs.",
-    "Unify remaining professional-tool drafts across hosts; batch draft/preview continuity is not established.",
-    "Recover historical four-edge/docking/glass gaps and obtain UI/IME/device evidence."
+    "Read exact-head Android CI/emulator results; triage remaining native regressions.",
+    "Establish stable process/project restoration identity before claiming process recovery of drafts.",
+    "Unify remaining professional-tool drafts and recover historical four-edge/docking/glass capabilities."
   ],
   "branch": "redesign/infinite-canvas-workbench-v2",
   "pr": 138,
-  "latest_durable_commit": "0e8d849a6338cbbbbcc877f9f4bd213b415ff262",
+  "latest_durable_commit": "a167287bbe6d108d8953dda8e36ddb4207a45b6f",
   "checkpoint_location": "The commit containing this updated record is the source checkpoint; latest_durable_commit identifies the inspected baseline.",
   "external_validation": {
     "baseline_android_ci": "success:38117186072",
     "baseline_emulator": "failure:38117186042; detailed logs unavailable",
     "baseline_fontconfig": "success:38117186058",
-    "proposed_product_changes": "source implemented; domain235/235; Android pending",
+    "proposed_product_changes": "source implemented; domain243/243; Android pending",
     "real_device_visual_ime": "pending",
     "uigs_intake": "Pending; source audit Candidate retained in .uigs/intake-pending/2026-10-11-task-category-host-audit.md",
-    "android_ci": "baseline 0e8d849a success:38160312321",
+    "android_ci": "parent a167287b success:38161380919",
     "emulator": "baseline in_progress:38160312619",
     "fontconfig": "baseline in_progress:38160312322"
   },
@@ -52,7 +55,8 @@
     "No local Android SDK; native compile, connected tests, visual/IME acceptance Pending.",
     "Baseline emulator logs available: full-suite timeout and named navigation/visibility/touch failures remain unresolved.",
     "Actual Activity/process saved-state restoration chain remains unverified.",
-    "Draft PR #138 remains unmerged; full 240 UI and historical capability parity not complete."
+    "Draft PR #138 remains unmerged; full 240 UI and historical capability parity not complete.",
+    "Process restart may reject batch input snapshot because initial session resets to1; same-session only, process recovery not implemented."
   ],
   "updated_at": "2026-10-12"
 }

@@ -92,3 +92,15 @@ Evidence: docs/MULTI-UI-CAPABILITY-MIGRATION-2026-10-11.md. Remaining feature wo
 - [ ] Android compile/instrumentation, batch draft continuity across hosts, device/visual/IME acceptance.
 
 No full-project completion claim. Evidence: docs/BATCH-REVIEW-2026-10-12.md.
+
+## Continuation: instance-owned batch drafts
+
+- [x] RED-to-GREEN primitive draft/snapshot tests and full domain243/243.
+- [x] Root shared store, both pipelines/hosts, literal inputs and preview/page continuity.
+- [x] Close cleanup, input/base/target invalidation and no persisted review authorization.
+- [x] Independent review, page-reference repair, hidden-owner observed-state reconciliation.
+- [ ] Android execution and Activity restoration evidence; cross-process identity not implemented.
+
+Ruling: reject cross-session saved inputs rather than silently adopting another project; cost is possible batch draft loss after process restart.
+Strict unobserved intermediate mutation requires a future command-layer version token; exact baseline commit remains guarded.
+Evidence: docs/BATCH-DRAFT-CONTINUITY-2026-10-12.md.

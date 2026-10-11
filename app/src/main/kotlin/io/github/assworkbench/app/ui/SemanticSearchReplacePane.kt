@@ -3,7 +3,6 @@ package io.github.assworkbench.app.ui
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
@@ -16,17 +15,18 @@ internal fun SemanticSearchReplacePane(
     state: EditorState,
     viewModel: EditorViewModel,
     eventIds: Set<Long>,
+    draftEntry: BatchAuthoringDraftEntry,
     modifier: Modifier = Modifier,
 ) {
-    var patternText by rememberSaveable { mutableStateOf("") }
-    var replacementText by rememberSaveable { mutableStateOf("") }
-    var searchScope by rememberSaveable { mutableStateOf(AssReplaceScope.VISIBLE_TEXT.name) }
-    var requiredTag by rememberSaveable { mutableStateOf("") }
-    var forbiddenTag by rememberSaveable { mutableStateOf("") }
-    var styleRegex by rememberSaveable { mutableStateOf("") }
-    var actorRegex by rememberSaveable { mutableStateOf("") }
-    var ignoreCase by rememberSaveable { mutableStateOf(true) }
-    var regexMode by rememberSaveable { mutableStateOf(true) }
+    var patternText by draftEntry.text("search.patternText", "")
+    var replacementText by draftEntry.text("search.replacementText", "")
+    var searchScope by draftEntry.text("search.searchScope", AssReplaceScope.VISIBLE_TEXT.name)
+    var requiredTag by draftEntry.text("search.requiredTag", "")
+    var forbiddenTag by draftEntry.text("search.forbiddenTag", "")
+    var styleRegex by draftEntry.text("search.styleRegex", "")
+    var actorRegex by draftEntry.text("search.actorRegex", "")
+    var ignoreCase by draftEntry.flag("search.ignoreCase", true)
+    var regexMode by draftEntry.flag("search.regexMode", true)
 
     fun compileMain(raw: String): Regex? {
         if (raw.isEmpty()) return null
@@ -88,12 +88,9 @@ internal fun SemanticSearchReplacePane(
     val query = queryResult?.getOrNull()
     val queryError = queryResult?.exceptionOrNull()?.message
 
-    var review by remember(state.workspaceSessionId, state.document, query, mainPattern, replacementText, scope, eventIds) {
-        mutableStateOf<AssBatchReview?>(null)
-    }
-    var executionError by remember(state.workspaceSessionId, state.document, query, mainPattern, replacementText, scope, eventIds) {
-        mutableStateOf<String?>(null)
-    }
+    val draftPreview = draftEntry.preview("search", state.document, eventIds)
+    val review = draftPreview?.review
+    val executionError = draftPreview?.error
     val preview = review?.preview
     val errorMessage = localInputError ?: queryError ?: executionError
 
@@ -169,8 +166,7 @@ internal fun SemanticSearchReplacePane(
                 val q = query ?: return@OutlinedButton
                 val result = runCatching { AssBatchReview.search(state.document, q,
                     AssSearchReplacement(scope, p, replacementText), eventIds, state.workspaceSessionId) }
-                review = result.getOrNull()
-                executionError = result.exceptionOrNull()?.message
+                draftEntry.record("search", state.document, eventIds, result)
             },
             enabled = localInputError == null && queryError == null && mainPattern != null && query != null,
             modifier = Modifier.fillMaxWidth().testTag("search-review-preview"),
@@ -179,7 +175,7 @@ internal fun SemanticSearchReplacePane(
             Text("搜索/替换规则无效：$errorMessage", color = MaterialTheme.colorScheme.error,
                 modifier = Modifier.testTag("search-replace-error"))
         } else {
-            review?.let { BatchReviewResults(it, "search-preview") { id -> viewModel.focusEvent(id, seek = false) } }
+            review?.let { BatchReviewResults(it, "search-preview", draftEntry.page("search")) { id -> viewModel.focusEvent(id, seek = false) } }
         }
         Button(
             onClick = { review?.let(viewModel::applyBatchReview) },

@@ -9,9 +9,9 @@ import androidx.compose.ui.unit.dp
 import io.github.assworkbench.domain.AssBatchReview
 
 @Composable
-internal fun BatchReviewResults(review: AssBatchReview, tagPrefix: String, onLocate: (Long) -> Unit) {
+internal fun BatchReviewResults(review: AssBatchReview, tagPrefix: String, pageState: MutableState<Int>? = null, onLocate: (Long) -> Unit) {
     val preview = review.preview
-    var previewPage by remember(review) { mutableStateOf(0) }
+    var previewPage by (pageState ?: remember(review) { mutableStateOf(0) })
     val changedExamples = remember(review, previewPage) { review.page(previewPage) }
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text("命中 ${preview.affectedEventIds.size} 条 · 实际变化 ${preview.changedEventIds.size} 条")
