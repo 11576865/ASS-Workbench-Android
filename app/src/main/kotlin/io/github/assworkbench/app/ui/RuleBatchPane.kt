@@ -13,7 +13,6 @@ import androidx.compose.ui.unit.dp
 import io.github.assworkbench.app.EditorState
 import io.github.assworkbench.app.EditorUiBatchDefaultScope
 import io.github.assworkbench.app.EditorViewModel
-import io.github.assworkbench.app.EditorViewModelUiActions
 import io.github.assworkbench.app.toEditorUiState
 import io.github.assworkbench.domain.*
 
@@ -24,10 +23,12 @@ internal fun RuleBatchPane(
     modifier: Modifier = Modifier,
 ) {
     val uiState = state.toEditorUiState()
-    val uiActions = remember(viewModel) { EditorViewModelUiActions(viewModel) }
-    val hasSelection = uiState.batch.selectedEventCount > 0
-    var selectedOnly by rememberSaveable(uiState.batch.defaultScope) {
-        mutableStateOf(uiState.batch.defaultScope == EditorUiBatchDefaultScope.SELECTION)
+    var scopeName by rememberSaveable(state.workspaceSessionId) {
+        mutableStateOf(AssBatchScope.default(uiState.batch.defaultScope == EditorUiBatchDefaultScope.SELECTION).name)
+    }
+    val scope = AssBatchScope.entries.firstOrNull { it.name == scopeName } ?: AssBatchScope.RESULTS
+    val scopeIds = remember(state.document.events, state.selectedEventIds, state.subtitleFilter, scope) {
+        scope.eventIds(state.document.events, state.selectedEventIds, state.subtitleFilter).toSet()
     }
     var styleFilter by rememberSaveable { mutableStateOf("") }
     var textFilter by rememberSaveable { mutableStateOf("") }
@@ -179,7 +180,7 @@ internal fun RuleBatchPane(
 
     fun filter(): AssBatchFilter {
         val filters = buildList<AssBatchFilter> {
-            if (selectedOnly) add(AssBatchFilter.EventIds(uiState.selection.eventIds))
+            add(AssBatchFilter.EventIds(scopeIds))
             styleFilter.trim().takeIf(String::isNotEmpty)?.let { add(AssBatchFilter.StyleIs(it)) }
             textFilter.takeIf(String::isNotEmpty)?.let { add(AssBatchFilter.TextContains(it)) }
             actorFilter.takeIf(String::isNotEmpty)?.let { add(AssBatchFilter.ActorContains(it)) }
@@ -259,7 +260,7 @@ internal fun RuleBatchPane(
 
     val recipeResult = remember(
         uiState.selection.eventIds,
-        selectedOnly, styleFilter, textFilter, actorFilter, layerFilter, tagFilter, commentFilter,
+        scopeIds, styleFilter, textFilter, actorFilter, layerFilter, tagFilter, commentFilter,
         rawRegexFilter, durationMin, durationMax,
         shiftText, styleText, layerText, actorText, marginL, marginR, marginV, findText, replaceText, commentAction,
         regexFind, regexReplace, regexRaw, timingOrigin, timingNumerator, timingDenominator, overridePropertyName, overrideValue,
@@ -270,26 +271,15 @@ internal fun RuleBatchPane(
     }
     val recipe = recipeResult?.getOrNull()
     val recipeError = recipeResult?.exceptionOrNull()?.message
-    var explicitPreview by remember(state.document, recipe) {
-        mutableStateOf<AssBatchPreview?>(null)
+    var explicitReview by remember(state.workspaceSessionId, state.document, recipe) {
+        mutableStateOf<AssBatchReview?>(null)
     }
-    var explicitPreviewError by remember(state.document, recipe) {
+    var explicitPreviewError by remember(state.workspaceSessionId, state.document, recipe) {
         mutableStateOf<String?>(null)
     }
-    val preview = explicitPreview
+    val preview = explicitReview?.preview
     val previewError = batchInputError ?: recipeError ?: explicitPreviewError
     val previewPending = previewError == null && recipe != null && preview == null
-    val changedExamples = remember(state.document, preview) {
-        if (preview == null) {
-            emptyList()
-        } else {
-            preview.changedEventIds.take(5).mapNotNull { id ->
-                val before = state.document.events.firstOrNull { it.id == id } ?: return@mapNotNull null
-                val after = preview.document.events.firstOrNull { it.id == id } ?: return@mapNotNull null
-                before to after
-            }
-        }
-    }
 
     Column(
         modifier.verticalScroll(rememberScrollState()).padding(10.dp),
@@ -311,7 +301,21 @@ internal fun RuleBatchPane(
         }
         Text("Scope / Filter", style = MaterialTheme.typography.labelLarge)
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            FilterChip(selectedOnly, { selectedOnly = !selectedOnly }, { Text("仅已选 ${uiState.batch.selectedEventCount}") })
+            AssBatchScope.entries.forEach { candidate ->
+                val label = when (candidate) {
+                    AssBatchScope.SELECTED -> "已选字幕"
+                    AssBatchScope.RESULTS -> "筛选结果"
+                    AssBatchScope.SELECTED_RESULTS -> "已选∩结果"
+                    AssBatchScope.DOCUMENT -> "整个文档"
+                }
+                FilterChip(scope == candidate, { scopeName = candidate.name }, { Text(label) },
+                    modifier = Modifier.testTag("batch-scope-${candidate.name}"))
+            }
+        }
+        Text("作用范围 ${scopeIds.size} 条 · 下方条件继续取交集；空范围不会扩大到整个文档。",
+            style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("batch-scope-count"))
+        Text("规则处理已提交的 ASS；不会自动应用其他工具中的未提交草稿。", style = MaterialTheme.typography.labelSmall)
+        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             listOf("ALL", "DIALOGUE", "COMMENT").forEach { mode ->
                 FilterChip(commentFilter == mode, { commentFilter = mode }, { Text(mode) })
             }
@@ -346,7 +350,7 @@ internal fun RuleBatchPane(
             )
             OutlinedTextField(layerText, { layerText = it }, label = { Text("设 Layer") }, modifier = Modifier.weight(1f))
         }
-        OutlinedTextField(actorText, { actorText = it }, label = { Text("设 Actor/Name") }, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(actorText, { actorText = it }, label = { Text("设 Actor/Name") }, modifier = Modifier.fillMaxWidth().testTag("batch-actor-action"))
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             OutlinedTextField(
                 marginL,
@@ -450,11 +454,11 @@ internal fun RuleBatchPane(
         OutlinedButton(
             onClick = {
                 val currentRecipe = recipe ?: return@OutlinedButton
-                val result = runCatching { AssBatchEngine.preview(state.document, currentRecipe) }
-                explicitPreview = result.getOrNull()
+                val result = runCatching { AssBatchReview.create(state.document, currentRecipe, state.workspaceSessionId) }
+                explicitReview = result.getOrNull()
                 explicitPreviewError = result.exceptionOrNull()?.message
             },
-            enabled = previewError == null && recipe != null,
+            enabled = batchInputError == null && recipeError == null && recipe != null,
             modifier = Modifier.fillMaxWidth().testTag("batch-preview-explicit"),
         ) {
             Text("预检并生成批处理预览")
@@ -477,31 +481,17 @@ internal fun RuleBatchPane(
                 )
             }
             preview != null -> {
-                Text("命中 ${preview.affectedEventIds.size} 条 · 实际变化 ${preview.changedEventIds.size} 条")
-                changedExamples.forEach { (before, after) ->
-                    Surface(tonalElevation = 1.dp, shape = MaterialTheme.shapes.small) {
-                        Column(Modifier.fillMaxWidth().padding(6.dp)) {
-                            Text("#${before.id} · ${before.start.millis}-${before.end.millis} → ${after.start.millis}-${after.end.millis}",
-                                style = MaterialTheme.typography.labelSmall)
-                            if (before.style != after.style || before.layer != after.layer) {
-                                Text("${before.style}/L${before.layer} → ${after.style}/L${after.layer}",
-                                    style = MaterialTheme.typography.labelSmall)
-                            }
-                            if (before.text != after.text) {
-                                Text(AssInlineSyntax.visibleText(before.text) + " → " + AssInlineSyntax.visibleText(after.text),
-                                    style = MaterialTheme.typography.bodySmall)
-                            }
-                        }
-                    }
+                explicitReview?.let { review ->
+                    BatchReviewResults(review, "batch-preview") { viewModel.focusEvent(it, seek = false) }
                 }
             }
         }
         Button(
-            onClick = { recipe?.let(uiActions::applyBatchRecipe) },
+            onClick = { explicitReview?.let(viewModel::applyBatchReview) },
             enabled = recipe != null && preview?.changedEventIds?.isNotEmpty() == true,
-            modifier = Modifier.fillMaxWidth(),
-        ) { Text("应用为一个事务") }
+            modifier = Modifier.fillMaxWidth().testTag("batch-review-commit"),
+        ) { Text("应用已预览的 ${preview?.changedEventIds?.size ?: 0} 条 · 一个事务") }
 
-        SemanticSearchReplacePane(state, viewModel)
+        SemanticSearchReplacePane(state, viewModel, scopeIds)
     }
 }

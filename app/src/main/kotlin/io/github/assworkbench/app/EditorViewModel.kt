@@ -17,6 +17,7 @@ import io.github.assworkbench.domain.AssTextDecoder
 import io.github.assworkbench.domain.AssTextEncoding
 import io.github.assworkbench.domain.SrtCodec
 import io.github.assworkbench.domain.AssLintIssue
+import io.github.assworkbench.domain.AssBatchReview
 import io.github.assworkbench.domain.AssBatchRecipe
 import io.github.assworkbench.domain.AssBatchEngine
 import io.github.assworkbench.domain.EventOverrideEditor
@@ -2189,6 +2190,16 @@ class EditorViewModel(application: Application, private val savedStateHandle: Sa
         editDocument("Quick Fix：${issue.code} · ${fix.label}") { document ->
             fix.apply(document, eventId)
         }
+    }
+
+    fun applyBatchReview(review: AssBatchReview) {
+        val current = _state.value
+        val document = runCatching { review.commit(current.document, current.workspaceSessionId) }.getOrElse { error ->
+            _state.update { it.copy(status = error.message ?: "批处理预览已过期，请重新预检。") }
+            return
+        }
+        if (review.preview.changedEventIds.isEmpty()) return
+        editDocument("批处理预览：修改 ${review.preview.changedEventIds.size} 条字幕。") { document }
     }
 
     fun applyBatchRecipe(recipe: AssBatchRecipe) {

@@ -1142,6 +1142,65 @@ class EditorRegressionInstrumentedTest {
         }
     }
 
+    @Test fun reviewedBatchCommitsOneUndoAndRejectsStaleBaselineAndSession() {
+        restoreRecovery()
+        composeRule.runOnIdle {
+            val before = viewModel.state.value.document
+            val recipe = io.github.assworkbench.domain.AssBatchRecipe("reviewed", actions = listOf(
+                io.github.assworkbench.domain.AssBatchAction.SetActor("Reviewed")))
+            val review = io.github.assworkbench.domain.AssBatchReview.create(before, recipe, viewModel.state.value.workspaceSessionId)
+            viewModel.applyBatchReview(review)
+            assertTrue(viewModel.state.value.document.events.all { it.name == "Reviewed" })
+            viewModel.undo()
+            assertEquals(before, viewModel.state.value.document)
+            viewModel.updateEventText(1L, "external mutation")
+            val changed = viewModel.state.value.document
+            viewModel.applyBatchReview(review)
+            assertEquals(changed, viewModel.state.value.document)
+            assertTrue(viewModel.state.value.status.contains("过期"))
+            val oldSession = io.github.assworkbench.domain.AssBatchReview.create(changed, recipe, viewModel.state.value.workspaceSessionId)
+            viewModel.newSubtitleProject()
+            val replacement = viewModel.state.value.document
+            viewModel.applyBatchReview(oldSession)
+            assertEquals(replacement, viewModel.state.value.document)
+            assertFalse(viewModel.state.value.canUndo)
+        }
+    }
+
+    @Test fun batchUsesSharedResultsAndRequiresFreshPreviewAfterScopeChangeAcrossHosts() {
+        restoreRecovery()
+        composeRule.runOnIdle { viewModel.setQuery("Second") }
+        openTool("BATCH")
+        composeRule.onNodeWithTag("batch-scope-RESULTS").performClick()
+        composeRule.onNodeWithTag("batch-scope-count").assertTextContains("作用范围 1 条")
+        composeRule.onNodeWithTag("batch-actor-action").performScrollTo().performTextReplacement("Reviewed")
+        hideKeyboard()
+        composeRule.onNodeWithTag("batch-preview-explicit").performScrollTo().performClick()
+        composeRule.onNodeWithTag("batch-review-commit").performScrollTo().assertIsEnabled()
+        val beforeLocate = viewModel.state.value.document
+        val selectionBeforeLocate = viewModel.state.value.selectedEventIds
+        composeRule.onNodeWithTag("batch-preview-locate-2").performScrollTo().performClick()
+        composeRule.runOnIdle {
+            assertEquals(2L, viewModel.state.value.focusedEventId)
+            assertEquals(selectionBeforeLocate, viewModel.state.value.selectedEventIds)
+            assertEquals(beforeLocate, viewModel.state.value.document)
+        }
+        composeRule.onNodeWithTag("batch-scope-DOCUMENT").performScrollTo().performClick()
+        composeRule.onNodeWithTag("batch-review-commit").performScrollTo().assertIsNotEnabled()
+        switchToUnifiedCanvas()
+        openTool("BATCH")
+        composeRule.onNodeWithTag("batch-scope-RESULTS").performScrollTo().performClick()
+        composeRule.onNodeWithTag("batch-scope-count").assertTextContains("作用范围 1 条")
+        composeRule.onNodeWithTag("batch-actor-action").performScrollTo().performTextReplacement("Reviewed")
+        hideKeyboard()
+        composeRule.onNodeWithTag("batch-preview-explicit").performScrollTo().performClick()
+        composeRule.onNodeWithTag("batch-review-commit").performScrollTo().performClick()
+        composeRule.runOnIdle {
+            assertEquals("Reviewed", viewModel.state.value.document.events.first { it.id == 2L }.name)
+            assertFalse(viewModel.state.value.document.events.first { it.id == 1L }.name == "Reviewed")
+        }
+    }
+
     @Test
     fun batchUnknownStyleAndNegativeMarginFailBeforePreview() {
         restoreRecovery()

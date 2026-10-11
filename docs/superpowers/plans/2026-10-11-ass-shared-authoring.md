@@ -81,3 +81,14 @@ Bounded unit evidence: docs/MAIN-CONTENT-FLOW-2026-10-11.md. Remaining migration
 - [ ] Native build/instrumentation/visual results; no merge or full-parity claim.
 
 Evidence: docs/MULTI-UI-CAPABILITY-MIGRATION-2026-10-11.md. Remaining feature work uses task record.
+
+## Continuation: reviewed batch scope and search replacement
+
+- [x] Resolve explicit selection/results/intersection/document scope IDs, preserve original default.
+- [x] Add immutable baseline/session preview receipt and guarded one-transaction VM command.
+- [x] Connect rule batch and original AssSearchReplace; paged full raw/metadata comparisons and focus-only locate.
+- [x] Independent review: default scope and locate Important findings addressed; retry and page allocation corrected.
+- [x] Full domain235/235, artifact/whitespace checks; connected regressions added.
+- [ ] Android compile/instrumentation, batch draft continuity across hosts, device/visual/IME acceptance.
+
+No full-project completion claim. Evidence: docs/BATCH-REVIEW-2026-10-12.md.
