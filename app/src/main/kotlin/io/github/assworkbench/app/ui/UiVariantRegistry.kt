@@ -20,7 +20,7 @@ internal enum class WorkspacePresentationMode(
     FIXED(
         title = "固定工作台",
         status = UiVariantStatus.STABLE,
-        description = "预览、字幕导航与当前工具采用稳定的自适应固定布局。",
+        description = "窄屏内容可延伸滚动并调节预览；宽屏采用字幕导航与工具并排的自适应布局。",
     ),
     CANVAS_EXPERIMENTAL(
         title = "自由 Canvas",

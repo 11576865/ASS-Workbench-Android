@@ -29,6 +29,7 @@ import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
@@ -639,16 +640,17 @@ internal fun InfiniteCanvasHost(
         } else {
             // No camera transform reaches this subtree: editors keep native-size hit areas.
             val (entry, node) = focused!!
+            val focusedPaneInsets = Modifier.padding(
+                start = if (toolDrawerResident) railWidth else 0.dp,
+                end = if (entries.any { it.bookmarked }) 68.dp else 0.dp,
+            )
             Surface(Modifier.fillMaxSize()
                 .padding(bottom = dockHeight)
-                .padding(start = if (toolDrawerResident) railWidth else 0.dp)
-                // Bookmark rail owns a real touch region; the focused editor
-                // must not place sliders/fields beneath it.
-                .padding(end = if (entries.any { it.bookmarked }) 68.dp else 0.dp)
                 .testTag("spatial-focused-editor"),
                 color = MaterialTheme.colorScheme.surface) {
                 Column {
-                    Row(Modifier.fillMaxWidth().height(64.dp).padding(horizontal = 8.dp),
+                    Row(Modifier.fillMaxWidth().height(64.dp).padding(horizontal = 8.dp)
+                        .testTag("spatial-focused-header"),
                         verticalAlignment = Alignment.CenterVertically) {
                         TextButton(onClick = ::returnToBoard, enabled = !gestureOwned,
                             modifier = Modifier.testTag("spatial-return-to-board")) {
@@ -661,11 +663,11 @@ internal fun InfiniteCanvasHost(
                                 .testTag("spatial-tool-switcher")) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Text(entry.title, style = MaterialTheme.typography.titleMedium,
-                                        maxLines = 1)
+                                        maxLines = 1, overflow = TextOverflow.Ellipsis)
                                     Icon(Icons.Filled.ArrowDropDown, "切换工具", Modifier.size(18.dp))
                                 }
                                 if (entry.subtitle.isNotBlank()) Text(entry.subtitle,
-                                    style = MaterialTheme.typography.labelSmall, maxLines = 1)
+                                    style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             }
                             DropdownMenu(expanded = switcherOpen,
                                 onDismissRequest = { switcherOpen = false }) {
@@ -683,25 +685,13 @@ internal fun InfiniteCanvasHost(
                                 }
                             }
                         }
-                        IconButton(onClick = { timelineDockVisible = !timelineDockVisible },
-                            enabled = !gestureOwned, modifier = Modifier.testTag("spatial-timeline-toggle")) {
-                            Icon(Icons.Filled.ViewTimeline, if (timelineDockVisible) "收起时间轴" else "展开时间轴")
-                        }
-                        if (entry.id.startsWith("POSITION:")) IconButton(
-                            onClick = onTogglePrecision, enabled = !gestureOwned,
-                            modifier = Modifier.testTag("spatial-precision-toggle"),
-                        ) {
-                            Icon(if (precisionEnabled) Icons.Filled.CenterFocusStrong
-                                else Icons.Filled.CenterFocusWeak,
-                                if (precisionEnabled) "关闭精密操控" else "开启精密操控")
-                        }
                         IconButton(onClick = ::showToolPicker, enabled = !gestureOwned,
                             modifier = Modifier.testTag("spatial-add-tool")) {
                             Icon(Icons.Filled.Add, "添加工具")
                         }
                         IconButton(onClick = { birdseyeOpen = true }, enabled = !gestureOwned,
                             modifier = Modifier.testTag("spatial-birdseye")) {
-                            Icon(Icons.Filled.Apps, "切换工具")
+                            Icon(Icons.Filled.Apps, "鸟瞰")
                         }
                         Box {
                             IconButton(onClick = { cardMenuId = entry.id }, enabled = !gestureOwned,
@@ -717,13 +707,6 @@ internal fun InfiniteCanvasHost(
                                         focusedId = null
                                         cardMenuId = null
                                     })
-                                if (viewportW < 460f) {
-                                    DropdownMenuItem(text = { Text("撤销字幕编辑") }, enabled = canUndo,
-                                        onClick = { onUndo(); cardMenuId = null })
-                                    DropdownMenuItem(text = { Text("重做字幕编辑") }, enabled = canRedo,
-                                        onClick = { onRedo(); cardMenuId = null })
-                                    HorizontalDivider()
-                                }
                                 if (entry.canClose) DropdownMenuItem(
                                     text = { Text(if (entry.bookmarked) "取消侧书签" else "放入侧书签") },
                                     modifier = Modifier.testTag("spatial-bookmark-" + entry.id.replace(':', '-')),
@@ -774,14 +757,7 @@ internal fun InfiniteCanvasHost(
                                     })
                             }
                         }
-                        if (viewportW >= 460f) {
-                            IconButton(onClick = onUndo, enabled = canUndo) {
-                                Icon(Icons.Filled.Undo, "撤销字幕编辑")
-                            }
-                            IconButton(onClick = onRedo, enabled = canRedo) {
-                                Icon(Icons.Filled.Redo, "重做字幕编辑")
-                            }
-                        }
+
                     }
                     HorizontalDivider()
                     val liveNode by rememberUpdatedState(node)
@@ -837,29 +813,53 @@ internal fun InfiniteCanvasHost(
                         else -> 0.40f
                     }
                     Column(Modifier.weight(1f).fillMaxWidth()) {
-                        if (showReferenceOption) Row(
-                            Modifier.fillMaxWidth().height(40.dp).padding(horizontal = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            TextButton(
-                                onClick = { referencePreviewVisible = !referencePreviewVisible },
-                                enabled = !gestureOwned,
-                                modifier = Modifier.testTag("spatial-preview-toggle"),
-                            ) {
-                                Icon(if (referencePreviewVisible) Icons.Filled.VisibilityOff
-                                    else Icons.Filled.Visibility, null, Modifier.size(18.dp))
-                                Spacer(Modifier.width(4.dp))
-                                Text(if (referencePreviewVisible) "隐藏参考画面" else "显示参考画面")
+                        // Navigation stays fixed above; task controls use their own finite,
+                        // horizontally scrollable strip at native touch density.
+                        Row(Modifier.fillMaxWidth().height(48.dp)
+                            .horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp)
+                            .testTag("spatial-focused-actions"),
+                            verticalAlignment = Alignment.CenterVertically) {
+                            IconButton(onClick = { timelineDockVisible = !timelineDockVisible },
+                                enabled = !gestureOwned, modifier = Modifier.testTag("spatial-timeline-toggle")) {
+                                Icon(Icons.Filled.ViewTimeline, if (timelineDockVisible) "收起时间轴" else "展开时间轴")
                             }
-                            if (referencePreviewVisible) TextButton(
-                                onClick = { referencePreviewSize = (referencePreviewSize + 1) % 3 },
-                                enabled = !gestureOwned,
-                                modifier = Modifier.testTag("spatial-preview-size"),
-                            ) { Text(when (referencePreviewSize) {
-                                0 -> "预览 25%"
-                                2 -> "预览 54%"
-                                else -> "预览 40%"
-                            }) }
+                            if (entry.id.startsWith("POSITION:")) IconButton(
+                                onClick = onTogglePrecision, enabled = !gestureOwned,
+                                modifier = Modifier.testTag("spatial-precision-toggle"),
+                            ) {
+                                Icon(if (precisionEnabled) Icons.Filled.CenterFocusStrong
+                                    else Icons.Filled.CenterFocusWeak,
+                                    if (precisionEnabled) "关闭精密操控" else "开启精密操控")
+                            }
+                            IconButton(onClick = onUndo, enabled = canUndo && !gestureOwned,
+                                modifier = Modifier.testTag("spatial-document-undo")) {
+                                Icon(Icons.Filled.Undo, "撤销字幕编辑")
+                            }
+                            IconButton(onClick = onRedo, enabled = canRedo && !gestureOwned,
+                                modifier = Modifier.testTag("spatial-document-redo")) {
+                                Icon(Icons.Filled.Redo, "重做字幕编辑")
+                            }
+                            if (showReferenceOption) {
+                                TextButton(
+                                    onClick = { referencePreviewVisible = !referencePreviewVisible },
+                                    enabled = !gestureOwned,
+                                    modifier = Modifier.testTag("spatial-preview-toggle"),
+                                ) {
+                                    Icon(if (referencePreviewVisible) Icons.Filled.VisibilityOff
+                                        else Icons.Filled.Visibility, null, Modifier.size(18.dp))
+                                    Spacer(Modifier.width(4.dp))
+                                    Text(if (referencePreviewVisible) "隐藏参考画面" else "显示参考画面")
+                                }
+                                if (referencePreviewVisible) TextButton(
+                                    onClick = { referencePreviewSize = (referencePreviewSize + 1) % 3 },
+                                    enabled = !gestureOwned,
+                                    modifier = Modifier.testTag("spatial-preview-size"),
+                                ) { Text(when (referencePreviewSize) {
+                                    0 -> "预览 25%"
+                                    2 -> "预览 54%"
+                                    else -> "预览 40%"
+                                }) }
+                            }
                         }
                         if (showReferenceOption && referencePreviewVisible && !imeVisible) {
                             // The reference is the real video/ASS renderer and shares the
@@ -874,20 +874,20 @@ internal fun InfiniteCanvasHost(
                                 }
                             }
                             if (viewportW >= 840f) {
-                                Row(Modifier.fillMaxSize()) {
+                                Row(Modifier.fillMaxSize().then(focusedPaneInsets)) {
                                     referencePane(Modifier.weight(referenceFraction).fillMaxHeight())
                                     VerticalDivider()
                                     productionEditor(Modifier.weight(1f - referenceFraction).fillMaxHeight())
                                 }
                             } else {
-                                Column(Modifier.fillMaxSize()) {
+                                Column(Modifier.fillMaxSize().then(focusedPaneInsets)) {
                                     referencePane(Modifier.fillMaxWidth().fillMaxHeight(referenceFraction))
                                     HorizontalDivider()
                                     productionEditor(Modifier.weight(1f).fillMaxWidth())
                                 }
                             }
                         } else {
-                            productionEditor(Modifier.fillMaxSize())
+                            productionEditor(Modifier.fillMaxSize().then(focusedPaneInsets))
                         }
                     }
                 }
@@ -898,7 +898,7 @@ internal fun InfiniteCanvasHost(
         // surface: pinning it keeps tool switching available while editing.
             if (toolDrawerOpen || toolDrawerResident) Surface(
                 modifier = Modifier.align(Alignment.CenterStart).fillMaxHeight()
-                    .padding(bottom = dockHeight).width(railWidth)
+                    .padding(top = if (boardMode) 0.dp else 113.dp, bottom = dockHeight).width(railWidth)
                     .zIndex(1_000_020f).testTag("spatial-edge-rail-left"),
                 color = MaterialTheme.colorScheme.surfaceContainerHigh,
                 tonalElevation = 6.dp,
@@ -936,7 +936,8 @@ internal fun InfiniteCanvasHost(
         // The world node remains saved while BOOKMARKED, so recall is reversible.
         val bookmarked = entries.filter { it.bookmarked }
         if (bookmarked.isNotEmpty()) Surface(
-            Modifier.align(Alignment.CenterEnd).padding(bottom = dockHeight).width(68.dp)
+            Modifier.align(Alignment.CenterEnd)
+                .padding(top = if (boardMode) 0.dp else 113.dp, bottom = dockHeight).width(68.dp)
                 .zIndex(1_000_022f).testTag("spatial-bookmark-rail"),
             color = MaterialTheme.colorScheme.surfaceContainerHigh,
             tonalElevation = 4.dp,
@@ -1145,7 +1146,7 @@ private fun CanvasToolSummary(
                 Spacer(Modifier.height(6.dp))
                 Text(entry.title, style = MaterialTheme.typography.titleSmall, maxLines = 1)
                 if (entry.subtitle.isNotBlank()) Text(entry.subtitle,
-                    style = MaterialTheme.typography.labelSmall, maxLines = 1)
+                    style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
     }

@@ -19,3 +19,9 @@ Implemented category-level selection, independent directory and root-owned navig
 Compact content flow also requires sufficient scroll range: editorHeight = viewport - preview leaves only chrome overflow and cannot scroll the full reference away. A bounded full-viewport pane makes the reference scrollable outside the viewport without unbounded nested LazyColumn measurement. Pure JVM category/layout 13/13 and domain 217/217 pass. Native flow/IME/device execution remains Pending, not usability evidence.
 
 Dedup search repeated against Foundry for `task category host`; returned related role/context candidates but no identical focused case. Append to this existing Pending packet; do not create Canonical or retry rejected cross-repository write.
+
+## Capability-consumer audit and narrow chrome
+
+Historical layout consolidation keeps decode tokens and old Surface fields, but current InfiniteCanvasHost has no consumers for old docking/minimized/tabGroup state, independent four-edge panels or GlassToolWindow. Capability parity needs an executable consumer, not retained serializers/models or route-decode tests. Related Foundry spatial-canvas Candidate already records restoration risks during PR #138; search `migration capability persistence` found that family. Append this focused source evidence here; no Canonical or rejected external retry.
+
+Narrow navigation checks must include optional resident/bookmark rails and actual action-strip overflow: a 320dp no-rail/no-preview fixture can pass while supported combined states collapse the title. Revised production Host retains full-width chrome, reserves rail touch areas below it, and adds a dual-rail + reference action regression. Native results Pending, not measured usability evidence. Source mapping: docs/MULTI-UI-CAPABILITY-MIGRATION-2026-10-11.md.

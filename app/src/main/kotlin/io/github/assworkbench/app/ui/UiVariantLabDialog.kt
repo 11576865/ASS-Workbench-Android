@@ -42,7 +42,7 @@ internal fun UiVariantLabDialog(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Text(
-                    "只保留标准主界面与无限画布实验。旧实验工程会迁移到无限画布，字幕、对象绑定和已保存工具状态继续沿用。",
+                    "可选择主界面或无限画布。旧布局名称使用无限画布，工具实例与对象绑定继续沿用；部分旧布局交互尚未提供。",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

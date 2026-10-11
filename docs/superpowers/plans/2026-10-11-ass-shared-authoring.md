@@ -69,3 +69,15 @@ Authorized scope follows the user's “继续” and docs/MAIN-CANVAS-RECHECK-20
 - [ ] Native CI/IME/visual acceptance; failed baseline emulator root cause requires accessible evidence.
 
 Bounded unit evidence: docs/MAIN-CONTENT-FLOW-2026-10-11.md. Remaining migration parity, filters, batch and canvas chrome continue from task record.
+
+
+## Continuation: historical capability audit and focused canvas chrome
+
+- [x] Map all eight retired presentation tokens to current production consumers and concrete parity gaps.
+- [x] Apply already-approved design section7: keep core navigation fixed, relocate contextual canvas/Undo/reference controls to bounded action strip.
+- [x] Keep resident/bookmark rails below full-width chrome; retain body-only rail insets.
+- [x] Add 320dp dual-rail/overflow regression; local native execution Pending.
+- [x] Run camera/overview/registry JVM33, artifact/whitespace checks; independent review addressed narrow supported-state and test-overflow gaps.
+- [ ] Native build/instrumentation/visual results; no merge or full-parity claim.
+
+Evidence: docs/MULTI-UI-CAPABILITY-MIGRATION-2026-10-11.md. Remaining feature work uses task record.

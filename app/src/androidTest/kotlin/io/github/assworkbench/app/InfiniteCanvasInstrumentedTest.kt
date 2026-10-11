@@ -38,6 +38,58 @@ import kotlin.math.roundToInt
 class InfiniteCanvasInstrumentedTest {
     @get:Rule val composeRule = createAndroidComposeRule<EditorRegressionHostActivity>()
 
+    @Test fun narrowFocusedPositionKeepsNavigationVisibleAndActionsOutsideTitleRow() {
+        val node = InfiniteCanvasNode("POSITION:primary")
+        val originalNodes = listOf(InfiniteCanvasNode("preview"), node)
+        var saved = InfiniteCanvasCamera() to originalNodes
+        var owned by mutableStateOf(false)
+        var undoCount = 0
+        composeRule.activityRule.scenario.onActivity { activity ->
+            activity.setContent {
+                MaterialTheme {
+                    InfiniteCanvasHost(
+                        sessionId = 92L,
+                        savedScene = InfiniteCanvasPersistence.encode(saved.first, saved.second),
+                        onSaveScene = { saved = InfiniteCanvasPersistence.decode(it) },
+                        entries = listOf(InfiniteCanvasEntry("preview", "视频"),
+                            InfiniteCanvasEntry(node.id, "位置与几何", "固定 Event #2", bookmarked = true)),
+                        gestureOwned = owned, onAddTool = {}, onActivate = {},
+                        onUndo = { undoCount++ }, onRedo = {}, canUndo = true, canRedo = true,
+                        modifier = Modifier.width(320.dp).fillMaxHeight(),
+                    ) { id, _ -> Text(id) }
+                }
+            }
+        }
+        composeRule.onNodeWithTag("spatial-edge-handle-left").performClick()
+        composeRule.onNodeWithTag("spatial-edge-pin-left").performClick()
+        composeRule.onNodeWithTag("spatial-edge-entry-POSITION-primary").performScrollTo().performClick()
+        val editor = composeRule.onNodeWithTag("spatial-focused-editor").fetchSemanticsNode().boundsInRoot
+        val header = composeRule.onNodeWithTag("spatial-focused-header").fetchSemanticsNode().boundsInRoot
+        for (tag in listOf("spatial-return-to-board", "spatial-tool-switcher", "spatial-add-tool",
+                "spatial-birdseye", "spatial-menu-POSITION-primary")) {
+            val bounds = composeRule.onNodeWithTag(tag).assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+            assertTrue("$tag stays inside narrow editor", bounds.left >= editor.left && bounds.right <= editor.right)
+        }
+        for (tag in listOf("spatial-timeline-toggle", "spatial-precision-toggle", "spatial-document-undo")) {
+            val bounds = composeRule.onNodeWithTag(tag).performScrollTo().assertIsDisplayed()
+                .fetchSemanticsNode().boundsInRoot
+            assertTrue("$tag stays below title row", bounds.top >= header.bottom)
+        }
+        val strip = composeRule.onNodeWithTag("spatial-focused-actions").fetchSemanticsNode().boundsInRoot
+        val finalAction = composeRule.onNodeWithTag("spatial-preview-size").performScrollTo()
+            .assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+        assertTrue("Final action scrolls into the strip", finalAction.left >= strip.left && finalAction.right <= strip.right)
+        composeRule.onNodeWithTag("spatial-return-to-board").assertIsDisplayed()
+        composeRule.onNodeWithTag("spatial-birdseye").assertIsDisplayed()
+        composeRule.onNodeWithTag("spatial-document-undo").performScrollTo()
+        composeRule.onNodeWithTag("spatial-document-undo").performClick()
+        assertEquals(1, undoCount)
+        composeRule.runOnIdle { owned = true }
+        composeRule.onNodeWithTag("spatial-document-undo").assertIsNotEnabled()
+        composeRule.onNodeWithTag("spatial-precision-toggle").performScrollTo().assertIsNotEnabled()
+        assertEquals(originalNodes, saved.second)
+    }
+
     @Test fun birdseyeRemainsVisibleOnNarrowCanvasWithoutScrollingTheToolbar() {
         val fixture = OverviewFixture(listOf(InfiniteCanvasNode("preview", x = 10_000f)))
         showOverviewFixture(fixture, Modifier.width(320.dp).fillMaxHeight())

@@ -2,8 +2,8 @@
   "schema_version": 1,
   "id": "ass-authoring-main-canvas-20261011",
   "goal": "Improve subtitle authoring efficiency, redesign main UI and refine infinite canvas UI.",
-  "status": "compact_content_flow_implemented_native_validation_pending",
-  "current_work_unit": "Compact content flow, task category and session-root navigation correction.",
+  "status": "canvas_chrome_and_capability_audit_implemented_native_validation_pending",
+  "current_work_unit": "Historical UI capability mapping and narrow focused-canvas action/navigation chrome.",
   "completed_units": [
     "Read current repository protocol, prior task and source checkpoint 69ad5c076c8695fae15c59b01cd391a647bb8652.",
     "User selected subtitle authoring efficiency as the new-capability priority.",
@@ -16,27 +16,30 @@
     "Rechecked actual main layout, task/tool selection, historical route consolidation and incomplete draft ownership; recorded source facts separately from unmeasured usability.",
     "Implemented bounded full-viewport compact content flow and adjustable preview; removed compact secondary navigation.",
     "Separated task categories from persisted tools; same-task selection retains active instance/binding; independent directory dismissal keeps inspector.",
-    "Independent source review addressed insufficient scroll range and primary-instance reset; domain JVM 217/217 and catalog/layout 13/13 pass."
+    "Independent source review addressed insufficient scroll range and primary-instance reset; domain JVM 217/217 and catalog/layout 13/13 pass.",
+    "Mapped eight retired modes to current consumers; recorded concrete four-edge/glass/dock/tab/continuous-timeline gaps.",
+    "Separated focused canvas title navigation from scrolling task actions; resident/bookmark rails no longer compress title/action width.",
+    "Source review addressed dual-rail width and real-overflow regression; canvas/overview/registry JVM33/33 pass."
   ],
   "next_units": [
-    "Map historical multi-UI capabilities to current hosts and their actual migration/evidence status.",
-    "Implement complete authoring workflow and production visual tests before design acceptance.",
-    "Investigate emulator failure with accessible native logs; validate compact flow, IME and font scaling."
+    "Implement shared subtitle filters and result-to-edit workflow, then explicit batch scope previews.",
+    "Unify remaining professional-tool draft ownership and conflict expression.",
+    "Recover historical capability gaps in separately bounded units; validate native CI/IME/visual results."
   ],
   "branch": "redesign/infinite-canvas-workbench-v2",
   "pr": 138,
-  "latest_durable_commit": "09df9b1c09c2ee94513ff99336feebb885dc8c9f",
+  "latest_durable_commit": "fb3953f24a1654aa24666fa43d0b7920fab84fbf",
   "checkpoint_location": "The commit containing this updated record is the source checkpoint; latest_durable_commit identifies the inspected baseline.",
   "external_validation": {
     "baseline_android_ci": "success:38117186072",
     "baseline_emulator": "failure:38117186042; detailed logs unavailable",
     "baseline_fontconfig": "success:38117186058",
-    "proposed_product_changes": "source implemented; pure JVM 230/230; native validation pending",
+    "proposed_product_changes": "source implemented; canvas JVM33/33; native320dp dual-rail/overflow regression pending",
     "real_device_visual_ime": "pending",
     "uigs_intake": "Pending; source audit Candidate retained in .uigs/intake-pending/2026-10-11-task-category-host-audit.md",
-    "android_ci": "baseline success:38135092633; new commit pending",
-    "emulator": "baseline failure:38135092606; step 12 editor regression; logs Transport closed",
-    "fontconfig": "baseline success:38135092608; new commit pending"
+    "android_ci": "in_progress:38142464433 at baseline fb3953f2",
+    "emulator": "in_progress:38142464426 at baseline fb3953f2; earlier 38135092606 failed, logs unavailable",
+    "fontconfig": "in_progress:38142464464 at baseline fb3953f2"
   },
   "blockers": [
     "No local Android SDK; no native compile, screenshot or connected-test pass claimed.",
