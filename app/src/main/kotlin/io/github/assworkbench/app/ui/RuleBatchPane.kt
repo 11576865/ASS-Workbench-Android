@@ -24,6 +24,7 @@ internal fun RuleBatchPane(
 ) {
     val uiState = state.toEditorUiState()
     val draftEntry = LocalBatchAuthoringDraftStore.current.obtain(instanceId)
+    var mode by draftEntry.text("presentation.mode", "rule", invalidateReview = false)
     var scopeName by draftEntry.text("rule.scope", AssBatchScope.default(uiState.batch.defaultScope == EditorUiBatchDefaultScope.SELECTION).name)
     val scope = AssBatchScope.entries.firstOrNull { it.name == scopeName } ?: AssBatchScope.RESULTS
     val scopeIds = remember(state.document.events, state.selectedEventIds, state.subtitleFilter, scope) {
@@ -277,216 +278,206 @@ internal fun RuleBatchPane(
     val previewError = batchInputError ?: recipeError ?: explicitPreviewError
     val previewPending = previewError == null && recipe != null && preview == null
 
-    Column(
-        modifier.verticalScroll(rememberScrollState()).padding(10.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Text("批处理规则", style = MaterialTheme.typography.titleMedium)
-        Text(
-            "Scope → 多条件 AND Filter → 多动作 Transform → Preview → Commit。整个规则只产生一个 Undo 节点。",
-            style = MaterialTheme.typography.bodySmall,
-        )
+    Column(modifier) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterChip(mode != "search", { mode = "rule" }, { Text("组合规则") }, Modifier.weight(1f).testTag("batch-mode-rule"))
+            FilterChip(mode == "search", { mode = "search" }, { Text("搜索替换") }, Modifier.weight(1f).testTag("batch-mode-search"))
+        }
+        if (mode == "search") {
+            SemanticSearchReplacePane(state, viewModel, scopeIds, draftEntry, Modifier.weight(1f).fillMaxWidth()) {
+                BatchScopePanel(scope, scopeIds.size) { scopeName = it.name }
+            }
+        } else {
+        Column(
+            Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(10.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text("批处理规则", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "选择字幕范围，设置需要修改的内容，预览后一次应用。",
+                style = MaterialTheme.typography.bodySmall,
+            )
 
-        if (uiState.batch.selectedEventCount > 1) {
-            Text("已选字幕结构", style = MaterialTheme.typography.labelLarge)
+            if (uiState.batch.selectedEventCount > 1) {
+                Text("已选字幕结构", style = MaterialTheme.typography.labelLarge)
+                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    OutlinedButton({ viewModel.mergeSelected(useLineBreak = true) }) { Text("合并 · 换行") }
+                    OutlinedButton({ viewModel.mergeSelected(useLineBreak = false) }) { Text("合并 · 空格") }
+                }
+                Text("合并直接作用于已选字幕并可撤销；下方规则需预览后提交。", style = MaterialTheme.typography.labelSmall)
+            }
+            BatchScopePanel(scope, scopeIds.size) { scopeName = it.name }
+            Text("筛选条件", style = MaterialTheme.typography.titleSmall)
+            Text("规则处理已提交的 ASS；不会自动应用其他工具中的未提交草稿。", style = MaterialTheme.typography.labelSmall)
             Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                OutlinedButton({ viewModel.mergeSelected(useLineBreak = true) }) { Text("合并 · 换行") }
-                OutlinedButton({ viewModel.mergeSelected(useLineBreak = false) }) { Text("合并 · 空格") }
-            }
-            Text("合并直接作用于已选字幕并可撤销；下方规则需预览后提交。", style = MaterialTheme.typography.labelSmall)
-        }
-        Text("Scope / Filter", style = MaterialTheme.typography.labelLarge)
-        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            AssBatchScope.entries.forEach { candidate ->
-                val label = when (candidate) {
-                    AssBatchScope.SELECTED -> "已选字幕"
-                    AssBatchScope.RESULTS -> "筛选结果"
-                    AssBatchScope.SELECTED_RESULTS -> "已选∩结果"
-                    AssBatchScope.DOCUMENT -> "整个文档"
+                listOf("ALL", "DIALOGUE", "COMMENT").forEach { mode ->
+                    FilterChip(commentFilter == mode, { commentFilter = mode }, { Text(mode) })
                 }
-                FilterChip(scope == candidate, { scopeName = candidate.name }, { Text(label) },
-                    modifier = Modifier.testTag("batch-scope-${candidate.name}"))
             }
-        }
-        Text("作用范围 ${scopeIds.size} 条 · 下方条件继续取交集；空范围不会扩大到整个文档。",
-            style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("batch-scope-count"))
-        Text("规则处理已提交的 ASS；不会自动应用其他工具中的未提交草稿。", style = MaterialTheme.typography.labelSmall)
-        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            listOf("ALL", "DIALOGUE", "COMMENT").forEach { mode ->
-                FilterChip(commentFilter == mode, { commentFilter = mode }, { Text(mode) })
+            OutlinedTextField(styleFilter, { styleFilter = it }, label = { Text("Style =") }, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(textFilter, { textFilter = it }, label = { Text("正文包含") }, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(actorFilter, { actorFilter = it }, label = { Text("Actor 包含") }, modifier = Modifier.fillMaxWidth())
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                OutlinedTextField(layerFilter, { layerFilter = it }, label = { Text("Layer =") }, modifier = Modifier.weight(1f))
+                OutlinedTextField(tagFilter, { tagFilter = it }, label = { Text("含 tag，例如 pos") }, modifier = Modifier.weight(1f))
             }
-        }
-        OutlinedTextField(styleFilter, { styleFilter = it }, label = { Text("Style =") }, modifier = Modifier.fillMaxWidth())
-        OutlinedTextField(textFilter, { textFilter = it }, label = { Text("正文 contains") }, modifier = Modifier.fillMaxWidth())
-        OutlinedTextField(actorFilter, { actorFilter = it }, label = { Text("Actor contains") }, modifier = Modifier.fillMaxWidth())
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            OutlinedTextField(layerFilter, { layerFilter = it }, label = { Text("Layer =") }, modifier = Modifier.weight(1f))
-            OutlinedTextField(tagFilter, { tagFilter = it }, label = { Text("含 tag，例如 pos") }, modifier = Modifier.weight(1f))
-        }
-        OutlinedTextField(
-            rawRegexFilter,
-            { rawRegexFilter = it },
-            label = { Text("Raw ASS Regex filter") },
-            modifier = Modifier.fillMaxWidth().testTag("batch-raw-regex-filter"),
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            OutlinedTextField(durationMin, { durationMin = it }, label = { Text("最短时长 ms") }, modifier = Modifier.weight(1f))
-            OutlinedTextField(durationMax, { durationMax = it }, label = { Text("最长时长 ms") }, modifier = Modifier.weight(1f))
-        }
-
-        HorizontalDivider()
-        Text("Transform", style = MaterialTheme.typography.labelLarge)
-        OutlinedTextField(shiftText, { shiftText = it }, label = { Text("时间平移 ms") }, modifier = Modifier.fillMaxWidth())
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             OutlinedTextField(
-                styleText,
-                { styleText = it },
-                label = { Text("设 Style") },
-                modifier = Modifier.weight(1f).testTag("batch-style-action"),
+                rawRegexFilter,
+                { rawRegexFilter = it },
+                label = { Text("Raw ASS Regex filter") },
+                modifier = Modifier.fillMaxWidth().testTag("batch-raw-regex-filter"),
             )
-            OutlinedTextField(layerText, { layerText = it }, label = { Text("设 Layer") }, modifier = Modifier.weight(1f))
-        }
-        OutlinedTextField(actorText, { actorText = it }, label = { Text("设 Actor/Name") }, modifier = Modifier.fillMaxWidth().testTag("batch-actor-action"))
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            OutlinedTextField(
-                marginL,
-                { marginL = it },
-                label = { Text("MarginL") },
-                modifier = Modifier.weight(1f).testTag("batch-margin-l"),
-            )
-            OutlinedTextField(marginR, { marginR = it }, label = { Text("MarginR") }, modifier = Modifier.weight(1f))
-            OutlinedTextField(marginV, { marginV = it }, label = { Text("MarginV") }, modifier = Modifier.weight(1f))
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            OutlinedTextField(findText, { findText = it }, label = { Text("正文查找") }, modifier = Modifier.weight(1f))
-            OutlinedTextField(replaceText, { replaceText = it }, label = { Text("替换") }, modifier = Modifier.weight(1f))
-        }
-        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            listOf("KEEP", "DIALOGUE", "COMMENT").forEach { mode ->
-                FilterChip(commentAction == mode, { commentAction = mode }, { Text("类型 ${mode}") })
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                OutlinedTextField(durationMin, { durationMin = it }, label = { Text("最短时长 ms") }, modifier = Modifier.weight(1f))
+                OutlinedTextField(durationMax, { durationMax = it }, label = { Text("最长时长 ms") }, modifier = Modifier.weight(1f))
             }
-        }
-        Text("高级 Transform", style = MaterialTheme.typography.labelLarge)
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            OutlinedTextField(regexFind, { regexFind = it }, label = { Text("Regex 查找") }, modifier = Modifier.weight(1f))
-            OutlinedTextField(regexReplace, { regexReplace = it }, label = { Text("Regex 替换") }, modifier = Modifier.weight(1f))
-        }
-        FilterChip(regexRaw, { regexRaw = !regexRaw }, { Text(if (regexRaw) "替换 Raw ASS" else "仅替正文") })
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            OutlinedTextField(timingOrigin, { timingOrigin = it }, label = { Text("缩放原点 ms") }, modifier = Modifier.weight(1f))
-            OutlinedTextField(timingNumerator, { timingNumerator = it }, label = { Text("时间倍率分子") }, modifier = Modifier.weight(1f))
-            OutlinedTextField(timingDenominator, { timingDenominator = it }, label = { Text("分母") }, modifier = Modifier.weight(1f))
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            OutlinedTextField(overridePropertyName, { overridePropertyName = it }, label = { Text("数值 override 属性") }, modifier = Modifier.weight(1f))
-            OutlinedTextField(overrideValue, { overrideValue = it }, label = { Text("值") }, modifier = Modifier.weight(1f))
-        }
 
-        Surface(
-            tonalElevation = 1.dp,
-            shape = MaterialTheme.shapes.small,
-            modifier = Modifier.fillMaxWidth().testTag("batch-karaoke-reveal"),
-        ) {
-            Column(Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                    Switch(
-                        checked = karaokeRevealEnabled,
-                        onCheckedChange = { karaokeRevealEnabled = it },
-                        modifier = Modifier.testTag("batch-karaoke-reveal-enabled"),
+            HorizontalDivider()
+            Text("修改内容", style = MaterialTheme.typography.labelLarge)
+            OutlinedTextField(shiftText, { shiftText = it }, label = { Text("时间平移 ms") }, modifier = Modifier.fillMaxWidth())
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                OutlinedTextField(
+                    styleText,
+                    { styleText = it },
+                    label = { Text("设 Style") },
+                    modifier = Modifier.weight(1f).testTag("batch-style-action"),
+                )
+                OutlinedTextField(layerText, { layerText = it }, label = { Text("设 Layer") }, modifier = Modifier.weight(1f))
+            }
+            OutlinedTextField(actorText, { actorText = it }, label = { Text("设 Actor/Name") }, modifier = Modifier.fillMaxWidth().testTag("batch-actor-action"))
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                OutlinedTextField(
+                    marginL,
+                    { marginL = it },
+                    label = { Text("MarginL") },
+                    modifier = Modifier.weight(1f).testTag("batch-margin-l"),
+                )
+                OutlinedTextField(marginR, { marginR = it }, label = { Text("MarginR") }, modifier = Modifier.weight(1f))
+                OutlinedTextField(marginV, { marginV = it }, label = { Text("MarginV") }, modifier = Modifier.weight(1f))
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                OutlinedTextField(findText, { findText = it }, label = { Text("正文查找") }, modifier = Modifier.weight(1f))
+                OutlinedTextField(replaceText, { replaceText = it }, label = { Text("替换") }, modifier = Modifier.weight(1f))
+            }
+            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                listOf("KEEP", "DIALOGUE", "COMMENT").forEach { mode ->
+                    FilterChip(commentAction == mode, { commentAction = mode }, { Text("类型 ${mode}") })
+                }
+            }
+            Text("高级修改", style = MaterialTheme.typography.labelLarge)
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                OutlinedTextField(regexFind, { regexFind = it }, label = { Text("Regex 查找") }, modifier = Modifier.weight(1f))
+                OutlinedTextField(regexReplace, { regexReplace = it }, label = { Text("Regex 替换") }, modifier = Modifier.weight(1f))
+            }
+            FilterChip(regexRaw, { regexRaw = !regexRaw }, { Text(if (regexRaw) "替换 Raw ASS" else "仅替正文") })
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                OutlinedTextField(timingOrigin, { timingOrigin = it }, label = { Text("缩放原点 ms") }, modifier = Modifier.weight(1f))
+                OutlinedTextField(timingNumerator, { timingNumerator = it }, label = { Text("时间倍率分子") }, modifier = Modifier.weight(1f))
+                OutlinedTextField(timingDenominator, { timingDenominator = it }, label = { Text("分母") }, modifier = Modifier.weight(1f))
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                OutlinedTextField(overridePropertyName, { overridePropertyName = it }, label = { Text("数值 override 属性") }, modifier = Modifier.weight(1f))
+                OutlinedTextField(overrideValue, { overrideValue = it }, label = { Text("值") }, modifier = Modifier.weight(1f))
+            }
+
+            Surface(
+                tonalElevation = 1.dp,
+                shape = MaterialTheme.shapes.small,
+                modifier = Modifier.fillMaxWidth().testTag("batch-karaoke-reveal"),
+            ) {
+                Column(Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                        Switch(
+                            checked = karaokeRevealEnabled,
+                            onCheckedChange = { karaokeRevealEnabled = it },
+                            modifier = Modifier.testTag("batch-karaoke-reveal-enabled"),
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text("Karaoke · 逐音节显现 FX", style = MaterialTheme.typography.labelLarge)
+                            Text(
+                                "启用后只让当前参数下可安全编译的 Karaoke Event 进入批次。",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                    if (karaokeRevealEnabled) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            OutlinedTextField(
+                                karaokeRevealMs,
+                                { karaokeRevealMs = it },
+                                label = { Text("显现 ms") },
+                                singleLine = true,
+                                modifier = Modifier.weight(1f).testTag("batch-karaoke-reveal-ms"),
+                            )
+                            OutlinedTextField(
+                                karaokeRevealBlur,
+                                { karaokeRevealBlur = it },
+                                label = { Text("起始 Blur") },
+                                singleLine = true,
+                                modifier = Modifier.weight(1f).testTag("batch-karaoke-reveal-blur"),
+                            )
+                            OutlinedTextField(
+                                karaokeRevealAccel,
+                                { karaokeRevealAccel = it },
+                                label = { Text("Accel") },
+                                singleLine = true,
+                                modifier = Modifier.weight(1f).testTag("batch-karaoke-reveal-accel"),
+                            )
+                        }
+                        if (karaokeRevealSpec == null) {
+                            Text(
+                                "参数无效：显现时长需 ≥ 0；Blur 0..20；Accel 为空或 > 0。",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                        } else {
+                            Text(
+                                "初始不兼容 Event 会被筛掉；若同一批处理中的前序动作使 Event 在执行阶段失去兼容性，预览/提交会整体失败，避免只应用部分动作。",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+            }
+
+            HorizontalDivider()
+            Text("变更预览", style = MaterialTheme.typography.labelLarge)
+            when {
+                previewError != null -> {
+                    Text(
+                        "预览失败：" + previewError,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.testTag("batch-preview-error"),
                     )
-                    Spacer(Modifier.width(8.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text("Karaoke · 逐音节显现 FX", style = MaterialTheme.typography.labelLarge)
-                        Text(
-                            "启用后只让当前参数下可安全编译的 Karaoke Event 进入批次。",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
                 }
-                if (karaokeRevealEnabled) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        OutlinedTextField(
-                            karaokeRevealMs,
-                            { karaokeRevealMs = it },
-                            label = { Text("显现 ms") },
-                            singleLine = true,
-                            modifier = Modifier.weight(1f).testTag("batch-karaoke-reveal-ms"),
-                        )
-                        OutlinedTextField(
-                            karaokeRevealBlur,
-                            { karaokeRevealBlur = it },
-                            label = { Text("起始 Blur") },
-                            singleLine = true,
-                            modifier = Modifier.weight(1f).testTag("batch-karaoke-reveal-blur"),
-                        )
-                        OutlinedTextField(
-                            karaokeRevealAccel,
-                            { karaokeRevealAccel = it },
-                            label = { Text("Accel") },
-                            singleLine = true,
-                            modifier = Modifier.weight(1f).testTag("batch-karaoke-reveal-accel"),
-                        )
-                    }
-                    if (karaokeRevealSpec == null) {
-                        Text(
-                            "参数无效：显现时长需 ≥ 0；Blur 0..20；Accel 为空或 > 0。",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.error,
-                        )
-                    } else {
-                        Text(
-                            "初始不兼容 Event 会被筛掉；若同一批处理中的前序动作使 Event 在执行阶段失去兼容性，预览/提交会整体失败，避免只应用部分动作。",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                previewPending -> {
+                    Text(
+                        "当前配方尚未执行完整预检；修改参数时不会扫描整个文档。",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.testTag("batch-preview-pending"),
+                    )
+                }
+                preview != null -> {
+                    explicitReview?.let { review ->
+                        BatchReviewResults(review, "batch-preview", draftEntry.page("rule")) { viewModel.focusEvent(it, seek = false) }
                     }
                 }
             }
         }
-
-        HorizontalDivider()
-        Text("Preview", style = MaterialTheme.typography.labelLarge)
-        OutlinedButton(
-            onClick = {
-                val currentRecipe = recipe ?: return@OutlinedButton
-                val result = runCatching { AssBatchReview.create(state.document, currentRecipe, state.workspaceSessionId) }
-                draftEntry.record("rule", state.document, scopeIds, result)
+        BatchActionBar(scopeIds.size, preview?.changedEventIds?.size, previewError,
+            previewEnabled = batchInputError == null && recipeError == null && recipe != null,
+            applyEnabled = recipe != null && preview?.changedEventIds?.isNotEmpty() == true,
+            previewTag = "batch-preview-explicit", applyTag = "batch-review-commit",
+            onPreview = {
+                recipe?.let { current -> draftEntry.record("rule", state.document, scopeIds,
+                    runCatching { AssBatchReview.create(state.document, current, state.workspaceSessionId) }) }
             },
-            enabled = batchInputError == null && recipeError == null && recipe != null,
-            modifier = Modifier.fillMaxWidth().testTag("batch-preview-explicit"),
-        ) {
-            Text("预检并生成批处理预览")
+            onApply = { explicitReview?.let(viewModel::applyBatchReview) })
         }
-        when {
-            previewError != null -> {
-                Text(
-                    "预览失败：" + previewError,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.testTag("batch-preview-error"),
-                )
-            }
-            previewPending -> {
-                Text(
-                    "当前配方尚未执行完整预检；修改参数时不会扫描整个文档。",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.testTag("batch-preview-pending"),
-                )
-            }
-            preview != null -> {
-                explicitReview?.let { review ->
-                    BatchReviewResults(review, "batch-preview", draftEntry.page("rule")) { viewModel.focusEvent(it, seek = false) }
-                }
-            }
-        }
-        Button(
-            onClick = { explicitReview?.let(viewModel::applyBatchReview) },
-            enabled = recipe != null && preview?.changedEventIds?.isNotEmpty() == true,
-            modifier = Modifier.fillMaxWidth().testTag("batch-review-commit"),
-        ) { Text("应用已预览的 ${preview?.changedEventIds?.size ?: 0} 条 · 一个事务") }
-
-        SemanticSearchReplacePane(state, viewModel, scopeIds, draftEntry)
     }
 }

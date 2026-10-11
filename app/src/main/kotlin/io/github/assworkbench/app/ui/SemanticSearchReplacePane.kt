@@ -1,6 +1,8 @@
 package io.github.assworkbench.app.ui
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -17,6 +19,7 @@ internal fun SemanticSearchReplacePane(
     eventIds: Set<Long>,
     draftEntry: BatchAuthoringDraftEntry,
     modifier: Modifier = Modifier,
+    scopeContent: @Composable () -> Unit,
 ) {
     var patternText by draftEntry.text("search.patternText", "")
     var replacementText by draftEntry.text("search.replacementText", "")
@@ -94,7 +97,9 @@ internal fun SemanticSearchReplacePane(
     val preview = review?.preview
     val errorMessage = localInputError ?: queryError ?: executionError
 
-    Column(modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(modifier) {
+    Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        scopeContent()
         HorizontalDivider()
         Text("结构化搜索与替换", style = MaterialTheme.typography.titleMedium)
         Text("沿用上方作用范围：${eventIds.size} 条。正文按现有 token 边界替换，跨 override block 的匹配可能命中但不会修改；Raw ASS 直接修改标签。", style = MaterialTheme.typography.bodySmall)
@@ -102,22 +107,23 @@ internal fun SemanticSearchReplacePane(
             FilterChip(regexMode, { regexMode = !regexMode }, { Text("Regex") })
             FilterChip(ignoreCase, { ignoreCase = !ignoreCase }, { Text("忽略大小写") })
         }
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            AssReplaceScope.entries.forEach { item ->
-                FilterChip(
-                    selected = scope == item,
-                    onClick = { searchScope = item.name },
-                    label = {
-                        Text(
-                            when (item) {
+        Column(Modifier.fillMaxWidth()) {
+            AssReplaceScope.entries.chunked(2).forEach { choices ->
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    choices.forEach { item ->
+                        FilterChip(
+                            selected = scope == item,
+                            onClick = { searchScope = item.name },
+                            modifier = Modifier.weight(1f),
+                            label = { Text(when (item) {
                                 AssReplaceScope.VISIBLE_TEXT -> "正文"
                                 AssReplaceScope.RAW_EVENT_TEXT -> "Raw ASS"
                                 AssReplaceScope.STYLE -> "Style"
                                 AssReplaceScope.ACTOR -> "Actor"
-                            }
+                            }) },
                         )
-                    },
-                )
+                    }
+                }
             }
         }
         OutlinedTextField(
@@ -160,27 +166,24 @@ internal fun SemanticSearchReplacePane(
                 modifier = Modifier.weight(1f).testTag("search-actor-regex"),
             )
         }
-        OutlinedButton(
-            onClick = {
-                val p = mainPattern ?: return@OutlinedButton
-                val q = query ?: return@OutlinedButton
-                val result = runCatching { AssBatchReview.search(state.document, q,
-                    AssSearchReplacement(scope, p, replacementText), eventIds, state.workspaceSessionId) }
-                draftEntry.record("search", state.document, eventIds, result)
-            },
-            enabled = localInputError == null && queryError == null && mainPattern != null && query != null,
-            modifier = Modifier.fillMaxWidth().testTag("search-review-preview"),
-        ) { Text("预检替换并查看变更") }
         if (errorMessage != null) {
             Text("搜索/替换规则无效：$errorMessage", color = MaterialTheme.colorScheme.error,
                 modifier = Modifier.testTag("search-replace-error"))
         } else {
             review?.let { BatchReviewResults(it, "search-preview", draftEntry.page("search")) { id -> viewModel.focusEvent(id, seek = false) } }
         }
-        Button(
-            onClick = { review?.let(viewModel::applyBatchReview) },
-            enabled = errorMessage == null && preview?.changedEventIds?.isNotEmpty() == true,
-            modifier = Modifier.fillMaxWidth().testTag("search-review-commit"),
-        ) { Text("应用已预览的替换 · 一个 Undo 事务") }
+    }
+    BatchActionBar(eventIds.size, preview?.changedEventIds?.size, errorMessage,
+        previewEnabled = localInputError == null && queryError == null && mainPattern != null && query != null,
+        applyEnabled = errorMessage == null && preview?.changedEventIds?.isNotEmpty() == true,
+        previewTag = "search-review-preview", applyTag = "search-review-commit",
+        onPreview = {
+            val p = mainPattern
+            val q = query
+            if (p != null && q != null) draftEntry.record("search", state.document, eventIds,
+                runCatching { AssBatchReview.search(state.document, q,
+                    AssSearchReplacement(scope, p, replacementText), eventIds, state.workspaceSessionId) })
+        },
+        onApply = { review?.let(viewModel::applyBatchReview) })
     }
 }

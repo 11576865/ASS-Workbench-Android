@@ -2,8 +2,8 @@
   "schema_version": 1,
   "id": "ass-authoring-main-canvas-20261011",
   "goal": "Improve subtitle authoring efficiency, redesign main UI and refine infinite canvas UI.",
-  "status": "shared_batch_drafts_source_implemented_native_validation_pending",
-  "current_work_unit": "Same-session ToolInstance-owned batch inputs, reviewed previews and page continuity across main/canvas",
+  "status": "batch_workbench_ui_source_implemented_native_validation_pending",
+  "current_work_unit": "Two batch workflow pages, fully visible scope choices and fixed review/apply action bar",
   "completed_units": [
     "Read current repository protocol, prior task and source checkpoint 69ad5c076c8695fae15c59b01cd391a647bb8652.",
     "User selected subtitle authoring efficiency as the new-capability priority.",
@@ -29,25 +29,30 @@
     "Independent source review fixed default scope and missing locate; domain235/235; Android regression additions pending.",
     "Session-root observable batch draft store shares all literal rule/search inputs and reviewed previews by ToolInstance, closes clean up owner.",
     "Same-session primitive snapshot restores parameters only; reviewed authorization requires fresh precheck; full domain243/243.",
-    "Independent review identified process/session mismatch, recorded outside completed scope; page cache no longer retains old document receipts."
+    "Independent review identified process/session mismatch, recorded outside completed scope; page cache no longer retains old document receipts.",
+    "Separated rule and semantic search UI into two workflow pages; scope/replace choices visible in2x2 cards.",
+    "Fixed preview/apply bar outside body scroll, pipeline-specific counts/error summary; presentation switches retain review.",
+    "Parent Android compile failure traced to nullable pagination delegate; explicit MutableState/value source fix awaiting native validation.",
+    "Full domain244/244; short-pane chrome and workflow-switch native tests added, old action scrolling updated.",
+    "Independent review repaired IME overlap with root viewport padding; two-host visible-keyboard touch regression added, native execution pending."
   ],
   "next_units": [
-    "Read exact-head Android CI/emulator results; triage remaining native regressions.",
-    "Establish stable process/project restoration identity before claiming process recovery of drafts.",
-    "Unify remaining professional-tool drafts and recover historical four-edge/docking/glass capabilities."
+    "Read exact-head Android compile/emulator results and resolve blockers before further UI work.",
+    "Inspect production native UI screenshots/IME/font scaling; continue main/canvas layout improvements based on evidence.",
+    "Restore remaining historical interaction capabilities and stable process/session recovery."
   ],
   "branch": "redesign/infinite-canvas-workbench-v2",
   "pr": 138,
-  "latest_durable_commit": "a167287bbe6d108d8953dda8e36ddb4207a45b6f",
+  "latest_durable_commit": "c89d34475a4f5c08fda8f37f91520d0d895eb351",
   "checkpoint_location": "The commit containing this updated record is the source checkpoint; latest_durable_commit identifies the inspected baseline.",
   "external_validation": {
     "baseline_android_ci": "success:38117186072",
     "baseline_emulator": "failure:38117186042; detailed logs unavailable",
     "baseline_fontconfig": "success:38117186058",
-    "proposed_product_changes": "source implemented; domain243/243; Android pending",
+    "proposed_product_changes": "source implemented; domain244/244; Android pending",
     "real_device_visual_ime": "pending",
     "uigs_intake": "Pending; source audit Candidate retained in .uigs/intake-pending/2026-10-11-task-category-host-audit.md",
-    "android_ci": "parent a167287b success:38161380919",
+    "android_ci": "parent c89d3447 failure:38162281475 app:compileDebugKotlin nullable delegate",
     "emulator": "baseline in_progress:38160312619",
     "fontconfig": "baseline in_progress:38160312322"
   },

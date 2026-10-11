@@ -11,6 +11,9 @@ data class BatchAuthoringDraft(
     fun edit(key: String, value: String): BatchAuthoringDraft =
         if (values[key] == value) this else copy(values = values + (key to value), previews = emptyMap())
 
+    fun present(key: String, value: String): BatchAuthoringDraft =
+        if (values[key] == value) this else copy(values = values + (key to value))
+
     fun record(channel: String, document: AssDocument, eventIds: Set<Long>, review: AssBatchReview?, error: String?): BatchAuthoringDraft =
         copy(previews = previews + (channel to BatchAuthoringPreview(document, eventIds.toSet(), review, error)))
 

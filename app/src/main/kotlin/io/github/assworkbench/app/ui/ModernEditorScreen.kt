@@ -313,7 +313,8 @@ fun ModernEditorScreen(
         color = MaterialTheme.colorScheme.background,
         contentColor = MaterialTheme.colorScheme.onBackground,
     ) {
-        Box(Modifier.fillMaxSize()) {
+        // Consume IME space once for both hosts; individual canvas nodes share this viewport.
+        Box(Modifier.fillMaxSize().imePadding()) {
         Column(Modifier.fillMaxSize()) {
             // File, project, history and workspace navigation are never gated
             // by hiding floating tools or opening a spatial authoring pane.

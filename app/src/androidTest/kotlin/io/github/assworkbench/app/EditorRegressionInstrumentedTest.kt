@@ -28,6 +28,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.click
 import androidx.compose.ui.test.swipe
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToNode
@@ -1063,6 +1064,7 @@ class EditorRegressionInstrumentedTest {
         val before = viewModel.state.value.document
 
         openTool("BATCH")
+        composeRule.onNodeWithTag("batch-mode-search").performClick()
         composeRule.onNodeWithTag("search-style-regex")
             .performScrollTo()
             .assertIsDisplayed()
@@ -1142,6 +1144,42 @@ class EditorRegressionInstrumentedTest {
         }
     }
 
+    @Test fun batchActionsRemainAboveVisibleKeyboardAcrossMainAndCanvas() {
+        restoreRecovery()
+        composeRule.activityRule.scenario.onActivity { activity ->
+            androidx.core.view.WindowCompat.setDecorFitsSystemWindows(activity.window, false)
+            activity.window.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+        }
+        repeat(2) { host ->
+            if (host == 1) switchToUnifiedCanvas()
+            openTool("BATCH")
+            composeRule.onNodeWithTag("batch-actor-action").performScrollTo().performClick()
+                .performTextReplacement("KEYBOARD_BATCH")
+            composeRule.activityRule.scenario.onActivity { activity ->
+                activity.currentFocus?.let { focused ->
+                    activity.getSystemService(android.view.inputmethod.InputMethodManager::class.java)
+                        .showSoftInput(focused, android.view.inputmethod.InputMethodManager.SHOW_FORCED)
+                }
+            }
+            composeRule.waitUntil(5_000) {
+                composeRule.activity.window.decorView.rootWindowInsets
+                    ?.isVisible(android.view.WindowInsets.Type.ime()) == true
+            }
+            composeRule.waitForIdle()
+            val decor = composeRule.activity.window.decorView
+            val keyboardTop = decor.height - decor.rootWindowInsets.getInsets(android.view.WindowInsets.Type.ime()).bottom
+            val preview = composeRule.onNodeWithTag("batch-preview-explicit")
+            val apply = composeRule.onNodeWithTag("batch-review-commit")
+            preview.assertIsDisplayed()
+            apply.assertIsDisplayed()
+            assertTrue("Preview must stay above IME", preview.fetchSemanticsNode().boundsInWindow.bottom <= keyboardTop + 1f)
+            assertTrue("Apply must stay above IME", apply.fetchSemanticsNode().boundsInWindow.bottom <= keyboardTop + 1f)
+            preview.performTouchInput { click() }
+            apply.assertIsEnabled()
+            hideKeyboard()
+        }
+    }
+
     @Test fun batchDraftAndReviewedPreviewFollowSameInstanceAcrossMainAndCanvas() {
         restoreRecovery()
         val before = viewModel.state.value.document
@@ -1150,14 +1188,17 @@ class EditorRegressionInstrumentedTest {
         composeRule.onNodeWithTag("batch-scope-RESULTS").performClick()
         composeRule.onNodeWithTag("batch-actor-action").performScrollTo().performTextReplacement("SHARED_BATCH")
         hideKeyboard()
-        composeRule.onNodeWithTag("batch-preview-explicit").performScrollTo().performClick()
-        composeRule.onNodeWithTag("batch-review-commit").performScrollTo().assertIsEnabled()
+        composeRule.onNodeWithTag("batch-preview-explicit").performClick()
+        composeRule.onNodeWithTag("batch-review-commit").assertIsEnabled()
+        composeRule.onNodeWithTag("batch-mode-search").performClick()
+        composeRule.onNodeWithTag("batch-mode-rule").performClick()
+        composeRule.onNodeWithTag("batch-review-commit").assertIsEnabled()
         switchToUnifiedCanvas()
         openTool("BATCH")
         composeRule.onNodeWithTag("batch-scope-RESULTS").performScrollTo().assertIsSelected()
         composeRule.onNodeWithTag("batch-scope-count").assertTextContains("作用范围 1 条")
         composeRule.onNodeWithTag("batch-actor-action").performScrollTo().assertTextContains("SHARED_BATCH")
-        composeRule.onNodeWithTag("batch-review-commit").performScrollTo().assertIsEnabled()
+        composeRule.onNodeWithTag("batch-review-commit").assertIsEnabled()
         composeRule.runOnIdle { assertEquals(before, viewModel.state.value.document) }
         composeRule.onNodeWithTag("batch-review-commit").performClick()
         composeRule.runOnIdle {
@@ -1170,20 +1211,22 @@ class EditorRegressionInstrumentedTest {
     @Test fun batchSearchLiteralInputsRestoreButReviewedCommitRequiresFreshPrecheckAfterRecreation() {
         restoreRecovery()
         openTool("BATCH")
+        composeRule.onNodeWithTag("batch-mode-search").performClick()
         composeRule.onNodeWithTag("batch-scope-DOCUMENT").performClick()
         composeRule.onNodeWithTag("search-pattern").performScrollTo().performTextReplacement("Second")
         composeRule.onNodeWithTag("search-replacement").performScrollTo().performTextReplacement("RESTORED_SEARCH")
         hideKeyboard()
-        composeRule.onNodeWithTag("search-review-preview").performScrollTo().performClick()
-        composeRule.onNodeWithTag("search-review-commit").performScrollTo().assertIsEnabled()
+        composeRule.onNodeWithTag("search-review-preview").performClick()
+        composeRule.onNodeWithTag("search-review-commit").assertIsEnabled()
         val before = viewModel.state.value.document
         composeRule.activityRule.scenario.recreate()
         composeRule.waitForIdle()
         viewModel = composeRule.activity.editorViewModel
         openTool("BATCH")
+        composeRule.onNodeWithTag("batch-mode-search").performClick()
         composeRule.onNodeWithTag("search-pattern").performScrollTo().assertTextContains("Second")
         composeRule.onNodeWithTag("search-replacement").performScrollTo().assertTextContains("RESTORED_SEARCH")
-        composeRule.onNodeWithTag("search-review-commit").performScrollTo().assertIsNotEnabled()
+        composeRule.onNodeWithTag("search-review-commit").assertIsNotEnabled()
         composeRule.runOnIdle { assertEquals(before, viewModel.state.value.document) }
     }
 
@@ -1220,8 +1263,8 @@ class EditorRegressionInstrumentedTest {
         composeRule.onNodeWithTag("batch-scope-count").assertTextContains("作用范围 1 条")
         composeRule.onNodeWithTag("batch-actor-action").performScrollTo().performTextReplacement("Reviewed")
         hideKeyboard()
-        composeRule.onNodeWithTag("batch-preview-explicit").performScrollTo().performClick()
-        composeRule.onNodeWithTag("batch-review-commit").performScrollTo().assertIsEnabled()
+        composeRule.onNodeWithTag("batch-preview-explicit").performClick()
+        composeRule.onNodeWithTag("batch-review-commit").assertIsEnabled()
         val beforeLocate = viewModel.state.value.document
         val selectionBeforeLocate = viewModel.state.value.selectedEventIds
         composeRule.onNodeWithTag("batch-preview-locate-2").performScrollTo().performClick()
@@ -1231,15 +1274,15 @@ class EditorRegressionInstrumentedTest {
             assertEquals(beforeLocate, viewModel.state.value.document)
         }
         composeRule.onNodeWithTag("batch-scope-DOCUMENT").performScrollTo().performClick()
-        composeRule.onNodeWithTag("batch-review-commit").performScrollTo().assertIsNotEnabled()
+        composeRule.onNodeWithTag("batch-review-commit").assertIsNotEnabled()
         switchToUnifiedCanvas()
         openTool("BATCH")
         composeRule.onNodeWithTag("batch-scope-RESULTS").performScrollTo().performClick()
         composeRule.onNodeWithTag("batch-scope-count").assertTextContains("作用范围 1 条")
         composeRule.onNodeWithTag("batch-actor-action").performScrollTo().performTextReplacement("Reviewed")
         hideKeyboard()
-        composeRule.onNodeWithTag("batch-preview-explicit").performScrollTo().performClick()
-        composeRule.onNodeWithTag("batch-review-commit").performScrollTo().performClick()
+        composeRule.onNodeWithTag("batch-preview-explicit").performClick()
+        composeRule.onNodeWithTag("batch-review-commit").performClick()
         composeRule.runOnIdle {
             assertEquals("Reviewed", viewModel.state.value.document.events.first { it.id == 2L }.name)
             assertFalse(viewModel.state.value.document.events.first { it.id == 1L }.name == "Reviewed")
@@ -1299,6 +1342,7 @@ class EditorRegressionInstrumentedTest {
         val before = viewModel.state.value.document
 
         openTool("BATCH")
+        composeRule.onNodeWithTag("batch-mode-search").performClick()
         composeRule.onNodeWithTag("search-style-regex")
             .performScrollTo()
             .assertIsDisplayed()
@@ -1341,7 +1385,7 @@ class EditorRegressionInstrumentedTest {
         composeRule.onNodeWithTag("batch-karaoke-reveal-accel")
             .assertIsDisplayed()
         composeRule.onNodeWithTag("batch-preview-explicit")
-            .performScrollTo()
+
             .assertIsDisplayed()
         composeRule.onNodeWithTag("batch-preview-pending")
             .performScrollTo()

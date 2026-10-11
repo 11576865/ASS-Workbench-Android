@@ -34,6 +34,12 @@ class BatchAuthoringDraftTest {
         val draft = reviewed().reconcile("rule", document, emptySet()).reconcile("rule", document, ids)
         assertNull(draft.previews["rule"])
     }
+    @Test fun changingPresentationKeepsReviewedParametersAndAuthorization() {
+        val draft = reviewed().present("presentation.mode", "search")
+        assertEquals("search", draft.values["presentation.mode"])
+        assertEquals("Alice", draft.values["actor"])
+        assertEquals(listOf(1L), draft.previews.getValue("rule").review?.preview?.changedEventIds)
+    }
     @Test fun defaultInitializationDoesNotOverwriteChosenScope() {
         val draft = reviewed().initialize("scope", "DOCUMENT").edit("scope", "SELECTED")
         assertEquals("SELECTED", draft.initialize("scope", "DOCUMENT").values["scope"])

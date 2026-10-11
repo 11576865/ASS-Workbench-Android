@@ -11,17 +11,18 @@ import io.github.assworkbench.domain.AssBatchReview
 @Composable
 internal fun BatchReviewResults(review: AssBatchReview, tagPrefix: String, pageState: MutableState<Int>? = null, onLocate: (Long) -> Unit) {
     val preview = review.preview
-    var previewPage by (pageState ?: remember(review) { mutableStateOf(0) })
+    val resolvedPageState: MutableState<Int> = pageState ?: remember(review) { mutableStateOf(0) }
+    val previewPage = resolvedPageState.value
     val changedExamples = remember(review, previewPage) { review.page(previewPage) }
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text("命中 ${preview.affectedEventIds.size} 条 · 实际变化 ${preview.changedEventIds.size} 条")
         val pages = review.pageCount
         if (pages > 0) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                OutlinedButton({ previewPage-- }, enabled = previewPage > 0,
+                OutlinedButton({ resolvedPageState.value-- }, enabled = previewPage > 0,
                     modifier = Modifier.testTag("$tagPrefix-previous")) { Text("上一页") }
                 Text("${previewPage + 1} / $pages", modifier = Modifier.weight(1f))
-                OutlinedButton({ previewPage++ }, enabled = previewPage + 1 < pages,
+                OutlinedButton({ resolvedPageState.value++ }, enabled = previewPage + 1 < pages,
                     modifier = Modifier.testTag("$tagPrefix-next")) { Text("下一页") }
             }
         }

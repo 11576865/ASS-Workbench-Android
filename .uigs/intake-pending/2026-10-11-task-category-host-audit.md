@@ -39,3 +39,13 @@ Source-only case: observable inputs/preview ownership must use tool instance ide
 Restore caveat: an in-memory session epoch starting at1 is not stable process/project identity. Rejecting mismatched snapshots protects boundaries but cannot substantiate killed-process restoration. Activity recreation retaining a VM is not a killed-process test. This is a scoped source observation, not Canonical.
 
 Dedup: existing Foundry spatial owner/session and evidence identity families searched; append source case here. Evidence domain243/243; Android/process/visual Pending. Destination write remains Pending under prior automatic cross-repository rejection; no retry.
+
+## Batch UI action ownership / Pending
+
+Source case: moving preview/apply outside a long scroll body requires pipeline-specific ownership; two stacked pipelines cannot share an ambiguous fixed apply action. Rule/search pages provide that context. Presentation state changes must not invalidate an already reviewed domain operation; parameter changes must.
+
+Test case: performScrollTo assumes a scrolling ancestor and must be removed when the production action becomes a fixed footer; preserve display/enabled/document assertions. Native320x191 fixture is newly added and Pending, not measured usability evidence.
+
+Bug observation: a nullable Elvis MutableState expression used as a var delegate failed the actual Android Kotlin compile on c89d3447, despite pure domain tests. Explicit state typing/member access source fix awaits exact-head native verification. Dedup search against existing UI/identity/viewport families; source-level intake only, Canonical unchanged. External write remains Pending after prior automatic cross-repository rejection.
+
+IME source review: fixed actions need keyboard-safe host bounds. Consume IME space at the common viewport rather than every spatial node. Added real-Activity two-host keyboard/bounds/touch regression; execution Pending, no measured device conclusion.

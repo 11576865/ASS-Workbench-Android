@@ -10,12 +10,12 @@ internal class BatchAuthoringDraftEntry(initial: BatchAuthoringDraft = BatchAuth
     var draft by mutableStateOf(initial)
         private set
 
-    fun text(key: String, default: String = ""): MutableState<String> {
+    fun text(key: String, default: String = "", invalidateReview: Boolean = true): MutableState<String> {
         draft = draft.initialize(key, default)
         return object : MutableState<String> {
             override var value: String
                 get() = draft.values.getValue(key)
-                set(value) { draft = draft.edit(key, value) }
+                set(value) { draft = if (invalidateReview) draft.edit(key, value) else draft.present(key, value) }
             override fun component1() = value
             override fun component2(): (String) -> Unit = { value = it }
         }

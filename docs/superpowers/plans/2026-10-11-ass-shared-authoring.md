@@ -104,3 +104,15 @@ No full-project completion claim. Evidence: docs/BATCH-REVIEW-2026-10-12.md.
 Ruling: reject cross-session saved inputs rather than silently adopting another project; cost is possible batch draft loss after process restart.
 Strict unobserved intermediate mutation requires a future command-layer version token; exact baseline commit remains guarded.
 Evidence: docs/BATCH-DRAFT-CONTINUITY-2026-10-12.md.
+
+## Continuation: visible batch workflows and fixed actions
+
+- [x] Trace exact parent Android compile failure to nullable pagination delegate; source fix uses explicit MutableState/value.
+- [x] Separate rule/search pages, visible2x2 range/field scope choices, bounded scrolling bodies and fixed action bars.
+- [x] Presentation-only draft changes preserve reviewed results; field edits continue invalidation.
+- [x] Domain244/244; short-pane/action/workflow regressions added; scroll helpers updated for fixed controls.
+- [ ] Exact-head Android build, native short-window/IME/font-scale/visual execution.
+
+Evidence: docs/BATCH-WORKBENCH-UI-2026-10-12.md. No renewed architecture approval required for this authorized workflow/UI continuation.
+
+Independent source review found fixed-footer IME overlap; root viewport now consumes keyboard inset once for both hosts. Actual Activity two-host test requires visible keyboard, verifies button window bounds above IME and touch precheck. Source re-review found no blockers; native execution pending.
