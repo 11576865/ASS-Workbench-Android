@@ -5,6 +5,16 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class WorkbenchToolCatalogTest {
+    @Test fun subtitleNavigationDoesNotOfferThePreviousInspectorTools() {
+        assertEquals(listOf(WorkbenchTool.SUBTITLES), fixedNavigationTools(WorkbenchToolGroup.NAVIGATION))
+    }
+
+    @Test fun fixedNavigationKeepsTheWorkspaceDirectoryReachable() {
+        assertEquals(listOf(WorkbenchTool.CAPABILITIES), fixedNavigationTools(WorkbenchToolGroup.WORKSPACE))
+        assertEquals(listOf(WorkbenchTool.STYLE, WorkbenchTool.POSITION, WorkbenchTool.VECTOR_CLIP),
+            fixedNavigationTools(WorkbenchToolGroup.TYPESETTING))
+    }
+
     @Test
     fun reclassificationRetainsEveryPersistedToolKey() {
         assertEquals(
