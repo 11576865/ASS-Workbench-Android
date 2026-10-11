@@ -17,6 +17,10 @@ internal enum class WorkbenchToolGroup(val title: String) {
     WORKSPACE("工作区"),
 }
 
+/** The second navigation row follows the requested group, including list and directory actions. */
+internal fun fixedNavigationTools(group: WorkbenchToolGroup): List<WorkbenchTool> =
+    WorkbenchTool.entries.filter { it.group == group }
+
 internal enum class ToolContextKind {
     EVENT,
     SELECTION,

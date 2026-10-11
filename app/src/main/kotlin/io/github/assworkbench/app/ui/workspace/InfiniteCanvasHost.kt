@@ -1033,75 +1033,85 @@ internal fun InfiniteCanvasHost(
         }
 
         // Workspace actions remain separate from ASS document Undo/Redo.
-        if (boardMode) Surface(Modifier.align(Alignment.TopCenter).padding(8.dp).zIndex(1_000_025f),
+        if (boardMode) Surface(Modifier.align(Alignment.TopCenter).widthIn(max = 900.dp).fillMaxWidth().padding(8.dp).zIndex(1_000_025f),
             shape = MaterialTheme.shapes.large, shadowElevation = 2.dp,
             color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.96f)) {
-            Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 6.dp),
+            Row(Modifier.fillMaxWidth().padding(horizontal = 6.dp),
                 verticalAlignment = Alignment.CenterVertically) {
-                if (boardMode) {
-                    Text("空间", Modifier.padding(horizontal = 8.dp),
-                        style = MaterialTheme.typography.titleSmall)
-                    TextButton(onClick = ::overview, enabled = !gestureOwned,
-                        modifier = Modifier.testTag("spatial-overview")) { Text("总览") }
-                    IconButton(onClick = ::goToPreviousViewport,
-                        enabled = !gestureOwned && viewportHistory.canBack,
-                        modifier = Modifier.testTag("spatial-viewport-back")) {
-                        Icon(Icons.Filled.ArrowBack, "返回上一画布视角")
-                    }
-                    IconButton(onClick = ::goToNextViewport,
-                        enabled = !gestureOwned && viewportHistory.canForward,
-                        modifier = Modifier.testTag("spatial-viewport-forward")) {
-                        Icon(Icons.Filled.ArrowForward, "前进下一画布视角")
-                    }
-                    TextButton(onClick = { timelineDockVisible = !timelineDockVisible },
-                        enabled = !gestureOwned, modifier = Modifier.testTag("spatial-timeline-toggle")) {
-                        Text(if (timelineDockVisible) "收起时间轴" else "时间轴")
-                    }
-                    Box {
-                        TextButton(onClick = { arrangeOpen = true }, enabled = !gestureOwned,
-                            modifier = Modifier.testTag("spatial-arrange")) { Text("整理") }
-                        DropdownMenu(expanded = arrangeOpen, onDismissRequest = { arrangeOpen = false }) {
-                            DropdownMenuItem(text = { Text("纵向排列") },
-                                onClick = { arrange(1) }, modifier = Modifier.testTag("spatial-arrange-column"))
-                            DropdownMenuItem(text = { Text("两列排列") },
-                                onClick = { arrange(2) }, modifier = Modifier.testTag("spatial-arrange-two"))
+                // Birdseye is the recovery route for a lost/offscreen workspace.
+                // Keep it outside the scrolling actions at every phone width.
+                Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()),
+                    verticalAlignment = Alignment.CenterVertically) {
+                    if (boardMode) {
+                        Text("空间", Modifier.padding(horizontal = 8.dp),
+                            style = MaterialTheme.typography.titleSmall)
+                        TextButton(onClick = ::overview, enabled = !gestureOwned,
+                            modifier = Modifier.testTag("spatial-overview")) { Text("总览") }
+                        IconButton(onClick = ::goToPreviousViewport,
+                            enabled = !gestureOwned && viewportHistory.canBack,
+                            modifier = Modifier.testTag("spatial-viewport-back")) {
+                            Icon(Icons.Filled.ArrowBack, "返回上一画布视角")
                         }
-                    }
-                    TextButton(onClick = { birdseyeOpen = true }, enabled = !gestureOwned,
-                        modifier = Modifier.testTag("spatial-birdseye")) { Text("鸟瞰") }
-                    Box {
-                        TextButton(onClick = { recallOpen = true }, enabled = !gestureOwned) { Text("召回") }
-                        DropdownMenu(expanded = recallOpen, onDismissRequest = { recallOpen = false }) {
-                            entries.forEach { entry ->
-                                DropdownMenuItem(text = { Text(entry.title) },
-                                    enabled = !gestureOwned,
-                                    modifier = Modifier.testTag("spatial-recall-" + entry.id.replace(':', '-')),
-                                    onClick = { focus(entry.id); recallOpen = false })
+                        IconButton(onClick = ::goToNextViewport,
+                            enabled = !gestureOwned && viewportHistory.canForward,
+                            modifier = Modifier.testTag("spatial-viewport-forward")) {
+                            Icon(Icons.Filled.ArrowForward, "前进下一画布视角")
+                        }
+                        TextButton(onClick = { timelineDockVisible = !timelineDockVisible },
+                            enabled = !gestureOwned, modifier = Modifier.testTag("spatial-timeline-toggle")) {
+                            Text(if (timelineDockVisible) "收起时间轴" else "时间轴")
+                        }
+                        Box {
+                            TextButton(onClick = { arrangeOpen = true }, enabled = !gestureOwned,
+                                modifier = Modifier.testTag("spatial-arrange")) { Text("整理") }
+                            DropdownMenu(expanded = arrangeOpen, onDismissRequest = { arrangeOpen = false }) {
+                                DropdownMenuItem(text = { Text("纵向排列") },
+                                    onClick = { arrange(1) }, modifier = Modifier.testTag("spatial-arrange-column"))
+                                DropdownMenuItem(text = { Text("两列排列") },
+                                    onClick = { arrange(2) }, modifier = Modifier.testTag("spatial-arrange-two"))
                             }
                         }
+                        Box {
+                            TextButton(onClick = { recallOpen = true }, enabled = !gestureOwned) { Text("召回") }
+                            DropdownMenu(expanded = recallOpen, onDismissRequest = { recallOpen = false }) {
+                                entries.forEach { entry ->
+                                    DropdownMenuItem(text = { Text(entry.title) },
+                                        enabled = !gestureOwned,
+                                        modifier = Modifier.testTag("spatial-recall-" + entry.id.replace(':', '-')),
+                                        onClick = { focus(entry.id); recallOpen = false })
+                                }
+                            }
+                        }
+                        IconButton(enabled = !gestureOwned,
+                            onClick = {
+                                navigateToCamera(scene.first.zoomAt(viewportW / 2f, viewportH / 2f,
+                                    scene.first.scale / 1.2f))
+                            }, modifier = Modifier.testTag("spatial-zoom-out")) {
+                            Icon(Icons.Filled.Remove, "缩小画布")
+                        }
+                        Text((camera.scale * 100f).toInt().toString() + "%",
+                            style = MaterialTheme.typography.labelSmall)
+                        IconButton(enabled = !gestureOwned,
+                            onClick = {
+                                navigateToCamera(scene.first.zoomAt(viewportW / 2f, viewportH / 2f,
+                                    scene.first.scale * 1.2f))
+                            }, modifier = Modifier.testTag("spatial-zoom-in")) {
+                            Icon(Icons.Filled.Add, "放大画布")
+                        }
                     }
-                    IconButton(enabled = !gestureOwned,
-                        onClick = {
-                            navigateToCamera(scene.first.zoomAt(viewportW / 2f, viewportH / 2f,
-                                scene.first.scale / 1.2f))
-                        }, modifier = Modifier.testTag("spatial-zoom-out")) {
-                        Icon(Icons.Filled.Remove, "缩小画布")
+                    IconButton(onClick = onUndo, enabled = canUndo) {
+                        Icon(Icons.Filled.Undo, "撤销字幕编辑")
                     }
-                    Text((camera.scale * 100f).toInt().toString() + "%",
-                        style = MaterialTheme.typography.labelSmall)
-                    IconButton(enabled = !gestureOwned,
-                        onClick = {
-                            navigateToCamera(scene.first.zoomAt(viewportW / 2f, viewportH / 2f,
-                                scene.first.scale * 1.2f))
-                        }, modifier = Modifier.testTag("spatial-zoom-in")) {
-                        Icon(Icons.Filled.Add, "放大画布")
+                    IconButton(onClick = onRedo, enabled = canRedo) {
+                        Icon(Icons.Filled.Redo, "重做字幕编辑")
                     }
                 }
-                IconButton(onClick = onUndo, enabled = canUndo) {
-                    Icon(Icons.Filled.Undo, "撤销字幕编辑")
-                }
-                IconButton(onClick = onRedo, enabled = canRedo) {
-                    Icon(Icons.Filled.Redo, "重做字幕编辑")
+                VerticalDivider(Modifier.height(26.dp).padding(horizontal = 4.dp))
+                TextButton(onClick = { birdseyeOpen = true }, enabled = !gestureOwned,
+                    modifier = Modifier.testTag("spatial-birdseye")) {
+                    Icon(Icons.Filled.Map, null, Modifier.size(18.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("鸟瞰")
                 }
             }
         }

@@ -791,609 +791,493 @@ class EditorRegressionInstrumentedTest {
         val before = viewModel.state.value.document
         val field = composeRule.onNodeWithTag("geometry-clip-left-1-value")
         field.performScrollTo().performTextReplacement("120")
-        composeRule.waitUntil(5_000) { vi…98032 tokens truncated…         .testTag("spatial-live-" + entry.id.replace(':', '-'))) {
-                                        contentState.SaveableStateProvider(canvasSaveableContentKey(sessionId, CanvasContentRole.BOARD, entry.id)) {
-                                            content(entry.id, !node.passthrough)
-                                        }
-                                    }
-                                } else {
-                                    Box(Modifier.weight(1f).fillMaxWidth()) {
-                                        CanvasToolSummary(entry, width, height,
-                                            enabled = !gestureOwned, onOpen = { focus(entry.id) })
-                                    }
-                                }
-                                Icon(Icons.Filled.OpenInFull, "调整 " + entry.title + " 大小",
-                                    Modifier.align(Alignment.End).size(44.dp)
-                                        .testTag("spatial-resize-" + entry.id.replace(':', '-'))
-                                        .pointerInput(entry.id, gestureOwned, node.layoutLocked) {
-                                            detectDragGestures(
-                                                onDragStart = { if (!gestureOwned && !liveNode.layoutLocked) moving = liveNode },
-                                                onDragEnd = {
-                                                    if (!gestureOwned) moving?.let(::updateNode)
-                                                    moving = null
-                                                },
-                                                onDragCancel = { moving = null },
-                                                onDrag = { change, delta ->
-                                                    if (!gestureOwned && !liveNode.layoutLocked) {
-                                                        change.consume()
-                                                        moving = liveNode.resize(
-                                                            delta.x / density / scale,
-                                                            delta.y / density / scale,
-                                                        )
-                                                    }
-                                                },
-                                            )
-                                        }.padding(12.dp))
-                            }
-                        }
-                    }
-                }
-            }
-            // Reusable tool access does not require travelling across world space.
-            Surface(Modifier.align(Alignment.BottomCenter)
-                .padding(bottom = dockHeight + 8.dp, start = 8.dp, end = 8.dp)
-                .zIndex(1_000_010f), shape = MaterialTheme.shapes.large, shadowElevation = 3.dp) {
-                Row(Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically) {
-                    // Keep the only creation affordance inside the visible viewport.
-                    // Instance tabs may scroll without pushing the directory off-screen.
-                    TextButton(onClick = ::showToolPicker, enabled = !gestureOwned,
-                        modifier = Modifier.testTag("spatial-add-tool")) {
-                        Icon(Icons.Filled.Add, null, Modifier.size(18.dp))
-                        Text("工具")
-                    }
-                    VerticalDivider(Modifier.height(26.dp).padding(horizontal = 4.dp))
-                    Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()),
-                        verticalAlignment = Alignment.CenterVertically) {
-                        entries.forEach { entry ->
-                            val node = nodes.firstOrNull { it.id == entry.id }
-                            TextButton(
-                                enabled = node != null && !gestureOwned,
-                                onClick = { focus(entry.id) },
-                                modifier = Modifier.testTag("spatial-quick-" + entry.id.replace(':', '-')),
-                            ) {
-                                Icon(if (node?.hidden == true) Icons.Filled.VisibilityOff
-                                    else Icons.Filled.Tab, null, Modifier.size(16.dp))
-                                Spacer(Modifier.width(4.dp))
-                                Text(entry.title, maxLines = 1)
-                            }
-                        }
-                    }
-                }
-            }
-            // Compact discoverability handle; the drawer is an optional list, not a second editor.
-            if (!toolDrawerOpen && !toolDrawerResident) FilledTonalIconButton(
-                onClick = { toolDrawerOpen = true },
-                modifier = Modifier.align(Alignment.CenterStart).zIndex(1_000_012f)
-                    .testTag("spatial-edge-handle-left"),
-            ) { Icon(Icons.Filled.ChevronRight, "展开工具目录") }
+        composeRule.waitUntil(5_000) { viewModel.state.value.previewDocument != null }
+        composeRule.runOnIdle { viewModel.previewEventRectClip(1L, 125.0, 240.0, 350.0, 460.0, false) }
+        for ((edge, value) in listOf("left" to "125.0", "top" to "240.0", "right" to "350.0", "bottom" to "460.0")) {
+            composeRule.onNodeWithTag("geometry-clip-$edge-1-value").performScrollTo().assertTextContains(value)
+        }
+        composeRule.onNodeWithTag("geometry-clip-normal-1").performScrollTo().assertIsSelected().assertIsNotEnabled()
+        composeRule.onNodeWithTag("geometry-clip-1-apply").performScrollTo().assertIsNotEnabled()
+        var deadline = android.os.SystemClock.uptimeMillis() + 400L
+        composeRule.waitUntil(2_000) { android.os.SystemClock.uptimeMillis() >= deadline }
+        assertEquals(before, viewModel.state.value.document)
+        composeRule.runOnIdle { viewModel.clearTransientPreview("geometry:1") }
+        field.performScrollTo().assertTextContains("120")
+        composeRule.onNodeWithTag("geometry-clip-inverted-1").performScrollTo().assertIsSelected()
+        deadline = android.os.SystemClock.uptimeMillis() + 400L
+        composeRule.waitUntil(2_000) { android.os.SystemClock.uptimeMillis() >= deadline }
+        assertEquals(before, viewModel.state.value.document)
+        composeRule.onNodeWithTag("geometry-clip-1-apply").performScrollTo().performClick()
+        composeRule.waitUntil(5_000) { viewModel.state.value.document != before }
+        composeRule.runOnIdle { viewModel.undo() }
+        composeRule.waitUntil(5_000) { viewModel.state.value.document == before }
+    }
 
-        } else {
-            // No camera transform reaches this subtree: editors keep native-size hit areas.
-            val (entry, node) = focused!!
-            Surface(Modifier.fillMaxSize()
-                .padding(bottom = dockHeight)
-                .padding(start = if (toolDrawerResident) railWidth else 0.dp)
-                // Bookmark rail owns a real touch region; the focused editor
-                // must not place sliders/fields beneath it.
-                .padding(end = if (entries.any { it.bookmarked }) 68.dp else 0.dp)
-                .testTag("spatial-focused-editor"),
-                color = MaterialTheme.colorScheme.surface) {
-                Column {
-                    Row(Modifier.fillMaxWidth().height(64.dp).padding(horizontal = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically) {
-                        TextButton(onClick = ::returnToBoard, enabled = !gestureOwned,
-                            modifier = Modifier.testTag("spatial-return-to-board")) {
-                            Icon(Icons.Filled.ArrowBack, null, Modifier.size(18.dp))
-                            Text("画布")
-                        }
-                        Box(Modifier.weight(1f)) {
-                            Column(Modifier.fillMaxWidth()
-                                .clickable(enabled = !gestureOwned) { switcherOpen = true }
-                                .testTag("spatial-tool-switcher")) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text(entry.title, style = MaterialTheme.typography.titleMedium,
-                                        maxLines = 1)
-                                    Icon(Icons.Filled.ArrowDropDown, "切换工具", Modifier.size(18.dp))
-                                }
-                                if (entry.subtitle.isNotBlank()) Text(entry.subtitle,
-                                    style = MaterialTheme.typography.labelSmall, maxLines = 1)
-                            }
-                            DropdownMenu(expanded = switcherOpen,
-                                onDismissRequest = { switcherOpen = false }) {
-                                entries.forEach { target ->
-                                    DropdownMenuItem(
-                                        text = { Text((if (target.id == entry.id) "✓ " else "") + target.title) },
-                                        enabled = !gestureOwned,
-                                        modifier = Modifier.testTag(
-                                            "spatial-switch-to-" + target.id.replace(':', '-')),
-                                        onClick = {
-                                            focus(target.id)
-                                            switcherOpen = false
-                                        },
-                                    )
-                                }
-                            }
-                        }
-                        IconButton(onClick = { timelineDockVisible = !timelineDockVisible },
-                            enabled = !gestureOwned, modifier = Modifier.testTag("spatial-timeline-toggle")) {
-                            Icon(Icons.Filled.ViewTimeline, if (timelineDockVisible) "收起时间轴" else "展开时间轴")
-                        }
-                        if (entry.id.startsWith("POSITION:")) IconButton(
-                            onClick = onTogglePrecision, enabled = !gestureOwned,
-                            modifier = Modifier.testTag("spatial-precision-toggle"),
-                        ) {
-                            Icon(if (precisionEnabled) Icons.Filled.CenterFocusStrong
-                                else Icons.Filled.CenterFocusWeak,
-                                if (precisionEnabled) "关闭精密操控" else "开启精密操控")
-                        }
-                        IconButton(onClick = ::showToolPicker, enabled = !gestureOwned,
-                            modifier = Modifier.testTag("spatial-add-tool")) {
-                            Icon(Icons.Filled.Add, "添加工具")
-                        }
-                        IconButton(onClick = { birdseyeOpen = true }, enabled = !gestureOwned,
-                            modifier = Modifier.testTag("spatial-birdseye")) {
-                            Icon(Icons.Filled.Apps, "切换工具")
-                        }
-                        Box {
-                            IconButton(onClick = { cardMenuId = entry.id }, enabled = !gestureOwned,
-                                modifier = Modifier.testTag("spatial-menu-" + entry.id.replace(':', '-'))) {
-                                Icon(Icons.Filled.MoreHoriz, "管理 " + entry.title)
-                            }
-                            DropdownMenu(expanded = cardMenuId == entry.id,
-                                onDismissRequest = { cardMenuId = null }) {
-                                DropdownMenuItem(text = { Text("收回工具") },
-                                    modifier = Modifier.testTag("spatial-hide-" + entry.id.replace(':', '-')),
-                                    onClick = {
-                                        updateNode(node.copy(hidden = true))
-                                        focusedId = null
-                                        cardMenuId = null
-                                    })
-                                if (viewportW < 460f) {
-                                    DropdownMenuItem(text = { Text("撤销字幕编辑") }, enabled = canUndo,
-                                        onClick = { onUndo(); cardMenuId = null })
-                                    DropdownMenuItem(text = { Text("重做字幕编辑") }, enabled = canRedo,
-                                        onClick = { onRedo(); cardMenuId = null })
-                                    HorizontalDivider()
-                                }
-                                if (entry.canClose) DropdownMenuItem(
-                                    text = { Text(if (entry.bookmarked) "取消侧书签" else "放入侧书签") },
-                                    modifier = Modifier.testTag("spatial-bookmark-" + entry.id.replace(':', '-')),
-                                    onClick = { onToggleBookmark(entry.id); cardMenuId = null },
-                                )
-                                DropdownMenuItem(text = { Text(if (node.layoutLocked) "解除布局锁" else "锁定布局") },
-                                    modifier = Modifier.testTag("spatial-layout-lock-" + entry.id.replace(':', '-')),
-                                    onClick = {
-                                        updateNode(node.copy(layoutLocked = !node.layoutLocked))
-                                        cardMenuId = null
-                                    })
-                                if (entry.canBindEvent) DropdownMenuItem(
-                                    text = { Text(if (entry.pinnedEvent) "解除对象固定（跟随焦点）"
-                                        else "固定读取对象 #" + entry.focusEventId) },
-                                    enabled = entry.pinnedEvent || entry.focusEventId != null,
-                                    onClick = { onToggleEventBinding(entry.id); cardMenuId = null })
-                                if (entry.canDuplicate) {
-                                    DropdownMenuItem(text = { Text("复制工具（保留绑定）") }, onClick = {
-                                        pendingToolSelection = entries.mapTo(mutableSetOf()) { it.id }
-                                        onDuplicateTool(entry.id, false)
-                                        cardMenuId = null
-                                    })
-                                    DropdownMenuItem(text = { Text("复制工具（跟随焦点）") }, onClick = {
-                                        pendingToolSelection = entries.mapTo(mutableSetOf()) { it.id }
-                                        onDuplicateTool(entry.id, true)
-                                        cardMenuId = null
-                                    })
-                                }
-                                if (entry.canClose) DropdownMenuItem(text = { Text("关闭工具实例") },
-                                    modifier = Modifier.testTag("spatial-close-" + entry.id.replace(':', '-')),
-                                    onClick = {
-                                        onCloseTool(entry.id)
-                                        focusedId = null
-                                        cardMenuId = null
-                                        pendingToolSelection = null
-                                    })
+    private fun captureLayout(name: String) {
+        composeRule.waitForIdle()
+        val bitmap = composeRule.onRoot().captureToImage().asAndroidBitmap()
+        val scaled = Bitmap.createScaledBitmap(bitmap, 900, (bitmap.height * 900f / bitmap.width).toInt(), true)
+        val output = ByteArrayOutputStream()
+        scaled.compress(Bitmap.CompressFormat.PNG, 100, output)
+        Base64.encodeToString(output.toByteArray(), Base64.NO_WRAP).chunked(2800).forEachIndexed { index, chunk ->
+            Log.i("AsswbVisual", "UI_CAPTURE:$name:$index:$chunk")
+        }
+        Log.i("AsswbVisual", "UI_CAPTURE_END:$name")
+    }
 
-                                DropdownMenuItem(text = { Text(if (node.alpha < 1f) "恢复实底" else "透明叠加") },
-                                    onClick = {
-                                        updateNode(node.copy(alpha = if (node.alpha < 1f) 1f else 0.2f))
-                                        cardMenuId = null
-                                    })
-                                if (entry.id == "audio") DropdownMenuItem(
-                                    text = { Text(if (node.passthrough) "操作波形" else "穿透操作视频") },
-                                    onClick = {
-                                        updateNode(node.copy(passthrough = !node.passthrough))
-                                        cardMenuId = null
-                                    })
-                            }
-                        }
-                        if (viewportW >= 460f) {
-                            IconButton(onClick = onUndo, enabled = canUndo) {
-                                Icon(Icons.Filled.Undo, "撤销字幕编辑")
-                            }
-                            IconButton(onClick = onRedo, enabled = canRedo) {
-                                Icon(Icons.Filled.Redo, "重做字幕编辑")
-                            }
-                        }
-                    }
-                    HorizontalDivider()
-                    val liveNode by rememberUpdatedState(node)
-                    val liveNodes by rememberUpdatedState(nodes)
-                    val liveContent by rememberUpdatedState(content)
-                    // Preserve ordinary remember() drafts while a pane is moved
-                    // between split and fullscreen layouts (or resized).
-                    val productionEditor = remember(entry.id, sessionId) {
-                        movableContentOf<Modifier> { paneModifier ->
-                        Box(paneModifier.testTag("spatial-native-content-" + entry.id.replace(':', '-'))) {
-                            val preview = liveNodes.firstOrNull { it.id == "preview" && !it.hidden }
-                            val audio = liveNodes.firstOrNull { it.id == "audio" && !it.hidden }
-                            // Audio/video is a real layered editing surface, not a flattened card.
-                            // Keep actual renderer and waveform on their existing clock and callbacks.
-                            if (entry.id == "audio" && preview != null) {
-                                contentState.SaveableStateProvider(canvasSaveableContentKey(sessionId, CanvasContentRole.FOCUSED_LAYER, "preview", entry.id)) {
-                                    liveContent("preview", true)
-                                }
-                                Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth()
-                                    .height(liveNode.height.coerceIn(160f, 460f).dp)
-                                    .background(MaterialTheme.colorScheme.surface.copy(alpha = liveNode.alpha))) {
-                                    contentState.SaveableStateProvider(canvasSaveableContentKey(sessionId, CanvasContentRole.FOCUSED_LAYER, "audio", entry.id)) {
-                                        liveContent("audio", !liveNode.passthrough)
-                                    }
-                                }
-                            } else {
-                                contentState.SaveableStateProvider(canvasSaveableContentKey(sessionId, CanvasContentRole.FOCUSED, entry.id)) {
-                                    liveContent(entry.id, !liveNode.passthrough)
-                                }
-                                if (entry.id == "preview" && audio != null) {
-                                    Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth()
-                                        .height(audio.height.coerceIn(160f, 460f).dp)
-                                        .background(MaterialTheme.colorScheme.surface.copy(alpha = audio.alpha))) {
-                                        contentState.SaveableStateProvider(canvasSaveableContentKey(sessionId, CanvasContentRole.FOCUSED_LAYER, "audio", entry.id)) {
-                                            liveContent("audio", !audio.passthrough)
-                                        }
-                                    }
-                                }
-                            }
-                        
-                        }
-                        }
-                    }
-                    val reference = nodes.firstOrNull { it.id == "preview" && !it.hidden }
-                    val showReferenceOption = entry.id != "preview" && entry.id != "audio" && reference != null
-                    // Give the text/parameter editor the full available height
-                    // while the soft keyboard is visible. The user's split choice
-                    // remains intact and automatically returns after IME closes.
-                    val imeVisible = WindowInsets.ime.getBottom(LocalDensity.current) > 0
-                    val referenceFraction = when (referencePreviewSize) {
-                        0 -> 0.25f
-                        2 -> 0.54f
-                        else -> 0.40f
-                    }
-                    Column(Modifier.weight(1f).fillMaxWidth()) {
-                        if (showReferenceOption) Row(
-                            Modifier.fillMaxWidth().height(40.dp).padding(horizontal = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            TextButton(
-                                onClick = { referencePreviewVisible = !referencePreviewVisible },
-                                enabled = !gestureOwned,
-                                modifier = Modifier.testTag("spatial-preview-toggle"),
-                            ) {
-                                Icon(if (referencePreviewVisible) Icons.Filled.VisibilityOff
-                                    else Icons.Filled.Visibility, null, Modifier.size(18.dp))
-                                Spacer(Modifier.width(4.dp))
-                                Text(if (referencePreviewVisible) "隐藏参考画面" else "显示参考画面")
-                            }
-                            if (referencePreviewVisible) TextButton(
-                                onClick = { referencePreviewSize = (referencePreviewSize + 1) % 3 },
-                                enabled = !gestureOwned,
-                                modifier = Modifier.testTag("spatial-preview-size"),
-                            ) { Text(when (referencePreviewSize) {
-                                0 -> "预览 25%"
-                                2 -> "预览 54%"
-                                else -> "预览 40%"
-                            }) }
-                        }
-                        if (showReferenceOption && referencePreviewVisible && !imeVisible) {
-                            // The reference is the real video/ASS renderer and shares the
-                            // current media clock and document focus with this editor.
-                            // SaveableStateProvider keys are unique within the stage.
-                            val referencePane: @Composable (Modifier) -> Unit = { paneModifier ->
-                                Box(paneModifier.background(MaterialTheme.colorScheme.surfaceContainerLow)
-                                    .testTag("spatial-reference-preview")) {
-                                    contentState.SaveableStateProvider(canvasSaveableContentKey(sessionId, CanvasContentRole.REFERENCE, "preview", entry.id)) {
-                                        content("preview", true)
-                                    }
-                                }
-                            }
-                            if (viewportW >= 840f) {
-                                Row(Modifier.fillMaxSize()) {
-                                    referencePane(Modifier.weight(referenceFraction).fillMaxHeight())
-                                    VerticalDivider()
-                                    productionEditor(Modifier.weight(1f - referenceFraction).fillMaxHeight())
-                                }
-                            } else {
-                                Column(Modifier.fillMaxSize()) {
-                                    referencePane(Modifier.fillMaxWidth().fillMaxHeight(referenceFraction))
-                                    HorizontalDivider()
-                                    productionEditor(Modifier.weight(1f).fillMaxWidth())
-                                }
-                            }
-                        } else {
-                            productionEditor(Modifier.fillMaxSize())
-                        }
-                    }
-                }
-            }
+    @Test
+    fun unifiedCanvasHidesAndRestoresWorldNodeWithoutDeletingToolState() {
+        restoreRecovery()
+        switchToUnifiedCanvas()
+        if (composeRule.onAllNodesWithTag("spatial-return-to-board")
+                .fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()) {
+            composeRule.onNodeWithTag("spatial-return-to-board").performClick()
+        }
+        val before = viewModel.state.value.document
+        composeRule.onNodeWithTag("spatial-quick-preview").performClick()
+        composeRule.onNodeWithTag("spatial-menu-preview").performClick()
+        composeRule.onNodeWithTag("spatial-hide-preview").performClick()
+        composeRule.onNodeWithTag("spatial-birdseye").performClick()
+        composeRule.onNodeWithTag("spatial-birdseye-node-preview").performScrollTo().performClick()
+        composeRule.onNodeWithTag("spatial-native-content-preview").assertExists()
+        assertEquals(before, viewModel.state.value.document)
+    }
+
+    @Test
+    fun unifiedCanvasLayoutLockSurvivesRecreationWithoutTouchingSubtitle() {
+        restoreRecovery()
+        switchToUnifiedCanvas()
+        val canonical = viewModel.state.value.document
+        if (composeRule.onAllNodesWithTag("spatial-return-to-board")
+                .fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()) {
+            composeRule.onNodeWithTag("spatial-return-to-board").performClick()
+        }
+        composeRule.onNodeWithTag("spatial-quick-preview").performClick()
+        composeRule.onNodeWithTag("spatial-menu-preview").performClick()
+        composeRule.onNodeWithTag("spatial-layout-lock-preview").performClick()
+        composeRule.activityRule.scenario.recreate()
+        composeRule.waitForIdle()
+        viewModel = composeRule.activity.editorViewModel
+        if (composeRule.onAllNodesWithTag("spatial-return-to-board")
+                .fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()) {
+            composeRule.onNodeWithTag("spatial-return-to-board").performClick()
+        }
+        composeRule.onNodeWithTag("spatial-menu-preview").performClick()
+        composeRule.onNodeWithText("解除布局锁").assertIsDisplayed()
+        assertEquals(canonical, viewModel.state.value.document)
+    }
+
+    @Test
+    fun recoveryDiscardDeletesJournalWithoutLoadingIt() {
+        composeRule.onNodeWithTag("recovery-discard")
+            .assertIsDisplayed()
+            .performClick()
+
+        composeRule.waitUntil(timeoutMillis = 10_000) {
+            !viewModel.state.value.recoveryAvailable
+        }
+        assertFalse(recoveryStore.exists())
+        assertFalse(viewModel.state.value.subtitleLoaded)
+    }
+
+    @Test
+    fun latestEditIsRecoverableByFreshViewModel() {
+        restoreRecovery()
+
+        viewModel.updateEventText(1L, "Recovered line UPDATED")
+        composeRule.waitUntil(timeoutMillis = 10_000) {
+            recoveryStore.read()
+                ?.document
+                ?.events
+                ?.firstOrNull { it.id == 1L }
+                ?.text == "Recovered line UPDATED"
         }
 
-        // A resident tool directory is a shared overlay, not a board-only
-        // surface: pinning it keeps tool switching available while editing.
-            if (toolDrawerOpen || toolDrawerResident) Surface(
-                modifier = Modifier.align(Alignment.CenterStart).fillMaxHeight()
-                    .padding(bottom = dockHeight).width(railWidth)
-                    .zIndex(1_000_020f).testTag("spatial-edge-rail-left"),
-                color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                tonalElevation = 6.dp,
-                shadowElevation = 4.dp,
-            ) {
-                Column(Modifier.fillMaxSize().padding(8.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = { toolDrawerResident = !toolDrawerResident },
-                            modifier = Modifier.size(40.dp).testTag("spatial-edge-pin-left")) {
-                            Icon(Icons.Filled.PushPin, if (toolDrawerResident) "取消驻留" else "驻留")
-                        }
-                        IconButton(onClick = { toolDrawerOpen = false; toolDrawerResident = false },
-                            modifier = Modifier.size(40.dp).testTag("spatial-edge-close-left")) {
-                            Icon(Icons.Filled.ChevronLeft, "收起目录")
-                        }
-                    }
-                    Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
-                        entries.forEach { entry ->
-                            TextButton(onClick = { focus(entry.id) },
-                                enabled = !gestureOwned,
-                                modifier = Modifier.fillMaxWidth()
-                                    .testTag("spatial-edge-entry-" + entry.id.replace(':', '-'))) {
-                                Text(entry.title, maxLines = 1)
-                            }
-                        }
-                    }
-                    IconButton(onClick = ::showToolPicker,
-                        modifier = Modifier.testTag("spatial-edge-add-tool")) {
-                        Icon(Icons.Filled.Add, "添加工具")
-                    }
-                }
-            }
+        // A fresh ViewModel approximates the next process launch: it must discover
+        // the journal from storage rather than inheriting the live editor state.
+        val fresh = EditorViewModel(application)
+        assertTrue(fresh.state.value.recoveryAvailable)
+        fresh.restoreRecovery()
+        assertEquals(
+            "Recovered line UPDATED",
+            fresh.state.value.document.events.first { it.id == 1L }.text,
+        )
+        assertTrue(fresh.state.value.dirty)
+    }
 
-        // Side bookmarks are live ToolInstance identities, not cloned editors.
-        // The world node remains saved while BOOKMARKED, so recall is reversible.
-        val bookmarked = entries.filter { it.bookmarked }
-        if (bookmarked.isNotEmpty()) Surface(
-            Modifier.align(Alignment.CenterEnd).padding(bottom = dockHeight).width(68.dp)
-                .zIndex(1_000_022f).testTag("spatial-bookmark-rail"),
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-            tonalElevation = 4.dp,
-        ) {
-            Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())
-                .padding(vertical = 8.dp),
-                horizontalAlignment = Alignment.CenterHorizontally) {
-                bookmarked.forEach { item ->
-                    TextButton(onClick = { focus(item.id) }, enabled = !gestureOwned,
-                        modifier = Modifier.fillMaxWidth()
-                            .testTag("spatial-bookmark-open-" + item.id.replace(':', '-'))) {
-                        Text(item.title.take(4), maxLines = 2)
-                    }
-                }
-            }
-        }
+    @Test
+    fun normalSaveFailureDoesNotEscapeAndKeepsDirtyRecovery() {
+        restoreRecovery()
 
-        // Minimal direction-aware edge navigation: no constellation of
-        // overlapping offscreen buttons and no invisible-world traversal.
-        // Hidden tools remain in Recall; BOOKMARKED tools live in their rail.
-        if (boardMode) {
-            val cues = canvasEdgeCues(
-                camera,
-                nodes.filter { node ->
-                    entries.any { entry -> entry.id == node.id && !entry.bookmarked }
-                },
-                viewportW, viewportH,
-            )
-            cues.forEach { cue ->
-                if (cue.side != CanvasEdge.LEFT || !toolDrawerOpen) {
-                    val target = entries.firstOrNull { it.id == cue.nearestNodeId }
-                    val align = when (cue.side) {
-                        CanvasEdge.LEFT -> Alignment.CenterStart
-                        CanvasEdge.RIGHT -> Alignment.CenterEnd
-                        CanvasEdge.TOP -> Alignment.TopCenter
-                        CanvasEdge.BOTTOM -> Alignment.BottomCenter
-                    }
-                    val margins = when (cue.side) {
-                        CanvasEdge.LEFT -> Modifier.padding(start = 8.dp)
-                        CanvasEdge.RIGHT -> Modifier.padding(
-                            end = if (entries.any { it.bookmarked }) 76.dp else 8.dp)
-                        CanvasEdge.TOP -> Modifier.padding(top = 64.dp)
-                        CanvasEdge.BOTTOM -> Modifier.padding(bottom = dockHeight + 68.dp)
-                    }
-                    FilledTonalButton(
-                        onClick = { focus(cue.nearestNodeId) },
-                        enabled = !gestureOwned && target != null,
-                        modifier = Modifier.align(align).then(margins)
-                            .zIndex(1_000_018f)
-                            .testTag("spatial-offscreen-" + cue.side.name.lowercase()),
-                    ) {
-                        Icon(when (cue.side) {
-                            CanvasEdge.LEFT -> Icons.Filled.ArrowBack
-                            CanvasEdge.RIGHT -> Icons.Filled.ArrowForward
-                            CanvasEdge.TOP -> Icons.Filled.ArrowUpward
-                            CanvasEdge.BOTTOM -> Icons.Filled.ArrowDownward
-                        }, null, Modifier.size(18.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text((target?.title ?: "工具") +
-                            if (cue.count > 1) " +${cue.count - 1}" else "",
-                            maxLines = 1)
-                    }
-                }
-            }
-        }
+        val handled = viewModel.saveTo(
+            Uri.parse("content://io.github.assworkbench.invalid-provider/unwritable.ass")
+        )
 
-        // The timeline is a persistent *real* editor surface owned by this
-        // workspace, not a separate presentation mode or a detached media clock.
-        if (timelineDockVisible) Surface(
-            Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(dockHeight)
-                .zIndex(1_000_040f).testTag("spatial-timeline-dock"),
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-            tonalElevation = 5.dp,
-        ) {
-            Column {
-                Row(Modifier.fillMaxWidth().height(40.dp).padding(horizontal = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Filled.DragHandle, null, Modifier.size(18.dp))
-                    Text("时间轴", Modifier.weight(1f), style = MaterialTheme.typography.labelLarge)
-                    TextButton(onClick = { timelineDockExpanded = !timelineDockExpanded },
-                        modifier = Modifier.testTag("spatial-timeline-expand")) {
-                        Text(if (timelineDockExpanded) "紧凑" else "展开")
-                    }
-                    IconButton(onClick = { timelineDockVisible = false },
-                        modifier = Modifier.testTag("spatial-timeline-close")) {
-                        Icon(Icons.Filled.Close, "关闭常驻时间轴")
-                    }
-                }
-                HorizontalDivider()
-                Box(Modifier.weight(1f).fillMaxWidth().testTag("spatial-timeline-content")) {
-                    renderTimeline(!timelineDockExpanded)
-                }
-            }
-        }
+        assertFalse(handled)
+        assertTrue(viewModel.state.value.dirty)
+        assertTrue(recoveryStore.exists())
+        assertTrue(viewModel.state.value.status.startsWith("字幕保存失败："))
+    }
 
-        // Workspace actions remain separate from ASS document Undo/Redo.
-        if (boardMode) Surface(Modifier.align(Alignment.TopCenter).widthIn(max = 900.dp).fillMaxWidth().padding(8.dp).zIndex(1_000_025f),
-            shape = MaterialTheme.shapes.large, shadowElevation = 2.dp,
-            color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.96f)) {
-            Row(Modifier.fillMaxWidth().padding(horizontal = 6.dp),
-                verticalAlignment = Alignment.CenterVertically) {
-                // Birdseye is the recovery route for a lost/offscreen workspace.
-                // Keep it outside the scrolling actions at every phone width.
-                Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()),
-                    verticalAlignment = Alignment.CenterVertically) {
-                    if (boardMode) {
-                        Text("空间", Modifier.padding(horizontal = 8.dp),
-                            style = MaterialTheme.typography.titleSmall)
-                        TextButton(onClick = ::overview, enabled = !gestureOwned,
-                            modifier = Modifier.testTag("spatial-overview")) { Text("总览") }
-                        IconButton(onClick = ::goToPreviousViewport,
-                            enabled = !gestureOwned && viewportHistory.canBack,
-                            modifier = Modifier.testTag("spatial-viewport-back")) {
-                            Icon(Icons.Filled.ArrowBack, "返回上一画布视角")
-                        }
-                        IconButton(onClick = ::goToNextViewport,
-                            enabled = !gestureOwned && viewportHistory.canForward,
-                            modifier = Modifier.testTag("spatial-viewport-forward")) {
-                            Icon(Icons.Filled.ArrowForward, "前进下一画布视角")
-                        }
-                        TextButton(onClick = { timelineDockVisible = !timelineDockVisible },
-                            enabled = !gestureOwned, modifier = Modifier.testTag("spatial-timeline-toggle")) {
-                            Text(if (timelineDockVisible) "收起时间轴" else "时间轴")
-                        }
-                        Box {
-                            TextButton(onClick = { arrangeOpen = true }, enabled = !gestureOwned,
-                                modifier = Modifier.testTag("spatial-arrange")) { Text("整理") }
-                            DropdownMenu(expanded = arrangeOpen, onDismissRequest = { arrangeOpen = false }) {
-                                DropdownMenuItem(text = { Text("纵向排列") },
-                                    onClick = { arrange(1) }, modifier = Modifier.testTag("spatial-arrange-column"))
-                                DropdownMenuItem(text = { Text("两列排列") },
-                                    onClick = { arrange(2) }, modifier = Modifier.testTag("spatial-arrange-two"))
-                            }
-                        }
-                        Box {
-                            TextButton(onClick = { recallOpen = true }, enabled = !gestureOwned) { Text("召回") }
-                            DropdownMenu(expanded = recallOpen, onDismissRequest = { recallOpen = false }) {
-                                entries.forEach { entry ->
-                                    DropdownMenuItem(text = { Text(entry.title) },
-                                        enabled = !gestureOwned,
-                                        modifier = Modifier.testTag("spatial-recall-" + entry.id.replace(':', '-')),
-                                        onClick = { focus(entry.id); recallOpen = false })
-                                }
-                            }
-                        }
-                        IconButton(enabled = !gestureOwned,
-                            onClick = {
-                                navigateToCamera(scene.first.zoomAt(viewportW / 2f, viewportH / 2f,
-                                    scene.first.scale / 1.2f))
-                            }, modifier = Modifier.testTag("spatial-zoom-out")) {
-                            Icon(Icons.Filled.Remove, "缩小画布")
-                        }
-                        Text((camera.scale * 100f).toInt().toString() + "%",
-                            style = MaterialTheme.typography.labelSmall)
-                        IconButton(enabled = !gestureOwned,
-                            onClick = {
-                                navigateToCamera(scene.first.zoomAt(viewportW / 2f, viewportH / 2f,
-                                    scene.first.scale * 1.2f))
-                            }, modifier = Modifier.testTag("spatial-zoom-in")) {
-                            Icon(Icons.Filled.Add, "放大画布")
-                        }
-                    }
-                    IconButton(onClick = onUndo, enabled = canUndo) {
-                        Icon(Icons.Filled.Undo, "撤销字幕编辑")
-                    }
-                    IconButton(onClick = onRedo, enabled = canRedo) {
-                        Icon(Icons.Filled.Redo, "重做字幕编辑")
-                    }
-                }
-                VerticalDivider(Modifier.height(26.dp).padding(horizontal = 4.dp))
-                TextButton(onClick = { birdseyeOpen = true }, enabled = !gestureOwned,
-                    modifier = Modifier.testTag("spatial-birdseye")) {
-                    Icon(Icons.Filled.Map, null, Modifier.size(18.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text("鸟瞰")
-                }
-            }
+    @Test
+    fun dirtyCanonicalSurvivesBackgroundResume() {
+        restoreRecovery()
+        viewModel.updateEventText(1L, "Recovered line BACKGROUND")
+        val before = viewModel.state.value.document
+
+        composeRule.activityRule.scenario.moveToState(Lifecycle.State.CREATED)
+        composeRule.activityRule.scenario.moveToState(Lifecycle.State.RESUMED)
+        composeRule.waitForIdle()
+
+        viewModel = composeRule.activity.editorViewModel
+        assertEquals(before, viewModel.state.value.document)
+        assertTrue(viewModel.state.value.dirty)
+        composeRule.waitUntil(10_000) {
+            recoveryStore.read()?.document?.events?.firstOrNull { it.id == 1L }?.text ==
+                "Recovered line BACKGROUND"
         }
     }
+
+    @Test
+    fun semanticSearchInvalidAuxiliaryFiltersStayFailClosed() {
+        restoreRecovery()
+        val before = viewModel.state.value.document
+
+        openTool("BATCH")
+        composeRule.onNodeWithTag("search-style-regex")
+            .performScrollTo()
+            .assertIsDisplayed()
+            .performTextReplacement("[")
+        composeRule.onNodeWithTag("search-replace-error")
+            .performScrollTo()
+            .assertIsDisplayed()
+        assertEquals(before, viewModel.state.value.document)
+
+        composeRule.onNodeWithTag("search-style-regex")
+            .performTextReplacement("")
+        composeRule.onNodeWithTag("search-forbidden-tag")
+            .performScrollTo()
+            .assertIsDisplayed()
+            .performTextReplacement("pos(")
+        composeRule.onNodeWithTag("search-replace-error")
+            .performScrollTo()
+            .assertIsDisplayed()
+        assertEquals(before, viewModel.state.value.document)
+    }
+
+    @Test
+    fun karaokeFxPreviewIsNonDestructiveAndBatchApplyCommitsAtomically() {
+        restoreRecovery()
+
+        viewModel.updateEventText(1L, "{\\k20}Ka{\\k20}ra")
+        viewModel.updateEventText(2L, "{\\k20}O{\\k20}ke")
+        viewModel.focusEvent(1L, seek = false)
+        viewModel.toggleSelected(1L)
+        viewModel.toggleSelected(2L)
+
+        val canonicalBeforePreview = viewModel.state.value.document
+        openTool("KARAOKE")
+
+        composeRule.onNodeWithTag("karaoke-fx-author")
+            .assertIsDisplayed()
+        composeRule.onNodeWithTag("karaoke-fx-summary")
+            .assertIsDisplayed()
+        composeRule.onNodeWithTag("karaoke-fx-preview")
+            .assertIsDisplayed()
+            .performClick()
+
+        composeRule.waitUntil(10_000) {
+            val state = viewModel.state.value
+            state.previewOwnerId == "karaoke-fx" &&
+                state.previewDocument?.events?.firstOrNull { it.id == 1L }?.text?.contains("\\fscy") == true &&
+                state.previewDocument?.events?.firstOrNull { it.id == 2L }?.text?.contains("\\fscy") == true
+        }
+        assertEquals(canonicalBeforePreview, viewModel.state.value.document)
+
+        composeRule.onNodeWithTag("karaoke-fx-apply")
+            .assertIsDisplayed()
+            .performClick()
+
+        composeRule.waitUntil(10_000) {
+            val state = viewModel.state.value
+            state.previewDocument == null &&
+                state.document.events.firstOrNull { it.id == 1L }?.text?.contains("\\fscy") == true &&
+                state.document.events.firstOrNull { it.id == 2L }?.text?.contains("\\fscy") == true
+        }
+        assertTrue(viewModel.state.value.dirty)
+    }
+
+    @Test
+    fun repeatedActivityRecreationDoesNotMutateDirtyDocument() {
+        restoreRecovery()
+        viewModel.updateEventText(1L, "{\\bord3}Recovered line RECREATE")
+        viewModel.setEventPosition(1L, 640.0, 360.0)
+        val before = viewModel.state.value.document
+
+        repeat(3) {
+            composeRule.activityRule.scenario.recreate()
+            composeRule.waitForIdle()
+            viewModel = composeRule.activity.editorViewModel
+            assertEquals(before, viewModel.state.value.document)
+            assertTrue(viewModel.state.value.dirty)
+        }
+    }
+
+    @Test
+    fun batchUnknownStyleAndNegativeMarginFailBeforePreview() {
+        restoreRecovery()
+        val before = viewModel.state.value.document
+
+        openTool("BATCH")
+        composeRule.onNodeWithTag("batch-style-action")
+            .performScrollTo()
+            .assertIsDisplayed()
+            .performTextReplacement("Missing")
+        composeRule.onNodeWithTag("batch-preview-error")
+            .performScrollTo()
+            .assertIsDisplayed()
+        assertEquals(before, viewModel.state.value.document)
+
+        composeRule.onNodeWithTag("batch-style-action")
+            .performTextReplacement("")
+        composeRule.onNodeWithTag("batch-margin-l")
+            .performScrollTo()
+            .assertIsDisplayed()
+            .performTextReplacement("-1")
+        composeRule.onNodeWithTag("batch-preview-error")
+            .performScrollTo()
+            .assertIsDisplayed()
+        assertEquals(before, viewModel.state.value.document)
+    }
+
+    @Test
+    fun batchInvalidRegexFailsClosedInsteadOfDroppingTheFilter() {
+        restoreRecovery()
+        val before = viewModel.state.value.document
+
+        openTool("BATCH")
+        composeRule.onNodeWithTag("batch-preview-pending")
+            .performScrollTo()
+            .assertIsDisplayed()
+        composeRule.onNodeWithTag("batch-raw-regex-filter")
+            .performScrollTo()
+            .assertIsDisplayed()
+            .performTextReplacement("[")
+        composeRule.onNodeWithTag("batch-preview-error")
+            .performScrollTo()
+            .assertIsDisplayed()
+
+        assertEquals(before, viewModel.state.value.document)
+    }
+
+    @Test
+    fun semanticSearchInvalidAuxiliaryFiltersFailClosedInUi() {
+        restoreRecovery()
+        val before = viewModel.state.value.document
+
+        openTool("BATCH")
+        composeRule.onNodeWithTag("search-style-regex")
+            .performScrollTo()
+            .assertIsDisplayed()
+            .performTextReplacement("[")
+        composeRule.onNodeWithTag("search-replace-error")
+            .performScrollTo()
+            .assertIsDisplayed()
+        assertEquals(before, viewModel.state.value.document)
+
+        composeRule.onNodeWithTag("search-style-regex")
+            .performTextReplacement("")
+        composeRule.onNodeWithTag("search-forbidden-tag")
+            .performScrollTo()
+            .assertIsDisplayed()
+            .performTextReplacement("pos(")
+        composeRule.onNodeWithTag("search-replace-error")
+            .performScrollTo()
+            .assertIsDisplayed()
+        assertEquals(before, viewModel.state.value.document)
+    }
+
+    @Test
+    fun batchKaraokeRevealControlsStayPreviewOnlyUntilCommit() {
+        restoreRecovery()
+        val before = viewModel.state.value.document
+
+        openTool("BATCH")
+        composeRule.onNodeWithTag("batch-karaoke-reveal")
+            .performScrollTo()
+            .assertIsDisplayed()
+        composeRule.onNodeWithTag("batch-karaoke-reveal-enabled")
+            .performScrollTo()
+            .assertIsDisplayed()
+            .performClick()
+        composeRule.onNodeWithTag("batch-karaoke-reveal-ms")
+            .performScrollTo()
+            .assertIsDisplayed()
+        composeRule.onNodeWithTag("batch-karaoke-reveal-blur")
+            .assertIsDisplayed()
+        composeRule.onNodeWithTag("batch-karaoke-reveal-accel")
+            .assertIsDisplayed()
+        composeRule.onNodeWithTag("batch-preview-explicit")
+            .performScrollTo()
+            .assertIsDisplayed()
+        composeRule.onNodeWithTag("batch-preview-pending")
+            .performScrollTo()
+            .assertIsDisplayed()
+
+        assertEquals(before, viewModel.state.value.document)
+
+        composeRule.onNodeWithTag("batch-karaoke-reveal-ms")
+            .performTextReplacement("-1")
+        composeRule.onNodeWithTag("batch-preview-error")
+            .performScrollTo()
+            .assertIsDisplayed()
+        assertEquals(before, viewModel.state.value.document)
+    }
+
+    @Test
+    fun effectsPaneExposesSpatialFadeAuthoringWithoutMutatingDocument() {
+        restoreRecovery()
+        eventRow(1L).performClick()
+        val before = viewModel.state.value.document
+
+        openTool("EFFECTS")
+        composeRule.onNodeWithTag("fx-composition-pane")
+            .performScrollTo()
+            .assertIsDisplayed()
+        composeRule.onNodeWithTag("fx-reflection-with-fade")
+            .performScrollTo()
+            .assertIsDisplayed()
+            .performClick()
+        composeRule.onNodeWithTag("fx-fade-bands")
+            .performScrollTo()
+            .assertIsDisplayed()
+        composeRule.onNodeWithTag("fx-fade-depth")
+            .assertIsDisplayed()
+        composeRule.onNodeWithTag("fx-fade-far-opacity")
+            .assertIsDisplayed()
+
+        assertEquals(before, viewModel.state.value.document)
+    }
+
+    private fun restoreRecovery() {
+        composeRule.onNodeWithTag("recovery-restore")
+            .assertIsDisplayed()
+            .performClick()
+
+        composeRule.waitUntil(timeoutMillis = 10_000) {
+            viewModel.state.value.subtitleLoaded &&
+                viewModel.state.value.document.events.size == 2
+        }
+        composeRule.onNodeWithTag("surface-SUBTITLES").assertDoesNotExist()
+        captureLayout("clean-canvas")
+        openTool("SUBTITLES")
+    }
+
+    private fun eventRow(id: Long): SemanticsNodeInteraction {
+        showFixedSubtitleList()
+        return composeRule.onNodeWithTag("event-row-$id")
+    }
+
+    private fun showFixedSubtitleList() {
+        hideKeyboard()
+        val fixedWorkspace = composeRule.onAllNodesWithTag("fixed-workspace", useUnmergedTree = true)
+            .fetchSemanticsNodes(atLeastOneRootRequired = false)
+        if (fixedWorkspace.isEmpty()) return
+
+        val navigationGroups = composeRule.onAllNodesWithTag("fixed-group-NAVIGATION", useUnmergedTree = true)
+            .fetchSemanticsNodes(atLeastOneRootRequired = false)
+        if (navigationGroups.isNotEmpty()) {
+            composeRule.onNodeWithTag("fixed-group-NAVIGATION").performScrollTo().performClick()
+        }
+        val pages = composeRule.onAllNodesWithTag("fixed-page-list", useUnmergedTree = true)
+            .fetchSemanticsNodes(atLeastOneRootRequired = false)
+        if (pages.isNotEmpty()) {
+            composeRule.onNodeWithTag("fixed-page-list").performClick()
+        }
+        composeRule.waitUntil(10_000) {
+            composeRule.onAllNodesWithTag("subtitle-navigation", useUnmergedTree = true)
+                .fetchSemanticsNodes(atLeastOneRootRequired = false)
+                .isNotEmpty()
+        }
+    }
+
+    private fun hideKeyboard() {
+        composeRule.activityRule.scenario.onActivity { activity ->
+            activity.getSystemService(android.view.inputmethod.InputMethodManager::class.java)
+                .hideSoftInputFromWindow(activity.window.decorView.windowToken, 0)
+        }
+        composeRule.waitUntil(5_000) {
+            composeRule.activity.window.decorView.rootWindowInsets
+                ?.isVisible(android.view.WindowInsets.Type.ime()) != true
+        }
+        composeRule.waitForIdle()
+    }
+
+    private fun switchToUnifiedCanvas() {
+        hideKeyboard()
+        if (composeRule.onAllNodesWithTag("spatial-workspace", useUnmergedTree = true)
+                .fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()) return
+        composeRule.onNodeWithContentDescription("工具和更多操作").performClick()
+        composeRule.onNodeWithTag("workspace-mode-toggle").performClick()
+        composeRule.onNodeWithTag("ui-variant-lab").assertIsDisplayed()
+        selectUiVariant("ui-variant-use-SPATIAL_EXPERIMENTAL")
+        composeRule.waitUntil(10_000) {
+            composeRule.onAllNodesWithTag("spatial-workspace", useUnmergedTree = true)
+                .fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()
+        }
+    }
+
+    private fun openTool(name: String) {
+        hideKeyboard()
+        val fixedWorkspace = composeRule.onAllNodesWithTag("fixed-workspace", useUnmergedTree = true)
+            .fetchSemanticsNodes(atLeastOneRootRequired = false)
+            .isNotEmpty()
+        if (fixedWorkspace) {
+            if (name == "SUBTITLES") {
+                showFixedSubtitleList()
+                return
+            }
+            val group = WorkbenchTool.valueOf(name).group
+            composeRule.onNodeWithTag("fixed-group-${group.name}").performScrollTo().performClick()
+            val fixedTool = composeRule.onAllNodesWithTag("fixed-tool-$name", useUnmergedTree = true)
+                .fetchSemanticsNodes(atLeastOneRootRequired = false)
+            if (fixedTool.isNotEmpty()) {
+                composeRule.onNodeWithTag("fixed-tool-$name").performScrollTo().performClick()
+                composeRule.waitForIdle()
+                return
+            }
+        }
+        composeRule.onNodeWithTag("workspace-tools").performClick()
+        composeRule.onNodeWithTag("tool-search").performTextReplacement(name)
+        hideKeyboard()
+        composeRule.onNodeWithTag("tool-$name").performScrollTo().performClick()
+        composeRule.waitForIdle()
+    }
+
+    private fun eventText(id: Long): String =
+        viewModel.state.value.document.events.first { it.id == id }.text
 }
 
-/** Compact LOD visual; the native editor remains independent of camera scale. */
-@Composable
-private fun CanvasToolSummary(
-    entry: InfiniteCanvasEntry,
-    width: Float,
-    height: Float,
-    enabled: Boolean,
-    onOpen: () -> Unit,
-) {
-    Box(Modifier.fillMaxSize().clickable(enabled = enabled, onClick = onOpen)
-        .testTag("spatial-open-" + entry.id.replace(':', '-'))) {
-        Column(Modifier.align(Alignment.Center).padding(8.dp),
-            horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(
-                when (entry.id) {
-                    "preview" -> Icons.Filled.Movie
-                    "subtitles" -> Icons.Filled.Subtitles
-                    "audio" -> Icons.Filled.GraphicEq
-                    else -> Icons.Filled.Tune
-                },
-                contentDescription = "打开 " + entry.title,
-                tint = MaterialTheme.colorScheme.primary,
-            )
-            if (width >= 148f && height >= 140f) {
-                Spacer(Modifier.height(6.dp))
-                Text(entry.title, style = MaterialTheme.typography.titleSmall, maxLines = 1)
-                if (entry.subtitle.isNotBlank()) Text(entry.subtitle,
-                    style = MaterialTheme.typography.labelSmall, maxLines = 1)
-            }
-        }
-    }
-}
-
-/** Measure summary cards without constraining their world size to the phone viewport. */
-@Composable
-private fun UnboundedBoardLayer(
-    modifier: Modifier = Modifier,
-    content: @Composable () -> Unit,
-) {
-    Layout(modifier = modifier, content = content) { measurables, constraints ->
-        val unbounded = Constraints(0, Constraints.Infinity, 0, Constraints.Infinity)
-        val children = measurables.map { it.measure(unbounded) }
-        layout(constraints.maxWidth, constraints.maxHeight) {
-            children.forEach { it.place(0, 0) }
-        }
-    }
+private fun seedRecovery(store: RecoveryStore) {
+    val document = AssDocument(
+        events = listOf(
+            AssEvent(
+                id = 1L,
+                start = SubTime(1_000),
+                end = SubTime(3_000),
+                text = "Recovered line",
+            ),
+            AssEvent(
+                id = 2L,
+                start = SubTime(3_200),
+                end = SubTime(5_000),
+                text = "Second recovered line",
+            ),
+        )
+    )
+    store.write(
+        project = SubtitleProject(title = "Recovery regression.ass"),
+        document = document,
+        textEncoding = AssTextEncoding.UTF8,
+    )
 }

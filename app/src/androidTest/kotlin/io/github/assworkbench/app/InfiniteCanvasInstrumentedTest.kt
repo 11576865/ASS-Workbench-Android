@@ -7,6 +7,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.Button
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -36,6 +37,15 @@ import kotlin.math.roundToInt
 @RunWith(AndroidJUnit4::class)
 class InfiniteCanvasInstrumentedTest {
     @get:Rule val composeRule = createAndroidComposeRule<EditorRegressionHostActivity>()
+
+    @Test fun birdseyeRemainsVisibleOnNarrowCanvasWithoutScrollingTheToolbar() {
+        val fixture = OverviewFixture(listOf(InfiniteCanvasNode("preview", x = 10_000f)))
+        showOverviewFixture(fixture, Modifier.width(320.dp).fillMaxHeight())
+        composeRule.onNodeWithTag("spatial-birdseye").assertIsDisplayed().performClick()
+        composeRule.onNodeWithTag("spatial-birdseye-node-preview").performScrollTo().performClick()
+        composeRule.onNodeWithTag("spatial-native-content-preview").assertExists()
+        assertEquals(fixture.nodes, fixture.saved.second)
+    }
 
     @Test fun birdseyeRecallsHiddenFarNodeWithoutChangingItsGeometry() {
         val fixture = OverviewFixture(listOf(
@@ -133,7 +143,7 @@ class InfiniteCanvasInstrumentedTest {
         var owned by mutableStateOf(false)
     }
 
-    private fun showOverviewFixture(fixture: OverviewFixture) {
+    private fun showOverviewFixture(fixture: OverviewFixture, modifier: Modifier = Modifier.fillMaxSize()) {
         composeRule.activityRule.scenario.onActivity { activity ->
             activity.setContent {
                 MaterialTheme {
@@ -143,7 +153,7 @@ class InfiniteCanvasInstrumentedTest {
                         entries = fixture.nodes.map { InfiniteCanvasEntry(it.id, it.id) },
                         gestureOwned = fixture.owned, onAddTool = {}, onActivate = {},
                         onUndo = {}, onRedo = {}, canUndo = false, canRedo = false,
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = modifier,
                     ) { id, _ -> Text(id, Modifier.testTag("overview-content-" + id)) }
                 }
             }

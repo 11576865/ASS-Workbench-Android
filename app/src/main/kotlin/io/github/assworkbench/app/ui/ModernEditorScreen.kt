@@ -967,26 +967,29 @@ private fun FixedWorkspace(
     modifier: Modifier = Modifier,
 ) {
     var compactPage by rememberSaveable { mutableStateOf("LIST") }
+    var navigationGroupRequested by rememberSaveable { mutableStateOf(false) }
     var lastActiveTool by remember { mutableStateOf(activeTool) }
     LaunchedEffect(activeTool) {
-        if (activeTool != lastActiveTool) compactPage = "EDITOR"
+        if (activeTool != lastActiveTool) {
+            compactPage = "EDITOR"
+            navigationGroupRequested = false
+        }
         lastActiveTool = activeTool
     }
     var consumedNavigationRevision by rememberSaveable { mutableIntStateOf(0) }
     LaunchedEffect(navigationRevision) {
         if (navigationRevision != consumedNavigationRevision) {
             compactPage = if (listRequested) "LIST" else "EDITOR"
+            navigationGroupRequested = listRequested
             consumedNavigationRevision = navigationRevision
         }
     }
 
     var previewDensityName by rememberSaveable { mutableStateOf(PreviewDensity.FULL.name) }
-    var navigationGroupRequested by rememberSaveable { mutableStateOf(false) }
     val requestedPreview = runCatching { PreviewDensity.valueOf(previewDensityName) }
         .getOrDefault(PreviewDensity.FULL)
-    val fixedTools = WorkbenchTool.entries.filter {
-        it.group == activeTool.group && it != WorkbenchTool.SUBTITLES && it != WorkbenchTool.CAPABILITIES
-    }
+    val navigationGroup = if (navigationGroupRequested) WorkbenchToolGroup.NAVIGATION else activeTool.group
+    val fixedTools = fixedNavigationTools(navigationGroup)
 
     fun selectTool(tool: WorkbenchTool) {
         navigationGroupRequested = false
@@ -1037,7 +1040,11 @@ private fun FixedWorkspace(
                 // this stable inspector slot, not the active ToolInstance ID.
                 draftSaveableScope = "fixed-inspector",
                 onOpenTool = ::selectTool,
-                onCloseText = { onExpandedChange(null); compactPage = "LIST" },
+                onCloseText = {
+                    onExpandedChange(null)
+                    compactPage = "LIST"
+                    navigationGroupRequested = true
+                },
                 searchOpen = searchOpen,
                 onCloseSearch = onCloseSearch,
             )
@@ -1089,18 +1096,29 @@ private fun FixedWorkspace(
                     }
                 }
                 Row(
-                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 6.dp),
+                    Modifier.fillMaxWidth().padding(horizontal = 6.dp),
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(activeTool.group.title, style = MaterialTheme.typography.labelMedium)
-                    fixedTools.forEach { tool ->
-                        FilterChip(
-                            selected = tool == activeTool,
-                            onClick = { selectTool(tool) },
-                            label = { Text(tool.title) },
-                            modifier = Modifier.testTag("fixed-tool-" + tool.name),
-                        )
+                    key(navigationGroup) {
+                        Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalAlignment = Alignment.CenterVertically) {
+                            fixedTools.forEach { tool ->
+                                FilterChip(
+                                    selected = if (tool == WorkbenchTool.SUBTITLES) navigationGroupRequested
+                                        else !navigationGroupRequested && tool == activeTool,
+                                    onClick = {
+                                        if (tool == WorkbenchTool.SUBTITLES) {
+                                            navigationGroupRequested = true
+                                            compactPage = "LIST"
+                                        } else selectTool(tool)
+                                    },
+                                    label = { Text(tool.title) },
+                                    modifier = Modifier.testTag("fixed-tool-" + tool.name),
+                                )
+                            }
+                        }
                     }
                     FilterChip(
                         selected = requestedPreview != PreviewDensity.HIDDEN,
@@ -1197,13 +1215,13 @@ private fun FixedWorkspace(
                     ) {
                         FilterChip(
                             compactPage == "LIST",
-                            { compactPage = "LIST" },
+                            { compactPage = "LIST"; navigationGroupRequested = true },
                             { Text("字幕列表") },
                             modifier = Modifier.testTag("fixed-page-list"),
                         )
                         FilterChip(
                             compactPage == "EDITOR",
-                            { compactPage = "EDITOR" },
+                            { compactPage = "EDITOR"; navigationGroupRequested = false },
                             { Text(activeTool.title) },
                             modifier = Modifier.testTag("fixed-page-editor"),
                         )
