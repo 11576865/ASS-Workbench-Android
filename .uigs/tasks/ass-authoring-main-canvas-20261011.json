@@ -2,8 +2,8 @@
   "schema_version": 1,
   "id": "ass-authoring-main-canvas-20261011",
   "goal": "Improve subtitle authoring efficiency, redesign main UI and refine infinite canvas UI.",
-  "status": "work_unit_complete_pending_external_validation",
-  "current_work_unit": "Session-owned Event Text drafts shared by fixed/spatial hosts and stable main authoring task strip.",
+  "status": "rechecked_design_gaps_identified",
+  "current_work_unit": "Recheck against original UI constitution; no new product behavior change.",
   "completed_units": [
     "Read current repository protocol, prior task and source checkpoint 69ad5c076c8695fae15c59b01cd391a647bb8652.",
     "User selected subtitle authoring efficiency as the new-capability priority.",
@@ -12,17 +12,18 @@
     "Implemented session-owned raw draft buffers, conflict reconciliation, cursor restoration and independent-owner cleanup.",
     "Replaced fixed two-row navigation with stable task strip and pinned complete directory/preview controls.",
     "Updated connected cross-host regression and production visual capture navigation; independent review addressed owner cleanup boundary.",
-    "Local full domain JVM 217/217, catalog/adaptive 9/9 and artifact/whitespace checks passed."
+    "Local full domain JVM 217/217, catalog/adaptive 9/9 and artifact/whitespace checks passed.",
+    "Rechecked actual main layout, task/tool selection, historical route consolidation and incomplete draft ownership; recorded source facts separately from unmeasured usability."
   ],
   "next_units": [
-    "Read exact pushed-head Android CI/Emulator/Fontconfig once; inspect failures before further implementation.",
-    "Implement unified subtitle filtering and result operations in both hosts.",
-    "Continue main layout and canvas focused-toolbar redesign using production screenshot evidence.",
-    "Implement scoped batch preview and canonical transaction guards."
+    "Correct layout specification against constitution 8.2: extendable content and adjustable reference, while preserving valid adaptive layouts.",
+    "Separate task categories, tool identity and host; repair category selection and redundant compact navigation.",
+    "Map historical multi-UI capabilities to current hosts and their actual migration/evidence status.",
+    "Implement complete authoring workflow and production visual tests before design acceptance."
   ],
   "branch": "redesign/infinite-canvas-workbench-v2",
   "pr": 138,
-  "latest_durable_commit": "900f505ad8fc532d9203795120558da3f4db8c51",
+  "latest_durable_commit": "58e4b4e04f1efc144177597bc86706f882d0e19d",
   "checkpoint_location": "The commit containing this updated record is the source checkpoint; latest_durable_commit identifies the inspected baseline.",
   "external_validation": {
     "baseline_android_ci": "success:38117186072",
@@ -30,7 +31,10 @@
     "baseline_fontconfig": "success:38117186058",
     "proposed_product_changes": "source_implemented; Android compilation/instrumentation pending",
     "real_device_visual_ime": "pending",
-    "uigs_intake": "Pending: automatic approval review rejected cross-repository Foundry write; deduplicated packet retained at .uigs/intake-pending/2026-10-11-shared-drafts.md"
+    "uigs_intake": "Pending; source audit Candidate retained in .uigs/intake-pending/2026-10-11-task-category-host-audit.md",
+    "android_ci": "success:38134560772",
+    "emulator": "in_progress:38134560746",
+    "fontconfig": "in_progress:38134560745"
   },
   "blockers": [
     "No local Android SDK; no native compile, screenshot or connected-test pass claimed.",
