@@ -224,11 +224,13 @@ internal fun InfiniteCanvasHost(
     }
 
     BoxWithConstraints(modifier.clipToBounds().background(MaterialTheme.colorScheme.surfaceContainerLowest)) {
-        val dockLayout = TimelineDockPolicy.canvasLayout(maxHeight.value,
+        // Capture before entering nested RowScope/PointerInputScope receivers.
+        val dockViewportHeightDp = maxHeight.value
+        val dockLayout = TimelineDockPolicy.canvasLayout(dockViewportHeightDp,
             timelineDockExpanded || timelineDragExtent != null, timelineDragExtent ?: timelineDockExtent)
         val dockHeight = if (timelineDockVisible) dockLayout.heightDp.dp else 0.dp
         val currentDockLayout by rememberUpdatedState(dockLayout)
-        LaunchedEffect(gestureOwned, maxHeight) { timelineDragExtent = null }
+        LaunchedEffect(gestureOwned, dockViewportHeightDp) { timelineDragExtent = null }
         val viewportW = maxWidth.value
         val viewportH = (maxHeight - dockHeight).value
         val railWidth = if (viewportW < 480f) 88.dp else 112.dp
@@ -1034,7 +1036,7 @@ internal fun InfiniteCanvasHost(
                     Row(Modifier.weight(1f).fillMaxHeight()
                         .testTag("spatial-timeline-resize")
                         .semantics { contentDescription = "上下拖动调整时间轴高度" }
-                        .pointerInput(gestureOwned, maxHeight, density) {
+                        .pointerInput(gestureOwned, dockViewportHeightDp, density) {
                             if (!gestureOwned) {
                                 var originHeight = 0f
                                 var totalDragDp = 0f
@@ -1047,12 +1049,12 @@ internal fun InfiniteCanvasHost(
                                         change.consume()
                                         totalDragDp += delta / density
                                         timelineDragExtent = TimelineDockPolicy.canvasResizeExtent(
-                                            maxHeight.value, originHeight, totalDragDp)
+                                            dockViewportHeightDp, originHeight, totalDragDp)
                                     },
                                     onDragEnd = {
                                         timelineDragExtent?.let { candidate ->
-                                            val settled = TimelineDockPolicy.canvasSettleExtent(maxHeight.value, candidate)
-                                            val height = TimelineDockPolicy.canvasLayout(maxHeight.value, true, settled).heightDp
+                                            val settled = TimelineDockPolicy.canvasSettleExtent(dockViewportHeightDp, candidate)
+                                            val height = TimelineDockPolicy.canvasLayout(dockViewportHeightDp, true, settled).heightDp
                                             timelineDockExpanded = height > 142f
                                             if (timelineDockExpanded) timelineDockExtent = settled
                                         }

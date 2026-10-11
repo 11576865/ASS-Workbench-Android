@@ -2,8 +2,8 @@
   "schema_version": 1,
   "id": "ass-authoring-main-canvas-20261011",
   "goal": "Improve subtitle authoring efficiency, redesign main UI and refine infinite canvas UI.",
-  "status": "canvas_timeline_resize_source_implemented_native_validation_pending",
-  "current_work_unit": "Continuous canvas timeline dock resize, bounded viewport suspension and retained timeline composition",
+  "status": "timeline_dsl_receiver_compile_repair_pending",
+  "current_work_unit": "Repair nested Compose DSL receiver access in continuous timeline handle",
   "completed_units": [
     "Read current repository protocol, prior task and source checkpoint 69ad5c076c8695fae15c59b01cd391a647bb8652.",
     "User selected subtitle authoring efficiency as the new-capability priority.",
@@ -37,7 +37,8 @@
     "Independent review repaired IME overlap with root viewport padding; two-host visible-keyboard touch regression added, native execution pending.",
     "Parent6eec59ac Android CI38163363710 success; nullable pagination delegate compile blocker resolved in actual Android build.",
     "Restored continuous timeline dock handle, nearby-only snap, cancel and safe viewport projection without writing preferred height during temporary constraints.",
-    "Independent source review found no Critical/Important; policy7/7 including3 existing tests, native two-test additions pending."
+    "Independent source review found no Critical/Important; policy7/7 including3 existing tests, native two-test additions pending.",
+    "Read all99cd725a failure logs; app compile blocked by implicit maxHeight inside RowScope, fixed with outer local Float capture; policy7/7 rerun."
   ],
   "next_units": [
     "Read exact-head Android compile/emulator results and resolve blockers before further UI work.",
@@ -46,7 +47,7 @@
   ],
   "branch": "redesign/infinite-canvas-workbench-v2",
   "pr": 138,
-  "latest_durable_commit": "6eec59ac5046eb93a901d461a60fc70486941db5",
+  "latest_durable_commit": "99cd725a688885d8077b211fc38ac292a7f6fbf7",
   "checkpoint_location": "The commit containing this updated record is the source checkpoint; latest_durable_commit identifies the inspected baseline.",
   "external_validation": {
     "baseline_android_ci": "success:38117186072",
@@ -55,9 +56,9 @@
     "proposed_product_changes": "timeline policy7/7; domain244/244 prior unchanged; Android new head pending",
     "real_device_visual_ime": "pending",
     "uigs_intake": "Pending; source audit Candidate retained in .uigs/intake-pending/2026-10-11-task-category-host-audit.md",
-    "android_ci": "parent6eec59ac success:38163363710; proposed timeline commit pending",
-    "emulator": "parent6eec59ac in_progress:38163363565",
-    "fontconfig": "parent6eec59ac in_progress:38163363538"
+    "android_ci": "99cd725a failure:38164245586 app:compileDebugKotlin implicit maxHeight; repair pending",
+    "emulator": "99cd725a failure:38164245566 compileDebugKotlin, no connected assertions executed",
+    "fontconfig": "99cd725a failure:38164245565 APK app compile; native build/release-gate tests success"
   },
   "blockers": [
     "No local Android SDK; native compile, connected tests, visual/IME acceptance Pending.",
