@@ -413,6 +413,31 @@ class EditorRegressionInstrumentedTest {
         composeRule.onNodeWithTag("spatial-native-content-CAPABILITIES-primary").assertExists()
     }
 
+    @Test fun productionTimelineDockResizeDoesNotChangeSubtitleEditingState() {
+        restoreRecovery()
+        switchToUnifiedCanvas()
+        val before = viewModel.state.value
+        composeRule.onNodeWithTag("spatial-timeline-toggle").performClick()
+        val originalHeight = composeRule.onNodeWithTag("spatial-timeline-dock").fetchSemanticsNode().boundsInRoot.height
+        val density = composeRule.activity.resources.displayMetrics.density
+        composeRule.onNodeWithTag("spatial-timeline-resize").performTouchInput {
+            down(center)
+            moveBy(Offset(0f, -100f * density))
+            up()
+        }
+        val newHeight = composeRule.onNodeWithTag("spatial-timeline-dock").fetchSemanticsNode().boundsInRoot.height
+        assertTrue(newHeight > originalHeight + 32f * density)
+        composeRule.onNodeWithTag("timeline-temporal-canvas").assertExists()
+        composeRule.runOnIdle {
+            val after = viewModel.state.value
+            assertEquals(before.document, after.document)
+            assertEquals(before.focusedEventId, after.focusedEventId)
+            assertEquals(before.selectedEventIds, after.selectedEventIds)
+            assertEquals(before.dirty, after.dirty)
+            assertEquals(before.canUndo, after.canUndo)
+        }
+    }
+
     @Test
     fun unifiedCanvasPreservesPersistentTimelineAndToolNavigation() {
         restoreRecovery()

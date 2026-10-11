@@ -49,3 +49,9 @@ Test case: performScrollTo assumes a scrolling ancestor and must be removed when
 Bug observation: a nullable Elvis MutableState expression used as a var delegate failed the actual Android Kotlin compile on c89d3447, despite pure domain tests. Explicit state typing/member access source fix awaits exact-head native verification. Dedup search against existing UI/identity/viewport families; source-level intake only, Canonical unchanged. External write remains Pending after prior automatic cross-repository rejection.
 
 IME source review: fixed actions need keyboard-safe host bounds. Consume IME space at the common viewport rather than every spatial node. Added real-Activity two-host keyboard/bounds/touch regression; execution Pending, no measured device conclusion.
+
+## Timeline preferred height versus temporary projection / Pending
+
+Dedup matched Foundry case `2026-10-04-ass-timeline-dock-current-main-reland.md` and spatial acceptance families. Additional source observation: a keyboard/window constraint must project a preferred dock extent, not overwrite the stored extent; drags start from the measured projected height, with candidate state cancelled when viewport/gesture ownership changes. Nearby-only snap avoids large unsolicited release jumps.
+
+Evidence: production `InfiniteCanvasHost`, `TimelineDockPolicy`7/7 (3 existing +4 added); native cancel/owned/suspend restoration and real timeline document-history tests added but unexecuted. Parent6eec59ac Android CI38163363710 passed, not this timeline head. No measured visual/device conclusion or Canonical promotion. External intake remains Pending after prior automatic cross-repository rejection; no retry.

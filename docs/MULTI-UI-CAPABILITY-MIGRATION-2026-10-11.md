@@ -13,7 +13,7 @@
 | GLASS_LAYERED_EXPERIMENTAL 玻璃叠层 | 世界节点透明度、音频背景透明与显式输入穿透 | 三材质、真实背景模糊、模糊性能模式、临时看穿没有当前 Host 入口；GlassToolWindow/GlassLayerModel 定义保留但无生产调用，不算承接完成 | InfiniteCanvasHost alpha/passthrough；GlassToolWindow、GlassLayerModel 无外部生产调用 |
 | SUBTITLE_OBJECT_EXPERIMENTAL 字幕对象 | 视频长按的冻结时刻候选选择、置信信息、对象选择 | 未逐项重审所有对象关系与能力 UI；不以候选选择器替代完整历史对象工作台 | SpatialWorkspace pickCanvasObject、ObjectCandidatePicker；PreviewTargetResolver |
 | EDGE_BOOKMARK_EXPERIMENTAL 四边书签 | BOOKMARKED 实例右侧轨、可驻留左目录 | 四边独立临时/驻留边层、尺寸拖动/吸附、书签侧别/排序/分组没有当前 Host 调用；EdgeWorkspaceModel 仅保留定义 | InfiniteCanvasHost spatial-bookmark-rail / spatial-edge-rail-left；EdgeWorkspaceModel 无生产消费者 |
-| TIMELINE_DOCK_EXPERIMENTAL 常驻时间轴 | 紧凑/展开的真实 Timeline Dock，与媒体共用时间现场 | 当前仅两档高度；旧连续拉伸高度手势未承接 | InfiniteCanvasHost timelineDockVisible/Expanded、renderTimeline；SpatialWorkspace Timeline pane |
+| TIMELINE_DOCK_EXPERIMENTAL 常驻时间轴 | 紧凑/展开的真实 Timeline Dock，与媒体共用时间现场 | 本轮源码补回连续高度抓手、附近吸附与短窗口暂挂；保留紧凑/展开按钮，原生触控与窗口恢复 Pending | InfiniteCanvasHost timelineDockVisible/Expanded、renderTimeline；SpatialWorkspace Timeline pane |
 
 “多 UI 保留”的准确结论：FIXED 和 SPATIAL 两个可选 Host 存在，共享领域工具与一部分旧交互已承接；八种退役模式不是仍可独立使用的 UI，也没有完整能力等价迁移。保留状态字段不等于功能可用。用户原来担心的能力流失确有具体缺口，而不是单纯布局数量的问题。
 
@@ -25,4 +25,4 @@ JVM 相机/节点/鸟瞰/布局注册 33/33 通过；编译使用从生产 Host 
 
 CI 时点：fb3953f2 Android CI 38142464433、Emulator 38142464426、Fontconfig 38142464464 均在运行中。此前 Emulator 38135092606 失败日志不可读取，根因未确认。本提交另触发异步 CI，不合并 PR。
 
-后续顺序：继续既定字幕筛选/结果到编辑/批量作用域；专业工具草稿统一与冲突表达；根据能力清单分单元恢复四边、停靠/标签组、玻璃或连续时间轴尺寸。上述缺口不因旧记录写有 Implemented 就宣布当前完成，也不在本轮工具栏改动中偷偷扩大为新子系统。
+后续顺序：字幕筛选/批量已有后续源码实现及各自验证记录；本轮连续时间轴尺寸见 `CANVAS-TIMELINE-RESIZE-2026-10-12.md`。专业工具草稿统一、四边、停靠/标签组、玻璃仍分单元推进。上述缺口不因旧记录写有 Implemented 就宣布当前完成，也不在本轮工具栏改动中偷偷扩大为新子系统。

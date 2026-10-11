@@ -13,7 +13,7 @@
 
 ## 2026-10-11 当前能力核对（PR #138，未合入）
 
-逐项历史布局能力与当前生产消费者见 `MULTI-UI-CAPABILITY-MIGRATION-2026-10-11.md`。已证实：四边独立边层、玻璃三材质/真实模糊、旧 Surface 停靠/最小化/标签组、时间轴连续高度手势尚无当前承接入口。对应旧数据结构与模型测试的保留不能证明功能可达。聚焦切换、实例/绑定、侧轨、两档 Timeline Dock、精密操作及对象候选选择有现行路径；其设备验收独立。下方事实快照及240行仍为历史基线，不能直接用于当前完成度。
+逐项历史布局能力与当前生产消费者见 `MULTI-UI-CAPABILITY-MIGRATION-2026-10-11.md`。已证实：四边独立边层、玻璃三材质/真实模糊、旧 Surface 停靠/最小化/标签组、时间轴连续高度手势原来缺失，本轮已补源码入口但原生 Pending；前三类仍无当前承接入口。对应旧数据结构与模型测试的保留不能证明功能可达。聚焦切换、实例/绑定、侧轨、两档 Timeline Dock、精密操作及对象候选选择有现行路径；其设备验收独立。下方事实快照及240行仍为历史基线，不能直接用于当前完成度。
 
 ## 事实快照
 
@@ -159,7 +159,7 @@
 | 081 | ASS Layer 与 UI 轨道分开建模，整理轨道不擅自改写渲染层级。 | **Partial** | main timeline core · #56 historical only | `ModernTimelinePane` + `core/domain/Timeline*`; dedicated Timeline Dock absent from registry | `TimelineViewportPolicyTest` / `AssTimelineSnapTest` / `AssTimelineRelationsTest`; no dock gate | Not 240-ID mapped | Not item-mapped |
 | 082 | 时间轴点击事件同步画面与工具，播放经过事件时不强制替换编辑对象。 | **Partial** | main timeline core · #56 historical only | `ModernTimelinePane` + `core/domain/Timeline*`; dedicated Timeline Dock absent from registry | `TimelineViewportPolicyTest` / `AssTimelineSnapTest` / `AssTimelineRelationsTest`; no dock gate | Not 240-ID mapped | Not item-mapped |
 | 083 | 提供循环播放当前事件、选择范围和手动区间，便于反复检查。 | **Partial** | main timeline core · #56 historical only | `ModernTimelinePane` + `core/domain/Timeline*`; dedicated Timeline Dock absent from registry | `TimelineViewportPolicyTest` / `AssTimelineSnapTest` / `AssTimelineRelationsTest`; no dock gate | Not 240-ID mapped | Not item-mapped |
-| 084 | 时间轴常驻区域可由用户调节高度，保留明确的召回和展开入口。 | **Implemented** | #98 Timeline Dock re-land candidate | `TimelineDockPolicy` bounded resize + snap；`timeline-dock-handle` vertical drag + `timeline-dock-toggle` explicit entry | `TimelineDockPolicyTest` + `UiVariantRegistryTest` + presentation invariant gate | Not 240-ID mapped | DEVICE 未验证；手势体验与触摸命中仍需真机。 |
+| 084 | 时间轴常驻区域可由用户调节高度，保留明确的召回和展开入口。 | **Partial** | branch-only PR #138 · native Pending | `InfiniteCanvasHost` 48dp抓手连续预览/取消/提交 + `TimelineDockPolicy.canvas*`；短窗口保留组合并暂挂 | policy 7/7（含旧3项）；两项native新增未执行；见 `CANVAS-TIMELINE-RESIZE-2026-10-12.md` | No production visual/device evidence | 尚未合入main；首选比例仅会话/Activity saveable，不宣称.asswb持久化或多轨完成。 |
 
 ### 八、时间轴的激进扩展
 

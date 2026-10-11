@@ -4,8 +4,10 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -29,9 +31,12 @@ import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
+import io.github.assworkbench.app.ui.TimelineDockPolicy
 import androidx.compose.ui.zIndex
 
 internal data class InfiniteCanvasEntry(
@@ -110,6 +115,8 @@ internal fun InfiniteCanvasHost(
     var switcherOpen by remember(sessionId) { mutableStateOf(false) }
     var timelineDockVisible by rememberSaveable(sessionId) { mutableStateOf(false) }
     var timelineDockExpanded by rememberSaveable(sessionId) { mutableStateOf(false) }
+    var timelineDockExtent by rememberSaveable(sessionId) { mutableFloatStateOf(0.42f) }
+    var timelineDragExtent by remember(sessionId) { mutableStateOf<Float?>(null) }
     var referencePreviewVisible by rememberSaveable(sessionId) { mutableStateOf(true) }
     var referencePreviewSize by rememberSaveable(sessionId) { mutableIntStateOf(1) }
     var cardMenuId by remember(sessionId) { mutableStateOf<String?>(null) }
@@ -217,8 +224,11 @@ internal fun InfiniteCanvasHost(
     }
 
     BoxWithConstraints(modifier.clipToBounds().background(MaterialTheme.colorScheme.surfaceContainerLowest)) {
-        val dockHeight = if (!timelineDockVisible) 0.dp
-            else if (timelineDockExpanded) maxHeight * 0.42f else 142.dp
+        val dockLayout = TimelineDockPolicy.canvasLayout(maxHeight.value,
+            timelineDockExpanded || timelineDragExtent != null, timelineDragExtent ?: timelineDockExtent)
+        val dockHeight = if (timelineDockVisible) dockLayout.heightDp.dp else 0.dp
+        val currentDockLayout by rememberUpdatedState(dockLayout)
+        LaunchedEffect(gestureOwned, maxHeight) { timelineDragExtent = null }
         val viewportW = maxWidth.value
         val viewportH = (maxHeight - dockHeight).value
         val railWidth = if (viewportW < 480f) 88.dp else 112.dp
@@ -821,7 +831,7 @@ internal fun InfiniteCanvasHost(
                             verticalAlignment = Alignment.CenterVertically) {
                             IconButton(onClick = { timelineDockVisible = !timelineDockVisible },
                                 enabled = !gestureOwned, modifier = Modifier.testTag("spatial-timeline-toggle")) {
-                                Icon(Icons.Filled.ViewTimeline, if (timelineDockVisible) "收起时间轴" else "展开时间轴")
+                                Icon(Icons.Filled.ViewTimeline, if (timelineDockVisible && dockLayout.suspended) "时间轴空间不足，恢复窗口后显示；点击关闭" else if (timelineDockVisible) "收起时间轴" else "展开时间轴")
                             }
                             if (entry.id.startsWith("POSITION:")) IconButton(
                                 onClick = onTogglePrecision, enabled = !gestureOwned,
@@ -1008,27 +1018,71 @@ internal fun InfiniteCanvasHost(
         // workspace, not a separate presentation mode or a detached media clock.
         if (timelineDockVisible) Surface(
             Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(dockHeight)
-                .zIndex(1_000_040f).testTag("spatial-timeline-dock"),
+                .zIndex(1_000_040f)
+                .then(if (dockLayout.suspended) Modifier.clearAndSetSemantics { }
+                    else Modifier.testTag("spatial-timeline-dock")),
             color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
             tonalElevation = 5.dp,
+            shadowElevation = 4.dp,
         ) {
+            // Keep the same timeline mounted at zero height while temporarily
+            // suspended. Its time viewport and unsaved local state must survive.
             Column {
-                Row(Modifier.fillMaxWidth().height(40.dp).padding(horizontal = 8.dp),
+                Row(Modifier.fillMaxWidth().height(48.dp).padding(horizontal = 8.dp),
                     verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Filled.DragHandle, null, Modifier.size(18.dp))
-                    Text("时间轴", Modifier.weight(1f), style = MaterialTheme.typography.labelLarge)
+                    Row(Modifier.weight(1f).fillMaxHeight()
+                        .testTag("spatial-timeline-resize")
+                        .semantics { contentDescription = "上下拖动调整时间轴高度" }
+                        .pointerInput(gestureOwned, maxHeight, density) {
+                            if (!gestureOwned) {
+                                var originHeight = 0f
+                                var totalDragDp = 0f
+                                detectVerticalDragGestures(
+                                    onDragStart = {
+                                        originHeight = currentDockLayout.heightDp
+                                        totalDragDp = 0f
+                                    },
+                                    onVerticalDrag = { change, delta ->
+                                        change.consume()
+                                        totalDragDp += delta / density
+                                        timelineDragExtent = TimelineDockPolicy.canvasResizeExtent(
+                                            maxHeight.value, originHeight, totalDragDp)
+                                    },
+                                    onDragEnd = {
+                                        timelineDragExtent?.let { candidate ->
+                                            val settled = TimelineDockPolicy.canvasSettleExtent(maxHeight.value, candidate)
+                                            val height = TimelineDockPolicy.canvasLayout(maxHeight.value, true, settled).heightDp
+                                            timelineDockExpanded = height > 142f
+                                            if (timelineDockExpanded) timelineDockExtent = settled
+                                        }
+                                        timelineDragExtent = null
+                                    },
+                                    onDragCancel = { timelineDragExtent = null },
+                                )
+                            }
+                        }, verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Filled.DragHandle, null, Modifier.size(24.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Column {
+                            Text("时间轴", style = MaterialTheme.typography.labelLarge)
+                            Text("拖动调整高度", style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
                     TextButton(onClick = { timelineDockExpanded = !timelineDockExpanded },
+                        enabled = !gestureOwned,
                         modifier = Modifier.testTag("spatial-timeline-expand")) {
                         Text(if (timelineDockExpanded) "紧凑" else "展开")
                     }
-                    IconButton(onClick = { timelineDockVisible = false },
+                    IconButton(onClick = { timelineDockVisible = false }, enabled = !gestureOwned,
                         modifier = Modifier.testTag("spatial-timeline-close")) {
                         Icon(Icons.Filled.Close, "关闭常驻时间轴")
                     }
                 }
                 HorizontalDivider()
                 Box(Modifier.weight(1f).fillMaxWidth().testTag("spatial-timeline-content")) {
-                    renderTimeline(!timelineDockExpanded)
+                    renderTimeline(dockLayout.compact)
                 }
             }
         }
@@ -1060,7 +1114,7 @@ internal fun InfiniteCanvasHost(
                         }
                         TextButton(onClick = { timelineDockVisible = !timelineDockVisible },
                             enabled = !gestureOwned, modifier = Modifier.testTag("spatial-timeline-toggle")) {
-                            Text(if (timelineDockVisible) "收起时间轴" else "时间轴")
+                            Text(if (timelineDockVisible && dockLayout.suspended) "时间轴待空间恢复" else if (timelineDockVisible) "收起时间轴" else "时间轴")
                         }
                         Box {
                             TextButton(onClick = { arrangeOpen = true }, enabled = !gestureOwned,

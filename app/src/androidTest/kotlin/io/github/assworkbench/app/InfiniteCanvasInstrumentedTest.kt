@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.Button
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
@@ -627,6 +628,76 @@ class InfiniteCanvasInstrumentedTest {
         composeRule.onNodeWithTag("spatial-reference-preview").assertExists()
         composeRule.onNodeWithText("Unsaved 1").assertExists()
         assertEquals(nodes, saved.second)
+    }
+
+    @Test fun timelineContinuousResizeCancelsAndSurvivesTemporaryViewportSuspension() {
+        val nodes = listOf(InfiniteCanvasNode("preview"), InfiniteCanvasNode("subtitles", x = 500f))
+        val initial = InfiniteCanvasPersistence.encode(InfiniteCanvasCamera(), nodes)
+        var saved = InfiniteCanvasPersistence.decode(initial)
+        var viewportHeight by mutableStateOf(600.dp)
+        var owned by mutableStateOf(false)
+        var timelineMounts = 0
+        var undoCount = 0
+        composeRule.activityRule.scenario.onActivity { activity ->
+            activity.setContent {
+                MaterialTheme {
+                    InfiniteCanvasHost(sessionId = 94L, savedScene = initial,
+                        onSaveScene = { saved = InfiniteCanvasPersistence.decode(it) },
+                        entries = nodes.map { InfiniteCanvasEntry(it.id, it.id) },
+                        gestureOwned = owned, onAddTool = {}, onActivate = {},
+                        renderTimeline = {
+                            remember { timelineMounts++ }
+                            var draft by remember { mutableIntStateOf(0) }
+                            Button(onClick = { draft++ }, modifier = Modifier.testTag("timeline-draft")) {
+                                Text("Timeline draft $draft")
+                            }
+                        },
+                        onUndo = { undoCount++ }, onRedo = {}, canUndo = true, canRedo = true,
+                        modifier = Modifier.width(320.dp).height(viewportHeight),
+                    ) { id, _ -> Text(id) }
+                }
+            }
+        }
+        composeRule.onNodeWithTag("spatial-quick-preview").performClick()
+        composeRule.onNodeWithTag("spatial-timeline-toggle").performClick()
+        composeRule.onNodeWithTag("timeline-draft").performClick()
+        val compactHeight = composeRule.onNodeWithTag("spatial-timeline-dock").fetchSemanticsNode().boundsInRoot.height
+        val density = composeRule.activity.resources.displayMetrics.density
+        composeRule.onNodeWithTag("spatial-timeline-resize").performTouchInput {
+            down(center)
+            moveBy(Offset(0f, -100f * density))
+            up()
+        }
+        val resizedHeight = composeRule.onNodeWithTag("spatial-timeline-dock").fetchSemanticsNode().boundsInRoot.height
+        assertTrue("Drag continuously grows the dock", resizedHeight > compactHeight + 40f * density)
+        composeRule.onNodeWithTag("spatial-timeline-resize").performTouchInput {
+            down(center)
+            moveBy(Offset(0f, -50f * density))
+            cancel()
+        }
+        assertEquals(resizedHeight, composeRule.onNodeWithTag("spatial-timeline-dock").fetchSemanticsNode().boundsInRoot.height, 1f)
+        composeRule.runOnIdle { owned = true }
+        composeRule.onNodeWithTag("spatial-timeline-expand").assertIsNotEnabled()
+        composeRule.onNodeWithTag("spatial-timeline-close").assertIsNotEnabled()
+        composeRule.onNodeWithTag("spatial-timeline-resize").performTouchInput {
+            down(center)
+            moveBy(Offset(0f, -50f * density))
+            up()
+        }
+        assertEquals(resizedHeight, composeRule.onNodeWithTag("spatial-timeline-dock").fetchSemanticsNode().boundsInRoot.height, 1f)
+        composeRule.runOnIdle { owned = false; viewportHeight = 240.dp }
+        composeRule.onNodeWithTag("spatial-timeline-dock").assertDoesNotExist()
+        composeRule.runOnIdle { viewportHeight = 600.dp }
+        composeRule.onNodeWithText("Timeline draft 1").assertExists()
+        assertEquals(resizedHeight, composeRule.onNodeWithTag("spatial-timeline-dock").fetchSemanticsNode().boundsInRoot.height, 1f)
+        composeRule.onNodeWithTag("spatial-timeline-expand").performClick()
+        composeRule.onNodeWithTag("spatial-timeline-expand").performClick()
+        assertEquals(resizedHeight, composeRule.onNodeWithTag("spatial-timeline-dock").fetchSemanticsNode().boundsInRoot.height, 1f)
+        composeRule.runOnIdle {
+            assertEquals(1, timelineMounts)
+            assertEquals(nodes, saved.second)
+            assertEquals(0, undoCount)
+        }
     }
 
     @Test fun unifiedCanvasTimelineDockWorksInsideFocusedEditorAndBoard() {

@@ -2,8 +2,8 @@
   "schema_version": 1,
   "id": "ass-authoring-main-canvas-20261011",
   "goal": "Improve subtitle authoring efficiency, redesign main UI and refine infinite canvas UI.",
-  "status": "batch_workbench_ui_source_implemented_native_validation_pending",
-  "current_work_unit": "Two batch workflow pages, fully visible scope choices and fixed review/apply action bar",
+  "status": "canvas_timeline_resize_source_implemented_native_validation_pending",
+  "current_work_unit": "Continuous canvas timeline dock resize, bounded viewport suspension and retained timeline composition",
   "completed_units": [
     "Read current repository protocol, prior task and source checkpoint 69ad5c076c8695fae15c59b01cd391a647bb8652.",
     "User selected subtitle authoring efficiency as the new-capability priority.",
@@ -34,7 +34,10 @@
     "Fixed preview/apply bar outside body scroll, pipeline-specific counts/error summary; presentation switches retain review.",
     "Parent Android compile failure traced to nullable pagination delegate; explicit MutableState/value source fix awaiting native validation.",
     "Full domain244/244; short-pane chrome and workflow-switch native tests added, old action scrolling updated.",
-    "Independent review repaired IME overlap with root viewport padding; two-host visible-keyboard touch regression added, native execution pending."
+    "Independent review repaired IME overlap with root viewport padding; two-host visible-keyboard touch regression added, native execution pending.",
+    "Parent6eec59ac Android CI38163363710 success; nullable pagination delegate compile blocker resolved in actual Android build.",
+    "Restored continuous timeline dock handle, nearby-only snap, cancel and safe viewport projection without writing preferred height during temporary constraints.",
+    "Independent source review found no Critical/Important; policy7/7 including3 existing tests, native two-test additions pending."
   ],
   "next_units": [
     "Read exact-head Android compile/emulator results and resolve blockers before further UI work.",
@@ -43,18 +46,18 @@
   ],
   "branch": "redesign/infinite-canvas-workbench-v2",
   "pr": 138,
-  "latest_durable_commit": "c89d34475a4f5c08fda8f37f91520d0d895eb351",
+  "latest_durable_commit": "6eec59ac5046eb93a901d461a60fc70486941db5",
   "checkpoint_location": "The commit containing this updated record is the source checkpoint; latest_durable_commit identifies the inspected baseline.",
   "external_validation": {
     "baseline_android_ci": "success:38117186072",
     "baseline_emulator": "failure:38117186042; detailed logs unavailable",
     "baseline_fontconfig": "success:38117186058",
-    "proposed_product_changes": "source implemented; domain244/244; Android pending",
+    "proposed_product_changes": "timeline policy7/7; domain244/244 prior unchanged; Android new head pending",
     "real_device_visual_ime": "pending",
     "uigs_intake": "Pending; source audit Candidate retained in .uigs/intake-pending/2026-10-11-task-category-host-audit.md",
-    "android_ci": "parent c89d3447 failure:38162281475 app:compileDebugKotlin nullable delegate",
-    "emulator": "baseline in_progress:38160312619",
-    "fontconfig": "baseline in_progress:38160312322"
+    "android_ci": "parent6eec59ac success:38163363710; proposed timeline commit pending",
+    "emulator": "parent6eec59ac in_progress:38163363565",
+    "fontconfig": "parent6eec59ac in_progress:38163363538"
   },
   "blockers": [
     "No local Android SDK; native compile, connected tests, visual/IME acceptance Pending.",
