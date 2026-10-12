@@ -505,12 +505,19 @@ class EditorRegressionInstrumentedTest {
             .fetchSemanticsNode().boundsInRoot
         assertEquals(previewBeforeRail, previewAfterRail)
 
-        composeRule.onNodeWithTag("spatial-edge-pin-left").performClick()
-        composeRule.onNodeWithTag("spatial-edge-entry-subtitles").performClick()
+        composeRule.onNodeWithTag("spatial-edge-pin-left").assertIsDisplayed().performClick()
+        composeRule.onNodeWithContentDescription("取消驻留").assertIsDisplayed()
+        Log.i("AsswbRegression", "resident-rail:pinned-on-board")
+        composeRule.onNodeWithTag("spatial-edge-entry-subtitles").assertIsDisplayed().performClick()
         composeRule.onNodeWithTag("spatial-focused-editor").assertIsDisplayed()
         composeRule.onNodeWithTag("spatial-native-content-subtitles").assertExists()
-        composeRule.onNodeWithTag("spatial-return-to-board").performClick()
         composeRule.onNodeWithTag("spatial-edge-rail-left").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("取消驻留").assertIsDisplayed()
+        Log.i("AsswbRegression", "resident-rail:retained-in-editor")
+        composeRule.onNodeWithTag("spatial-return-to-board").assertIsDisplayed().performClick()
+        composeRule.onNodeWithTag("spatial-edge-rail-left").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("取消驻留").assertIsDisplayed()
+        Log.i("AsswbRegression", "resident-rail:retained-on-return")
         composeRule.onNodeWithTag("spatial-edge-close-left").performClick()
         composeRule.onNodeWithTag("spatial-node-subtitles").assertIsDisplayed()
 

@@ -2,8 +2,8 @@
   "schema_version": 1,
   "id": "ass-authoring-main-canvas-20261011",
   "goal": "Improve subtitle authoring efficiency, redesign main UI and refine infinite canvas UI.",
-  "status": "rotation_layout_reachability_pending_native",
-  "current_work_unit": "Verify actual post-rotation compact flow reachability without resetting scroll or losing drafts",
+  "status": "resident_rail_boundary_evidence_pending_native",
+  "current_work_unit": "Assert resident rail state at pin, focus and return boundaries without weakening native visibility",
   "completed_units": [
     "Read current repository protocol, prior task and source checkpoint 69ad5c076c8695fae15c59b01cd391a647bb8652.",
     "User selected subtitle authoring efficiency as the new-capability priority.",
@@ -59,7 +59,8 @@
     "a1870711 Android CI38260616288 and Fontconfig38260616256 passed; Emulator38260616254 full150/11 failures, four projection groups22/22. Focused work unit moves direct Host switch outside selection branch; existing failed shared-filter regression now uses visible direct action and immediately checks selected IDs/query/document. Native repair pending; ten other failures preserved in triage.",
     "ca6e5d0d Android38267249329 and Fontconfig38267249383 passed; Emulator38267249421 XML full-attempt26/5 only, no complete150-case evidence. Shared-filter native case finished with no failure record. Compact common tool helper now displays real directory entry and outer fixed-inspector before existing strict field scroll/visibility assertions; native execution pending.",
     "79aca312 Android38269823513/Fontconfig38269823368 passed; Emulator38269823578 full150/4 failures, four groups22/22. Prior outer-scroll/batch-field and selected Host-switch failures absent. Batch IME failure is visibility setup wait, before footer assertions. Setup now refocuses real displayed field and commands/observes actual focused root with failure evidence; strict footer geometry/touch retained. Native execution pending.",
-    "d4cd3417 Android38272497826/Fontconfig38272497825 success; Emulator38272497780 full150/3, groups22/22. Rotation test now waits idle and uses actual compact-flow selector to scroll preview into view, assert display, scroll inspector back and assert draft. Wide/tablet checks unchanged; native pending. IME actual input focus absent and resident rail post-return remain unresolved; transient transform node failure did not recur but root unknown."
+    "d4cd3417 Android38272497826/Fontconfig38272497825 success; Emulator38272497780 full150/3, groups22/22. Rotation test now waits idle and uses actual compact-flow selector to scroll preview into view, assert display, scroll inspector back and assert draft. Wide/tablet checks unchanged; native pending. IME actual input focus absent and resident rail post-return remain unresolved; transient transform node failure did not recur but root unknown.",
+    "c87edd7d Android38277245846/Fontconfig38277245808 success; Emulator38277245803 four projection groups22/22, full-attempt empty XML. Source job fetch Transport closed; full regression/rotation correction unverified. Existing resident-rail regression now verifies pin label and displayed rail before/after focus/return with stage logs; native pending, no product root inferred."
   ],
   "next_units": [
     "Diagnose named IME/navigation/batch-review/viewport assertions from docs/EMULATOR-FAILURE-TRIAGE-2026-10-12.md; preserve native gates.",
@@ -68,18 +69,18 @@
   ],
   "branch": "redesign/infinite-canvas-workbench-v2",
   "pr": 138,
-  "latest_durable_commit": "d4cd3417eabbe61d703925eceaa3371ac11f3ecb",
+  "latest_durable_commit": "c87edd7db62fa95550a40d73d0c3c98958611942",
   "checkpoint_location": "The commit containing this updated record is the source checkpoint; latest_durable_commit identifies the inspected baseline.",
   "external_validation": {
     "baseline_android_ci": "success:38117186072",
     "baseline_emulator": "failure:38117186042; detailed logs unavailable",
     "baseline_fontconfig": "success:38117186058",
-    "proposed_product_changes": "No product change; layout-aware rotation test scrolls existing compact preview and inspector with strict display/draft checks; native pending",
+    "proposed_product_changes": "No production change; strict pin/focus/return resident-rail boundary assertions and phase evidence; native pending",
     "real_device_visual_ime": "pending",
     "uigs_intake": "Pending; source audit Candidate retained in .uigs/intake-pending/2026-10-11-task-category-host-audit.md",
-    "android_ci": "d4cd3417 success:38272497826",
-    "emulator": "d4cd3417 failure:38272497780 full150/3, evidence114895760377",
-    "fontconfig": "d4cd3417 success:38272497825"
+    "android_ci": "c87edd7d success:38277245846",
+    "emulator": "c87edd7d failure:38277245803 empty full-attempt XML; source log Transport closed",
+    "fontconfig": "c87edd7d success:38277245808"
   },
   "blockers": [
     "No local Android SDK; native compile, connected tests, visual/IME acceptance Pending.",

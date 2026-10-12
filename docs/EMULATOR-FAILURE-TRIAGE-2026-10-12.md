@@ -1,5 +1,15 @@
 # 模拟器失败清单：已取得真实断言
 
+## c87edd7d 无完整XML与驻留侧轨边界断言
+
+Android38277245846和Fontconfig38277245808成功；Emulator38277245803失败，证据job114913110972成功，来源job114905615883/attempt1。四组投影22项无失败；整套attempt5 XML为空，UNREADABLE XML:no element found:line1,column0。原始job读取Transport closed。本轮没有完整用例数量、剩余失败数量或旋转校正通过证据；不能沿用上轮150/3作为本轮实测。
+
+本单元加强已有侧轨回归的状态边界，尚不修复未经确认的产品根因。既有失败在返回画布后spatial-edge-rail-left显示断言。生产toolDrawerResident由rememberSaveable(sessionId)保存，focus设置toolDrawerOpen=toolDrawerResident，returnToBoard要求驻留时保留目录。原测试只点击pin，没有确认pin状态变化或聚焦编辑器中的驻留目录。
+
+现在实际显示后点击pin，要求“取消驻留”语义可见；打开字幕编辑器后要求侧轨及“取消驻留”仍显示；返回画布再检查二者。加入无用户正文的三个阶段日志，保留之前世界节点bounds不变、原生编辑器、收起/召回断言，不清空驻留、不改为assertExists、不绕过触控或吞掉失败。新断言用于区分pin点击未生效、focus丢失和return丢失，不能预先归因。
+
+本地source/diff/artifact-policy检查通过；新原生执行Pending。旋转、批量IME焦点以及此前变换节点偶发问题仍需后续证据，PR未合并。日期2026-10-13（Asia/Shanghai）。
+
 ## d4cd3417 完整回归与旋转后的实际布局
 
 Android38272497826、Fontconfig38272497825成功；Emulator38272497780失败，证据job114895760377成功，来源job114889925038/attempt1。投影22项无失败，完整150项、3失败、0 errors、0 skipped。transformFieldsProjectExternalPreviewAndRestoreDrafts本次无失败，但上轮失效节点的根因尚未确认，不能宣称消除偶发问题。

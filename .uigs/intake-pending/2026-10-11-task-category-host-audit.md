@@ -1,3 +1,9 @@
+## Resident state evidence must span activation and return / Pending (2026-10-13)
+
+Dedup checked spatial state/navigation family. Prior full150/3 rail failure is after return to board, while test never verifies pin toggle or resident rail inside focused editor. Strengthened same native case checks real displayed pin label “取消驻留” and rail at all three boundaries with stage logs. Keep world bounds, native content and recall assertions; no inferred product root or repair. Current c87edd7d full attempt XML empty; cannot certify remaining failure count or rotation pass. New execution pending.
+
+Source docs/EMULATOR-FAILURE-TRIAGE-2026-10-12.md. Case/Test refinement only, Canonical unchanged; external Foundry intake Pending after earlier automatic cross-repository rejection, no retry.
+
 ## Orientation is not a layout-profile assertion / Pending (2026-10-13)
 
 Dedup checked viewport/reachability family. d4cd3417 full150/3 native rotation case fails preview display after prior editing scrolled outer flow. Source policy keeps short landscape COMPACT unless width>=720 and height>=420. Actual layout/profile, retained scroll and visibility must be distinguished from orientation label. Existing test now waits idle, uses actual compact-flow presence, scrolls preview into view and asserts display, scrolls inspector back and checks draft; wider profile assertions unchanged. No product reset of user's scroll. Source-level test correction; native pending, no usability claim or Canonical promotion.
