@@ -136,6 +136,47 @@ class EditorRegressionInstrumentedTest {
         }
     }
 
+    @Test fun batchReviewStaysExpiredAfterEditUndoEvenWhenUiSkipsIntermediateFrames() {
+        restoreRecovery()
+        composeRule.runOnIdle {
+            viewModel.focusEvent(1L, seek = false)
+            val before = viewModel.state.value
+            val review = io.github.assworkbench.domain.AssBatchReview.create(before.document,
+                io.github.assworkbench.domain.AssBatchRecipe("review", actions = listOf(
+                    io.github.assworkbench.domain.AssBatchAction.SetActor("ReviewedActor"))),
+                before.workspaceSessionId, before.documentRevision)
+            val store = io.github.assworkbench.app.ui.BatchAuthoringDraftStore(before.workspaceSessionId)
+            val draft = store.obtain("BATCH:primary")
+            val ids = before.document.events.mapTo(linkedSetOf()) { it.id }
+            draft.record("rule", before.document, ids, Result.success(review), before.documentRevision)
+
+            viewModel.focusEvent(2L, seek = false)
+            viewModel.setQuery("Second")
+            assertEquals(before.documentRevision, viewModel.state.value.documentRevision)
+            viewModel.focusEvent(1L, seek = false)
+            viewModel.updateFocusedText("intermediate edit")
+            viewModel.undo()
+            val restored = viewModel.state.value
+            assertEquals(before.document, restored.document)
+            assertEquals(before.documentRevision + 2L, restored.documentRevision)
+            assertEquals(null, draft.preview("rule", restored.document, ids, restored.documentRevision))
+            viewModel.applyBatchReview(review)
+            assertEquals(before.document, viewModel.state.value.document)
+            assertTrue(viewModel.state.value.status.contains("已过期"))
+            assertTrue(viewModel.state.value.canRedo)
+
+            val fresh = io.github.assworkbench.domain.AssBatchReview.create(restored.document,
+                io.github.assworkbench.domain.AssBatchRecipe("review", actions = listOf(
+                    io.github.assworkbench.domain.AssBatchAction.SetActor("ReviewedActor"))),
+                restored.workspaceSessionId, restored.documentRevision)
+            viewModel.applyBatchReview(fresh)
+            assertTrue(viewModel.state.value.document.events.all { it.name == "ReviewedActor" })
+            assertEquals(restored.documentRevision + 1L, viewModel.state.value.documentRevision)
+            viewModel.undo()
+            assertEquals(before.document, viewModel.state.value.document)
+        }
+    }
+
     @Test fun subtitleFilterSavedStateRestoresConditionsAndProjectReplacementClearsThem() {
         restoreRecovery()
         composeRule.runOnIdle {
@@ -1261,7 +1302,8 @@ class EditorRegressionInstrumentedTest {
             val before = viewModel.state.value.document
             val recipe = io.github.assworkbench.domain.AssBatchRecipe("reviewed", actions = listOf(
                 io.github.assworkbench.domain.AssBatchAction.SetActor("Reviewed")))
-            val review = io.github.assworkbench.domain.AssBatchReview.create(before, recipe, viewModel.state.value.workspaceSessionId)
+            val review = io.github.assworkbench.domain.AssBatchReview.create(before, recipe,
+                viewModel.state.value.workspaceSessionId, viewModel.state.value.documentRevision)
             viewModel.applyBatchReview(review)
             assertTrue(viewModel.state.value.document.events.all { it.name == "Reviewed" })
             viewModel.undo()
@@ -1271,7 +1313,8 @@ class EditorRegressionInstrumentedTest {
             viewModel.applyBatchReview(review)
             assertEquals(changed, viewModel.state.value.document)
             assertTrue(viewModel.state.value.status.contains("过期"))
-            val oldSession = io.github.assworkbench.domain.AssBatchReview.create(changed, recipe, viewModel.state.value.workspaceSessionId)
+            val oldSession = io.github.assworkbench.domain.AssBatchReview.create(changed, recipe,
+                viewModel.state.value.workspaceSessionId, viewModel.state.value.documentRevision)
             viewModel.newSubtitleProject()
             val replacement = viewModel.state.value.document
             viewModel.applyBatchReview(oldSession)

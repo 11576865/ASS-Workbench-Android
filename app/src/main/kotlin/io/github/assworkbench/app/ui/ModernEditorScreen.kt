@@ -176,8 +176,8 @@ fun ModernEditorScreen(
     val fixedTool = WorkbenchTool.valueOf(fixedToolName)
     val eventTextDraftStore = rememberEventTextDraftStore(state.workspaceSessionId)
     val batchAuthoringDraftStore = rememberBatchAuthoringDraftStore(state.workspaceSessionId)
-    LaunchedEffect(batchAuthoringDraftStore, state.document, state.selectedEventIds, state.subtitleFilter) {
-        batchAuthoringDraftStore.reconcile(state.document, state.selectedEventIds, state.subtitleFilter)
+    LaunchedEffect(batchAuthoringDraftStore, state.documentRevision, state.document, state.selectedEventIds, state.subtitleFilter) {
+        batchAuthoringDraftStore.reconcile(state.document, state.selectedEventIds, state.subtitleFilter, state.documentRevision)
     }
     LaunchedEffect(eventTextDraftStore, state.document.events.map { it.id }) {
         eventTextDraftStore.retainEvents(state.document.events.mapTo(linkedSetOf()) { it.id })

@@ -2,8 +2,8 @@
   "schema_version": 1,
   "id": "ass-authoring-main-canvas-20261011",
   "goal": "Improve subtitle authoring efficiency, redesign main UI and refine infinite canvas UI.",
-  "status": "emulator_failure_diagnostics_pending_native",
-  "current_work_unit": "Bound instrumentation failure summaries and preserve isolated per-attempt raw evidence",
+  "status": "batch_revision_guard_pending_native",
+  "current_work_unit": "Reject reviewed batch edits after intermediate document revisions, including edit then Undo",
   "completed_units": [
     "Read current repository protocol, prior task and source checkpoint 69ad5c076c8695fae15c59b01cd391a647bb8652.",
     "User selected subtitle authoring efficiency as the new-capability priority.",
@@ -41,27 +41,30 @@
     "Read all99cd725a failure logs; app compile blocked by implicit maxHeight inside RowScope, fixed with outer local Float capture; policy7/7 rerun.",
     "Exact2afe2e9c Android CI38165660471 and Fontconfig38165660491 passed; Emulator38165660505 failed, two log retrievals returned Transport closed without assertion details.",
     "Added bounded failure/error XML summary, immutable raw per-attempt archives and one-day manual-only artifact; review caught stale XML attribution and repeat-run archive collision, both corrected.",
-    "Diagnostic tools9/9 RED-to-GREEN; runner deadlines, full-suite gate, Gradle failure propagation, screenshot chunk output and product assertions retained."
+    "Diagnostic tools9/9 RED-to-GREEN; runner deadlines, full-suite gate, Gradle failure propagation, screenshot chunk output and product assertions retained.",
+    "Reproduced edit/Undo content equality reauthorizing old review with real UndoHistory and AssBatchReview.",
+    "Added atomic document revision publication boundary, rule/search review guards and shared draft invalidation; domain suite248/248 with original resources.",
+    "Added real ViewModel Android regression for skipped intermediate frames and fresh re-review; unexecuted locally."
   ],
   "next_units": [
-    "Read exact diagnostic-head native results; identify emulator failure from bounded summaries before further product fixes.",
+    "Read exact revision-guard native CI results and emulator assertion evidence before merging or further UI product fixes.",
     "Inspect production native UI screenshots/IME/font scaling; continue main/canvas layout improvements based on evidence.",
     "Restore remaining historical interaction capabilities and stable process/session recovery."
   ],
   "branch": "redesign/infinite-canvas-workbench-v2",
   "pr": 138,
-  "latest_durable_commit": "2afe2e9cbfb30217a69ab16593ade7fe3e014301",
+  "latest_durable_commit": "29e81a786315a75b517061d60d84ba6ae9744f7f",
   "checkpoint_location": "The commit containing this updated record is the source checkpoint; latest_durable_commit identifies the inspected baseline.",
   "external_validation": {
     "baseline_android_ci": "success:38117186072",
     "baseline_emulator": "failure:38117186042; detailed logs unavailable",
     "baseline_fontconfig": "success:38117186058",
-    "proposed_product_changes": "timeline policy7/7; domain244/244 prior unchanged; diagnostic tools9/9; diagnostic head native pending",
+    "proposed_product_changes": "domain248/248; revision guard Android compile/native pending",
     "real_device_visual_ime": "pending",
     "uigs_intake": "Pending; source audit Candidate retained in .uigs/intake-pending/2026-10-11-task-category-host-audit.md",
-    "android_ci": "2afe2e9c success:38165660471; Compose DSL compile blocker resolved",
-    "emulator": "2afe2e9c failure:38165660505; job114547572877; assertion details unavailable, log transport closed twice",
-    "fontconfig": "2afe2e9c success:38165660491"
+    "android_ci": "29e81a78 success:38168176578",
+    "emulator": "29e81a78 failure:38168176589/job114555009385; log retrieval Transport closed, root unknown",
+    "fontconfig": "29e81a78 success:38168176580"
   },
   "blockers": [
     "No local Android SDK; native compile, connected tests, visual/IME acceptance Pending.",

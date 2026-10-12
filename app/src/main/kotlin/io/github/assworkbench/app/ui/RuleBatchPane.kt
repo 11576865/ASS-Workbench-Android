@@ -271,7 +271,7 @@ internal fun RuleBatchPane(
     }
     val recipe = recipeResult?.getOrNull()
     val recipeError = recipeResult?.exceptionOrNull()?.message
-    val draftPreview = draftEntry.preview("rule", state.document, scopeIds)
+    val draftPreview = draftEntry.preview("rule", state.document, scopeIds, state.documentRevision)
     val explicitReview = draftPreview?.review
     val explicitPreviewError = draftPreview?.error
     val preview = explicitReview?.preview
@@ -475,7 +475,7 @@ internal fun RuleBatchPane(
             previewTag = "batch-preview-explicit", applyTag = "batch-review-commit",
             onPreview = {
                 recipe?.let { current -> draftEntry.record("rule", state.document, scopeIds,
-                    runCatching { AssBatchReview.create(state.document, current, state.workspaceSessionId) }) }
+                    runCatching { AssBatchReview.create(state.document, current, state.workspaceSessionId, state.documentRevision) }, state.documentRevision) }
             },
             onApply = { explicitReview?.let(viewModel::applyBatchReview) })
         }

@@ -61,4 +61,13 @@ class BatchAuthoringDraftTest {
         assertNull(cleaned.drafts["sibling"])
         assertEquals("Alice", cleaned.drafts.getValue("BATCH:primary").values["actor"])
     }
+    @Test fun skippedIntermediateUiFramesCannotKeepOldPreview() {
+        val draft = BatchAuthoringDraft().edit("actor", "Alice").record("rule", document, setOf(1L), reviewed().previews.getValue("rule").review, null,
+            documentRevision = 11)
+        val reconciled = draft.reconcile("rule", document, setOf(1L), documentRevision = 13)
+        assertNull(reconciled.previews["rule"])
+        assertEquals("Alice", reconciled.values["actor"])
+        assertSame(draft, draft.reconcile("rule", document, setOf(1L), documentRevision = 11))
+    }
+
 }

@@ -91,7 +91,7 @@ internal fun SemanticSearchReplacePane(
     val query = queryResult?.getOrNull()
     val queryError = queryResult?.exceptionOrNull()?.message
 
-    val draftPreview = draftEntry.preview("search", state.document, eventIds)
+    val draftPreview = draftEntry.preview("search", state.document, eventIds, state.documentRevision)
     val review = draftPreview?.review
     val executionError = draftPreview?.error
     val preview = review?.preview
@@ -182,7 +182,7 @@ internal fun SemanticSearchReplacePane(
             val q = query
             if (p != null && q != null) draftEntry.record("search", state.document, eventIds,
                 runCatching { AssBatchReview.search(state.document, q,
-                    AssSearchReplacement(scope, p, replacementText), eventIds, state.workspaceSessionId) })
+                    AssSearchReplacement(scope, p, replacementText), eventIds, state.workspaceSessionId, state.documentRevision) }, state.documentRevision)
         },
         onApply = { review?.let(viewModel::applyBatchReview) })
     }

@@ -29,6 +29,8 @@ data class SpectrogramState(
 data class EditorState(
     val project: SubtitleProject = SubtitleProject(),
     val document: AssDocument = AssDocument(),
+    /** Monotonic within this VM; navigation/preview/presentation do not advance it. */
+    val documentRevision: Long = 0L,
     val previewDocument: AssDocument? = null,
     /** Owner of the single active transient domain preview. */
     val previewOwnerId: String? = null,

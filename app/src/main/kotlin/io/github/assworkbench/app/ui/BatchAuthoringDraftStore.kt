@@ -30,14 +30,14 @@ internal class BatchAuthoringDraftEntry(initial: BatchAuthoringDraft = BatchAuth
             override fun component2(): (Boolean) -> Unit = { value = it }
         }
     }
-    fun preview(channel: String, document: AssDocument, eventIds: Set<Long>): BatchAuthoringPreview? {
-        draft = draft.reconcile(channel, document, eventIds)
+    fun preview(channel: String, document: AssDocument, eventIds: Set<Long>, documentRevision: Long = 0L): BatchAuthoringPreview? {
+        draft = draft.reconcile(channel, document, eventIds, documentRevision)
         return draft.previews[channel]
     }
     fun page(channel: String): MutableState<Int> = pages.getOrPut(channel) { mutableStateOf(0) }
-    fun record(channel: String, document: AssDocument, eventIds: Set<Long>, result: Result<AssBatchReview>) {
+    fun record(channel: String, document: AssDocument, eventIds: Set<Long>, result: Result<AssBatchReview>, documentRevision: Long = 0L) {
         pages[channel]?.value = 0
-        draft = draft.record(channel, document, eventIds, result.getOrNull(), result.exceptionOrNull()?.message)
+        draft = draft.record(channel, document, eventIds, result.getOrNull(), result.exceptionOrNull()?.message, documentRevision)
     }
 }
 
@@ -45,12 +45,12 @@ internal class BatchAuthoringDraftStore(val sessionId: Long, snapshot: BatchAuth
     private val entries = snapshot.drafts.mapValues { BatchAuthoringDraftEntry(it.value) }.toMutableMap()
     fun obtain(instanceId: String): BatchAuthoringDraftEntry = entries.getOrPut(instanceId) { BatchAuthoringDraftEntry() }
     fun removeInstance(instanceId: String) { entries.remove(instanceId) }
-    fun reconcile(document: AssDocument, selectedIds: Set<Long>, filter: SubtitleFilterState) {
+    fun reconcile(document: AssDocument, selectedIds: Set<Long>, filter: SubtitleFilterState, documentRevision: Long = 0L) {
         entries.values.forEach { entry ->
             val scope = AssBatchScope.entries.firstOrNull { it.name == entry.draft.values["rule.scope"] } ?: return@forEach
             val ids = scope.eventIds(document.events, selectedIds, filter).toSet()
-            entry.preview("rule", document, ids)
-            entry.preview("search", document, ids)
+            entry.preview("rule", document, ids, documentRevision)
+            entry.preview("search", document, ids, documentRevision)
         }
     }
     fun save(): List<String> = BatchAuthoringDraftSnapshot(sessionId, entries.mapValues { it.value.draft }).save()

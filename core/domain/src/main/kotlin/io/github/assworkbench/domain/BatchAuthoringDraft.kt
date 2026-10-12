@@ -14,12 +14,12 @@ data class BatchAuthoringDraft(
     fun present(key: String, value: String): BatchAuthoringDraft =
         if (values[key] == value) this else copy(values = values + (key to value))
 
-    fun record(channel: String, document: AssDocument, eventIds: Set<Long>, review: AssBatchReview?, error: String?): BatchAuthoringDraft =
-        copy(previews = previews + (channel to BatchAuthoringPreview(document, eventIds.toSet(), review, error)))
+    fun record(channel: String, document: AssDocument, eventIds: Set<Long>, review: AssBatchReview?, error: String?, documentRevision: Long = 0L): BatchAuthoringDraft =
+        copy(previews = previews + (channel to BatchAuthoringPreview(document, eventIds.toSet(), review, error, documentRevision)))
 
-    fun reconcile(channel: String, document: AssDocument, eventIds: Set<Long>): BatchAuthoringDraft {
+    fun reconcile(channel: String, document: AssDocument, eventIds: Set<Long>, documentRevision: Long = 0L): BatchAuthoringDraft {
         val current = previews[channel] ?: return this
-        return if (current.document == document && current.eventIds == eventIds) this
+        return if (current.documentRevision == documentRevision && current.document == document && current.eventIds == eventIds) this
             else copy(previews = previews - channel)
     }
 }
@@ -29,6 +29,7 @@ data class BatchAuthoringPreview(
     val eventIds: Set<Long>,
     val review: AssBatchReview?,
     val error: String?,
+    val documentRevision: Long = 0L,
 )
 
 /** Only literal input records persist. Recovered inputs always require a fresh precheck. */

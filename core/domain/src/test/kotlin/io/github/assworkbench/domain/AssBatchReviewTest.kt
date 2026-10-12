@@ -54,4 +54,34 @@ class AssBatchReviewTest {
         assertEquals("Alice", review.commit(doc).events.first().name)
         assertEquals("", doc.events.first().name)
     }
+    @Test fun undoToIdenticalContentDoesNotReauthorizeOldReview() {
+        val history = UndoHistory(doc)
+        val review = AssBatchReview.create(doc,
+            AssBatchRecipe("review", actions = listOf(AssBatchAction.SetActor("Alice"))),
+            sessionId = 3, documentRevision = 11)
+        val changed = history.commit(doc.copy(events = events.drop(1)))
+        val revisionAfterEdit = AssDocumentRevision.advance(11, doc, changed)
+        val restored = history.undo()
+        val revisionAfterUndo = AssDocumentRevision.advance(revisionAfterEdit, changed, restored)
+        assertEquals(doc, restored)
+        assertEquals(13L, revisionAfterUndo)
+        assertFailsWith<IllegalArgumentException> { review.commit(restored, 3, documentRevision = revisionAfterUndo) }
+        assertEquals("Alice", review.commit(doc, 3, documentRevision = 11).events.first().name)
+    }
+    @Test fun searchReviewAlsoRequiresTheSameDocumentRevision() {
+        val review = AssBatchReview.search(doc, AssSearchQuery(),
+            AssSearchReplacement(AssReplaceScope.VISIBLE_TEXT, Regex("hit"), "new"), setOf(2L),
+            sessionId = 3, documentRevision = 11)
+        assertFailsWith<IllegalArgumentException> { review.commit(doc, 3, documentRevision = 12) }
+        assertEquals("new", review.commit(doc, 3, documentRevision = 11).events[1].text)
+    }
+
+    @Test fun unchangedDocumentDoesNotInvalidateReview() {
+        val revision = AssDocumentRevision.advance(11, doc, doc.copy())
+        val review = AssBatchReview.create(doc,
+            AssBatchRecipe("review", actions = listOf(AssBatchAction.SetActor("Alice"))), documentRevision = 11)
+        assertEquals(11L, revision)
+        assertEquals("Alice", review.commit(doc, documentRevision = revision).events.first().name)
+    }
+
 }
