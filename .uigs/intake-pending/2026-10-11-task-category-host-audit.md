@@ -1,3 +1,9 @@
+## Narrow action rail must budget controls inside actual padding / Pending (2026-10-13)
+
+Dedup checked spatial native-density/action reachability family. Source narrow rail88dp has72dp content after padding16, but old Row declared two40dp buttons (80dp). Stack48dp actions with4dp spacing and expose checked pin plus text status; preserve resident identity and scroll list. Added native actual bounds containment/nonoverlap assertions alongside existing residency/geometry tests; native RED/GREEN and device visuals pending. This source-confirmed width defect is not established as historical residency-loss root. Current PR diagnostics left running; product repair stored on independent checkpoint.
+
+Source docs/EMULATOR-FAILURE-TRIAGE-2026-10-12.md. Bug/Case extension only, Canonical unchanged. External intake remains Pending after prior automatic cross-repository rejection, no retry.
+
 ## Resident state evidence must span activation and return / Pending (2026-10-13)
 
 Dedup checked spatial state/navigation family. Prior full150/3 rail failure is after return to board, while test never verifies pin toggle or resident rail inside focused editor. Strengthened same native case checks real displayed pin label “取消驻留” and rail at all three boundaries with stage logs. Keep world bounds, native content and recall assertions; no inferred product root or repair. Current c87edd7d full attempt XML empty; cannot certify remaining failure count or rotation pass. New execution pending.

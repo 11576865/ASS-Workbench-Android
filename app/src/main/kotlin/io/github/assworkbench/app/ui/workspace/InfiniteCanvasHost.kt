@@ -917,13 +917,20 @@ internal fun InfiniteCanvasHost(
                 shadowElevation = 4.dp,
             ) {
                 Column(Modifier.fillMaxSize().padding(8.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = { toolDrawerResident = !toolDrawerResident },
-                            modifier = Modifier.size(40.dp).testTag("spatial-edge-pin-left")) {
+                    Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        IconToggleButton(checked = toolDrawerResident,
+                            onCheckedChange = { toolDrawerResident = it },
+                            modifier = Modifier.size(48.dp).testTag("spatial-edge-pin-left")) {
                             Icon(Icons.Filled.PushPin, if (toolDrawerResident) "取消驻留" else "驻留")
                         }
+                        Text(if (toolDrawerResident) "已驻留" else "临时目录",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (toolDrawerResident) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.testTag("spatial-edge-resident-status"))
                         IconButton(onClick = { toolDrawerOpen = false; toolDrawerResident = false },
-                            modifier = Modifier.size(40.dp).testTag("spatial-edge-close-left")) {
+                            modifier = Modifier.size(48.dp).testTag("spatial-edge-close-left")) {
                             Icon(Icons.Filled.ChevronLeft, "收起目录")
                         }
                     }

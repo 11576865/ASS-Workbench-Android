@@ -504,6 +504,12 @@ class EditorRegressionInstrumentedTest {
         val previewAfterRail = composeRule.onNodeWithTag("spatial-node-preview")
             .fetchSemanticsNode().boundsInRoot
         assertEquals(previewBeforeRail, previewAfterRail)
+        val railBounds = composeRule.onNodeWithTag("spatial-edge-rail-left").fetchSemanticsNode().boundsInRoot
+        val pinBounds = composeRule.onNodeWithTag("spatial-edge-pin-left").fetchSemanticsNode().boundsInRoot
+        val closeBounds = composeRule.onNodeWithTag("spatial-edge-close-left").fetchSemanticsNode().boundsInRoot
+        assertTrue("Pin must fit inside the rail", pinBounds.left >= railBounds.left && pinBounds.right <= railBounds.right)
+        assertTrue("Close must fit inside the rail", closeBounds.left >= railBounds.left && closeBounds.right <= railBounds.right)
+        assertTrue("Rail actions must not overlap", pinBounds.bottom <= closeBounds.top || pinBounds.right <= closeBounds.left)
 
         composeRule.onNodeWithTag("spatial-edge-pin-left").assertIsDisplayed().performClick()
         composeRule.onNodeWithContentDescription("取消驻留").assertIsDisplayed()

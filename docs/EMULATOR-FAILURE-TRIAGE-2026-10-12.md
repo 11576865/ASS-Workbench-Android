@@ -1,5 +1,15 @@
 # 模拟器失败清单：已取得真实断言
 
+## 2026-10-13 窄侧轨真实布局修复检查点
+
+899ca3ae Android CI38282098992成功；Emulator38282098951及Fontconfig38282098961检查时仍运行。为保留驻留三阶段诊断，当前UI改动先保存在fix/narrow-resident-rail-20261013检查点，不更新PR138运行头。
+
+已确认的源码布局缺陷：窄屏railWidth=88dp，Column左右padding各8dp，可用宽72dp，Row同时布置两个size40dp按钮，总需求80dp。宽侧轨112dp才有96dp可用。窄屏横排布局容纳不下两个声明尺寸按钮；这不是侧轨驻留状态丢失的已确认原因。
+
+局部设计：保持原侧轨位置、工具身份与focus/return流程，将按钮纵排居中、尺寸48dp、间距4dp；驻留用IconToggleButton暴露checked状态，加“已驻留/临时目录”labelSmall反馈，收起继续同时清除open/resident。工具目录保留weight1f滚动，添加工具入口保留。修复无需把驻留变成另一套导航或克隆字幕状态。
+
+新增原生几何断言：pin/close的水平bounds必须位于rail内，二者不得重叠；原驻留label、三阶段显示、world bounds、文档与召回断言保留。原生RED/GREEN尚未执行，本地source/diff/artifact-policy检查通过。48dp为实现尺寸，不宣称设备测量或完整大字/极短窗口验收。外部CI/视觉/触控Pending，不宣称历史驻留消失或IME焦点缺陷已修复。
+
 ## c87edd7d 无完整XML与驻留侧轨边界断言
 
 Android38277245846和Fontconfig38277245808成功；Emulator38277245803失败，证据job114913110972成功，来源job114905615883/attempt1。四组投影22项无失败；整套attempt5 XML为空，UNREADABLE XML:no element found:line1,column0。原始job读取Transport closed。本轮没有完整用例数量、剩余失败数量或旋转校正通过证据；不能沿用上轮150/3作为本轮实测。
