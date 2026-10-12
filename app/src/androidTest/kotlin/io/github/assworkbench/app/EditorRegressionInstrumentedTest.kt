@@ -6,9 +6,10 @@ import androidx.test.espresso.UiController
 import androidx.test.espresso.ViewAction
 import androidx.test.espresso.action.ViewActions
 import androidx.test.espresso.matcher.RootMatchers.withDecorView
-import androidx.test.espresso.matcher.ViewMatchers.hasWindowFocus
 import androidx.test.espresso.matcher.ViewMatchers.isRoot
+import org.hamcrest.Description
 import org.hamcrest.Matcher
+import org.hamcrest.TypeSafeMatcher
 
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertIsNotSelected
@@ -485,7 +486,7 @@ class EditorRegressionInstrumentedTest {
                 .fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()) {
             composeRule.onNodeWithTag("spatial-return-to-board").performClick()
         }
-        composeRule.onNodeWithTag("spatial-overview").performClick()
+        composeRule.onNodeWithTag("spatial-overview").performScrollTo().assertIsDisplayed().performClick()
         composeRule.onNodeWithTag("spatial-node-preview").assertIsDisplayed()
         composeRule.onNodeWithTag("spatial-node-subtitles").assertIsDisplayed()
         composeRule.onNodeWithTag("spatial-node-audio").assertIsDisplayed()
@@ -507,7 +508,7 @@ class EditorRegressionInstrumentedTest {
         composeRule.onNodeWithTag("spatial-edge-close-left").performClick()
         composeRule.onNodeWithTag("spatial-node-subtitles").assertIsDisplayed()
 
-        composeRule.onNodeWithText("召回").performClick()
+        composeRule.onNodeWithText("召回").performScrollTo().assertIsDisplayed().performClick()
         composeRule.onNodeWithTag("spatial-recall-subtitles").performClick()
         composeRule.onNodeWithTag("spatial-native-content-subtitles").assertExists()
     }
@@ -610,7 +611,7 @@ class EditorRegressionInstrumentedTest {
         composeRule.onNodeWithTag("spatial-native-content-CAPABILITIES-primary").assertExists()
         composeRule.onNodeWithTag("spatial-menu-CAPABILITIES-primary").performClick()
         composeRule.onNodeWithText("收回工具").performClick()
-        composeRule.onNodeWithText("召回").performClick()
+        composeRule.onNodeWithText("召回").performScrollTo().assertIsDisplayed().performClick()
         composeRule.onNodeWithTag("spatial-recall-CAPABILITIES-primary").performClick()
         composeRule.onNodeWithTag("spatial-native-content-CAPABILITIES-primary").assertExists()
     }
@@ -1701,7 +1702,15 @@ class EditorRegressionInstrumentedTest {
     }
 
     private fun performInFocusedWindow(description: String, action: (UiController, View) -> Unit) {
-        onView(isRoot()).inRoot(withDecorView(hasWindowFocus())).perform(object : ViewAction {
+        // Window focus differs from a child View's input focus. Espresso does
+        // not expose a ViewMatchers.hasWindowFocus API in the pinned version.
+        val focusedDecor = object : TypeSafeMatcher<View>() {
+            override fun describeTo(description: Description) {
+                description.appendText("decor view with window focus")
+            }
+            override fun matchesSafely(view: View): Boolean = view.hasWindowFocus()
+        }
+        onView(isRoot()).inRoot(withDecorView(focusedDecor)).perform(object : ViewAction {
             override fun getConstraints(): Matcher<View> = isRoot()
             override fun getDescription(): String = description
             override fun perform(controller: UiController, view: View) = action(controller, view.rootView)

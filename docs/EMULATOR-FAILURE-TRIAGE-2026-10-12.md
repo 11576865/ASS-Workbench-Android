@@ -1,5 +1,15 @@
 # 模拟器失败清单：已取得真实断言
 
+## 5f5c904b 编译阻断与画布操作可达性
+
+Android CI run38250102462、Fontconfig run38250102470成功；Emulator run38250102523失败。独立证据job114816059291列出五轮NO XML RESULTS。进一步读取原始job114813871580，五轮均在compileDebugAndroidTestKotlin失败：EditorRegressionInstrumentedTest.kt:9/1704 Unresolved reference 'hasWindowFocus'。本轮没有执行原生断言，不能据此判断上一轮24项失败是否减少。
+
+移除不存在的ViewMatchers.hasWindowFocus导入，使用测试内TypeSafeMatcher<View>调用View.hasWindowFocus，再交给withDecorView。保留对实际焦点窗口执行与观察IME的逻辑、五秒期限和null不能代表关闭的检查。Android CI新增compileDebugAndroidTestKotlin门禁，在模拟器之外也编译测试源码。
+
+生产画布顶栏的缩放、总览、召回属于horizontalScroll操作行，鸟瞰入口独立固定。现有测试直接点击屏外语义节点：改为performScrollTo → assertIsDisplayed → performClick，覆盖语义缩放、普通草稿保留、召回和文档/Undo不变用例。此为已确认操作路径校正，尚不证明历史缩放/召回失败全部由此引起；保留原有结果断言，不使用屏外语义动作绕过触控。
+
+本地无Android SDK，本轮完成源码、差异和artifact policy检查；新的测试编译与模拟器结果待CI。未修改领域逻辑，不沿用267项领域测试作为本轮验证。
+
 ## 多选时搜索入口
 
 sharedSubtitleFilterNavigatesResultsWithoutChangingSelectionOrDocumentAcrossHosts实际先toggleSelected(1L)，再点击搜索。生产顶栏selectionMode分支只有退出、计数、全选、批量，搜索只存在于else分支。因此缺少搜索节点是确认的产品入口缺口。沿用已批准的筛选/选择并存语义，在多选分支也提供同一onSearchToggle入口；不通过清空选择来修复测试。既有失败回归继续验证筛选、定位和文档/选择不被导航暗中更改。新原生执行Pending。

@@ -258,10 +258,10 @@ class InfiniteCanvasInstrumentedTest {
         composeRule.onNodeWithTag("overview-content-preview").assertExists()
         composeRule.onNodeWithTag("overview-content-subtitles").assertExists()
 
-        composeRule.onNodeWithTag("spatial-zoom-out").performClick()
+        composeRule.onNodeWithTag("spatial-zoom-out").performScrollTo().assertIsDisplayed().performClick()
         composeRule.onNodeWithTag("spatial-live-preview").assertDoesNotExist()
         composeRule.onNodeWithTag("spatial-open-preview").assertExists()
-        composeRule.onNodeWithTag("spatial-zoom-in").performClick()
+        composeRule.onNodeWithTag("spatial-zoom-in").performScrollTo().assertIsDisplayed().performClick()
         composeRule.onNodeWithTag("spatial-live-preview").assertExists()
         assertEquals(fixture.nodes, fixture.saved.second)
     }
@@ -545,9 +545,9 @@ class InfiniteCanvasInstrumentedTest {
         }
         composeRule.onNodeWithTag("editor-draft-increment").performClick()
         composeRule.onNodeWithText("Draft 1").assertExists()
-        composeRule.onNodeWithTag("spatial-zoom-out").performClick()
+        composeRule.onNodeWithTag("spatial-zoom-out").performScrollTo().assertIsDisplayed().performClick()
         composeRule.onNodeWithTag("spatial-open-subtitles").assertExists()
-        composeRule.onNodeWithTag("spatial-zoom-in").performClick()
+        composeRule.onNodeWithTag("spatial-zoom-in").performScrollTo().assertIsDisplayed().performClick()
         composeRule.onNodeWithText("Draft 1").assertExists()
     }
 

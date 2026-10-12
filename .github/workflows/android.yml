@@ -84,6 +84,9 @@ jobs:
       - name: Unit tests
         run: gradle :core:domain:test :core:fonts:test :core:container:test :app:testDebugUnitTest --stacktrace
 
+      - name: Compile instrumentation tests
+        run: gradle :app:compileDebugAndroidTestKotlin --stacktrace
+
       - name: Build debug APK
         run: gradle :app:assembleDebug --stacktrace
 

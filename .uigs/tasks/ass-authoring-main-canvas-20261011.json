@@ -2,8 +2,8 @@
   "schema_version": 1,
   "id": "ass-authoring-main-canvas-20261011",
   "goal": "Improve subtitle authoring efficiency, redesign main UI and refine infinite canvas UI.",
-  "status": "focused_window_ime_repair_pending_native",
-  "current_work_unit": "Integrate timing checkpoint, repair focused-window IME test action, and retain search access during selection mode",
+  "status": "instrumentation_compile_and_canvas_reachability_pending_ci",
+  "current_work_unit": "Repair missing Espresso matcher, compile instrumentation in Android CI, and scroll canvas actions onscreen before native touch",
   "completed_units": [
     "Read current repository protocol, prior task and source checkpoint 69ad5c076c8695fae15c59b01cd391a647bb8652.",
     "User selected subtitle authoring efficiency as the new-capability priority.",
@@ -54,7 +54,8 @@
     "071c9818 Android CI38244659459 passed. Side-rail assertion now targets native content and header/rail vertical boundary; batch tests bring outer-flow footer onscreen and assert display before touch, IME test remains strict. Native execution pending.",
     "Session/owner/Event timing store, clean sync/dirty conflict/reset/explicit apply and exact-millis baseline implemented; eight new domain cases, full267/267. Actual Activity and store Android regressions added, unexecuted.",
     "c7dbcd74 full146/24 failed, evidence job114808156236 readable; repeated Activity-window hide request rejected while AlertDialog owns focus. Native helper now commands and observes focused decor root, preserves deadline/cause; explicit dialog IME/draft preservation test added, unexecuted.",
-    "Native shared-filter missing-search assertion matched toolbar selectionMode hiding search. Added same independent search toggle without clearing selection; existing native red regression preserved, execution pending."
+    "Native shared-filter missing-search assertion matched toolbar selectionMode hiding search. Added same independent search toggle without clearing selection; existing native red regression preserved, execution pending.",
+    "5f5c904b Android/Fontconfig passed; emulator38250102523 failed compiling androidTest before execution, five attempts without XML. Removed unavailable hasWindowFocus import via local typed View matcher; retained focused-window IME assertions. Canvas tests now scroll overview/recall/zoom actions into view and assert display before touch; existing result assertions preserved."
   ],
   "next_units": [
     "Diagnose named IME/navigation/batch-review/viewport assertions from docs/EMULATOR-FAILURE-TRIAGE-2026-10-12.md; preserve native gates.",
@@ -63,18 +64,18 @@
   ],
   "branch": "redesign/infinite-canvas-workbench-v2",
   "pr": 138,
-  "latest_durable_commit": "fbdc3f4945f976807a810077228c74680af85680",
+  "latest_durable_commit": "5f5c904b6d7dffd7b6241f06be70aa63f0ff9bbe",
   "checkpoint_location": "The commit containing this updated record is the source checkpoint; latest_durable_commit identifies the inspected baseline.",
   "external_validation": {
     "baseline_android_ci": "success:38117186072",
     "baseline_emulator": "failure:38117186042; detailed logs unavailable",
     "baseline_fontconfig": "success:38117186058",
-    "proposed_product_changes": "timing checkpoint domain267/267 from previous work; focused-window IME helper native/compile pending",
+    "proposed_product_changes": "No production/domain change; test matcher, canvas touch reachability and instrumentation compile gate pending CI",
     "real_device_visual_ime": "pending",
     "uigs_intake": "Pending; source audit Candidate retained in .uigs/intake-pending/2026-10-11-task-category-host-audit.md",
-    "android_ci": "c7dbcd74 success:38246400860",
-    "emulator": "c7dbcd74 failure:38246400875; full146/24 failures; evidence success:114808156236",
-    "fontconfig": "c7dbcd74 success:38246400843"
+    "android_ci": "5f5c904b success:38250102462",
+    "emulator": "5f5c904b failure:38250102523; compileDebugAndroidTestKotlin unresolved hasWindowFocus; no instrumentation assertions executed",
+    "fontconfig": "5f5c904b success:38250102470"
   },
   "blockers": [
     "No local Android SDK; native compile, connected tests, visual/IME acceptance Pending.",

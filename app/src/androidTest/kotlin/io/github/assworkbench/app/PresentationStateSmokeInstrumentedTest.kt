@@ -69,9 +69,9 @@ class PresentationStateSmokeInstrumentedTest {
         }
         val document = viewModel.state.value.document
         val selection = viewModel.state.value.focusedEventId
-        composeRule.onNodeWithTag("spatial-zoom-out").performClick()
-        composeRule.onNodeWithTag("spatial-zoom-in").performClick()
-        composeRule.onNodeWithText("召回").performClick()
+        composeRule.onNodeWithTag("spatial-zoom-out").performScrollTo().assertIsDisplayed().performClick()
+        composeRule.onNodeWithTag("spatial-zoom-in").performScrollTo().assertIsDisplayed().performClick()
+        composeRule.onNodeWithText("召回").performScrollTo().assertIsDisplayed().performClick()
         composeRule.onNodeWithTag("spatial-recall-audio").performClick()
         composeRule.onNodeWithTag("spatial-audio-evidence").assertIsDisplayed()
         composeRule.onNodeWithTag("spatial-menu-audio").performClick()
