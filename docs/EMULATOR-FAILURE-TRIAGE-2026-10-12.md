@@ -1,5 +1,15 @@
 # 模拟器失败清单：已取得真实断言
 
+## ca6e5d0d 有限结果与嵌套滚动导航
+
+Android CI38267249329与Fontconfig38267249383成功；Emulator38267249421失败，证据job114877673625可读，来源job114872392838/attempt1。四组投影22项无失败；整套尝试XML仅26项、5失败、0 errors、0 skipped，未取得完整150项执行证据。原日志显示Gradle在4m8s失败且卸载两个包失败，未确认中止根因。不能将26/5与上一轮150/11直接比较。共享筛选跨Host用例在原日志中完成且没有失败记录，证据局限于本次执行。
+
+本单元处理测试导航的嵌套滚动边界。固定COMPACT布局的fixed-content-flow包含参考预览和有限高度fixed-inspector；规则/搜索正文再有内部verticalScroll。performScrollTo字段只滚最近的内部祖先，不能保证整个工具已经进入实际屏幕。这与batch-style-action、batch-preview-pending等实际显示断言失败一致；尚未完成原生修复验证。
+
+openTool固定分支选择真实目录条目时先确认显示；关闭目录、等待稳定后，仅当fixed-content-flow存在时对fixed-inspector执行performScrollTo并确认显示，再由现有用例滚动具体字段。画布、平板不调用不存在的外层滚动；所有字段、错误提示、文档、Undo及IME避让断言保留。键盘可见后的底栏严格测试仍不额外滚动，不把显示改成存在或直接触发语义动作。
+
+本地无Android SDK，source/diff/artifact-policy检查通过；Android编译与原生执行Pending。rectClip外部接管、rotation IME等待、其余未执行失败及完整回归仍未关闭，不宣称产品缺陷全部已修复。
+
 ## a1870711 实际回归与多选布局入口
 
 Android CI38260616288、Fontconfig38260616256成功，测试源码编译门禁通过。Emulator38260616254失败；证据job114857613028成功，来源job114849840212、attempt1、merge SHA3e54cef366e08a4d3683876d9c597ebcc9e83ba9。四组投影共22项无失败；完整150项、11失败、0 errors、0 skipped。画布缩放/召回旧失败未再出现在该清单，不将报告读取成功视为回归通过。

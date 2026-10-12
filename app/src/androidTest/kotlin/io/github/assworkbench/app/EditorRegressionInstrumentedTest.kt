@@ -1769,8 +1769,15 @@ class EditorRegressionInstrumentedTest {
             composeRule.onNodeWithTag("fixed-tool-CAPABILITIES").performClick()
             composeRule.onNodeWithTag("tool-search").performTextReplacement(name)
             hideKeyboard()
-            composeRule.onNodeWithTag("tool-$name").performScrollTo().performClick()
+            composeRule.onNodeWithTag("tool-$name").performScrollTo().assertIsDisplayed().performClick()
             composeRule.waitForIdle()
+            // Inner performScrollTo only reaches the nearest scroll ancestor.
+            // Expose the finite inspector in the compact outer flow first;
+            // subsequent field scroll/display assertions remain strict.
+            if (composeRule.onAllNodesWithTag("fixed-content-flow", useUnmergedTree = true)
+                    .fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()) {
+                composeRule.onNodeWithTag("fixed-inspector").performScrollTo().assertIsDisplayed()
+            }
             return
         }
         composeRule.onNodeWithTag("spatial-add-tool").assertIsDisplayed().performClick()

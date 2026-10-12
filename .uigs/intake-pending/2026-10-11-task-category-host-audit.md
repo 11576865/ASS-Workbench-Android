@@ -1,3 +1,9 @@
+## Nested scroll reachability requires exposing the outer tool pane / Pending
+
+Dedup checked existing viewport/reachability family and prior footer observation. Source fixed compact flow has finite inspector after reference preview; rule/search inner scroll creates nearer ancestor. Existing native batch field display failures ca6e5d0d/run38267249421 persist after inner performScrollTo. Common test tool navigation now first scrolls the finite fixed-inspector through actual outer flow and asserts display; inner assertions and strict visible-keyboard footer test remain unchanged. This is source-supported test-path correction, native confirmation pending, no established product scrolling failure or usability claim.
+
+Evidence remains partial: full-attempt XML26/5 does not certify all150 tests or a failure reduction. Prior cross-repository automatic rejection remains respected; bounded Candidate/Case update Pending, no Foundry retry or Canonical promotion. See docs/EMULATOR-FAILURE-TRIAGE-2026-10-12.md.
+
 ## Selection must retain independent Host navigation / Pending
 
 Dedup checked task/context and spatial Host families. Native a1870711/run38260616254 full150/11: shared-filter test retains selected Event2, then fails finding the more menu while switching Host. Source selectionMode hides both menu and direct layout switch. Existing direct toggle is moved outside selection branch, using unchanged presentation callback; test uses actual displayed toggle and checks selection/query/document immediately after switch. No clearing selection or semantic click bypass. Local source/diff/artifact-policy checks only; native execution pending, other ten failures unresolved.
