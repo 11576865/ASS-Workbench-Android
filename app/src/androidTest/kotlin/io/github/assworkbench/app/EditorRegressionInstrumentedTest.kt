@@ -1610,13 +1610,24 @@ class EditorRegressionInstrumentedTest {
     }
 
     private fun hideKeyboard() {
+        var requestEvidence = "IME hide request not issued"
         composeRule.activityRule.scenario.onActivity { activity ->
-            activity.getSystemService(android.view.inputmethod.InputMethodManager::class.java)
+            val decor = activity.window.decorView
+            val focus = activity.currentFocus
+            val wasVisible = decor.rootWindowInsets?.isVisible(android.view.WindowInsets.Type.ime())
+            val accepted = activity.getSystemService(android.view.inputmethod.InputMethodManager::class.java)
                 .hideSoftInputFromWindow(activity.window.decorView.windowToken, 0)
+            requestEvidence = "accepted=$accepted beforeVisible=$wasVisible windowFocused=${decor.hasWindowFocus()} " +
+                "focusClass=${focus?.javaClass?.simpleName} focusHasToken=${focus?.windowToken != null} " +
+                "focusTokenMatchesDecor=${focus?.windowToken == decor.windowToken}"
         }
-        composeRule.waitUntil(5_000) {
-            composeRule.activity.window.decorView.rootWindowInsets
-                ?.isVisible(android.view.WindowInsets.Type.ime()) != true
+        try {
+            composeRule.waitUntil(5_000) {
+                composeRule.activity.window.decorView.rootWindowInsets
+                    ?.isVisible(android.view.WindowInsets.Type.ime()) != true
+            }
+        } catch (error: androidx.compose.ui.test.ComposeTimeoutException) {
+            throw AssertionError("IME hide did not complete: $requestEvidence", error)
         }
         composeRule.waitForIdle()
     }
@@ -1652,7 +1663,11 @@ class EditorRegressionInstrumentedTest {
             composeRule.waitForIdle()
             return
         }
-        composeRule.onNodeWithTag("workspace-tools").performClick()
+        composeRule.onNodeWithTag("spatial-add-tool").assertIsDisplayed().performClick()
+        composeRule.waitUntil(10_000) {
+            composeRule.onAllNodesWithTag("tool-search")
+                .fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()
+        }
         composeRule.onNodeWithTag("tool-search").performTextReplacement(name)
         hideKeyboard()
         composeRule.onNodeWithTag("tool-$name").performScrollTo().performClick()

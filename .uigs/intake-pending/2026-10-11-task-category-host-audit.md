@@ -1,5 +1,11 @@
 # Candidate / Pending Foundry write
 
+## Retired selector in common native navigation helper / Pending
+
+Dedup matches Foundry stable-action-identity and fictional-selector UI contract families. Exact source audit links named native workspace-tools missing-node failures to a common helper targeting a removed tag. Current production spatial-add-tool opens the real directory in both board and focused stage; three existing regressions already use it. Change the helper to that visible action and wait for real tool-search, preserving downstream draft/document/Undo assertions. Native validation pending.
+
+Separate IME timeout failures now preserve request acceptance/focus/token metadata in the failure message and keep original cause/timeout. No product-keyboard root inferred, no test skipped or failure changed to success. Source docs/EMULATOR-FAILURE-TRIAGE-2026-10-12.md. Foundry write remains Pending after prior automatic cross-repository rejection; no retry or Canonical promotion.
+
 ## Same-instance metadata draft continuity / Pending
 
 Dedup found the existing Foundry shared raw draft/owner family. Actor/Layer/type had Host-local rememberSaveable storage; shared immutable metadata buffers now retain literal values under session + tool owner + Event ID, with clean synchronization, dirty external conflict, explicit reload/overwrite and successful-commit acknowledgement. Own numeric normalization must be acknowledged against actual canonical values, otherwise a successful 003→3 Layer commit can appear as an external conflict.

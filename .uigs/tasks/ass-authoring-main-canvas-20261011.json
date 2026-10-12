@@ -2,8 +2,8 @@
   "schema_version": 1,
   "id": "ass-authoring-main-canvas-20261011",
   "goal": "Improve subtitle authoring efficiency, redesign main UI and refine infinite canvas UI.",
-  "status": "metadata_draft_continuity_pending_native",
-  "current_work_unit": "Share metadata drafts across hosts and integrate field-validation checkpoint; named emulator failures now available",
+  "status": "native_navigation_helper_repair_pending_ci",
+  "current_work_unit": "Repair retired canvas directory selector and capture IME request boundaries without guessing product root",
   "completed_units": [
     "Read current repository protocol, prior task and source checkpoint 69ad5c076c8695fae15c59b01cd391a647bb8652.",
     "User selected subtitle authoring efficiency as the new-capability priority.",
@@ -49,7 +49,8 @@
     "Readable report job114691954061 identified gh api terminal-escape rejection before extraction; added explicit file-download flag and sanitized parser output, tools16/16.",
     "Timing/Layer field errors and commit disablement implemented in shared editor; five domain tests, full253/253; two-host Activity regression unexecuted.",
     "Six metadata draft domain cases and full259/259; shared store, external conflict/reload/overwrite, successful canonical normalization acknowledgement; native tests added, unexecuted.",
-    "952364b7 independent evidence job114787971310 succeeded: four projection suites22/22; full142 cases29 failures. Named assertions preserved in failure triage, root causes not conflated."
+    "952364b7 independent evidence job114787971310 succeeded: four projection suites22/22; full142 cases29 failures. Named assertions preserved in failure triage, root causes not conflated.",
+    "7d069410 Android CI38242900337 passed; common canvas helper still used removed workspace-tools. Updated to visible spatial-add-tool plus actual directory wait; original assertions retained. IME timeout enriched with request/focus/token evidence, not claimed fixed."
   ],
   "next_units": [
     "Diagnose named IME/navigation/batch-review/viewport assertions from docs/EMULATOR-FAILURE-TRIAGE-2026-10-12.md; preserve native gates.",
@@ -58,18 +59,18 @@
   ],
   "branch": "redesign/infinite-canvas-workbench-v2",
   "pr": 138,
-  "latest_durable_commit": "673d09ca10539545dfbf66526d9a680f97b12371",
+  "latest_durable_commit": "7d069410277b23bc9b5c48ee1a5935e92c95758b",
   "checkpoint_location": "The commit containing this updated record is the source checkpoint; latest_durable_commit identifies the inspected baseline.",
   "external_validation": {
     "baseline_android_ci": "success:38117186072",
     "baseline_emulator": "failure:38117186042; detailed logs unavailable",
     "baseline_fontconfig": "success:38117186058",
-    "proposed_product_changes": "metadata + field validation domain259/259; Compose and new native tests pending",
+    "proposed_product_changes": "metadata/field validation Android compile passed; navigation helper and IME diagnostic native execution pending",
     "real_device_visual_ime": "pending",
     "uigs_intake": "Pending; source audit Candidate retained in .uigs/intake-pending/2026-10-11-task-category-host-audit.md",
-    "android_ci": "952364b7 success:38240367088",
-    "emulator": "952364b7 failure:38240367109; evidence job114787971310 success; full142/29 failures",
-    "fontconfig": "952364b7 success:38240367092"
+    "android_ci": "7d069410 success:38242900337",
+    "emulator": "7d069410 in_progress:38242900332; previous952364b7 full142/29 failures",
+    "fontconfig": "7d069410 in_progress:38242900290"
   },
   "blockers": [
     "No local Android SDK; native compile, connected tests, visual/IME acceptance Pending.",
