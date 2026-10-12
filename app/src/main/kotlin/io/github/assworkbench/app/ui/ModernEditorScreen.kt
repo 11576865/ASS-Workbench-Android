@@ -1943,18 +1943,29 @@ private fun InlineEventEditor(
     }
 
     if (activeSection == WorkbenchTool.TEXT) {
+    val timingInput = remember(startText, endText) { EventTimingInputValidation.parse(startText, endText) }
     Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro)) {
-        OutlinedTextField(startText, { startText = it }, label = { Text("Start") }, singleLine = true, modifier = Modifier.weight(1f))
-        OutlinedTextField(endText, { endText = it }, label = { Text("End") }, singleLine = true, modifier = Modifier.weight(1f))
+        OutlinedTextField(startText, { startText = it }, label = { Text("Start") }, singleLine = true,
+            isError = timingInput.startInvalid,
+            supportingText = { if (timingInput.startInvalid) Text("输入 ASS 时间或非负毫秒数") },
+            modifier = Modifier.weight(1f).testTag("event-start-${event.id}"))
+        OutlinedTextField(endText, { endText = it }, label = { Text("End") }, singleLine = true,
+            isError = timingInput.endInvalid || timingInput.reversed,
+            supportingText = {
+                if (timingInput.endInvalid) Text("输入 ASS 时间或非负毫秒数")
+                else if (timingInput.reversed) Text("End 不能早于 Start")
+            },
+            modifier = Modifier.weight(1f).testTag("event-end-${event.id}"))
         Button(
             onClick = {
-                val start = runCatching { SubTime.fromEditable(startText) }.getOrNull()
-                val end = runCatching { SubTime.fromEditable(endText) }.getOrNull()
-                if (start != null && end != null && end >= start) {
+                val start = timingInput.start
+                val end = timingInput.end
+                if (timingInput.canApply && start != null && end != null) {
                     viewModel.setEventTiming(event.id, start.millis, end.millis)
                 }
             },
-            modifier = Modifier.align(Alignment.CenterVertically),
+            enabled = timingInput.canApply,
+            modifier = Modifier.align(Alignment.CenterVertically).testTag("event-apply-time-${event.id}"),
         ) { Text("应用") }
     }
 
@@ -2029,6 +2040,8 @@ private fun InlineEventEditor(
     }
 
     if (activeSection == WorkbenchTool.EVENT) {
+        val parsedLayer = layerText.toIntOrNull()
+        val layerValid = parsedLayer != null && parsedLayer in -999..999
         Surface(
             color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.38f),
             shape = MaterialTheme.shapes.small,
@@ -2036,7 +2049,13 @@ private fun InlineEventEditor(
         ) {
             Column(Modifier.padding(WorkbenchDimens.Small), verticalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro), verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedTextField(layerText, { layerText = it }, label = { Text("Layer") }, singleLine = true, modifier = Modifier.width(88.dp))
+                    OutlinedTextField(layerText, { layerText = it }, label = { Text("Layer") }, singleLine = true,
+                        isError = !layerValid,
+                        supportingText = {
+                            if (parsedLayer == null) Text("输入有效整数")
+                            else if (!layerValid) Text("范围 -999～999")
+                        },
+                        modifier = Modifier.width(88.dp).testTag("event-layer-${event.id}"))
                     FilterChip(selected = comment, onClick = { comment = !comment }, label = { Text(if (comment) "Comment" else "Dialogue") })
                 }
                 OutlinedTextField(actorText, { actorText = it }, label = { Text("Actor") }, singleLine = true, modifier = Modifier.fillMaxWidth())
@@ -2046,14 +2065,16 @@ private fun InlineEventEditor(
                         actorText = event.name
                         comment = event.comment
                     }) { Text("取消") }
-                    Button(onClick = {
+                    Button(enabled = layerValid, onClick = {
+                        val layer = parsedLayer ?: return@Button
+                        if (!layerValid) return@Button
                         viewModel.focusEvent(event.id, seek = false)
                         viewModel.updateFocusedMetadata(
-                            layer = layerText.toIntOrNull() ?: event.layer,
+                            layer = layer,
                             actor = actorText,
                             comment = comment,
                         )
-                    }) { Text("应用") }
+                    }, modifier = Modifier.testTag("event-apply-metadata-${event.id}")) { Text("应用") }
                 }
                 Divider()
                 Text("结构操作", style = MaterialTheme.typography.labelMedium)

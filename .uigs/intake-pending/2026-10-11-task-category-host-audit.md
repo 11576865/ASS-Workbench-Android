@@ -1,5 +1,11 @@
 # Candidate / Pending Foundry write
 
+## Editable numeric input must not silently substitute canonical values / Pending
+
+Dedup queried Foundry numeric coercion/invalid-input observations and bugs. Inline Event time commit silently returned on parse/order failure; Layer parse failure substituted canonical Layer while applying other fields, and VM clamped out-of-range integers. Source-level UI fix ties visible field errors and disabled commit to the existing parser/VM contract, preserving negative Layer and zero/equal timing. App-specific -999..999 is not an ASS standard claim.
+
+Evidence: five new domain cases, full domain253/253 via Kotlin harness; real Activity two-host invalid/repair/Undo test added but unexecuted. Docs/EVENT-FIELD-VALIDATION-2026-10-12.md. No measured usability claim. External intake remains Pending under prior automatic cross-repository rejection; no retry or Canonical promotion.
+
 ## Terminal escape rejection in evidence download / Pending
 
 Dedup queried existing spatial evidence-identity and emulator diagnostic observation families. Report job114691954061 in run38212068747 was readable and failed before extraction: gh api rejected terminal escape sequences, explicitly requesting --allow-escape-sequences. This localizes the new report failure only; no product assertion or earlier Transport closed root is established.

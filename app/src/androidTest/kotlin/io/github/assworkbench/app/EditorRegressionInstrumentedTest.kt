@@ -87,6 +87,54 @@ class EditorRegressionInstrumentedTest {
         composeRule.waitForIdle()
     }
 
+    @Test fun invalidEventFieldsExplainErrorsAndCannotCommitAcrossHosts() {
+        restoreRecovery()
+        composeRule.runOnIdle { viewModel.focusEvent(1L, seek = false) }
+        for (canvas in listOf(false, true)) {
+            if (canvas) switchToUnifiedCanvas()
+            val before = viewModel.state.value.document
+            openTool("TEXT")
+            composeRule.onNodeWithTag("event-start-1").performScrollTo().performTextReplacement("broken")
+            hideKeyboard()
+            composeRule.onNodeWithTag("event-apply-time-1").assertIsNotEnabled()
+            composeRule.onNodeWithText("输入 ASS 时间或非负毫秒数").assertExists()
+            composeRule.runOnIdle { assertEquals(before, viewModel.state.value.document) }
+            composeRule.onNodeWithTag("event-start-1").performTextReplacement("2000")
+            composeRule.onNodeWithTag("event-end-1").performTextReplacement("1000")
+            hideKeyboard()
+            composeRule.onNodeWithTag("event-apply-time-1").assertIsNotEnabled()
+            composeRule.onNodeWithText("End 不能早于 Start").assertExists()
+            composeRule.onNodeWithTag("event-end-1").performTextReplacement("3000")
+            hideKeyboard()
+            composeRule.onNodeWithTag("event-apply-time-1").performScrollTo().assertIsEnabled().performClick()
+            composeRule.runOnIdle {
+                assertEquals(2000L, viewModel.state.value.document.events.first { it.id == 1L }.start.millis)
+                assertEquals(3000L, viewModel.state.value.document.events.first { it.id == 1L }.end.millis)
+                viewModel.undo()
+            }
+            composeRule.runOnIdle { assertEquals(before, viewModel.state.value.document) }
+            openTool("EVENT")
+            composeRule.onNodeWithTag("event-layer-1").performScrollTo().performTextReplacement("oops")
+            hideKeyboard()
+            composeRule.onNodeWithTag("event-apply-metadata-1").assertIsNotEnabled()
+            composeRule.onNodeWithText("输入有效整数").assertExists()
+            composeRule.runOnIdle { assertEquals(before, viewModel.state.value.document) }
+            composeRule.onNodeWithTag("event-layer-1").performTextReplacement("1000")
+            hideKeyboard()
+            composeRule.onNodeWithTag("event-apply-metadata-1").assertIsNotEnabled()
+            composeRule.onNodeWithText("范围 -999～999").assertExists()
+            composeRule.runOnIdle { assertEquals(before, viewModel.state.value.document) }
+            composeRule.onNodeWithTag("event-layer-1").performTextReplacement("-3")
+            hideKeyboard()
+            composeRule.onNodeWithTag("event-apply-metadata-1").performScrollTo().assertIsEnabled().performClick()
+            composeRule.runOnIdle {
+                assertEquals(-3, viewModel.state.value.document.events.first { it.id == 1L }.layer)
+                viewModel.undo()
+            }
+            composeRule.runOnIdle { assertEquals(before, viewModel.state.value.document) }
+        }
+    }
+
     @Test fun sharedSubtitleFilterNavigatesResultsWithoutChangingSelectionOrDocumentAcrossHosts() {
         restoreRecovery()
         val before = viewModel.state.value
