@@ -8,6 +8,8 @@ TIMESTAMP = re.compile(r"^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?Z ")
 START = re.compile(r"^---- instrumentation failure summary \(attempt \d+\) ----$")
 END = "---- instrumentation logcat tails ----"
 TRACE_LIMIT = 1200
+TERMINAL_SEQUENCE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)")
+CONTROL = re.compile(r"[\x00-\x08\x0b-\x1f\x7f]")
 
 
 def extract(path: Path) -> int:
@@ -18,7 +20,8 @@ def extract(path: Path) -> int:
     truncated = False
     with path.open(encoding="utf-8", errors="replace") as source:
         for raw in source:
-            line = TIMESTAMP.sub("", raw.rstrip("\r\n"))
+            clean = CONTROL.sub("", TERMINAL_SEQUENCE.sub("", raw.rstrip("\r\n")))
+            line = TIMESTAMP.sub("", clean)
             if START.fullmatch(line):
                 if active:
                     print("EVIDENCE INCOMPLETE ATTEMPT SUMMARY: previous block never ended")

@@ -1,5 +1,11 @@
 # Candidate / Pending Foundry write
 
+## Terminal escape rejection in evidence download / Pending
+
+Dedup queried existing spatial evidence-identity and emulator diagnostic observation families. Report job114691954061 in run38212068747 was readable and failed before extraction: gh api rejected terminal escape sequences, explicitly requesting --allow-escape-sequences. This localizes the new report failure only; no product assertion or earlier Transport closed root is established.
+
+Allow escapes only for download to a temporary file, then strip terminal sequences/control characters before printing bounded summaries. A colored-marker/OSC-link regression failed before repair and passed afterward; tools16/16. Actual GitHub report execution pending. Append to existing case; Canonical unchanged, Foundry write remains Pending under prior automatic cross-repository rejection, no retry.
+
 ## Independent compact evidence channel / Pending (2026-10-12)
 
 Dedup queried Foundry evidence-identity and Android emulator-offline observation families. Exact eaab9382 Android/Fontconfig succeeded, emulator38194661365 failed; job-log connector returned Transport closed and annotations endpoint was unsupported. No assertion retrieved; log size is not established as the cause.

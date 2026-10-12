@@ -68,6 +68,18 @@ class EmulatorEvidenceTest(unittest.TestCase):
         self.assertEqual(0, result.returncode)
         self.assertIn("trace truncated", result.stdout)
 
+    def test_terminal_sequences_are_removed_without_losing_failure_text(self):
+        result = self.report("2026-10-12T02:00:00Z \x1b[36m---- instrumentation failure summary (attempt 1) ----\x1b[0m\n"
+            "2026-10-12T02:00:01Z \x1b[31mFAIL Editor#touch: invisible\x1b[0m\n"
+            "2026-10-12T02:00:02Z \x1b]8;;https://example.test\x07at Editor.kt:42\x1b]8;;\x1b\\\n"
+            "2026-10-12T02:00:03Z ---- instrumentation logcat tails ----\n")
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertIn("FAIL Editor#touch: invisible", result.stdout)
+        self.assertIn("at Editor.kt:42", result.stdout)
+        self.assertNotIn("\x1b", result.stdout)
+        self.assertNotIn("\x07", result.stdout)
+        self.assertNotIn("https://example.test", result.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()

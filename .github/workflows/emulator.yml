@@ -153,6 +153,6 @@ jobs:
             exit 1
           fi
           echo "Original job: https://github.com/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN_ID/job/$source_job_id"
-          timeout 90s gh api "repos/$GITHUB_REPOSITORY/actions/jobs/$source_job_id/logs" \
+          timeout 90s gh api --allow-escape-sequences "repos/$GITHUB_REPOSITORY/actions/jobs/$source_job_id/logs" \
             > "$RUNNER_TEMP/emulator-source-job.log"
           python3 tools/extract_emulator_evidence.py "$RUNNER_TEMP/emulator-source-job.log"

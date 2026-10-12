@@ -3,7 +3,7 @@
   "id": "ass-authoring-main-canvas-20261011",
   "goal": "Improve subtitle authoring efficiency, redesign main UI and refine infinite canvas UI.",
   "status": "emulator_evidence_channel_pending_ci",
-  "current_work_unit": "Read exact-run emulator attempt summaries through a separate read-only report job",
+  "current_work_unit": "Repair gh api terminal escape rejection in the independent evidence channel",
   "completed_units": [
     "Read current repository protocol, prior task and source checkpoint 69ad5c076c8695fae15c59b01cd391a647bb8652.",
     "User selected subtitle authoring efficiency as the new-capability priority.",
@@ -45,7 +45,8 @@
     "Reproduced edit/Undo content equality reauthorizing old review with real UndoHistory and AssBatchReview.",
     "Added atomic document revision publication boundary, rule/search review guards and shared draft invalidation; domain suite248/248 with original resources.",
     "Added real ViewModel Android regression for skipped intermediate frames and fresh re-review; unexecuted locally.",
-    "eaab9382 Android/Fontconfig passed; emulator failed with unreadable job log. Added same-run/attempt compact evidence job; tools15/15, native channel pending."
+    "eaab9382 Android/Fontconfig passed; emulator failed with unreadable job log. Added same-run/attempt compact evidence job; tools15/15, native channel pending.",
+    "Readable report job114691954061 identified gh api terminal-escape rejection before extraction; added explicit file-download flag and sanitized parser output, tools16/16."
   ],
   "next_units": [
     "Read exact revision-guard native CI results and emulator assertion evidence before merging or further UI product fixes.",
@@ -54,7 +55,7 @@
   ],
   "branch": "redesign/infinite-canvas-workbench-v2",
   "pr": 138,
-  "latest_durable_commit": "eaab9382cc6ea49ef2937bde452949697b424316",
+  "latest_durable_commit": "f5d6d2b7d3e19087d450b5acbc285ad70b28e12f",
   "checkpoint_location": "The commit containing this updated record is the source checkpoint; latest_durable_commit identifies the inspected baseline.",
   "external_validation": {
     "baseline_android_ci": "success:38117186072",
@@ -63,9 +64,9 @@
     "proposed_product_changes": "revision guard Android build passed; device regressions not established as passing; read-only evidence channel pending CI",
     "real_device_visual_ime": "pending",
     "uigs_intake": "Pending; source audit Candidate retained in .uigs/intake-pending/2026-10-11-task-category-host-audit.md",
-    "android_ci": "eaab9382 success:38194661353",
-    "emulator": "eaab9382 failure:38194661365/job114634577024; Transport closed, assertions unknown",
-    "fontconfig": "eaab9382 success:38194661354"
+    "android_ci": "f5d6d2b7 success:38212068626",
+    "emulator": "f5d6d2b7 failure:38212068747; report job114691954061 fails at escape rejection; product assertions unavailable",
+    "fontconfig": "f5d6d2b7 success:38212068728"
   },
   "blockers": [
     "No local Android SDK; native compile, connected tests, visual/IME acceptance Pending.",
