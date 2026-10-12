@@ -1,5 +1,13 @@
 # 模拟器失败清单：已取得真实断言
 
+## 2026-10-13 侧轨检查点接回PR138
+
+899ca3ae Android38282098992与Fontconfig38282098961成功，Emulator38282098951失败。证据job114928905723成功，来源job114921569046/attempt1：四组投影22项无失败；完整attempt5 NO XML RESULTS。不存在完整回归或驻留三阶段断言结果，不能宣称剩余失败减少或侧轨行为恢复。
+
+检查点b5af474d已保留窄侧轨实际UI修复（纵向48dp操作、checked驻留开关、文字状态）及几何断言。原回归结束后接回redesign/infinite-canvas-workbench-v2/PR138进入Android/原生验证；原生触控、显示、窄屏大字/短窗口验收Pending。新增回归门禁未删除，现有IME焦点、驻留消失和变换偶发节点问题未关闭。
+
+本单元只完成已经授权UI检查点的集成与证据状态更新；没有将编译或四组投影成功等同整套UI验收。source/diff/artifact-policy检查通过。UIGS Intake未产生独立新知识，已有侧轨Bug/Case记录保持Pending，未重试先前自动拒绝的Foundry跨仓库写入。
+
 ## 2026-10-13 窄侧轨真实布局修复检查点
 
 899ca3ae Android CI38282098992成功；Emulator38282098951及Fontconfig38282098961检查时仍运行。为保留驻留三阶段诊断，当前UI改动先保存在fix/narrow-resident-rail-20261013检查点，不更新PR138运行头。
