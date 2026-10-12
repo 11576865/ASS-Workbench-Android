@@ -135,6 +135,40 @@ class EditorRegressionInstrumentedTest {
         }
     }
 
+    @Test fun metadataDraftFollowsHostAndRetainsExternalConflictUntilExplicitApply() {
+        restoreRecovery()
+        composeRule.runOnIdle { viewModel.focusEvent(1L, seek = false) }
+        val before = viewModel.state.value.document
+        openTool("EVENT")
+        composeRule.onNodeWithTag("event-actor-1").performScrollTo().performTextReplacement("Local actor")
+        composeRule.onNodeWithTag("event-layer-1").performScrollTo().performTextReplacement("-03")
+        hideKeyboard()
+        composeRule.onNodeWithTag("event-comment-1").performClick()
+        composeRule.onNodeWithTag("workspace-direct-mode-toggle").performClick()
+        openTool("EVENT")
+        composeRule.onNodeWithTag("event-actor-1").assertTextContains("Local actor")
+        composeRule.onNodeWithTag("event-layer-1").assertTextContains("-03")
+        composeRule.onNodeWithTag("event-comment-1").assertIsSelected()
+        composeRule.runOnIdle {
+            assertEquals(before, viewModel.state.value.document)
+            viewModel.updateFocusedMetadata(0, "External actor", false)
+        }
+        val external = viewModel.state.value.document
+        composeRule.onNodeWithTag("event-metadata-conflict-1").assertExists()
+        composeRule.onNodeWithTag("event-actor-1").assertTextContains("Local actor")
+        composeRule.onNodeWithTag("event-apply-metadata-1").performScrollTo().performClick()
+        composeRule.onNodeWithTag("event-metadata-conflict-1").assertDoesNotExist()
+        composeRule.onNodeWithTag("event-layer-1").assertTextContains("-3")
+        composeRule.runOnIdle {
+            val event = viewModel.state.value.document.events.first { it.id == 1L }
+            assertEquals(-3, event.layer)
+            assertEquals("Local actor", event.name)
+            assertTrue(event.comment)
+            viewModel.undo()
+        }
+        composeRule.runOnIdle { assertEquals(external, viewModel.state.value.document) }
+    }
+
     @Test fun sharedSubtitleFilterNavigatesResultsWithoutChangingSelectionOrDocumentAcrossHosts() {
         restoreRecovery()
         val before = viewModel.state.value

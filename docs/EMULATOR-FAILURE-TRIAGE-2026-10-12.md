@@ -1,0 +1,40 @@
+# 模拟器失败清单：已取得真实断言
+
+来源：952364b7；Emulator run38240367109/attempt1，回归job114781182675，独立证据job114787971310成功。实际执行的PR merge SHA为64a894c370b95d1bee8fde7d02d0197576b008f5。Android CI38240367088及Fontconfig38240367092成功。
+
+四个独立投影尝试分别9、3、7、3项，全部无失败；完整回归142项，29失败、0 errors、0 skipped。报告通道成功不代表回归通过。此次数量不证明完整预期测试集全部执行，原始job退出码继续是失败。
+
+失败包含IME等待超时、入口节点缺失、控件未显示、批量预览应用0条以及侧轨遮挡。以下只记录断言事实；没有证明统一根因，不通过删除断言或改成检查存在来掩盖真实可达性要求。
+
+- `batchUnknownStyleAndNegativeMarginFailBeforePreview`：`java.lang.AssertionError: Assert failed: The component with TestTag = 'batch-style-action' is not displayed!`
+- `rectClipExternalTakeoverCancelsPendingDraftAndRestoresAllCoordinates`：`androidx.compose.ui.test.ComposeTimeoutException: Condition still not satisfied after 5000 ms`
+- `groupedNavigationAndGeometrySectionsPreserveDocument`：`androidx.compose.ui.test.ComposeTimeoutException: Condition still not satisfied after 5000 ms`
+- `batchDraftAndReviewedPreviewFollowSameInstanceAcrossMainAndCanvas`：`java.lang.AssertionError: Failed to assert the following: (is enabled)`
+- `sharedSubtitleFilterNavigatesResultsWithoutChangingSelectionOrDocumentAcrossHosts`：`java.lang.AssertionError: Failed to inject touch input.`
+- `batchInvalidRegexFailsClosedInsteadOfDroppingTheFilter`：`java.lang.AssertionError: Assert failed: The component with TestTag = 'batch-preview-pending' is not displayed!`
+- `transformSliderStillOwnsItsPreviewAndCommitsOneUndoStep`：`androidx.compose.ui.test.ComposeTimeoutException: Condition still not satisfied after 5000 ms`
+- `eventTextDraftFollowsTheSameToolAcrossMainAndCanvasWithoutImplicitCommit`：`java.lang.AssertionError: Failed to inject touch input.`
+- `inspectorDraftSurvivesToolSwitchAndRotation`：`androidx.compose.ui.test.ComposeTimeoutException: Condition still not satisfied after 5000 ms`
+- `batchKaraokeRevealControlsStayPreviewOnlyUntilCommit`：`java.lang.AssertionError: Assert failed: The component with TestTag = 'batch-karaoke-reveal' is not displayed!`
+- `semanticSearchInvalidAuxiliaryFiltersStayFailClosed`：`java.lang.AssertionError: Assert failed: The component with TestTag = 'search-style-regex' is not displayed!`
+- `unifiedCanvasHidesAndRecallsNativeToolDirectory`：`java.lang.AssertionError: Failed to inject touch input.`
+- `spatialWorkspaceExposesBoardAndNativeEditorWithoutMovingWorldNodes`：`java.lang.AssertionError: Assert failed: The component with TestTag = 'spatial-edge-rail-left' is not displayed!`
+- `effectsPaneExposesSpatialFadeAuthoringWithoutMutatingDocument`：`androidx.compose.ui.test.ComposeTimeoutException: Condition still not satisfied after 5000 ms`
+- `semanticSearchInvalidAuxiliaryFiltersFailClosedInUi`：`java.lang.AssertionError: Assert failed: The component with TestTag = 'search-style-regex' is not displayed!`
+- `batchActionsRemainAboveVisibleKeyboardAcrossMainAndCanvas`：`java.lang.AssertionError: Failed to inject touch input.`
+- `batchSearchLiteralInputsRestoreButReviewedCommitRequiresFreshPrecheckAfterRecreation`：`androidx.compose.ui.test.ComposeTimeoutException: Condition still not satisfied after 5000 ms`
+- `transformFieldsProjectExternalPreviewAndRestoreDrafts`：`java.lang.AssertionError: Failed to perform text input.`
+- `equalExternalTakeoverCancelsPendingNumericCommit`：`androidx.compose.ui.test.ComposeTimeoutException: Condition still not satisfied after 5000 ms`
+- `compactContentFlowCanScrollPreviewOutWithoutLosingDirtyText`：`androidx.compose.ui.test.ComposeTimeoutException: Condition still not satisfied after 5000 ms`
+- `batchUsesSharedResultsAndRequiresFreshPreviewAfterScopeChangeAcrossHosts`：`java.lang.AssertionError: Failed to assert the following: (is enabled)`
+- `karaokeFxPreviewIsNonDestructiveAndBatchApplyCommitsAtomically`：`androidx.compose.ui.test.ComposeTimeoutException: Condition still not satisfied after 5000 ms`
+- `fixedTaskNavigationAndExternalToolCommandKeepTheRequestedEditorConsistent`：`androidx.compose.ui.test.ComposeTimeoutException: Condition still not satisfied after 5000 ms`
+- `independentDirectoryDismissalPreservesDirtyTextAndTaskContext`：`androidx.compose.ui.test.ComposeTimeoutException: Condition still not satisfied after 5000 ms`
+- `positionFieldsFollowTransientPreviewAndCancelRestoresTypedDraft`：`androidx.compose.ui.test.ComposeTimeoutException: Condition still not satisfied after 5000 ms`
+- `semanticZoomDoesNotDestroyNonSaveableEditorDraft`：`java.lang.AssertionError: Failed: assertExists.`
+- `closeUpBoardKeepsMultipleRealToolsAndOverviewUsesSummaries`：`java.lang.AssertionError: Failed: assertDoesNotExist.`
+- `unifiedCanvasSideBookmarksReuseToolIdentityAndPersistWorldGeometry`：`java.lang.AssertionError: Bookmark rail must not cover native editor controls`
+- `spatialCameraAndOverlayDoNotEditDocument`：`java.lang.AssertionError: Failed to inject touch input.`
+
+优先后续：核对hideKeyboard在有焦点或SHOW_FORCED状态的收起流程；核对Host切换完成与工具目录的可见入口；区分固定底栏/滚动正文的显示断言；检查review变为应用0条的实际配方及收据状态；独立复现书签轨覆盖。以上是调查顺序，不是已确认产品根因。新增字段校验和元数据共享草稿均未在本来源提交中执行，不能以其解释这些失败。
+

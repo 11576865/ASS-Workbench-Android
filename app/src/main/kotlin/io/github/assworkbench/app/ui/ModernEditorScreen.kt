@@ -175,6 +175,10 @@ fun ModernEditorScreen(
     }
     val fixedTool = WorkbenchTool.valueOf(fixedToolName)
     val eventTextDraftStore = rememberEventTextDraftStore(state.workspaceSessionId)
+    val eventMetadataDraftStore = rememberEventMetadataDraftStore(state.workspaceSessionId)
+    LaunchedEffect(eventMetadataDraftStore, state.document.events) {
+        eventMetadataDraftStore.reconcile(state.document.events)
+    }
     val batchAuthoringDraftStore = rememberBatchAuthoringDraftStore(state.workspaceSessionId)
     LaunchedEffect(batchAuthoringDraftStore, state.documentRevision, state.document, state.selectedEventIds, state.subtitleFilter) {
         batchAuthoringDraftStore.reconcile(state.document, state.selectedEventIds, state.subtitleFilter, state.documentRevision)
@@ -307,7 +311,8 @@ fun ModernEditorScreen(
     }
 
     MaterialTheme(colorScheme = workbenchColors(appearance)) {
-    CompositionLocalProvider(LocalEventTextDraftStore provides eventTextDraftStore, LocalBatchAuthoringDraftStore provides batchAuthoringDraftStore) {
+    CompositionLocalProvider(LocalEventTextDraftStore provides eventTextDraftStore,
+        LocalEventMetadataDraftStore provides eventMetadataDraftStore, LocalBatchAuthoringDraftStore provides batchAuthoringDraftStore) {
     Surface(
         modifier = Modifier.fillMaxSize(),
         color = MaterialTheme.colorScheme.background,
@@ -551,6 +556,7 @@ fun ModernEditorScreen(
                         val remaining = next.tools.mapTo(hashSetOf()) { it.id }
                         workspaceState.tools.filterNot { it.id in remaining }.forEach {
                             eventTextDraftStore.removeInstance(it.id)
+                            eventMetadataDraftStore.removeInstance(it.id)
                             batchAuthoringDraftStore.removeInstance(it.id)
                         }
                         workspaceState = next
@@ -1933,9 +1939,15 @@ private fun InlineEventEditor(
     }
     var rawField by rawDraft::value
     var rawBaseText by rawDraft::baseText
-    var layerText by rememberSaveable(event.id, event.layer) { mutableStateOf(event.layer.toString()) }
-    var actorText by rememberSaveable(event.id, event.name) { mutableStateOf(event.name) }
-    var comment by rememberSaveable(event.id, event.comment) { mutableStateOf(event.comment) }
+    val metadataStore = LocalEventMetadataDraftStore.current
+    val metadataDraft = remember(metadataStore, draftOwnerId, event.id) { metadataStore.obtain(draftOwnerId, event) }
+    var metadataValues by metadataDraft::values
+    val layerText = metadataValues.layer
+    val actorText = metadataValues.actor
+    val comment = metadataValues.comment
+    LaunchedEffect(metadataDraft, event.layer, event.name, event.comment) {
+        metadataDraft.reconcile(EventMetadataValues.from(event))
+    }
     val playbackPositionMs by viewModel.playbackPositionMs.collectAsState()
 
     LaunchedEffect(rawDraft, event.text) {
@@ -2042,6 +2054,7 @@ private fun InlineEventEditor(
     if (activeSection == WorkbenchTool.EVENT) {
         val parsedLayer = layerText.toIntOrNull()
         val layerValid = parsedLayer != null && parsedLayer in -999..999
+        val metadataConflict = metadataDraft.snapshot().classify(EventMetadataValues.from(event)) == RawEventDraftState.EXTERNAL_CONFLICT
         Surface(
             color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.38f),
             shape = MaterialTheme.shapes.small,
@@ -2049,22 +2062,25 @@ private fun InlineEventEditor(
         ) {
             Column(Modifier.padding(WorkbenchDimens.Small), verticalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro), verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedTextField(layerText, { layerText = it }, label = { Text("Layer") }, singleLine = true,
+                    OutlinedTextField(layerText, { metadataValues = metadataValues.copy(layer = it) }, label = { Text("Layer") }, singleLine = true,
                         isError = !layerValid,
                         supportingText = {
                             if (parsedLayer == null) Text("输入有效整数")
                             else if (!layerValid) Text("范围 -999～999")
                         },
                         modifier = Modifier.width(88.dp).testTag("event-layer-${event.id}"))
-                    FilterChip(selected = comment, onClick = { comment = !comment }, label = { Text(if (comment) "Comment" else "Dialogue") })
+                    FilterChip(selected = comment, onClick = { metadataValues = metadataValues.copy(comment = !comment) },
+                        modifier = Modifier.testTag("event-comment-${event.id}"), label = { Text(if (comment) "Comment" else "Dialogue") })
                 }
-                OutlinedTextField(actorText, { actorText = it }, label = { Text("Actor") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(actorText, { metadataValues = metadataValues.copy(actor = it) }, label = { Text("Actor") }, singleLine = true,
+                    modifier = Modifier.fillMaxWidth().testTag("event-actor-${event.id}"))
+                if (metadataConflict) Text("元数据已在其他面板修改；草稿已保留。重新载入会丢弃草稿，以草稿覆盖会覆盖当前元数据。",
+                    color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall,
+                    modifier = Modifier.testTag("event-metadata-conflict-${event.id}"))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                     TextButton(onClick = {
-                        layerText = event.layer.toString()
-                        actorText = event.name
-                        comment = event.comment
-                    }) { Text("取消") }
+                        metadataDraft.reset(EventMetadataValues.from(event))
+                    }, modifier = Modifier.testTag("event-reset-metadata-${event.id}")) { Text(if (metadataConflict) "重新载入" else "取消") }
                     Button(enabled = layerValid, onClick = {
                         val layer = parsedLayer ?: return@Button
                         if (!layerValid) return@Button
@@ -2074,7 +2090,11 @@ private fun InlineEventEditor(
                             actor = actorText,
                             comment = comment,
                         )
-                    }, modifier = Modifier.testTag("event-apply-metadata-${event.id}")) { Text("应用") }
+                        viewModel.state.value.document.events.firstOrNull { it.id == event.id }?.let { committed ->
+                            if (committed.layer == layer && committed.name == actorText && committed.comment == comment)
+                                metadataDraft.reset(EventMetadataValues.from(committed))
+                        }
+                    }, modifier = Modifier.testTag("event-apply-metadata-${event.id}")) { Text(if (metadataConflict) "以草稿覆盖" else "应用") }
                 }
                 Divider()
                 Text("结构操作", style = MaterialTheme.typography.labelMedium)

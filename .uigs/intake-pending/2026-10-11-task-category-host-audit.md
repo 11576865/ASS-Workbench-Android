@@ -1,5 +1,11 @@
 # Candidate / Pending Foundry write
 
+## Same-instance metadata draft continuity / Pending
+
+Dedup found the existing Foundry shared raw draft/owner family. Actor/Layer/type had Host-local rememberSaveable storage; shared immutable metadata buffers now retain literal values under session + tool owner + Event ID, with clean synchronization, dirty external conflict, explicit reload/overwrite and successful-commit acknowledgement. Own numeric normalization must be acknowledged against actual canonical values, otherwise a successful 003→3 Layer commit can appear as an external conflict.
+
+Evidence: six new domain tests, complete domain259/259 via Kotlin reflection; Activity Host/conflict/Undo and actual store lifecycle Android tests added but unexecuted. Time fields and killed-process restore remain outside completed scope. docs/EVENT-METADATA-DRAFTS-2026-10-12.md. Source-only Candidate extension; Canonical unchanged. Foundry external intake Pending after prior automatic cross-repository rejection, no retry.
+
 ## Editable numeric input must not silently substitute canonical values / Pending
 
 Dedup queried Foundry numeric coercion/invalid-input observations and bugs. Inline Event time commit silently returned on parse/order failure; Layer parse failure substituted canonical Layer while applying other fields, and VM clamped out-of-range integers. Source-level UI fix ties visible field errors and disabled commit to the existing parser/VM contract, preserving negative Layer and zero/equal timing. App-specific -999..999 is not an ASS standard claim.
