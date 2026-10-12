@@ -1387,20 +1387,30 @@ class EditorRegressionInstrumentedTest {
         repeat(2) { host ->
             if (host == 1) switchToUnifiedCanvas()
             openTool("BATCH")
-            composeRule.onNodeWithTag("batch-actor-action").performScrollTo().performClick()
+            composeRule.onNodeWithTag("batch-actor-action").performScrollTo().assertIsDisplayed()
                 .performTextReplacement("KEYBOARD_BATCH")
-            composeRule.activityRule.scenario.onActivity { activity ->
-                activity.currentFocus?.let { focused ->
-                    activity.getSystemService(android.view.inputmethod.InputMethodManager::class.java)
-                        .showSoftInput(focused, android.view.inputmethod.InputMethodManager.SHOW_FORCED)
+            composeRule.waitForIdle()
+            composeRule.onNodeWithTag("batch-actor-action").assertIsDisplayed().performClick()
+            var keyboardRoot: View? = null
+            var showEvidence = "No focused root selected"
+            try {
+                performInFocusedWindow("Show batch IME in the focused window") { controller, root ->
+                    keyboardRoot = root
+                    val focused = checkNotNull(root.findFocus()) { "Batch field must own input focus" }
+                    val accepted = focused.context.getSystemService(android.view.inputmethod.InputMethodManager::class.java)
+                        .showSoftInput(focused, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT)
+                    showEvidence = "host=$host accepted=$accepted windowFocused=${root.hasWindowFocus()} " +
+                        "focusClass=${focused.javaClass.simpleName} hasToken=${focused.windowToken != null}"
+                    controller.loopMainThreadUntilIdle()
                 }
-            }
-            composeRule.waitUntil(5_000) {
-                composeRule.activity.window.decorView.rootWindowInsets
-                    ?.isVisible(android.view.WindowInsets.Type.ime()) == true
+                composeRule.waitUntil(5_000) {
+                    keyboardRoot?.rootWindowInsets?.isVisible(android.view.WindowInsets.Type.ime()) == true
+                }
+            } catch (error: Exception) {
+                throw AssertionError("Batch IME did not become visible: $showEvidence", error)
             }
             composeRule.waitForIdle()
-            val decor = composeRule.activity.window.decorView
+            val decor = checkNotNull(keyboardRoot)
             val keyboardTop = decor.height - decor.rootWindowInsets.getInsets(android.view.WindowInsets.Type.ime()).bottom
             val preview = composeRule.onNodeWithTag("batch-preview-explicit")
             val apply = composeRule.onNodeWithTag("batch-review-commit")

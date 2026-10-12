@@ -2,8 +2,8 @@
   "schema_version": 1,
   "id": "ass-authoring-main-canvas-20261011",
   "goal": "Improve subtitle authoring efficiency, redesign main UI and refine infinite canvas UI.",
-  "status": "compact_tool_navigation_pending_native",
-  "current_work_unit": "Expose the finite compact inspector through the outer flow before existing inner field scrolling",
+  "status": "batch_ime_setup_pending_native",
+  "current_work_unit": "Request and observe batch IME in the actual focused window; retain strict keyboard-safe action assertions",
   "completed_units": [
     "Read current repository protocol, prior task and source checkpoint 69ad5c076c8695fae15c59b01cd391a647bb8652.",
     "User selected subtitle authoring efficiency as the new-capability priority.",
@@ -57,7 +57,8 @@
     "Native shared-filter missing-search assertion matched toolbar selectionMode hiding search. Added same independent search toggle without clearing selection; existing native red regression preserved, execution pending.",
     "5f5c904b Android/Fontconfig passed; emulator38250102523 failed compiling androidTest before execution, five attempts without XML. Removed unavailable hasWindowFocus import via local typed View matcher; retained focused-window IME assertions. Canvas tests now scroll overview/recall/zoom actions into view and assert display before touch; existing result assertions preserved.",
     "a1870711 Android CI38260616288 and Fontconfig38260616256 passed; Emulator38260616254 full150/11 failures, four projection groups22/22. Focused work unit moves direct Host switch outside selection branch; existing failed shared-filter regression now uses visible direct action and immediately checks selected IDs/query/document. Native repair pending; ten other failures preserved in triage.",
-    "ca6e5d0d Android38267249329 and Fontconfig38267249383 passed; Emulator38267249421 XML full-attempt26/5 only, no complete150-case evidence. Shared-filter native case finished with no failure record. Compact common tool helper now displays real directory entry and outer fixed-inspector before existing strict field scroll/visibility assertions; native execution pending."
+    "ca6e5d0d Android38267249329 and Fontconfig38267249383 passed; Emulator38267249421 XML full-attempt26/5 only, no complete150-case evidence. Shared-filter native case finished with no failure record. Compact common tool helper now displays real directory entry and outer fixed-inspector before existing strict field scroll/visibility assertions; native execution pending.",
+    "79aca312 Android38269823513/Fontconfig38269823368 passed; Emulator38269823578 full150/4 failures, four groups22/22. Prior outer-scroll/batch-field and selected Host-switch failures absent. Batch IME failure is visibility setup wait, before footer assertions. Setup now refocuses real displayed field and commands/observes actual focused root with failure evidence; strict footer geometry/touch retained. Native execution pending."
   ],
   "next_units": [
     "Diagnose named IME/navigation/batch-review/viewport assertions from docs/EMULATOR-FAILURE-TRIAGE-2026-10-12.md; preserve native gates.",
@@ -66,18 +67,18 @@
   ],
   "branch": "redesign/infinite-canvas-workbench-v2",
   "pr": 138,
-  "latest_durable_commit": "ca6e5d0dbd354a807d87e64f7a9ee575e0572620",
+  "latest_durable_commit": "79aca312a9fb7bf0392995f8ef8f0706382984c9",
   "checkpoint_location": "The commit containing this updated record is the source checkpoint; latest_durable_commit identifies the inspected baseline.",
   "external_validation": {
     "baseline_android_ci": "success:38117186072",
     "baseline_emulator": "failure:38117186042; detailed logs unavailable",
     "baseline_fontconfig": "success:38117186058",
-    "proposed_product_changes": "No production change; compact common test navigation scrolls outer inspector before existing inner field actions; native pending",
+    "proposed_product_changes": "No product change; batch IME visibility precondition targets focused root with diagnostics, native pending",
     "real_device_visual_ime": "pending",
     "uigs_intake": "Pending; source audit Candidate retained in .uigs/intake-pending/2026-10-11-task-category-host-audit.md",
-    "android_ci": "ca6e5d0d success:38267249329",
-    "emulator": "ca6e5d0d failure:38267249421, XML26/5; complete-suite evidence missing",
-    "fontconfig": "ca6e5d0d success:38267249383"
+    "android_ci": "79aca312 success:38269823513",
+    "emulator": "79aca312 failure:38269823578 full150/4, evidence114888717179",
+    "fontconfig": "79aca312 success:38269823368"
   },
   "blockers": [
     "No local Android SDK; native compile, connected tests, visual/IME acceptance Pending.",

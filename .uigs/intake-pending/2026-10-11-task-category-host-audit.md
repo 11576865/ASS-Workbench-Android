@@ -1,3 +1,9 @@
+## Keyboard-safe layout assertions require a verified visible IME / Pending
+
+Dedup: existing focused-window IME Case and viewport/action reachability family. 79aca312 full150/4 native failure occurs before footer geometry checks, waiting for IME appearance. Setup silently skipped Activity.currentFocus=null and commanded/observed Activity window. Revised existing regression refocuses actual displayed field, requires input focus, SHOW_IMPLICIT commands and observes same focused root, preserves5s timeout and adds accepted/Host/focus/token diagnostics. Strict footer visibility/geometry/touch unmodified. No product keyboard defect or repair inferred; native execution pending.
+
+Source docs/EMULATOR-FAILURE-TRIAGE-2026-10-12.md. Candidate/Case extension only, Canonical unchanged. External intake remains Pending after prior automatic cross-repository rejection, no retry.
+
 ## Nested scroll reachability requires exposing the outer tool pane / Pending
 
 Dedup checked existing viewport/reachability family and prior footer observation. Source fixed compact flow has finite inspector after reference preview; rule/search inner scroll creates nearer ancestor. Existing native batch field display failures ca6e5d0d/run38267249421 persist after inner performScrollTo. Common test tool navigation now first scrolls the finite fixed-inspector through actual outer flow and asserts display; inner assertions and strict visible-keyboard footer test remain unchanged. This is source-supported test-path correction, native confirmation pending, no established product scrolling failure or usability claim.
