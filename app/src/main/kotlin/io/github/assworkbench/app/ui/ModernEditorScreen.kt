@@ -1557,6 +1557,17 @@ private fun ModernAppBar(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(2.dp),
         ) {
+            IconButton(
+                onClick = onToggleWorkspaceMode,
+                modifier = Modifier.size(40.dp).testTag("workspace-direct-mode-toggle"),
+            ) {
+                Icon(
+                    if (workspaceMode == WorkspacePresentationMode.FIXED)
+                        Icons.Filled.DashboardCustomize else Icons.Filled.Dashboard,
+                    contentDescription = if (workspaceMode == WorkspacePresentationMode.FIXED)
+                        "切换至无限画布" else "切换至标准工作台",
+                )
+            }
             if (selectionMode) {
                 IconButton(onClick = uiActions::clearSelection) { Icon(Icons.Filled.Close, "退出多选") }
                 Text("已选 ${uiState.selection.eventIds.size} 条", Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
@@ -1587,17 +1598,6 @@ private fun ModernAppBar(
                     onClick = onSearchToggle,
                 ) {
                     Icon(if (searchOpen) Icons.Filled.Close else Icons.Filled.Search, null)
-                }
-                IconButton(
-                    onClick = onToggleWorkspaceMode,
-                    modifier = Modifier.size(40.dp).testTag("workspace-direct-mode-toggle"),
-                ) {
-                    Icon(
-                        if (workspaceMode == WorkspacePresentationMode.FIXED)
-                            Icons.Filled.DashboardCustomize else Icons.Filled.Dashboard,
-                        contentDescription = if (workspaceMode == WorkspacePresentationMode.FIXED)
-                            "切换至无限画布" else "切换至标准工作台",
-                    )
                 }
                 TooltipIconButton("保存", onSave, enabled = uiState.document.subtitleLoaded) { Icon(Icons.Filled.Save, null) }
                 if (!compactToolbar) {

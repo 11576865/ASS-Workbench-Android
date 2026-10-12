@@ -278,7 +278,13 @@ class EditorRegressionInstrumentedTest {
         composeRule.onNodeWithTag("subtitle-result-select-all").performScrollTo().performClick()
         composeRule.runOnIdle { assertEquals(setOf(2L), viewModel.state.value.selectedEventIds) }
         composeRule.onNodeWithContentDescription("关闭搜索").performClick()
+        composeRule.onNodeWithTag("workspace-direct-mode-toggle").assertIsDisplayed()
         switchToUnifiedCanvas()
+        composeRule.runOnIdle {
+            assertEquals(setOf(2L), viewModel.state.value.selectedEventIds)
+            assertEquals("Second", viewModel.state.value.query)
+            assertEquals(before.document, viewModel.state.value.document)
+        }
         openTool("SUBTITLES")
         composeRule.onNodeWithTag("subtitle-results").assertExists()
         composeRule.runOnIdle {
@@ -1742,10 +1748,8 @@ class EditorRegressionInstrumentedTest {
         hideKeyboard()
         if (composeRule.onAllNodesWithTag("spatial-workspace", useUnmergedTree = true)
                 .fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()) return
-        composeRule.onNodeWithContentDescription("工具和更多操作").performClick()
-        composeRule.onNodeWithTag("workspace-mode-toggle").performClick()
-        composeRule.onNodeWithTag("ui-variant-lab").assertIsDisplayed()
-        selectUiVariant("ui-variant-use-SPATIAL_EXPERIMENTAL")
+        composeRule.onNodeWithTag("workspace-direct-mode-toggle")
+            .assertIsDisplayed().performClick()
         composeRule.waitUntil(10_000) {
             composeRule.onAllNodesWithTag("spatial-workspace", useUnmergedTree = true)
                 .fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()

@@ -1,3 +1,9 @@
+## Selection must retain independent Host navigation / Pending
+
+Dedup checked task/context and spatial Host families. Native a1870711/run38260616254 full150/11: shared-filter test retains selected Event2, then fails finding the more menu while switching Host. Source selectionMode hides both menu and direct layout switch. Existing direct toggle is moved outside selection branch, using unchanged presentation callback; test uses actual displayed toggle and checks selection/query/document immediately after switch. No clearing selection or semantic click bypass. Local source/diff/artifact-policy checks only; native execution pending, other ten failures unresolved.
+
+Append to prior independent-filter access family; single source Case/Candidate extension, no Canonical promotion. External intake remains Pending after prior automatic rejection for cross-repository disclosure/destination authorization; no retry. Evidence: docs/EMULATOR-FAILURE-TRIAGE-2026-10-12.md.
+
 # Candidate / Pending Foundry write
 
 ## Selection mode must retain independent filtering access / Pending
