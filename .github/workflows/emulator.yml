@@ -122,3 +122,37 @@ jobs:
           path: diagnostics/instrumentation
           if-no-files-found: warn
           retention-days: 1
+
+  emulator-evidence:
+    name: emulator-evidence
+    needs: editor-regression
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read compact evidence from this run attempt
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_RUN_ID: ${{ github.run_id }}
+          SOURCE_RUN_ATTEMPT: ${{ github.run_attempt }}
+          SOURCE_SHA: ${{ github.sha }}
+          SOURCE_CONCLUSION: ${{ needs.editor-regression.result }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Evidence source: repository=$GITHUB_REPOSITORY run=$SOURCE_RUN_ID attempt=$SOURCE_RUN_ATTEMPT sha=$SOURCE_SHA result=$SOURCE_CONCLUSION"
+          source_job_id=$(timeout 30s gh api --paginate \
+            "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN_ID/attempts/$SOURCE_RUN_ATTEMPT/jobs" \
+            --jq '.jobs[] | select(.name == "editor-regression") | .id')
+          if [[ ! "$source_job_id" =~ ^[0-9]+$ ]]; then
+            echo "NO SOURCE JOB: evidence unavailable; no regression pass inferred"
+            exit 1
+          fi
+          echo "Original job: https://github.com/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN_ID/job/$source_job_id"
+          timeout 90s gh api "repos/$GITHUB_REPOSITORY/actions/jobs/$source_job_id/logs" \
+            > "$RUNNER_TEMP/emulator-source-job.log"
+          python3 tools/extract_emulator_evidence.py "$RUNNER_TEMP/emulator-source-job.log"

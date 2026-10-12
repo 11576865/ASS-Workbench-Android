@@ -1,5 +1,11 @@
 # Candidate / Pending Foundry write
 
+## Independent compact evidence channel / Pending (2026-10-12)
+
+Dedup queried Foundry evidence-identity and Android emulator-offline observation families. Exact eaab9382 Android/Fontconfig succeeded, emulator38194661365 failed; job-log connector returned Transport closed and annotations endpoint was unsupported. No assertion retrieved; log size is not established as the cause.
+
+Existing bounded summaries still share the screenshot-heavy job log. Read-only dependent report downloads the same run/attempt job on the runner and extracts only existing attempt summaries into a separate small job log. Extraction success is distinct from regression success; absent/incomplete summaries fail the report, all attempt/failure identities remain, raw source log remains authoritative. Six parser regressions RED-to-GREEN, complete Python tools15/15; real report/native execution pending. Source docs/EMULATOR-EVIDENCE-CHANNEL-2026-10-12.md. External intake Pending under prior automatic cross-repository rejection; no retry or Canonical promotion.
+
 Destination: 11576865/UIGS-Foundry
 Related family: inbox/candidates/2026-10-03-spatial-canvas-camera-semantic-zoom-gesture-ownership.md
 Source: ASS-Workbench-Android@58e4b4e; docs/MAIN-CANVAS-RECHECK-2026-10-11.md.
