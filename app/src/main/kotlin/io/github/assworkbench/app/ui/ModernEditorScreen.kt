@@ -176,6 +176,10 @@ fun ModernEditorScreen(
     val fixedTool = WorkbenchTool.valueOf(fixedToolName)
     val eventTextDraftStore = rememberEventTextDraftStore(state.workspaceSessionId)
     val eventMetadataDraftStore = rememberEventMetadataDraftStore(state.workspaceSessionId)
+    val eventTimingDraftStore = rememberEventTimingDraftStore(state.workspaceSessionId)
+    LaunchedEffect(eventTimingDraftStore, state.document.events) {
+        eventTimingDraftStore.reconcile(state.document.events)
+    }
     LaunchedEffect(eventMetadataDraftStore, state.document.events) {
         eventMetadataDraftStore.reconcile(state.document.events)
     }
@@ -312,6 +316,7 @@ fun ModernEditorScreen(
 
     MaterialTheme(colorScheme = workbenchColors(appearance)) {
     CompositionLocalProvider(LocalEventTextDraftStore provides eventTextDraftStore,
+        LocalEventTimingDraftStore provides eventTimingDraftStore,
         LocalEventMetadataDraftStore provides eventMetadataDraftStore, LocalBatchAuthoringDraftStore provides batchAuthoringDraftStore) {
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -557,6 +562,7 @@ fun ModernEditorScreen(
                         workspaceState.tools.filterNot { it.id in remaining }.forEach {
                             eventTextDraftStore.removeInstance(it.id)
                             eventMetadataDraftStore.removeInstance(it.id)
+                            eventTimingDraftStore.removeInstance(it.id)
                             batchAuthoringDraftStore.removeInstance(it.id)
                         }
                         workspaceState = next
@@ -1931,8 +1937,14 @@ private fun InlineEventEditor(
 ) {
     // Inline edit buffers are saveable so a configuration change does not
     // silently discard text that has not yet been committed to the canonical Event.
-    var startText by rememberSaveable(event.id, event.start.millis) { mutableStateOf(event.start.toAss()) }
-    var endText by rememberSaveable(event.id, event.end.millis) { mutableStateOf(event.end.toAss()) }
+    val timingStore = LocalEventTimingDraftStore.current
+    val timingDraft = remember(timingStore, draftOwnerId, event.id) { timingStore.obtain(draftOwnerId, event) }
+    var timingValues by timingDraft::values
+    val startText = timingValues.start
+    val endText = timingValues.end
+    LaunchedEffect(timingDraft, event.start.millis, event.end.millis) {
+        timingDraft.reconcile(EventTimingCanonical.from(event))
+    }
     val draftStore = LocalEventTextDraftStore.current
     val rawDraft = remember(draftStore, draftOwnerId, event.id) {
         draftStore.obtain(draftOwnerId, event.id, event.text)
@@ -1956,12 +1968,14 @@ private fun InlineEventEditor(
 
     if (activeSection == WorkbenchTool.TEXT) {
     val timingInput = remember(startText, endText) { EventTimingInputValidation.parse(startText, endText) }
+    val timingState = timingDraft.snapshot().classify(EventTimingCanonical.from(event))
+    val timingConflict = timingState == RawEventDraftState.EXTERNAL_CONFLICT
     Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro)) {
-        OutlinedTextField(startText, { startText = it }, label = { Text("Start") }, singleLine = true,
+        OutlinedTextField(startText, { timingValues = timingValues.copy(start = it) }, label = { Text("Start") }, singleLine = true,
             isError = timingInput.startInvalid,
             supportingText = { if (timingInput.startInvalid) Text("输入 ASS 时间或非负毫秒数") },
             modifier = Modifier.weight(1f).testTag("event-start-${event.id}"))
-        OutlinedTextField(endText, { endText = it }, label = { Text("End") }, singleLine = true,
+        OutlinedTextField(endText, { timingValues = timingValues.copy(end = it) }, label = { Text("End") }, singleLine = true,
             isError = timingInput.endInvalid || timingInput.reversed,
             supportingText = {
                 if (timingInput.endInvalid) Text("输入 ASS 时间或非负毫秒数")
@@ -1974,11 +1988,24 @@ private fun InlineEventEditor(
                 val end = timingInput.end
                 if (timingInput.canApply && start != null && end != null) {
                     viewModel.setEventTiming(event.id, start.millis, end.millis)
+                    viewModel.state.value.document.events.firstOrNull { it.id == event.id }?.let { committed ->
+                        if (committed.start == start && committed.end == end)
+                            timingDraft.reset(EventTimingCanonical.from(committed))
+                    }
                 }
             },
             enabled = timingInput.canApply,
             modifier = Modifier.align(Alignment.CenterVertically).testTag("event-apply-time-${event.id}"),
-        ) { Text("应用") }
+        ) { Text(if (timingConflict) "覆盖时间" else "应用") }
+    }
+    if (timingConflict) Text("时间已在其他面板修改；草稿已保留。重新载入会丢弃草稿，覆盖时间会覆盖当前 Start/End。",
+        color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall,
+        modifier = Modifier.testTag("event-timing-conflict-${event.id}"))
+    if (timingState != RawEventDraftState.CLEAN) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+        TextButton(onClick = { timingDraft.reset(EventTimingCanonical.from(event)) },
+            modifier = Modifier.testTag("event-reset-time-${event.id}")) {
+            Text(if (timingConflict) "重新载入时间" else "还原时间")
+        }
     }
 
     OutlinedTextField(

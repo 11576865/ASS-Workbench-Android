@@ -1,5 +1,11 @@
 # Candidate / Pending Foundry write
 
+## Timing draft baseline must retain source precision / Pending
+
+Dedup queried shared-draft/owner and precision/identity families. Start/End Host-local buffers now share an instance/session/Event-owned pair, preserve dirty external conflicts and explicit reset/overwrite. Canonical baseline uses actual milliseconds:1049→1041ms has the same ASS display string, so formatted-text equality cannot certify an unchanged source. Own commit acknowledgement checks actual millisecond values and preserves the existing display formatter. Host remount and equivalent external acknowledgement retain literal millisecond input; a two-assertion regression reproduced incidental normalization before its repair.
+
+Evidence: eight new domain cases and full267/267 via Kotlin reflection; Activity Host/conflict/1251ms/Undo and actual store lifecycle/restore/reset native tests added but unexecuted. Process restore and other professional-tool drafts remain incomplete. docs/EVENT-TIMING-DRAFTS-2026-10-12.md. Canonical unchanged, Foundry write Pending after prior automatic cross-repository rejection, no retry.
+
 ## Assertion geometry and outer-flow action reachability / Pending
 
 Dedup queried existing geometry/viewport and stable-action evidence families. Side-rail source/test audit: the old overlap assertion used the full-width focused container including navigation above the rail. Compare real native content bounds, and independently check header above rail; do not weaken content visibility or geometry invariance.

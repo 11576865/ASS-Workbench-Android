@@ -169,6 +169,37 @@ class EditorRegressionInstrumentedTest {
         composeRule.runOnIdle { assertEquals(external, viewModel.state.value.document) }
     }
 
+    @Test fun timingDraftFollowsHostAndExplicitOverwriteKeepsMillisecondValue() {
+        restoreRecovery()
+        composeRule.runOnIdle { viewModel.focusEvent(1L, seek = false) }
+        val before = viewModel.state.value.document
+        openTool("TEXT")
+        composeRule.onNodeWithTag("event-start-1").performScrollTo().performTextReplacement("1251")
+        composeRule.onNodeWithTag("event-end-1").performTextReplacement("4000")
+        hideKeyboard()
+        composeRule.onNodeWithTag("workspace-direct-mode-toggle").performClick()
+        openTool("TEXT")
+        composeRule.onNodeWithTag("event-start-1").assertTextContains("1251")
+        composeRule.onNodeWithTag("event-end-1").assertTextContains("4000")
+        composeRule.runOnIdle {
+            assertEquals(before, viewModel.state.value.document)
+            viewModel.setEventTiming(1L, 1500, 4500)
+        }
+        val external = viewModel.state.value.document
+        composeRule.onNodeWithTag("event-timing-conflict-1").assertExists()
+        composeRule.onNodeWithTag("event-start-1").assertTextContains("1251")
+        composeRule.onNodeWithTag("event-apply-time-1").performScrollTo().assertIsEnabled().performClick()
+        composeRule.onNodeWithTag("event-timing-conflict-1").assertDoesNotExist()
+        composeRule.onNodeWithTag("event-start-1").assertTextContains("0:00:01.25")
+        composeRule.runOnIdle {
+            val event = viewModel.state.value.document.events.first { it.id == 1L }
+            assertEquals(1251L, event.start.millis)
+            assertEquals(4000L, event.end.millis)
+            viewModel.undo()
+        }
+        composeRule.runOnIdle { assertEquals(external, viewModel.state.value.document) }
+    }
+
     @Test fun sharedSubtitleFilterNavigatesResultsWithoutChangingSelectionOrDocumentAcrossHosts() {
         restoreRecovery()
         val before = viewModel.state.value

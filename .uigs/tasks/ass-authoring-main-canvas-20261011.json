@@ -2,8 +2,8 @@
   "schema_version": 1,
   "id": "ass-authoring-main-canvas-20261011",
   "goal": "Improve subtitle authoring efficiency, redesign main UI and refine infinite canvas UI.",
-  "status": "native_geometry_reachability_repair_pending_ci",
-  "current_work_unit": "Assert native-content rail geometry and visible outer-flow batch actions while preserving strict IME regression",
+  "status": "timing_draft_continuity_checkpoint_pending_native",
+  "current_work_unit": "Share paired timing inputs across hosts with millisecond canonical baseline; preserve current emulator diagnostics",
   "completed_units": [
     "Read current repository protocol, prior task and source checkpoint 69ad5c076c8695fae15c59b01cd391a647bb8652.",
     "User selected subtitle authoring efficiency as the new-capability priority.",
@@ -51,7 +51,8 @@
     "Six metadata draft domain cases and full259/259; shared store, external conflict/reload/overwrite, successful canonical normalization acknowledgement; native tests added, unexecuted.",
     "952364b7 independent evidence job114787971310 succeeded: four projection suites22/22; full142 cases29 failures. Named assertions preserved in failure triage, root causes not conflated.",
     "7d069410 Android CI38242900337 passed; common canvas helper still used removed workspace-tools. Updated to visible spatial-add-tool plus actual directory wait; original assertions retained. IME timeout enriched with request/focus/token evidence, not claimed fixed.",
-    "071c9818 Android CI38244659459 passed. Side-rail assertion now targets native content and header/rail vertical boundary; batch tests bring outer-flow footer onscreen and assert display before touch, IME test remains strict. Native execution pending."
+    "071c9818 Android CI38244659459 passed. Side-rail assertion now targets native content and header/rail vertical boundary; batch tests bring outer-flow footer onscreen and assert display before touch, IME test remains strict. Native execution pending.",
+    "Session/owner/Event timing store, clean sync/dirty conflict/reset/explicit apply and exact-millis baseline implemented; eight new domain cases, full267/267. Actual Activity and store Android regressions added, unexecuted."
   ],
   "next_units": [
     "Diagnose named IME/navigation/batch-review/viewport assertions from docs/EMULATOR-FAILURE-TRIAGE-2026-10-12.md; preserve native gates.",
@@ -60,18 +61,18 @@
   ],
   "branch": "redesign/infinite-canvas-workbench-v2",
   "pr": 138,
-  "latest_durable_commit": "071c981815e015a0a9d5c59a289a4788cfd148ac",
+  "latest_durable_commit": "c7dbcd74947d766f5fd19d47d913f5f435f1ea6a",
   "checkpoint_location": "The commit containing this updated record is the source checkpoint; latest_durable_commit identifies the inspected baseline.",
   "external_validation": {
     "baseline_android_ci": "success:38117186072",
     "baseline_emulator": "failure:38117186042; detailed logs unavailable",
     "baseline_fontconfig": "success:38117186058",
-    "proposed_product_changes": "test geometry/reachability fixes source-reviewed; no product change; new native tests pending",
+    "proposed_product_changes": "timing draft checkpoint domain267/267; Android/Compose integration unexecuted",
     "real_device_visual_ime": "pending",
     "uigs_intake": "Pending; source audit Candidate retained in .uigs/intake-pending/2026-10-11-task-category-host-audit.md",
-    "android_ci": "071c9818 success:38244659459",
-    "emulator": "071c9818 in_progress:38244659428; prior952364b7 full142/29 failures",
-    "fontconfig": "071c9818 in_progress:38244659452"
+    "android_ci": "c7dbcd74 success:38246400860",
+    "emulator": "c7dbcd74 in_progress:38246400875; preserve diagnostic run",
+    "fontconfig": "c7dbcd74 in_progress:38246400843"
   },
   "blockers": [
     "No local Android SDK; native compile, connected tests, visual/IME acceptance Pending.",
