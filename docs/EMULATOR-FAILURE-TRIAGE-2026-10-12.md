@@ -1,5 +1,17 @@
 # 模拟器失败清单：已取得真实断言
 
+## d4cd3417 完整回归与旋转后的实际布局
+
+Android38272497826、Fontconfig38272497825成功；Emulator38272497780失败，证据job114895760377成功，来源job114889925038/attempt1。投影22项无失败，完整150项、3失败、0 errors、0 skipped。transformFieldsProjectExternalPreviewAndRestoreDrafts本次无失败，但上轮失效节点的根因尚未确认，不能宣称消除偶发问题。
+
+剩余：旋转preview-workspace显示、返回画布后的驻留侧轨显示、批量IME前置焦点。IME新证据为Batch field must own input focus，尚未执行避让几何/触控断言；本单元不继续盲改键盘。
+
+本单元校正旋转用例的布局假设：AdaptiveWorkspacePolicy仅width>=720且height>=420时进入DUAL_PANE，短横屏仍COMPACT；fixed-content-flow允许参考预览滚出视口且保留外层滚动现场。上一轮openTool为了触达真实工具滚动到fixed-inspector，旋转后直接要求preview-workspace显示不适用于此路径。
+
+旋转后等待Compose idle并读取实际fixed-content-flow语义。若COMPACT且预览存在，先真实滚动预览并要求显示，再滚回fixed-inspector并要求显示，继续原草稿断言与截图。宽屏显示、平板边界/不重叠、会话、草稿与最终提交断言保持。该校正不要求旋转时自动重置用户滚动现场，也不把显示断言降为存在。
+
+本地source/diff/artifact policy通过，无Android SDK；新的原生验证Pending。侧轨驻留与IME焦点仍待单独定位，PR未合并。记录日期2026-10-13（Asia/Shanghai）。
+
 ## 79aca312 完整回归与键盘显示前置条件
 
 Android38269823513和Fontconfig38269823368成功。Emulator38269823578失败；证据job114888717179成功，来源job114881031263/attempt1。四组投影22项全部无失败；完整150项、4失败、0 errors、0 skipped。批量字段/错误提示/卡拉OK可见性与跨Host筛选旧失败未再出现，支持上一轮外层工具面板导航校正；仍不代表整套回归通过。

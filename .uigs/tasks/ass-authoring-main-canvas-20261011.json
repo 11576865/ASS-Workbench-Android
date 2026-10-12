@@ -2,8 +2,8 @@
   "schema_version": 1,
   "id": "ass-authoring-main-canvas-20261011",
   "goal": "Improve subtitle authoring efficiency, redesign main UI and refine infinite canvas UI.",
-  "status": "batch_ime_setup_pending_native",
-  "current_work_unit": "Request and observe batch IME in the actual focused window; retain strict keyboard-safe action assertions",
+  "status": "rotation_layout_reachability_pending_native",
+  "current_work_unit": "Verify actual post-rotation compact flow reachability without resetting scroll or losing drafts",
   "completed_units": [
     "Read current repository protocol, prior task and source checkpoint 69ad5c076c8695fae15c59b01cd391a647bb8652.",
     "User selected subtitle authoring efficiency as the new-capability priority.",
@@ -58,7 +58,8 @@
     "5f5c904b Android/Fontconfig passed; emulator38250102523 failed compiling androidTest before execution, five attempts without XML. Removed unavailable hasWindowFocus import via local typed View matcher; retained focused-window IME assertions. Canvas tests now scroll overview/recall/zoom actions into view and assert display before touch; existing result assertions preserved.",
     "a1870711 Android CI38260616288 and Fontconfig38260616256 passed; Emulator38260616254 full150/11 failures, four projection groups22/22. Focused work unit moves direct Host switch outside selection branch; existing failed shared-filter regression now uses visible direct action and immediately checks selected IDs/query/document. Native repair pending; ten other failures preserved in triage.",
     "ca6e5d0d Android38267249329 and Fontconfig38267249383 passed; Emulator38267249421 XML full-attempt26/5 only, no complete150-case evidence. Shared-filter native case finished with no failure record. Compact common tool helper now displays real directory entry and outer fixed-inspector before existing strict field scroll/visibility assertions; native execution pending.",
-    "79aca312 Android38269823513/Fontconfig38269823368 passed; Emulator38269823578 full150/4 failures, four groups22/22. Prior outer-scroll/batch-field and selected Host-switch failures absent. Batch IME failure is visibility setup wait, before footer assertions. Setup now refocuses real displayed field and commands/observes actual focused root with failure evidence; strict footer geometry/touch retained. Native execution pending."
+    "79aca312 Android38269823513/Fontconfig38269823368 passed; Emulator38269823578 full150/4 failures, four groups22/22. Prior outer-scroll/batch-field and selected Host-switch failures absent. Batch IME failure is visibility setup wait, before footer assertions. Setup now refocuses real displayed field and commands/observes actual focused root with failure evidence; strict footer geometry/touch retained. Native execution pending.",
+    "d4cd3417 Android38272497826/Fontconfig38272497825 success; Emulator38272497780 full150/3, groups22/22. Rotation test now waits idle and uses actual compact-flow selector to scroll preview into view, assert display, scroll inspector back and assert draft. Wide/tablet checks unchanged; native pending. IME actual input focus absent and resident rail post-return remain unresolved; transient transform node failure did not recur but root unknown."
   ],
   "next_units": [
     "Diagnose named IME/navigation/batch-review/viewport assertions from docs/EMULATOR-FAILURE-TRIAGE-2026-10-12.md; preserve native gates.",
@@ -67,18 +68,18 @@
   ],
   "branch": "redesign/infinite-canvas-workbench-v2",
   "pr": 138,
-  "latest_durable_commit": "79aca312a9fb7bf0392995f8ef8f0706382984c9",
+  "latest_durable_commit": "d4cd3417eabbe61d703925eceaa3371ac11f3ecb",
   "checkpoint_location": "The commit containing this updated record is the source checkpoint; latest_durable_commit identifies the inspected baseline.",
   "external_validation": {
     "baseline_android_ci": "success:38117186072",
     "baseline_emulator": "failure:38117186042; detailed logs unavailable",
     "baseline_fontconfig": "success:38117186058",
-    "proposed_product_changes": "No product change; batch IME visibility precondition targets focused root with diagnostics, native pending",
+    "proposed_product_changes": "No product change; layout-aware rotation test scrolls existing compact preview and inspector with strict display/draft checks; native pending",
     "real_device_visual_ime": "pending",
     "uigs_intake": "Pending; source audit Candidate retained in .uigs/intake-pending/2026-10-11-task-category-host-audit.md",
-    "android_ci": "79aca312 success:38269823513",
-    "emulator": "79aca312 failure:38269823578 full150/4, evidence114888717179",
-    "fontconfig": "79aca312 success:38269823368"
+    "android_ci": "d4cd3417 success:38272497826",
+    "emulator": "d4cd3417 failure:38272497780 full150/3, evidence114895760377",
+    "fontconfig": "d4cd3417 success:38272497825"
   },
   "blockers": [
     "No local Android SDK; native compile, connected tests, visual/IME acceptance Pending.",
@@ -87,5 +88,5 @@
     "Draft PR #138 remains unmerged; full 240 UI and historical capability parity not complete.",
     "Process restart may reject batch input snapshot because initial session resets to1; same-session only, process recovery not implemented."
   ],
-  "updated_at": "2026-10-12"
+  "updated_at": "2026-10-13"
 }

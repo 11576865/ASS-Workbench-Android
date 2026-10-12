@@ -1,3 +1,9 @@
+## Orientation is not a layout-profile assertion / Pending (2026-10-13)
+
+Dedup checked viewport/reachability family. d4cd3417 full150/3 native rotation case fails preview display after prior editing scrolled outer flow. Source policy keeps short landscape COMPACT unless width>=720 and height>=420. Actual layout/profile, retained scroll and visibility must be distinguished from orientation label. Existing test now waits idle, uses actual compact-flow presence, scrolls preview into view and asserts display, scrolls inspector back and checks draft; wider profile assertions unchanged. No product reset of user's scroll. Source-level test correction; native pending, no usability claim or Canonical promotion.
+
+Evidence docs/EMULATOR-FAILURE-TRIAGE-2026-10-12.md. Bounded Candidate/Case extension; external intake Pending after prior cross-repository auto-review rejection, no retry.
+
 ## Keyboard-safe layout assertions require a verified visible IME / Pending
 
 Dedup: existing focused-window IME Case and viewport/action reachability family. 79aca312 full150/4 native failure occurs before footer geometry checks, waiting for IME appearance. Setup silently skipped Activity.currentFocus=null and commanded/observed Activity window. Revised existing regression refocuses actual displayed field, requires input focus, SHOW_IMPLICIT commands and observes same focused root, preserves5s timeout and adds accepted/Host/focus/token diagnostics. Strict footer visibility/geometry/touch unmodified. No product keyboard defect or repair inferred; native execution pending.

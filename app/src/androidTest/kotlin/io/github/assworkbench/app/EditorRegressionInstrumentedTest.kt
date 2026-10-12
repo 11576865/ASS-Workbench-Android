@@ -843,8 +843,19 @@ class EditorRegressionInstrumentedTest {
             composeRule.activity.resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
         }
         Log.i("AsswbRegression", "rotation:check-landscape")
+        composeRule.waitForIdle()
+        val compactLandscape = composeRule.onAllNodesWithTag("fixed-content-flow", useUnmergedTree = true)
+            .fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()
         val previewNodes = composeRule.onAllNodesWithTag("preview-workspace").fetchSemanticsNodes(atLeastOneRootRequired = false)
-        if (previewNodes.isNotEmpty()) composeRule.onNodeWithTag("preview-workspace").assertIsDisplayed()
+        if (previewNodes.isNotEmpty()) {
+            // Short landscape windows can remain COMPACT. Their saved outer
+            // scroll may intentionally hide the preview while editing.
+            if (compactLandscape) composeRule.onNodeWithTag("preview-workspace").performScrollTo()
+            composeRule.onNodeWithTag("preview-workspace").assertIsDisplayed()
+        }
+        if (compactLandscape) {
+            composeRule.onNodeWithTag("fixed-inspector").performScrollTo().assertIsDisplayed()
+        }
         val listNodes = composeRule.onAllNodesWithTag("subtitle-navigation").fetchSemanticsNodes(atLeastOneRootRequired = false)
         if (listNodes.isNotEmpty()) composeRule.onNodeWithTag("subtitle-navigation").assertIsDisplayed()
         composeRule.onNodeWithTag("event-inspector").assertIsDisplayed()
