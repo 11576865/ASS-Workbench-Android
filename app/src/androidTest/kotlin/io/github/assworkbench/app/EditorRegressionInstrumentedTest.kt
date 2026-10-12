@@ -1,5 +1,15 @@
 package io.github.assworkbench.app
 
+import android.view.View
+import androidx.test.espresso.Espresso.onView
+import androidx.test.espresso.UiController
+import androidx.test.espresso.ViewAction
+import androidx.test.espresso.action.ViewActions
+import androidx.test.espresso.matcher.RootMatchers.withDecorView
+import androidx.test.espresso.matcher.ViewMatchers.hasWindowFocus
+import androidx.test.espresso.matcher.ViewMatchers.isRoot
+import org.hamcrest.Matcher
+
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsEnabled
@@ -198,6 +208,44 @@ class EditorRegressionInstrumentedTest {
             viewModel.undo()
         }
         composeRule.runOnIdle { assertEquals(external, viewModel.state.value.document) }
+    }
+
+    @Test fun directoryDialogKeyboardClosesWithoutDismissingOrSubmittingDraft() {
+        restoreRecovery()
+        // Establish the host through the real two-layout switch, independent of
+        // whichever presentation a preceding fixture persisted.
+        if (composeRule.onAllNodesWithTag("fixed-workspace", useUnmergedTree = true)
+                .fetchSemanticsNodes(atLeastOneRootRequired = false).isEmpty()) {
+            composeRule.onNodeWithTag("workspace-direct-mode-toggle").performClick()
+            composeRule.waitUntil(10_000) {
+                composeRule.onAllNodesWithTag("fixed-workspace", useUnmergedTree = true)
+                    .fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()
+            }
+        }
+        composeRule.runOnIdle { viewModel.focusEvent(1L, seek = false) }
+        openTool("TEXT")
+        composeRule.onNodeWithTag("event-raw-1").performScrollTo().performTextInput(" DIALOG_DRAFT")
+        hideKeyboard()
+        val before = viewModel.state.value.document
+        composeRule.onNodeWithTag("fixed-tool-CAPABILITIES").performClick()
+        composeRule.onNodeWithTag("tool-search").performTextReplacement("STYLE")
+        var dialogRoot: View? = null
+        performInFocusedWindow("Show IME in the directory dialog") { controller, root ->
+            dialogRoot = root
+            val focused = checkNotNull(root.findFocus()) { "Directory dialog must own text focus" }
+            focused.context.getSystemService(android.view.inputmethod.InputMethodManager::class.java)
+                .showSoftInput(focused, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT)
+            controller.loopMainThreadUntilIdle()
+        }
+        composeRule.waitUntil(5_000) {
+            dialogRoot?.rootWindowInsets?.isVisible(android.view.WindowInsets.Type.ime()) == true
+        }
+        hideKeyboard()
+        composeRule.onNodeWithTag("fixed-tool-directory").assertIsDisplayed()
+        composeRule.onNodeWithTag("tool-search").assertTextContains("STYLE")
+        composeRule.onNodeWithTag("fixed-directory-close").performClick()
+        assertEquals("Recovered line DIALOG_DRAFT", rawDraftText(1L))
+        composeRule.runOnIdle { assertEquals(before, viewModel.state.value.document) }
     }
 
     @Test fun sharedSubtitleFilterNavigatesResultsWithoutChangingSelectionOrDocumentAcrossHosts() {
@@ -1652,24 +1700,30 @@ class EditorRegressionInstrumentedTest {
         return action.assertIsDisplayed()
     }
 
+    private fun performInFocusedWindow(description: String, action: (UiController, View) -> Unit) {
+        onView(isRoot()).inRoot(withDecorView(hasWindowFocus())).perform(object : ViewAction {
+            override fun getConstraints(): Matcher<View> = isRoot()
+            override fun getDescription(): String = description
+            override fun perform(controller: UiController, view: View) = action(controller, view.rootView)
+        })
+    }
+
     private fun hideKeyboard() {
-        var requestEvidence = "IME hide request not issued"
-        composeRule.activityRule.scenario.onActivity { activity ->
-            val decor = activity.window.decorView
-            val focus = activity.currentFocus
-            val wasVisible = decor.rootWindowInsets?.isVisible(android.view.WindowInsets.Type.ime())
-            val accepted = activity.getSystemService(android.view.inputmethod.InputMethodManager::class.java)
-                .hideSoftInputFromWindow(activity.window.decorView.windowToken, 0)
-            requestEvidence = "accepted=$accepted beforeVisible=$wasVisible windowFocused=${decor.hasWindowFocus()} " +
-                "focusClass=${focus?.javaClass?.simpleName} focusHasToken=${focus?.windowToken != null} " +
-                "focusTokenMatchesDecor=${focus?.windowToken == decor.windowToken}"
-        }
+        var imeRoot: View? = null
+        var requestEvidence = "No focused root selected"
         try {
-            composeRule.waitUntil(5_000) {
-                composeRule.activity.window.decorView.rootWindowInsets
-                    ?.isVisible(android.view.WindowInsets.Type.ime()) != true
+            performInFocusedWindow("Close IME in the currently focused window") { controller, root ->
+                imeRoot = root
+                requestEvidence = "rootClass=${root.javaClass.simpleName} windowFocused=${root.hasWindowFocus()} " +
+                    "focusClass=${root.findFocus()?.javaClass?.simpleName} " +
+                    "beforeVisible=${root.rootWindowInsets?.isVisible(android.view.WindowInsets.Type.ime())}"
+                ViewActions.closeSoftKeyboard().perform(controller, root)
             }
-        } catch (error: androidx.compose.ui.test.ComposeTimeoutException) {
+            composeRule.waitUntil(5_000) {
+                imeRoot?.rootWindowInsets
+                    ?.isVisible(android.view.WindowInsets.Type.ime()) == false
+            }
+        } catch (error: Exception) {
             throw AssertionError("IME hide did not complete: $requestEvidence", error)
         }
         composeRule.waitForIdle()

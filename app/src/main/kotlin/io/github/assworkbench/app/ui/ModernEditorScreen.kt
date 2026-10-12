@@ -1560,6 +1560,12 @@ private fun ModernAppBar(
             if (selectionMode) {
                 IconButton(onClick = uiActions::clearSelection) { Icon(Icons.Filled.Close, "退出多选") }
                 Text("已选 ${uiState.selection.eventIds.size} 条", Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
+                TooltipIconButton(
+                    label = if (searchOpen) "关闭搜索" else "搜索",
+                    onClick = onSearchToggle,
+                ) {
+                    Icon(if (searchOpen) Icons.Filled.Close else Icons.Filled.Search, null)
+                }
                 TextButton(onClick = viewModel::toggleSelectAllVisible) { Text("全选") }
                 TextButton(onClick = { onTool(WorkbenchTool.BATCH) }) { Text("批量") }
             } else {

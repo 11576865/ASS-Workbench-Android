@@ -1,5 +1,46 @@
 # 模拟器失败清单：已取得真实断言
 
+## 多选时搜索入口
+
+sharedSubtitleFilterNavigatesResultsWithoutChangingSelectionOrDocumentAcrossHosts实际先toggleSelected(1L)，再点击搜索。生产顶栏selectionMode分支只有退出、计数、全选、批量，搜索只存在于else分支。因此缺少搜索节点是确认的产品入口缺口。沿用已批准的筛选/选择并存语义，在多选分支也提供同一onSearchToggle入口；不通过清空选择来修复测试。既有失败回归继续验证筛选、定位和文档/选择不被导航暗中更改。新原生执行Pending。
+
+
+## c7dbcd74 最终结果与焦点窗口修复
+
+来源run38246400875/attempt1，回归job114801352170，证据job114808156236成功。Android38246400860和Fontconfig38246400843成功。投影四组仍22/22无失败；完整146项、24失败、0 errors、0 skipped。测试集合由142变为146，不能用总数变化计算完成率。
+
+- `batchUnknownStyleAndNegativeMarginFailBeforePreview`：java.lang.AssertionError: IME hide did not complete: accepted=false beforeVisible=true windowFocused=false focusClass=null focusHasToken=false focusTokenMatchesDecor=false
+- `rectClipExternalTakeoverCancelsPendingDraftAndRestoresAllCoordinates`：java.lang.AssertionError: IME hide did not complete: accepted=false beforeVisible=true windowFocused=false focusClass=null focusHasToken=false focusTokenMatchesDecor=false
+- `groupedNavigationAndGeometrySectionsPreserveDocument`：java.lang.AssertionError: IME hide did not complete: accepted=false beforeVisible=true windowFocused=false focusClass=null focusHasToken=false focusTokenMatchesDecor=false
+- `sharedSubtitleFilterNavigatesResultsWithoutChangingSelectionOrDocumentAcrossHosts`：java.lang.AssertionError: Failed to inject touch input.
+- `batchInvalidRegexFailsClosedInsteadOfDroppingTheFilter`：java.lang.AssertionError: Assert failed: The component with TestTag = 'batch-preview-pending' is not displayed!
+- `transformSliderStillOwnsItsPreviewAndCommitsOneUndoStep`：java.lang.AssertionError: IME hide did not complete: accepted=false beforeVisible=true windowFocused=false focusClass=null focusHasToken=false focusTokenMatchesDecor=false
+- `inspectorDraftSurvivesToolSwitchAndRotation`：java.lang.AssertionError: IME hide did not complete: accepted=false beforeVisible=true windowFocused=false focusClass=null focusHasToken=false focusTokenMatchesDecor=false
+- `batchKaraokeRevealControlsStayPreviewOnlyUntilCommit`：java.lang.AssertionError: IME hide did not complete: accepted=false beforeVisible=true windowFocused=false focusClass=null focusHasToken=false focusTokenMatchesDecor=false
+- `spatialWorkspaceLongPressDragExtractsPositionWithoutEditingAss`：java.lang.AssertionError: Action performScrollTo() failed.
+- `semanticSearchInvalidAuxiliaryFiltersStayFailClosed`：java.lang.AssertionError: Assert failed: The component with TestTag = 'search-style-regex' is not displayed!
+- `unifiedCanvasHidesAndRecallsNativeToolDirectory`：java.lang.AssertionError: Failed to inject touch input.
+- `spatialWorkspaceExposesBoardAndNativeEditorWithoutMovingWorldNodes`：java.lang.AssertionError: Assert failed: The component with TestTag = 'spatial-edge-rail-left' is not displayed!
+- `effectsPaneExposesSpatialFadeAuthoringWithoutMutatingDocument`：java.lang.AssertionError: IME hide did not complete: accepted=false beforeVisible=true windowFocused=false focusClass=null focusHasToken=false focusTokenMatchesDecor=false
+- `semanticSearchInvalidAuxiliaryFiltersFailClosedInUi`：java.lang.AssertionError: IME hide did not complete: accepted=false beforeVisible=true windowFocused=false focusClass=null focusHasToken=false focusTokenMatchesDecor=false
+- `batchActionsRemainAboveVisibleKeyboardAcrossMainAndCanvas`：androidx.compose.ui.test.ComposeTimeoutException: Condition still not satisfied after 5000 ms
+- `batchSearchLiteralInputsRestoreButReviewedCommitRequiresFreshPrecheckAfterRecreation`：java.lang.AssertionError: IME hide did not complete: accepted=false beforeVisible=false windowFocused=false focusClass=null focusHasToken=false focusTokenMatchesDecor=false
+- `transformFieldsProjectExternalPreviewAndRestoreDrafts`：java.lang.AssertionError: IME hide did not complete: accepted=false beforeVisible=true windowFocused=false focusClass=null focusHasToken=false focusTokenMatchesDecor=false
+- `fixedInspectorSharesUncommittedEventDraftAcrossToolInstances`：java.lang.AssertionError: IME hide did not complete: accepted=false beforeVisible=false windowFocused=false focusClass=AndroidComposeView focusHasToken=true focusTokenMatchesDecor=true
+- `karaokeFxPreviewIsNonDestructiveAndBatchApplyCommitsAtomically`：java.lang.AssertionError: IME hide did not complete: accepted=false beforeVisible=true windowFocused=false focusClass=null focusHasToken=false focusTokenMatchesDecor=false
+- `independentDirectoryDismissalPreservesDirtyTextAndTaskContext`：java.lang.AssertionError: IME hide did not complete: accepted=false beforeVisible=true windowFocused=false focusClass=null focusHasToken=false focusTokenMatchesDecor=false
+- `metadataDraftFollowsHostAndRetainsExternalConflictUntilExplicitApply`：java.lang.AssertionError: IME hide did not complete: accepted=false beforeVisible=true windowFocused=false focusClass=null focusHasToken=false focusTokenMatchesDecor=false
+- `semanticZoomDoesNotDestroyNonSaveableEditorDraft`：java.lang.AssertionError: Failed: assertExists.
+- `closeUpBoardKeepsMultipleRealToolsAndOverviewUsesSummaries`：java.lang.AssertionError: Failed: assertDoesNotExist.
+- `spatialCameraAndOverlayDoNotEditDocument`：java.lang.AssertionError: Failed to inject touch input.
+
+IME失败的边界证据为accepted=false、windowFocused=false，常伴随Activity.currentFocus=null；固定工具目录使用AlertDialog独立Window，原hideKeyboard却向Activity.decorView.windowToken发请求并观察Activity的insets。这能定位已观测的目录窗口收起路径，不能自动解释全部失败。
+
+改为Espresso onView(isRoot()).inRoot(withDecorView(hasWindowFocus()))定位实际焦点窗口，在该root执行标准closeSoftKeyboard，并观察同一root的IME visibility必须为false；null不当作关闭。保留5秒期限、原始cause、实际显示/文档/草稿/Undo断言。增加明确让Dialog键盘出现后关闭的回归，检查目录不被关闭、搜索字面输入和未提交正文保留；显式声明espresso-core测试依赖，与现有Test1.6系列对齐。不改产品键盘实现。
+
+新测试和时间草稿一起接回PR138，Android编译与原生执行待CI。本地无SDK，仅source/diff/artifact policy检查，未新增领域逻辑、不重复计为领域测试通过。
+
+
 ## 内容边界与批量触控校准
 
 071c9818 Android CI38244659459成功；对应Fontconfig38244659452和Emulator38244659428检查时仍运行，IME新增诊断尚无本轮结果。

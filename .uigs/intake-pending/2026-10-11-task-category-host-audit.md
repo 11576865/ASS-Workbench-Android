@@ -1,5 +1,15 @@
 # Candidate / Pending Foundry write
 
+## Selection mode must retain independent filtering access / Pending
+
+Source + native-red case: shared filter test selects an Event before opening search; toolbar selectionMode removes the only search action, yielding missing 搜索 semantics. Selection and filter are independent workspace axes, so keep the existing search toggle available rather than clear selection or weaken the test. Existing failed native regression retains document/selection/filter assertions; repaired product entry native validation pending. Append to existing task/context family, no Canonical promotion. Foundry external write Pending after earlier automatic cross-repository rejection; no retry.
+
+## IME command and observation must target the same active window / Pending
+
+Dedup queried popup/semantic-sync and presentation-isolation families. Native c7dbcd74/38246400875 full146/24 failures; repeated hideKeyboard evidence accepted=false/windowFocused=false/Activity focus null. Source fixed directory is AlertDialog, while helper commanded Activity decor token and observed Activity insets. Repair uses Espresso focused decor root for both standard close action and visibility assertion, retaining deadline/cause and fail-closed null handling.
+
+Added real dialog-visible-keyboard regression retaining dialog/search text/uncommitted raw draft/document. Not a product keyboard behavior change; new native execution pending, no all-failure closure. Source docs/EMULATOR-FAILURE-TRIAGE-2026-10-12.md. Canonical unchanged; Foundry write Pending after prior automatic cross-repository rejection, no retry.
+
 ## Timing draft baseline must retain source precision / Pending
 
 Dedup queried shared-draft/owner and precision/identity families. Start/End Host-local buffers now share an instance/session/Event-owned pair, preserve dirty external conflicts and explicit reset/overwrite. Canonical baseline uses actual milliseconds:1049→1041ms has the same ASS display string, so formatted-text equality cannot certify an unchanged source. Own commit acknowledgement checks actual millisecond values and preserves the existing display formatter. Host remount and equivalent external acknowledgement retain literal millisecond input; a two-assertion regression reproduced incidental normalization before its repair.
