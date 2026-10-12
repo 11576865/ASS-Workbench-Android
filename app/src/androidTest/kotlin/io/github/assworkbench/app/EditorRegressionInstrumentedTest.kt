@@ -1336,7 +1336,7 @@ class EditorRegressionInstrumentedTest {
         composeRule.onNodeWithTag("batch-scope-RESULTS").performClick()
         composeRule.onNodeWithTag("batch-actor-action").performScrollTo().performTextReplacement("SHARED_BATCH")
         hideKeyboard()
-        composeRule.onNodeWithTag("batch-preview-explicit").performClick()
+        visibleBatchAction("batch-preview-explicit").performClick()
         composeRule.onNodeWithTag("batch-review-commit").assertIsEnabled()
         composeRule.onNodeWithTag("batch-mode-search").performClick()
         composeRule.onNodeWithTag("batch-mode-rule").performClick()
@@ -1348,7 +1348,7 @@ class EditorRegressionInstrumentedTest {
         composeRule.onNodeWithTag("batch-actor-action").performScrollTo().assertTextContains("SHARED_BATCH")
         composeRule.onNodeWithTag("batch-review-commit").assertIsEnabled()
         composeRule.runOnIdle { assertEquals(before, viewModel.state.value.document) }
-        composeRule.onNodeWithTag("batch-review-commit").performClick()
+        visibleBatchAction("batch-review-commit").performClick()
         composeRule.runOnIdle {
             assertEquals("SHARED_BATCH", viewModel.state.value.document.events.first { it.id == 2L }.name)
             viewModel.undo()
@@ -1364,7 +1364,7 @@ class EditorRegressionInstrumentedTest {
         composeRule.onNodeWithTag("search-pattern").performScrollTo().performTextReplacement("Second")
         composeRule.onNodeWithTag("search-replacement").performScrollTo().performTextReplacement("RESTORED_SEARCH")
         hideKeyboard()
-        composeRule.onNodeWithTag("search-review-preview").performClick()
+        visibleBatchAction("search-review-preview").performClick()
         composeRule.onNodeWithTag("search-review-commit").assertIsEnabled()
         val before = viewModel.state.value.document
         composeRule.activityRule.scenario.recreate()
@@ -1413,7 +1413,7 @@ class EditorRegressionInstrumentedTest {
         composeRule.onNodeWithTag("batch-scope-count").assertTextContains("作用范围 1 条")
         composeRule.onNodeWithTag("batch-actor-action").performScrollTo().performTextReplacement("Reviewed")
         hideKeyboard()
-        composeRule.onNodeWithTag("batch-preview-explicit").performClick()
+        visibleBatchAction("batch-preview-explicit").performClick()
         composeRule.onNodeWithTag("batch-review-commit").assertIsEnabled()
         val beforeLocate = viewModel.state.value.document
         val selectionBeforeLocate = viewModel.state.value.selectedEventIds
@@ -1431,8 +1431,8 @@ class EditorRegressionInstrumentedTest {
         composeRule.onNodeWithTag("batch-scope-count").assertTextContains("作用范围 1 条")
         composeRule.onNodeWithTag("batch-actor-action").performScrollTo().performTextReplacement("Reviewed")
         hideKeyboard()
-        composeRule.onNodeWithTag("batch-preview-explicit").performClick()
-        composeRule.onNodeWithTag("batch-review-commit").performClick()
+        visibleBatchAction("batch-preview-explicit").performClick()
+        visibleBatchAction("batch-review-commit").performClick()
         composeRule.runOnIdle {
             assertEquals("Reviewed", viewModel.state.value.document.events.first { it.id == 2L }.name)
             assertFalse(viewModel.state.value.document.events.first { it.id == 1L }.name == "Reviewed")
@@ -1607,6 +1607,18 @@ class EditorRegressionInstrumentedTest {
                 .fetchSemanticsNodes(atLeastOneRootRequired = false)
                 .isNotEmpty()
         }
+    }
+
+    private fun visibleBatchAction(tag: String): SemanticsNodeInteraction {
+        val action = composeRule.onNodeWithTag(tag)
+        // Fixed actions are outside the tool's inner scroll body. In the compact
+        // main host the entire finite tool pane still belongs to the outer flow.
+        // Canvas/tablet footers have no such scrolling ancestor.
+        if (composeRule.onAllNodesWithTag("fixed-content-flow", useUnmergedTree = true)
+                .fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()) {
+            action.performScrollTo()
+        }
+        return action.assertIsDisplayed()
     }
 
     private fun hideKeyboard() {

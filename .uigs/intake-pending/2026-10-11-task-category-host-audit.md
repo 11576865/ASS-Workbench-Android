@@ -1,5 +1,11 @@
 # Candidate / Pending Foundry write
 
+## Assertion geometry and outer-flow action reachability / Pending
+
+Dedup queried existing geometry/viewport and stable-action evidence families. Side-rail source/test audit: the old overlap assertion used the full-width focused container including navigation above the rail. Compare real native content bounds, and independently check header above rail; do not weaken content visibility or geometry invariance.
+
+Batch preview tests previously clicked fixed footers without asserting on-screen placement. A footer outside a tool's inner scroll may still belong to the compact Host outer content flow. Scroll only when the actual outer flow exists, then require display before touch; leave the keyboard-safe footer regression strict and unscrolled. Native tests pending, batch0 final root not inferred from source alone. docs/EMULATOR-FAILURE-TRIAGE-2026-10-12.md. Canonical unchanged; external Foundry write remains Pending after earlier automatic cross-repository rejection, no retry.
+
 ## Retired selector in common native navigation helper / Pending
 
 Dedup matches Foundry stable-action-identity and fictional-selector UI contract families. Exact source audit links named native workspace-tools missing-node failures to a common helper targeting a removed tag. Current production spatial-add-tool opens the real directory in both board and focused stage; three existing regressions already use it. Change the helper to that visible action and wait for real tool-search, preserving downstream draft/document/Undo assertions. Native validation pending.
