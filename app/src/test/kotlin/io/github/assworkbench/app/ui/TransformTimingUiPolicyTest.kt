@@ -15,6 +15,14 @@ class TransformTimingUiPolicyTest {
             transformTimingHandleRange(" 120 ", "780", 3300),
         )
         assertEquals(
+            TransformTimingHandleRange(120, 780),
+            transformTimingHandleRange("120.0", "780.0", 3300),
+        )
+        assertEquals(
+            TransformTimingHandleRange(120, 780),
+            transformTimingHandleRange("1.2e2", "780.0", 3300),
+        )
+        assertEquals(
             TransformTimingHandleRange(350, 350),
             transformTimingHandleRange("350", "350", 3300),
         )
@@ -25,6 +33,7 @@ class TransformTimingUiPolicyTest {
         assertNull(transformTimingHandleRange("0", "", 3300))
         assertNull(transformTimingHandleRange("", "900", 3300))
         assertNull(transformTimingHandleRange("0.5", "900.5", 3300))
+        assertNull(transformTimingHandleRange("120.1", "780.0", 3300))
     }
 
     @Test fun outOfBoundsInvalidAndLongIntervalsNeverGetClamped() {
@@ -32,6 +41,8 @@ class TransformTimingUiPolicyTest {
         assertNull(transformTimingHandleRange("0", "4500", 3300))
         assertNull(transformTimingHandleRange("950", "800", 3300))
         assertNull(transformTimingHandleRange("abc", "900", 3300))
+        assertNull(transformTimingHandleRange("NaN", "900", 3300))
+        assertNull(transformTimingHandleRange("Infinity", "900", 3300))
         assertNull(transformTimingHandleRange("0", "200", 0))
         assertNull(transformTimingHandleRange("0", "200", 16_000_001))
         assertNull(transformTimingHandleRange("0", "9223372036854775808", 3300))
