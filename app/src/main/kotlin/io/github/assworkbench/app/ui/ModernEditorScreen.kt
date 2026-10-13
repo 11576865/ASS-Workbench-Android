@@ -2191,34 +2191,81 @@ private fun InlineEffectsEditor(
     playbackPositionMs: Long,
     viewModel: EditorViewModel,
 ) {
-    val visual = remember(event.id, event.text) { EventOverrideEditor.inspect(event.text) }
     val animation = remember(event.id, event.text) { AssAnimationSemantic.inspect(event.text) }
-    var blur by remember(event.id, event.text) { mutableStateOf(visual.blur?.toString().orEmpty()) }
-    var softEntry by remember(event.id, event.text) { mutableStateOf(visual.softEntry) }
-    var fadeMode by remember(event.id, event.text) {
-        mutableStateOf(when { animation.complexFade != null -> "fade"; animation.simpleFade != null -> "fad"; else -> "none" })
-    }
-    var fadeIn by remember(event.id, event.text) { mutableStateOf((animation.simpleFade?.fadeInMs ?: 150).toString()) }
-    var fadeOut by remember(event.id, event.text) { mutableStateOf((animation.simpleFade?.fadeOutMs ?: 150).toString()) }
-    val complex = animation.complexFade
-    var a1 by remember(event.id, event.text) { mutableStateOf((complex?.alpha1 ?: 255).toString()) }
-    var a2 by remember(event.id, event.text) { mutableStateOf((complex?.alpha2 ?: 0).toString()) }
-    var a3 by remember(event.id, event.text) { mutableStateOf((complex?.alpha3 ?: 255).toString()) }
-    var t1 by remember(event.id, event.text) { mutableStateOf((complex?.time1Ms ?: 0).toString()) }
-    var t2 by remember(event.id, event.text) { mutableStateOf((complex?.time2Ms ?: 150).toString()) }
-    var t3 by remember(event.id, event.text) { mutableStateOf((complex?.time3Ms ?: 850).toString()) }
-    var t4 by remember(event.id, event.text) { mutableStateOf((complex?.time4Ms ?: 1000).toString()) }
-
-    fun previewVisual(value: Double? = blur.toDoubleOrNull()) {
-        viewModel.previewEventVisualEffectsIfSourceMatches(event.id, event.text, value, softEntry)
-    }
+    val fxStore = LocalEventFxDraftStore.current
+    val fxDraft = remember(fxStore, event.id) { fxStore.obtain(event.id, event.text) }
+    LaunchedEffect(fxDraft, event.text) { fxDraft.reconcile(event.text) }
+    val fields = fxDraft.fields
+    val blur = fields.blur
+    val softEntry = fields.softEntry
+    val fadeMode = fields.fadeMode
+    val fadeIn = fields.fadeIn
+    val fadeOut = fields.fadeOut
+    val a1 = fields.a1
+    val a2 = fields.a2
+    val a3 = fields.a3
+    val t1 = fields.t1
+    val t2 = fields.t2
+    val t3 = fields.t3
+    val t4 = fields.t4
+    val sourceConflict = fxDraft.conflict(event.text)
     val blurNumber = blur.toDoubleOrNull()
-    val blurIsValid = blur.isBlank() || (blurNumber != null && blurNumber.isFinite() && blurNumber >= 0.0)
-    fun commitVisual() {
-        if (blurIsValid) {
-            viewModel.applyEventVisualEffectsIfSourceMatches(
-                event.id, event.text, blurNumber, softEntry,
+    val blurIsValid = blur.isBlank() ||
+        (blurNumber != null && blurNumber.isFinite() && blurNumber >= 0.0)
+    val simpleIn = fadeIn.toIntOrNull()
+    val simpleOut = fadeOut.toIntOrNull()
+    val complexNumbers = listOf(a1, a2, a3, t1, t2, t3, t4).map { it.toIntOrNull() }
+    val fadeIsValid = when (fadeMode) {
+        "none" -> true
+        "fad" -> simpleIn != null && simpleOut != null &&
+            simpleIn in 0..1_000_000 && simpleOut in 0..1_000_000
+        "fade" -> complexNumbers.all { it != null } &&
+            complexNumbers.take(3).all { it in 0..255 } &&
+            complexNumbers.drop(3).let { times ->
+                times.all { it != null && it >= 0 } &&
+                    times.zipWithNext().all { (left, right) -> left!! <= right!! }
+            }
+        else -> false
+    }
+
+    fun previewVisual(value: Double? = blurNumber, nextSoft: Boolean = softEntry) {
+        if (!fxDraft.conflict(event.text) && blurIsValid) {
+            viewModel.previewEventVisualEffectsIfSourceMatches(
+                event.id, event.text, value, nextSoft,
             )
+        }
+    }
+
+    fun commitVisual() {
+        if (sourceConflict || !blurIsValid) return
+        val nextSource = EventOverrideEditor.updateVisualEffects(
+            event.text, blurNumber, softEntry,
+        )
+        if (nextSource == event.text || viewModel.applyEventVisualEffectsIfSourceMatches(
+                event.id, event.text, blurNumber, softEntry,
+            )) {
+            fxDraft.acknowledge(nextSource, appliedBlur = true)
+        }
+    }
+
+    fun commitFade() {
+        if (sourceConflict || !fadeIsValid) return
+        val complex = if (fadeMode == "fade") {
+            AssComplexFade(
+                complexNumbers[0]!!, complexNumbers[1]!!, complexNumbers[2]!!,
+                complexNumbers[3]!!, complexNumbers[4]!!,
+                complexNumbers[5]!!, complexNumbers[6]!!,
+            )
+        } else null
+        val nextSource = when (fadeMode) {
+            "none" -> AssAnimationSemantic.removeFade(event.text)
+            "fad" -> AssAnimationSemantic.patchSimpleFade(event.text, simpleIn!!, simpleOut!!)
+            else -> AssAnimationSemantic.patchComplexFade(event.text, complex!!)
+        }
+        if (nextSource == event.text || viewModel.applyEventFadeIfSourceMatches(
+                event.id, event.text, fadeMode, simpleIn, simpleOut, complex,
+            )) {
+            fxDraft.acknowledge(nextSource, appliedBlur = false)
         }
     }
 
@@ -2233,23 +2280,43 @@ private fun InlineEffectsEditor(
     ) {
         Column(Modifier.padding(WorkbenchDimens.Small), verticalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small)) {
             // Keep the daily Event controls above the advanced composition templates.
+            if (sourceConflict) {
+                Row(
+                    Modifier.fillMaxWidth().testTag("effect-fx-conflict"),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        "ASS 已变化 · 草稿保留",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.weight(1f),
+                    )
+                    TextButton(
+                        onClick = {
+                            fxDraft.discard(event.text)
+                            viewModel.clearTransientPreview("effects:${event.id}")
+                        },
+                        modifier = Modifier.testTag("effect-fx-discard"),
+                    ) { Text("舍弃草稿") }
+                }
+            }
             ContinuousParameterControl(
                 label = "Blur",
                 valueText = blur,
-                onValueTextChange = { blur = it },
+                onValueTextChange = { fxDraft.fields = fxDraft.fields.copy(blur = it) },
                 range = 0f..20f,
                 step = 0.1,
                 supportingText = null,
                 testTagPrefix = "effect-blur",
-                onPreview = { previewVisual(it) },
+                onPreview = { if (!sourceConflict) previewVisual(it) },
                 // Blur gesture remains preview-only; the adjacent Apply button commits.
             )
             Row(verticalAlignment = Alignment.CenterVertically) {
-                FilterChip(selected = softEntry, onClick = { softEntry = !softEntry; previewVisual() }, label = { Text("Soft Entry · 160ms") })
+                FilterChip(selected = softEntry, onClick = { fxDraft.fields = fxDraft.fields.copy(softEntry = !softEntry); previewVisual(nextSoft = !softEntry) }, label = { Text("Soft Entry · 160ms") })
                 Spacer(Modifier.weight(1f))
                 Button(
                     onClick = ::commitVisual,
-                    enabled = blurIsValid,
+                    enabled = blurIsValid && !sourceConflict,
                     modifier = Modifier.testTag("effect-blur-apply"),
                 ) { Text("应用视觉效果") }
             }
@@ -2260,43 +2327,35 @@ private fun InlineEffectsEditor(
                 Text("\\fad 与 \\fade 冲突 · 应用将替换", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
             }
             Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro)) {
-                FilterChip(selected = fadeMode == "none", onClick = { fadeMode = "none" }, label = { Text("无") })
-                FilterChip(selected = fadeMode == "fad", onClick = { fadeMode = "fad" }, label = { Text("\\fad") })
-                FilterChip(selected = fadeMode == "fade", onClick = { fadeMode = "fade" }, label = { Text("\\fade") })
+                FilterChip(selected = fadeMode == "none", onClick = { fxDraft.fields = fxDraft.fields.copy(fadeMode = "none") }, label = { Text("无") })
+                FilterChip(selected = fadeMode == "fad", onClick = { fxDraft.fields = fxDraft.fields.copy(fadeMode = "fad") }, label = { Text("\\fad") })
+                FilterChip(selected = fadeMode == "fade", onClick = { fxDraft.fields = fxDraft.fields.copy(fadeMode = "fade") }, label = { Text("\\fade") })
             }
             if (fadeMode == "fad") {
                 Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro)) {
-                    OutlinedTextField(fadeIn, { fadeIn = it }, label = { Text("Fade In ms") }, singleLine = true, modifier = Modifier.weight(1f))
-                    OutlinedTextField(fadeOut, { fadeOut = it }, label = { Text("Fade Out ms") }, singleLine = true, modifier = Modifier.weight(1f))
+                    OutlinedTextField(fadeIn, { fxDraft.fields = fxDraft.fields.copy(fadeIn = it) }, label = { Text("Fade In ms") }, singleLine = true, modifier = Modifier.weight(1f))
+                    OutlinedTextField(fadeOut, { fxDraft.fields = fxDraft.fields.copy(fadeOut = it) }, label = { Text("Fade Out ms") }, singleLine = true, modifier = Modifier.weight(1f))
                 }
             } else if (fadeMode == "fade") {
                 Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro)) {
-                    OutlinedTextField(a1, { a1 = it }, label = { Text("A1") }, singleLine = true, modifier = Modifier.weight(1f))
-                    OutlinedTextField(a2, { a2 = it }, label = { Text("A2") }, singleLine = true, modifier = Modifier.weight(1f))
-                    OutlinedTextField(a3, { a3 = it }, label = { Text("A3") }, singleLine = true, modifier = Modifier.weight(1f))
+                    OutlinedTextField(a1, { fxDraft.fields = fxDraft.fields.copy(a1 = it) }, label = { Text("A1") }, singleLine = true, modifier = Modifier.weight(1f))
+                    OutlinedTextField(a2, { fxDraft.fields = fxDraft.fields.copy(a2 = it) }, label = { Text("A2") }, singleLine = true, modifier = Modifier.weight(1f))
+                    OutlinedTextField(a3, { fxDraft.fields = fxDraft.fields.copy(a3 = it) }, label = { Text("A3") }, singleLine = true, modifier = Modifier.weight(1f))
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro)) {
-                    OutlinedTextField(t1, { t1 = it }, label = { Text("T1") }, singleLine = true, modifier = Modifier.weight(1f))
-                    OutlinedTextField(t2, { t2 = it }, label = { Text("T2") }, singleLine = true, modifier = Modifier.weight(1f))
-                    OutlinedTextField(t3, { t3 = it }, label = { Text("T3") }, singleLine = true, modifier = Modifier.weight(1f))
-                    OutlinedTextField(t4, { t4 = it }, label = { Text("T4") }, singleLine = true, modifier = Modifier.weight(1f))
+                    OutlinedTextField(t1, { fxDraft.fields = fxDraft.fields.copy(t1 = it) }, label = { Text("T1") }, singleLine = true, modifier = Modifier.weight(1f))
+                    OutlinedTextField(t2, { fxDraft.fields = fxDraft.fields.copy(t2 = it) }, label = { Text("T2") }, singleLine = true, modifier = Modifier.weight(1f))
+                    OutlinedTextField(t3, { fxDraft.fields = fxDraft.fields.copy(t3 = it) }, label = { Text("T3") }, singleLine = true, modifier = Modifier.weight(1f))
+                    OutlinedTextField(t4, { fxDraft.fields = fxDraft.fields.copy(t4 = it) }, label = { Text("T4") }, singleLine = true, modifier = Modifier.weight(1f))
                 }
                 Text("α 0=实 / 255=透 · T=Event ms", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                Button(onClick = {
-                    when (fadeMode) {
-                        "none" -> viewModel.clearEventFade(event.id)
-                        "fad" -> {
-                            val fi = fadeIn.toIntOrNull(); val fo = fadeOut.toIntOrNull()
-                            if (fi != null && fo != null) viewModel.setEventSimpleFade(event.id, fi, fo)
-                        }
-                        "fade" -> {
-                            val v = listOf(a1, a2, a3, t1, t2, t3, t4).map { it.toIntOrNull() }
-                            if (v.all { it != null }) viewModel.setEventComplexFade(event.id, AssComplexFade(v[0]!!, v[1]!!, v[2]!!, v[3]!!, v[4]!!, v[5]!!, v[6]!!))
-                        }
-                    }
-                }) { Text("应用 Fade") }
+                Button(
+                    onClick = ::commitFade,
+                    enabled = fadeIsValid && !sourceConflict,
+                    modifier = Modifier.testTag("effect-fade-apply"),
+                ) { Text("应用 Fade") }
             }
 
             Divider()
