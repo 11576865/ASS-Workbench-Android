@@ -1715,6 +1715,40 @@ class EditorRegressionInstrumentedTest {
     }
 
     @Test
+    fun fadeDraftPersistsAcrossTaskAndHostAndExternalRawCannotOverwriteIt() {
+        restoreRecovery()
+        composeRule.runOnIdle {
+            viewModel.updateEventText(1L, "{\\fad(120,180)}Recovered line")
+        }
+        eventRow(1L).performClick()
+        openTool("EFFECTS")
+        composeRule.onNodeWithTag("effect-fade-in")
+            .performScrollTo().performTextReplacement("240")
+        hideKeyboard()
+        openTool("TEXT")
+        openTool("EFFECTS")
+        composeRule.onNodeWithTag("effect-fade-in")
+            .performScrollTo().assertTextContains("240")
+
+        switchToUnifiedCanvas()
+        openTool("EFFECTS")
+        composeRule.onNodeWithTag("effect-fade-in")
+            .performScrollTo().assertTextContains("240")
+
+        composeRule.runOnIdle {
+            viewModel.updateEventText(1L, "{\\pos(60,80)\\fad(120,180)}Recovered line")
+        }
+        composeRule.onNodeWithTag("effect-fx-conflict")
+            .performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithTag("effect-fade-apply")
+            .performScrollTo().assertIsNotEnabled()
+        composeRule.onNodeWithTag("effect-fx-discard")
+            .performScrollTo().performClick()
+        composeRule.onNodeWithTag("effect-fade-in")
+            .performScrollTo().assertTextContains("120")
+    }
+
+    @Test
     fun fadeCommitRejectsStaleSourceAndInvalidParametersWithoutChangingDocument() {
         restoreRecovery()
         val original = "{\\pos(12,34)\\blur2\\fad(120,180)}Recovered line"
