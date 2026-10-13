@@ -3,7 +3,7 @@
   "id": "ass-native-ui-minimal-rollout-20261013",
   "goal": "将经过评审的平板优先、少字主义 ASS UI 分阶段接入正式 Android Compose 工程；保留完整 18 工具目录、Raw 保真、Karaoke/动画语义与独立实验 Host。",
   "status": "in_progress",
-  "current_bounded_work_unit": "Session-owned Transform draft resilience and source-guarded commit — WORK_UNIT_COMPLETE",
+  "current_bounded_work_unit": "Safe Transform delete and Blur explicit preview-to-Apply boundary — WORK_UNIT_COMPLETE",
   "completed_units": [
     {
       "name": "FIXED is the new session default",
@@ -132,29 +132,69 @@
     {
       "name": "Clarify snapshot record width",
       "commit": "4091a9ebc19288d9bf1e0de15eab1e74b7d01745"
+    },
+    {
+      "name": "Canonical source-guarded Transform removal by Event Raw text",
+      "commit": "bf48e22550b23300886047749891abec04af8a46"
+    },
+    {
+      "name": "Transform draft store identifies dirty sibling transform edits",
+      "commit": "c4ea5de4f03592be1f06f8615064167a7d588a6d"
+    },
+    {
+      "name": "Native Transform deletion disabled on dirty/conflicting drafts",
+      "commit": "97a302384124406661586d2b15a1eeb21f34e175"
+    },
+    {
+      "name": "Android regression for guarded delete and Undo",
+      "commit": "93e8e9a7491277bf5bf09824121cf13b8d4a9efa"
+    },
+    {
+      "name": "Blur gesture no longer commits automatically",
+      "commit": "d6c23ab06aa1e6f55324bfed58fe3e218f81902f"
+    },
+    {
+      "name": "Guard native Blur Apply against source changes",
+      "commit": "94daebf41776945768537e19a17d27e98ed8f3b3"
+    },
+    {
+      "name": "Validate exact Blur input and guard explicit native Apply",
+      "commit": "986e8a78345a9999a942ac700576875eb6e17d43"
+    },
+    {
+      "name": "Guard Blur preview against changed source",
+      "commit": "109d6ba9611c6f9aba30890ff30b4bb30cd1c69a"
+    },
+    {
+      "name": "Route Blur preview through source guard",
+      "commit": "406f92a321cb70f000a5b2532ec7cf86993d72c8"
+    },
+    {
+      "name": "Android regression for Blur preview, guarded Apply and Undo",
+      "commit": "f176383c4218e407079494b9e44f62ed752bf8b5"
     }
   ],
   "next_units": [
-    "Build and run exact main SHA with Android CI and tablet emulator; repair any Kotlin, Compose or instrumentation errors visible from logs.",
-    "Audit effects Fade/Blur and Karaoke drafts for the same source-guarded session resilience; avoid sweeping new features.",
-    "Verify renderer-backed ASS preview and save/reopen Unknown-tag preservation using real media and fonts.",
-    "Measure touch target, IME and visual density on tablet portrait and landscape."
+    "Obtain actual native Gradle/CI and emulator output for latest main SHA; fix any compilation or interaction failures before claiming acceptance.",
+    "Make Fade preview/Apply source-guarded and retain Fade/Blur drafts per Event/session without incorrectly converting unknown Raw overrides.",
+    "Validate actual ASS libass preview, Undo, and save/reopen with complex tags; keep experimental canvas separate.",
+    "Tablet layout visual capture and touch/IME/gesture accessibility verification."
   ],
   "repository": "11576865/ASS-Workbench-Android",
   "branch": "main",
   "pull_request": null,
-  "latest_durable_code_commit": "f4843ea3642ca6690db05bdf33ae0c94d4201ccc",
+  "latest_durable_code_commit": "f176383c4218e407079494b9e44f62ed752bf8b5",
   "external_validation": {
-    "android_ci": "PENDING_EXTERNAL_VALIDATION — combined status returned [] for latest main commit",
-    "emulator_regression": "PENDING_EXTERNAL_VALIDATION — PR-triggered workflow lookup not applicable to main and returned []",
+    "android_ci": "PENDING_EXTERNAL_VALIDATION; no successful native CI or Gradle output verified",
+    "emulator_regression": "PENDING_EXTERNAL_VALIDATION",
     "visual_capture": "PENDING_EXTERNAL_VALIDATION",
     "fontconfig_renderer": "NOT_REQUESTED_BY_THIS_UNIT",
-    "local_gradle": "NOT_EXECUTED — local command runtime unavailable"
+    "local_gradle": "NOT_EXECUTED; repository not cloned; no Android Gradle toolchain and container cannot resolve GitHub host"
   },
   "blockers": [
-    "Native Gradle/JVM and emulator instrumented suites not executed or confirmed; added tests are unverified.",
-    "Cross-host application state and Compose save/restore need device evidence; tests are a defined target, not acceptance.",
-    "Lossless arbitrary ASS tagging/rendering remains domain and libass-level follow-up."
+    "Native code and instrumentation assertions committed to main; no Android build or emulator execution observed.",
+    "Source-guarded Fade and per-Event Fade/Blur drafts still need the same lifecycle/transaction audit.",
+    "Touch target and state behavior on tablet portrait/landscape require visual and device evidence."
   ],
   "safeguards": [
     "Persisted legacy variant strings still resolve to SPATIAL_EXPERIMENTAL; null/new defaults to FIXED.",
@@ -162,5 +202,5 @@
     "Experimental infinite canvas only via global workspace controls, not fixed task navigation.",
     "Icon-only compact controls retain content descriptions and explanatory long-press tooltips."
   ],
-  "updated_at": "2026-10-13T22:05:00+08:00"
+  "updated_at": "2026-10-13T23:25:00+08:00"
 }
