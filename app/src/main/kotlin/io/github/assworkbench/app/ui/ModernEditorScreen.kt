@@ -1557,15 +1557,16 @@ private fun ModernAppBar(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(2.dp),
         ) {
-            IconButton(
+            TooltipIconButton(
+                label = if (workspaceMode == WorkspacePresentationMode.FIXED)
+                    "切换至实验性无限画布" else "返回标准工作台",
                 onClick = onToggleWorkspaceMode,
                 modifier = Modifier.size(40.dp).testTag("workspace-direct-mode-toggle"),
             ) {
                 Icon(
                     if (workspaceMode == WorkspacePresentationMode.FIXED)
                         Icons.Filled.DashboardCustomize else Icons.Filled.Dashboard,
-                    contentDescription = if (workspaceMode == WorkspacePresentationMode.FIXED)
-                        "切换至无限画布" else "切换至标准工作台",
+                    contentDescription = null,
                 )
             }
             if (selectionMode) {
@@ -1678,6 +1679,7 @@ private fun TooltipIconButton(
     label: String,
     onClick: () -> Unit,
     enabled: Boolean = true,
+    modifier: Modifier = Modifier,
     content: @Composable () -> Unit,
 ) {
     TooltipBox(
@@ -1688,7 +1690,7 @@ private fun TooltipIconButton(
         IconButton(
             onClick = onClick,
             enabled = enabled,
-            modifier = Modifier.semantics { contentDescription = label },
+            modifier = modifier.semantics { contentDescription = label },
         ) { content() }
     }
 }
