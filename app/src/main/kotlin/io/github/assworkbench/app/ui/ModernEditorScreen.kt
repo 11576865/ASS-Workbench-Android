@@ -2207,7 +2207,7 @@ private fun InlineEffectsEditor(
     var t4 by remember(event.id, event.text) { mutableStateOf((complex?.time4Ms ?: 1000).toString()) }
 
     fun previewVisual(value: Double? = blur.toDoubleOrNull()) {
-        viewModel.previewEventVisualEffects(event.id, value, softEntry)
+        viewModel.previewEventVisualEffectsIfSourceMatches(event.id, event.text, value, softEntry)
     }
     val blurNumber = blur.toDoubleOrNull()
     val blurIsValid = blur.isBlank() || (blurNumber != null && blurNumber.isFinite() && blurNumber >= 0.0)
