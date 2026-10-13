@@ -52,6 +52,7 @@ import androidx.lifecycle.Lifecycle
 import io.github.assworkbench.app.ui.WorkbenchTool
 import io.github.assworkbench.domain.AssDocument
 import io.github.assworkbench.domain.AssEvent
+import io.github.assworkbench.domain.AssTransform
 import io.github.assworkbench.domain.AssTextEncoding
 import io.github.assworkbench.domain.SubTime
 import io.github.assworkbench.domain.SubtitleProject
@@ -1669,6 +1670,25 @@ class EditorRegressionInstrumentedTest {
             .performScrollTo()
             .assertIsDisplayed()
         assertEquals(before, viewModel.state.value.document)
+    }
+
+    @Test
+    fun staleTransformSourceIsRejectedWithoutOverwritingOtherRawEdits() {
+        restoreRecovery()
+        val baseline = "{\\t(120,780,\\fscx140)}Recovered line"
+        val externallyChanged = "{\\pos(50,60)\\t(120,780,\\fscx140)}Recovered line"
+        composeRule.runOnIdle {
+            viewModel.updateEventText(1L, baseline)
+            viewModel.updateEventText(1L, externallyChanged)
+            val before = viewModel.state.value.document
+            val candidate = AssTransform(150.0, 750.0, null, "\\fscx190")
+            assertFalse(viewModel.setEventTransformIfSourceMatches(1L, 0, baseline, candidate))
+            assertEquals(before, viewModel.state.value.document)
+            assertTrue(viewModel.setEventTransformIfSourceMatches(1L, 0, externallyChanged, candidate))
+            assertTrue(viewModel.state.value.document.events.first { it.id == 1L }.text.contains("\\pos(50,60)"))
+            viewModel.undo()
+            assertEquals(before, viewModel.state.value.document)
+        }
     }
 
     @Test
