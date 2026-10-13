@@ -3,7 +3,7 @@
   "id": "ass-native-ui-minimal-rollout-20261013",
   "goal": "将经过评审的平板优先、少字主义 ASS UI 分阶段接入正式 Android Compose 工程；保留完整 18 工具目录、Raw 保真、Karaoke/动画语义与独立实验 Host。",
   "status": "in_progress",
-  "current_bounded_work_unit": "Native entry and compact UI chrome migration — WORK_UNIT_COMPLETE",
+  "current_bounded_work_unit": "Task-specialist tool discoverability and low-copy native directory — WORK_UNIT_COMPLETE",
   "completed_units": [
     {
       "name": "FIXED is the new session default",
@@ -36,29 +36,49 @@
     {
       "name": "Icon-first compact task toolbar with accessible tooltip",
       "commit": "3f81b368c0ee415ace1c7152e993d22039eaff3b"
+    },
+    {
+      "name": "Project existing specialist tools into active task menu",
+      "commit": "e1b17efa0b86dfb9a24b067311aaeeb1c9cb8833"
+    },
+    {
+      "name": "Show contextual specialist switcher in FIXED task bar",
+      "commit": "a41644dab1642fc652f1703fa50f3cd97fa584c1"
+    },
+    {
+      "name": "JVM catalog projection contract regression",
+      "commit": "874ad89a987d869adf6a95562d90265fb44243b8"
+    },
+    {
+      "name": "Android UI contextual-menu smoke test added",
+      "commit": "bbcefd7be37ded565818d06518f3a1f44449c950"
+    },
+    {
+      "name": "Remove persistent descriptions from searchable tool directory",
+      "commit": "f22f4499229d518dd51257115266c76caaa5224c"
     }
   ],
   "next_units": [
-    "Native CI compile, unit tests and tablet/phone emulator visual capture; correct visible failures",
-    "Integrate native effects editor against existing AssKaraokeFxAuthoring/AssFxComposition and Raw-preserving domain authoring; begin with bounded real ASS write and Undo",
-    "Implement real preview source/time alignment and validate with libass/multifont actual-media samples",
-    "Task-fit tablet refinement of fixed surface and direct professional controls; confirm feature discoverability",
-    "Device and IME/TalkBack touch/longpress acceptance, workspace/data state continuity"
+    "Validate main branch Compose Kotlin build / JVM tests / instrumented test + screenshot. Repair any failures before proceeding.",
+    "Connect effect tools to existing AssKaraokeFxAuthoring/AssFxComposition authoring and undo rather than copying HTML demo writers.",
+    "Validate accurate libass time/provenance rendering on tablet emulator and real media.",
+    "Native task-specific layout density and gestures on portrait tablet; test keyboard, TalkBack and stylus."
   ],
   "repository": "11576865/ASS-Workbench-Android",
   "branch": "main",
   "pull_request": null,
-  "latest_durable_code_commit": "3f81b368c0ee415ace1c7152e993d22039eaff3b",
+  "latest_durable_code_commit": "f22f4499229d518dd51257115266c76caaa5224c",
   "external_validation": {
-    "android_ci": "PENDING_EXTERNAL_VALIDATION",
-    "emulator_regression": "PENDING_EXTERNAL_VALIDATION",
-    "visual_capture": "PENDING_EXTERNAL_VALIDATION",
+    "android_ci": "PENDING_EXTERNAL_VALIDATION — connector returned no PR-scoped workflow runs; combined classic status had no entries",
+    "emulator_regression": "PENDING_EXTERNAL_VALIDATION — newly authored test not executed",
+    "visual_capture": "PENDING_EXTERNAL_VALIDATION — no native screenshots verified",
     "fontconfig_renderer": "NOT_REQUESTED_BY_THIS_UNIT",
     "local_gradle": "NOT_EXECUTED"
   },
   "blockers": [
-    "No native Gradle compilation or device screenshot has been verified in this chat.",
-    "HTML v6.3 UI and source-aware effects proposal are prototypes, not installed native code."
+    "Native Gradle/Android test environment unavailable in this turn; no compile success may be asserted.",
+    "GitHub connector for workflow runs returns only PR-triggered runs, none for pushed main; classic commit statuses empty.",
+    "Browser HTML v6.3 is design evidence only; animation domain and full layout still require Kotlin integration."
   ],
   "safeguards": [
     "Persisted legacy variant strings still resolve to SPATIAL_EXPERIMENTAL; null/new defaults to FIXED.",
@@ -66,5 +86,5 @@
     "Experimental infinite canvas only via global workspace controls, not fixed task navigation.",
     "Icon-only compact controls retain content descriptions and explanatory long-press tooltips."
   ],
-  "updated_at": "2026-10-13T21:02:00+08:00"
+  "updated_at": "2026-10-13T22:05:00+08:00"
 }
