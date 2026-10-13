@@ -2208,10 +2208,11 @@ private fun InlineEffectsEditor(
     val t2 = fields.t2
     val t3 = fields.t3
     val t4 = fields.t4
+    val sourceStale = fxDraft.baseSource != event.text
     val sourceConflict = fxDraft.conflict(event.text)
     val blurNumber = blur.toDoubleOrNull()
     val blurIsValid = blur.isBlank() ||
-        (blurNumber != null && blurNumber.isFinite() && blurNumber >= 0.0)
+        (blurNumber != null && blurNumber.isFinite() && blurNumber in 0.0..20.0)
     val simpleIn = fadeIn.toIntOrNull()
     val simpleOut = fadeOut.toIntOrNull()
     val complexNumbers = listOf(a1, a2, a3, t1, t2, t3, t4).map { it.toIntOrNull() }
@@ -2229,7 +2230,7 @@ private fun InlineEffectsEditor(
     }
 
     fun previewVisual(value: Double? = blurNumber, nextSoft: Boolean = softEntry) {
-        if (!fxDraft.conflict(event.text) && blurIsValid) {
+        if (!sourceStale && blurIsValid) {
             viewModel.previewEventVisualEffectsIfSourceMatches(
                 event.id, event.text, value, nextSoft,
             )
@@ -2237,7 +2238,7 @@ private fun InlineEffectsEditor(
     }
 
     fun commitVisual() {
-        if (sourceConflict || !blurIsValid) return
+        if (sourceStale || !blurIsValid) return
         val nextSource = EventOverrideEditor.updateVisualEffects(
             event.text, blurNumber, softEntry,
         )
@@ -2249,7 +2250,7 @@ private fun InlineEffectsEditor(
     }
 
     fun commitFade() {
-        if (sourceConflict || !fadeIsValid) return
+        if (sourceStale || !fadeIsValid) return
         val complex = if (fadeMode == "fade") {
             AssComplexFade(
                 complexNumbers[0]!!, complexNumbers[1]!!, complexNumbers[2]!!,
@@ -2316,7 +2317,7 @@ private fun InlineEffectsEditor(
                 Spacer(Modifier.weight(1f))
                 Button(
                     onClick = ::commitVisual,
-                    enabled = blurIsValid && !sourceConflict,
+                    enabled = blurIsValid && !sourceStale,
                     modifier = Modifier.testTag("effect-blur-apply"),
                 ) { Text("应用视觉效果") }
             }
@@ -2353,7 +2354,7 @@ private fun InlineEffectsEditor(
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                 Button(
                     onClick = ::commitFade,
-                    enabled = fadeIsValid && !sourceConflict,
+                    enabled = fadeIsValid && !sourceStale,
                     modifier = Modifier.testTag("effect-fade-apply"),
                 ) { Text("应用 Fade") }
             }
