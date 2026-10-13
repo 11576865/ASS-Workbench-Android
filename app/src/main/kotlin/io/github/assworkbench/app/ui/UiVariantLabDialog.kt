@@ -14,15 +14,20 @@ import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Science
 import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TooltipBox
+import androidx.compose.material3.TooltipDefaults
+import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
@@ -35,17 +40,12 @@ internal fun UiVariantLabDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("工作区布局") },
+        title = { Text("工作区") },
         text = {
             Column(
                 modifier = Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Text(
-                    "可选择主界面或无限画布。旧布局名称使用无限画布，工具实例与对象绑定继续沿用；部分旧布局交互尚未提供。",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
                 UiVariantRegistry.entries.forEach { variant ->
                     UiVariantCard(
                         variant = variant,
@@ -62,6 +62,7 @@ internal fun UiVariantLabDialog(
     )
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun UiVariantCard(
     variant: WorkspacePresentationMode,
@@ -73,54 +74,52 @@ private fun UiVariantCard(
         UiVariantStatus.EXPERIMENTAL -> Icons.Filled.Science
         UiVariantStatus.ARCHIVED -> Icons.Filled.History
     }
-    Card(
-        modifier = Modifier.fillMaxWidth().testTag("ui-variant-${variant.name}"),
-        colors = CardDefaults.cardColors(
-            containerColor = if (selected) {
-                MaterialTheme.colorScheme.primaryContainer
-            } else {
-                MaterialTheme.colorScheme.surfaceContainer
-            },
-        ),
-        border = BorderStroke(
-            1.dp,
-            if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
-        ),
+    TooltipBox(
+        positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+        tooltip = { PlainTooltip { Text(variant.description) } },
+        state = rememberTooltipState(),
     ) {
-        Column(
-            Modifier.fillMaxWidth().padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+        Card(
+            modifier = Modifier.fillMaxWidth().testTag("ui-variant-${variant.name}"),
+            colors = CardDefaults.cardColors(
+                containerColor = if (selected) {
+                    MaterialTheme.colorScheme.primaryContainer
+                } else {
+                    MaterialTheme.colorScheme.surfaceContainer
+                },
+            ),
+            border = BorderStroke(
+                1.dp,
+                if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
+            ),
         ) {
             Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(icon, null)
-                Column(Modifier.weight(1f)) {
-                    Text(variant.title, style = MaterialTheme.typography.titleSmall)
+                Icon(icon, contentDescription = null)
+                Text(
+                    variant.title,
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                if (variant.status == UiVariantStatus.EXPERIMENTAL) {
                     Text(
-                        variant.description,
-                        style = MaterialTheme.typography.bodySmall,
+                        "实验",
+                        style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                AssistChip(
-                    onClick = {},
-                    enabled = false,
-                    label = { Text(variant.status.label) },
-                )
-            }
-            if (selected) {
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Icon(Icons.Filled.CheckCircle, null)
-                    Text("当前使用", style = MaterialTheme.typography.labelLarge)
-                }
-            } else {
-                OutlinedButton(
-                    onClick = onSelect,
-                    modifier = Modifier.fillMaxWidth().testTag("ui-variant-use-${variant.name}"),
-                ) {
-                    Text("使用此界面")
+                if (selected) {
+                    Icon(Icons.Filled.CheckCircle, contentDescription = "当前使用")
+                } else {
+                    OutlinedButton(
+                        onClick = onSelect,
+                        modifier = Modifier.testTag("ui-variant-use-${variant.name}"),
+                    ) {
+                        Text("切换")
+                    }
                 }
             }
         }
