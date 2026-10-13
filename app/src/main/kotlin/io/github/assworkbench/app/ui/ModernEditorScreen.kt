@@ -2249,15 +2249,18 @@ private fun InlineEffectsEditor(
         }
     }
 
-    fun commitFade() {
-        if (sourceStale || !fadeIsValid) return
-        val complex = if (fadeMode == "fade") {
+    fun selectedComplexFade(): AssComplexFade? =
+        if (fadeMode == "fade" && fadeIsValid) {
             AssComplexFade(
                 complexNumbers[0]!!, complexNumbers[1]!!, complexNumbers[2]!!,
                 complexNumbers[3]!!, complexNumbers[4]!!,
                 complexNumbers[5]!!, complexNumbers[6]!!,
             )
         } else null
+
+    fun commitFade() {
+        if (sourceStale || !fadeIsValid) return
+        val complex = selectedComplexFade()
         val nextSource = when (fadeMode) {
             "none" -> AssAnimationSemantic.removeFade(event.text)
             "fad" -> AssAnimationSemantic.patchSimpleFade(event.text, simpleIn!!, simpleOut!!)
@@ -2351,12 +2354,26 @@ private fun InlineEffectsEditor(
                 }
                 Text("α 0=实 / 255=透 · T=Event ms", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                TextButton(
+                    onClick = {
+                        viewModel.previewEventFadeIfSourceMatches(
+                            event.id, event.text, fadeMode,
+                            simpleIn, simpleOut, selectedComplexFade(),
+                        )
+                    },
+                    enabled = fadeIsValid && !sourceStale,
+                    modifier = Modifier.testTag("effect-fade-preview"),
+                ) { Text("预览") }
                 Button(
                     onClick = ::commitFade,
                     enabled = fadeIsValid && !sourceStale,
                     modifier = Modifier.testTag("effect-fade-apply"),
-                ) { Text("应用 Fade") }
+                ) { Text("应用") }
             }
 
             Divider()
