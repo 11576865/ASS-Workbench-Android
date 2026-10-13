@@ -1,0 +1,55 @@
+{
+  "packet_version": 1,
+  "packet_id": "ci-11576865-ASS-Workbench-Android-38411351159-1",
+  "status": "pending",
+  "record_type": "ci_failure",
+  "title": "Android Emulator Regression: failure",
+  "summary": "Tracked CI workflow did not complete successfully. Source adapter captured failed job/step evidence when available.",
+  "source_repository": "11576865/ASS-Workbench-Android",
+  "source_event": "workflow_run",
+  "source_ref": "main",
+  "source_sha": "a41644dab1642fc652f1703fa50f3cd97fa584c1",
+  "source_url": "https://github.com/11576865/ASS-Workbench-Android/actions/runs/38411351159",
+  "created_at": "2026-10-13T14:14:59+00:00",
+  "dedupe_key": "workflow_run:11576865/ASS-Workbench-Android:38411351159:1",
+  "routing_hints": [
+    "interface-grammar",
+    "operations",
+    "red-reason",
+    "reliability"
+  ],
+  "evidence": {
+    "workflow": "Android Emulator Regression",
+    "run_id": "38411351159",
+    "run_attempt": "1",
+    "conclusion": "failure",
+    "trigger_event": "push",
+    "failed_jobs": [
+      {
+        "id": 115344542148,
+        "name": "editor-regression",
+        "conclusion": "failure"
+      },
+      {
+        "id": 115345335850,
+        "name": "emulator-evidence",
+        "conclusion": "failure"
+      }
+    ],
+    "failed_steps": [
+      {
+        "job": "editor-regression",
+        "number": 12,
+        "name": "Run editor regression suite on Android Emulator",
+        "conclusion": "failure"
+      },
+      {
+        "job": "emulator-evidence",
+        "number": 3,
+        "name": "Read compact evidence from this run attempt",
+        "conclusion": "failure"
+      }
+    ],
+    "capture_error": ""
+  }
+}
