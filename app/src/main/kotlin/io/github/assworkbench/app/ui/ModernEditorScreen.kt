@@ -2209,7 +2209,15 @@ private fun InlineEffectsEditor(
     fun previewVisual(value: Double? = blur.toDoubleOrNull()) {
         viewModel.previewEventVisualEffects(event.id, value, softEntry)
     }
-    fun commitVisual() { viewModel.applyEventVisualEffects(event.id, blur.toDoubleOrNull(), softEntry) }
+    val blurNumber = blur.toDoubleOrNull()
+    val blurIsValid = blur.isBlank() || (blurNumber != null && blurNumber.isFinite() && blurNumber >= 0.0)
+    fun commitVisual() {
+        if (blurIsValid) {
+            viewModel.applyEventVisualEffectsIfSourceMatches(
+                event.id, event.text, blurNumber, softEntry,
+            )
+        }
+    }
 
     DisposableEffect(event.id) {
         onDispose { viewModel.clearTransientPreview("effects:${event.id}") }
@@ -2236,7 +2244,11 @@ private fun InlineEffectsEditor(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 FilterChip(selected = softEntry, onClick = { softEntry = !softEntry; previewVisual() }, label = { Text("Soft Entry · 160ms") })
                 Spacer(Modifier.weight(1f))
-                Button(onClick = ::commitVisual) { Text("应用视觉效果") }
+                Button(
+                    onClick = ::commitVisual,
+                    enabled = blurIsValid,
+                    modifier = Modifier.testTag("effect-blur-apply"),
+                ) { Text("应用视觉效果") }
             }
 
             Divider()
