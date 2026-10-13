@@ -2638,14 +2638,14 @@ private fun InlineTransformCard(
                             )
                             val nextSource = AssAnimationSemantic.patchTransform(eventSourceText, index, candidate)
                             if (nextSource != eventSourceText) {
-                                viewModel.setEventTransform(eventId, index, candidate)
+                                if (!viewModel.setEventTransformIfSourceMatches(
+                                        eventId, index, eventSourceText, candidate,
+                                    )) return@Button
+                                draft.acknowledgeCommittedSource(nextSource, fields)
+                            } else {
+                                // A semantically unchanged source needs no Undo transaction.
+                                draft.reset(eventSourceText, TransformDraftFields.from(transform))
                             }
-                            // Never treat unchanged/failed canonical writes as a new revision.
-                            draft.reset(
-                                if (nextSource == eventSourceText) eventSourceText else nextSource,
-                                if (nextSource == eventSourceText) TransformDraftFields.from(transform)
-                                else fields,
-                            )
                         },
                     ) { Text("应用 Transform") }
                 }
