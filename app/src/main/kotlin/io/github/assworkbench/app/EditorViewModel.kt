@@ -4065,6 +4065,24 @@ class EditorViewModel(application: Application, private val savedStateHandle: Sa
         }
     }
 
+    /**
+     * Non-committal rendering must not project an old editor snapshot over a
+     * newer canonical Raw ASS Event. Final writes are separately source-guarded.
+     */
+    fun previewEventVisualEffectsIfSourceMatches(
+        id: Long,
+        expectedSource: String,
+        blur: Double?,
+        softEntry: Boolean,
+    ) {
+        val current = _state.value.document.events.firstOrNull { it.id == id }
+        if (current?.text != expectedSource) {
+            clearTransientPreview("effects:$id")
+            return
+        }
+        previewEventVisualEffects(id, blur, softEntry)
+    }
+
     fun previewEventVisualEffects(id: Long, blur: Double?, softEntry: Boolean) {
         val before = _state.value.document
         val preview = withEventVisualEffects(before, id, blur, softEntry)
