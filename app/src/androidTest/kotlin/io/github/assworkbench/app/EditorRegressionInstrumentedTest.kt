@@ -1715,6 +1715,30 @@ class EditorRegressionInstrumentedTest {
     }
 
     @Test
+    fun blurApplyDoesNotOverwriteAnExternallyEditedEvent() {
+        restoreRecovery()
+        val original = "{\\pos(12,34)}Recovered line"
+        val changed = "{\\pos(50,60)}Recovered line"
+        composeRule.runOnIdle {
+            viewModel.updateEventText(1L, original)
+            viewModel.updateEventText(1L, changed)
+            val before = viewModel.state.value.document
+            assertFalse(viewModel.applyEventVisualEffectsIfSourceMatches(
+                1L, original, 2.5, false,
+            ))
+            assertEquals(before, viewModel.state.value.document)
+            assertTrue(viewModel.applyEventVisualEffectsIfSourceMatches(
+                1L, changed, 2.5, false,
+            ))
+            val output = viewModel.state.value.document.events.first { it.id == 1L }.text
+            assertTrue(output.contains("\\pos(50,60)"))
+            assertTrue(output.contains("\\blur"))
+            viewModel.undo()
+            assertEquals(before, viewModel.state.value.document)
+        }
+    }
+
+    @Test
     fun staleTransformSourceIsRejectedWithoutOverwritingOtherRawEdits() {
         restoreRecovery()
         val baseline = "{\\t(120,780,\\fscx140)}Recovered line"
