@@ -26,6 +26,29 @@ class WorkbenchToolCatalogTest {
         assertEquals(WorkbenchTool.STYLE, WorkbenchTask.TYPESETTING.toolFor(WorkbenchTool.TEXT))
     }
 
+    @Test fun contextualTaskMenuExposesSpecialistToolsWithoutNewKeys() {
+        assertEquals(
+            listOf(WorkbenchTool.TEXT, WorkbenchTool.EVENT),
+            contextualToolsFor(WorkbenchTool.TEXT),
+        )
+        assertEquals(
+            listOf(WorkbenchTool.TIMELINE, WorkbenchTool.FRAMES),
+            contextualToolsFor(WorkbenchTool.FRAMES),
+        )
+        assertEquals(
+            listOf(WorkbenchTool.STYLE, WorkbenchTool.POSITION, WorkbenchTool.VECTOR_CLIP),
+            contextualToolsFor(WorkbenchTool.POSITION),
+        )
+        assertEquals(
+            listOf(WorkbenchTool.EFFECTS, WorkbenchTool.KARAOKE),
+            contextualToolsFor(WorkbenchTool.KARAOKE),
+        )
+        assertTrue(contextualToolsFor(WorkbenchTool.SUBTITLES).isEmpty())
+        assertTrue(contextualToolsFor(WorkbenchTool.PROJECT).isEmpty())
+        assertTrue(contextualToolsFor(WorkbenchTool.CAPABILITIES).isEmpty())
+        assertTrue(contextualToolsFor(WorkbenchTool.FONTS).isEmpty())
+    }
+
     @Test fun subtitleNavigationDoesNotOfferThePreviousInspectorTools() {
         assertEquals(listOf(WorkbenchTool.SUBTITLES), fixedNavigationTools(WorkbenchToolGroup.NAVIGATION))
     }
