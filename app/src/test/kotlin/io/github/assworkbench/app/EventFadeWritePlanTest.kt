@@ -42,6 +42,7 @@ class EventFadeWritePlanTest {
         assertNull(proposeEventFadeSource(source, "fad", null, 100))
         assertNull(proposeEventFadeSource(source, "fade"))
         assertNull(proposeEventFadeSource(source, "unsupported"))
+        assertNull(proposeEventFadeSource("{\\fad(50,100)Broken", "fad", 200, 300))
     }
 
     @Test fun unchangedAndClearProposalDoNotCreateDifferentRawText() {
