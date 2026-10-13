@@ -83,6 +83,9 @@ internal class TransformDraftStore(
             TransformDraftEntry(source, TransformDraftFields.from(transform))
         }
 
+    fun hasDirtyInEvent(eventId: Long): Boolean =
+        entries.any { (key, entry) -> key.eventId == eventId && entry.dirty }
+
     fun retainEvents(ids: Set<Long>) {
         entries.keys.retainAll { it.eventId in ids }
     }
