@@ -4076,6 +4076,30 @@ class EditorViewModel(application: Application, private val savedStateHandle: Sa
         }
     }
 
+    /**
+     * UI write boundary: a Blur slider can outlive the original Event source.
+     * Reject stale proposals instead of stripping tags from a newer Raw edit.
+     */
+    fun applyEventVisualEffectsIfSourceMatches(
+        id: Long,
+        expectedSource: String,
+        blur: Double?,
+        softEntry: Boolean,
+    ): Boolean {
+        var committed = false
+        editDocument("已更新字幕 #" + id + " 的 Blur / Soft Entry。") { doc ->
+            val event = doc.events.firstOrNull { it.id == id }
+            if (event == null || event.text != expectedSource) {
+                doc
+            } else {
+                val updated = withEventVisualEffects(doc, id, blur, softEntry)
+                committed = updated != doc
+                updated
+            }
+        }
+        return committed
+    }
+
     fun applyEventVisualEffects(id: Long, blur: Double?, softEntry: Boolean) {
         editDocument("已更新字幕 #" + id + " 的 Blur / Soft Entry。") { doc ->
             withEventVisualEffects(doc, id, blur, softEntry)
