@@ -4182,6 +4182,34 @@ class EditorViewModel(application: Application, private val savedStateHandle: Sa
         }
     }
 
+    /**
+     * Source-guarded deletion for UI. The index is an ordinal inside the source;
+     * if another author changed the raw Event, do not remove a different tag.
+     */
+    fun removeEventTransformIfSourceMatches(
+        id: Long,
+        index: Int,
+        expectedSource: String,
+    ): Boolean {
+        var committed = false
+        editDocument("已移除字幕 #" + id + " 的 Transform #" + (index + 1) + "。") { doc ->
+            val current = doc.events.firstOrNull { it.id == id }
+            if (current == null || current.text != expectedSource) {
+                doc
+            } else {
+                val rewritten = AssAnimationSemantic.removeTransform(current.text, index)
+                if (rewritten == current.text) doc
+                else {
+                    committed = true
+                    doc.copy(events = doc.events.map { event ->
+                        if (event.id == id) event.copy(text = rewritten) else event
+                    })
+                }
+            }
+        }
+        return committed
+    }
+
     fun removeEventTransform(id: Long, index: Int) {
         editDocument("已移除字幕 #" + id + " 的 Transform #" + (index + 1) + "。") { doc ->
             doc.copy(events = doc.events.map { event ->
