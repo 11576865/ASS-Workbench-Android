@@ -3,7 +3,7 @@
   "id": "ass-native-ui-minimal-rollout-20261013",
   "goal": "将经过评审的平板优先、少字主义 ASS UI 分阶段接入正式 Android Compose 工程；保留完整 18 工具目录、Raw 保真、Karaoke/动画语义与独立实验 Host。",
   "status": "in_progress",
-  "current_bounded_work_unit": "Native Transform interval handles + exact timing fallback — WORK_UNIT_COMPLETE",
+  "current_bounded_work_unit": "Session-owned Transform draft resilience and source-guarded commit — WORK_UNIT_COMPLETE",
   "completed_units": [
     {
       "name": "FIXED is the new session default",
@@ -96,29 +96,65 @@
     {
       "name": "Android instrumentation: interval visibility and fractional exact fallback",
       "commit": "5768416cdcc0629a571b3dd93ce1d3672fcc9086"
+    },
+    {
+      "name": "Transform per-session per-Event/index draft store with save/restore and source conflict tracking",
+      "commit": "6d58a081c14055afea2b1bbf9a29e64ebf066613"
+    },
+    {
+      "name": "Compose Transform editors consume session draft, block conflicts and expose reset",
+      "commit": "2a1511c1568b970358ac349c15fd26e2c345c706"
+    },
+    {
+      "name": "JVM Transform draft navigation/conflict/save/session tests",
+      "commit": "b4e571e6f6161ee811afb9e24328d6b5d01e6f80"
+    },
+    {
+      "name": "Block preview through conflicting old Transform source",
+      "commit": "6c87fc71db3cbd347cc54c96b33fa803d5fd5ab7"
+    },
+    {
+      "name": "Native guarded ViewModel Transform write",
+      "commit": "72f3e53c6ded79d0aa4d7990bf6591fbf859cf52"
+    },
+    {
+      "name": "Native guarded Transform UI acknowledgement and conflict race protection",
+      "commit": "05e55f1f41925f77f9e13521e43d39fdbb310c32"
+    },
+    {
+      "name": "Native instrumentation stale source rejection and Undo check",
+      "commit": "fe85ede904d859c6f57fe2804f21e9aa1c2297db"
+    },
+    {
+      "name": "Native instrumentation cross-tool/Host draft retention and external conflict",
+      "commit": "f4843ea3642ca6690db05bdf33ae0c94d4201ccc"
+    },
+    {
+      "name": "Clarify snapshot record width",
+      "commit": "4091a9ebc19288d9bf1e0de15eab1e74b7d01745"
     }
   ],
   "next_units": [
-    "Obtain native Gradle build, JVM tests and emulator visual/gesture evidence on exact main SHA; fix concrete failures.",
-    "Audit Transform draft ownership across Event focus/tool/Host transitions and typed fields; do not lose uncommitted edits.",
-    "Connect renderer-backed real ASS source/preview and native save/reopen with correct Undo and unknown tag preservation.",
-    "Review tablet precision manipulator touch target/accessibility after actual Compose screenshots."
+    "Build and run exact main SHA with Android CI and tablet emulator; repair any Kotlin, Compose or instrumentation errors visible from logs.",
+    "Audit effects Fade/Blur and Karaoke drafts for the same source-guarded session resilience; avoid sweeping new features.",
+    "Verify renderer-backed ASS preview and save/reopen Unknown-tag preservation using real media and fonts.",
+    "Measure touch target, IME and visual density on tablet portrait and landscape."
   ],
   "repository": "11576865/ASS-Workbench-Android",
   "branch": "main",
   "pull_request": null,
-  "latest_durable_code_commit": "5768416cdcc0629a571b3dd93ce1d3672fcc9086",
+  "latest_durable_code_commit": "f4843ea3642ca6690db05bdf33ae0c94d4201ccc",
   "external_validation": {
-    "android_ci": "PENDING_EXTERNAL_VALIDATION (empty combined-status response)",
-    "emulator_regression": "PENDING_EXTERNAL_VALIDATION (no PR-triggered runs on direct main commit)",
+    "android_ci": "PENDING_EXTERNAL_VALIDATION — combined status returned [] for latest main commit",
+    "emulator_regression": "PENDING_EXTERNAL_VALIDATION — PR-triggered workflow lookup not applicable to main and returned []",
     "visual_capture": "PENDING_EXTERNAL_VALIDATION",
     "fontconfig_renderer": "NOT_REQUESTED_BY_THIS_UNIT",
-    "local_gradle": "NOT_EXECUTED (no accessible local Android toolchain)"
+    "local_gradle": "NOT_EXECUTED — local command runtime unavailable"
   },
   "blockers": [
-    "No successful native Gradle or emulator run observed for the new main commit.",
-    "RangeSlider UI semantics/gesture and actual libass preview require device validation.",
-    "Effects drafting via full panel recomposition remains a separate future state-resilience audit."
+    "Native Gradle/JVM and emulator instrumented suites not executed or confirmed; added tests are unverified.",
+    "Cross-host application state and Compose save/restore need device evidence; tests are a defined target, not acceptance.",
+    "Lossless arbitrary ASS tagging/rendering remains domain and libass-level follow-up."
   ],
   "safeguards": [
     "Persisted legacy variant strings still resolve to SPATIAL_EXPERIMENTAL; null/new defaults to FIXED.",
