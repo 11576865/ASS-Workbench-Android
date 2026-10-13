@@ -1672,6 +1672,41 @@ class EditorRegressionInstrumentedTest {
     }
 
     @Test
+    fun transformTimingHandlesAreDraftOnlyAndKeepExactFieldFallback() {
+        restoreRecovery()
+        composeRule.runOnIdle {
+            viewModel.updateEventText(1L, "{\\t(120,780,\\fscx140)}Recovered line")
+        }
+        composeRule.waitUntil(5_000) {
+            viewModel.state.value.document.events.first { it.id == 1L }.text
+                .contains("\\t(120,780,")
+        }
+        val before = viewModel.state.value.document
+        eventRow(1L).performClick()
+        openTool("EFFECTS")
+        composeRule.onNodeWithTag("effect-transform-entry")
+            .performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithTag("effect-transform-range-0")
+            .performScrollTo().assertIsDisplayed()
+        assertEquals(before, viewModel.state.value.document)
+
+        // Fractional timestamps remain editable in the exact fields, not
+        // silently rounded or represented by a one-millisecond slider.
+        composeRule.runOnIdle {
+            viewModel.updateEventText(1L, "{\\t(120.5,780.5,\\fscx140)}Recovered line")
+        }
+        composeRule.waitUntil(5_000) {
+            viewModel.state.value.document.events.first { it.id == 1L }.text
+                .contains("\\t(120.5,780.5,")
+        }
+        composeRule.onNodeWithTag("effect-transform-start-0")
+            .performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithTag("effect-transform-end-0")
+            .performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithTag("effect-transform-range-0").assertDoesNotExist()
+    }
+
+    @Test
     fun effectsPaneExposesSpatialFadeAuthoringWithoutMutatingDocument() {
         restoreRecovery()
         eventRow(1L).performClick()
