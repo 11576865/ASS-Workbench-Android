@@ -2224,6 +2224,7 @@ private fun InlineEffectsEditor(
                 range = 0f..20f,
                 step = 0.1,
                 supportingText = null,
+                testTagPrefix = "effect-blur",
                 onPreview = { previewVisual(it) },
                 onGestureActive = { active -> if (!active) commitVisual() },
             )
@@ -2234,7 +2235,7 @@ private fun InlineEffectsEditor(
             }
 
             Divider()
-            Text("Fade", style = MaterialTheme.typography.titleSmall)
+            Text("Fade", style = MaterialTheme.typography.titleSmall, modifier = Modifier.testTag("effect-fade-header"))
             if (animation.fadeConflict) {
                 Text("\\fad 与 \\fade 冲突 · 应用将替换", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
             }
@@ -2296,7 +2297,7 @@ private fun InlineTransformWorkspace(
     var addOpen by rememberSaveable(event.id) { mutableStateOf(false) }
     val malformedCount = transforms.count { it.malformed }
 
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+    Row(Modifier.fillMaxWidth().testTag("effect-transform-entry"), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text("Animation · \\t", style = MaterialTheme.typography.titleSmall)
             Text(
