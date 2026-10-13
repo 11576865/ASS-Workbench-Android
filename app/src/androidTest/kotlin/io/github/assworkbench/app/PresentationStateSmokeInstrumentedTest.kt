@@ -57,6 +57,26 @@ class PresentationStateSmokeInstrumentedTest {
         assertEquals(focus, viewModel.state.value.focusedEventId)
     }
 
+    @Test fun standardTaskContextMenuReachesSpecialistsWithoutChangingDocument() {
+        composeRule.activityRule.scenario.onActivity { it.restoreDeterministicFixture() }
+        composeRule.waitUntil(10_000) { viewModel.state.value.document.events.size == 2 }
+        val before = viewModel.state.value.document
+        val focus = viewModel.state.value.focusedEventId
+
+        // FIXED task bar exposes Position / Vector Clip directly next to Style.
+        composeRule.onNodeWithTag("fixed-context-tools").assertIsDisplayed().performClick()
+        composeRule.onNodeWithTag("fixed-context-POSITION").assertIsDisplayed().performClick()
+        composeRule.waitForIdle()
+        assertEquals(before, viewModel.state.value.document)
+        assertEquals(focus, viewModel.state.value.focusedEventId)
+
+        composeRule.onNodeWithTag("fixed-context-tools").assertIsDisplayed().performClick()
+        composeRule.onNodeWithTag("fixed-context-VECTOR_CLIP").assertIsDisplayed().performClick()
+        composeRule.waitForIdle()
+        assertEquals(before, viewModel.state.value.document)
+        assertEquals(focus, viewModel.state.value.focusedEventId)
+    }
+
     @Test fun spatialCameraAndOverlayDoNotEditDocument() {
         composeRule.activityRule.scenario.onActivity { it.restoreDeterministicFixture() }
         composeRule.waitUntil(10_000) { viewModel.state.value.document.events.size == 2 }
