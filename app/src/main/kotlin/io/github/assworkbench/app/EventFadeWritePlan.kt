@@ -14,7 +14,10 @@ internal fun proposeEventFadeSource(
     fadeInMs: Int? = null,
     fadeOutMs: Int? = null,
     complex: AssComplexFade? = null,
-): String? = when (mode) {
+): String? {
+    // Malformed leading overrides cannot be safely re-authored.
+    if (AssAnimationSemantic.inspect(source).malformedLeadingBlock) return null
+    return when (mode) {
     "none" -> AssAnimationSemantic.removeFade(source)
     "fad" -> {
         if (fadeInMs == null || fadeOutMs == null ||
@@ -35,4 +38,5 @@ internal fun proposeEventFadeSource(
         }
     }
     else -> null
+}
 }
