@@ -1734,6 +1734,8 @@ class EditorRegressionInstrumentedTest {
         openTool("EFFECTS")
         composeRule.onNodeWithTag("effect-fade-in")
             .performScrollTo().assertTextContains("240")
+        composeRule.onNodeWithTag("effect-fade-preview")
+            .performScrollTo().assertIsEnabled()
 
         composeRule.runOnIdle {
             viewModel.updateEventText(1L, "{\\pos(60,80)\\fad(120,180)}Recovered line")
@@ -1771,10 +1773,26 @@ class EditorRegressionInstrumentedTest {
                 complex = io.github.assworkbench.domain.AssComplexFade(0, 255, 0, 500, 200, 800, 1000),
             ))
             assertEquals(before, viewModel.state.value.document)
+            viewModel.previewEventFadeIfSourceMatches(
+                1L, original, "fad", 200, 300,
+            )
+            assertEquals(null, viewModel.state.value.previewDocument)
+            viewModel.previewEventFadeIfSourceMatches(
+                1L, changed, "fad", -1, 300,
+            )
+            assertEquals(null, viewModel.state.value.previewDocument)
+            viewModel.previewEventFadeIfSourceMatches(
+                1L, changed, "fad", 200, 300,
+            )
+            val previewRaw = viewModel.state.value.previewDocument
+                ?.events?.first { it.id == 1L }?.text
+            assertTrue(previewRaw?.contains("\\fad(200,300)") == true)
+            assertEquals(before, viewModel.state.value.document)
             assertTrue(viewModel.applyEventFadeIfSourceMatches(
                 1L, changed, "fad", 200, 300,
             ))
             val raw = viewModel.state.value.document.events.first { it.id == 1L }.text
+            assertEquals(previewRaw, raw)
             assertTrue(raw.contains("\\pos(50,60)"))
             assertTrue(raw.contains("\\blur2"))
             assertTrue(raw.contains("\\fad(200,300)"))
