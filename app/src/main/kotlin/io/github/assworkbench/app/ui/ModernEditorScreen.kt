@@ -2231,7 +2231,7 @@ private fun InlineEffectsEditor(
                 supportingText = null,
                 testTagPrefix = "effect-blur",
                 onPreview = { previewVisual(it) },
-                onGestureActive = { active -> if (!active) commitVisual() },
+                // Blur gesture remains preview-only; the adjacent Apply button commits.
             )
             Row(verticalAlignment = Alignment.CenterVertically) {
                 FilterChip(selected = softEntry, onClick = { softEntry = !softEntry; previewVisual() }, label = { Text("Soft Entry · 160ms") })
