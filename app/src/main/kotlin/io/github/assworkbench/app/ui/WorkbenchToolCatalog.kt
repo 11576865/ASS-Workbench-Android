@@ -150,3 +150,13 @@ internal val WorkbenchTool.task: WorkbenchTask
         WorkbenchToolGroup.EFFECTS -> WorkbenchTask.EFFECTS
         else -> WorkbenchTask.OTHER
     }
+
+/**
+ * Fast access to specialized tools in the current authoring task.
+ * This is only a projection of the persisted tool catalog, never a new registry.
+ */
+internal fun contextualToolsFor(activeTool: WorkbenchTool): List<WorkbenchTool> {
+    val task = activeTool.task
+    if (task == WorkbenchTask.OTHER || task == WorkbenchTask.SUBTITLES) return emptyList()
+    return WorkbenchTool.entries.filter { it.task == task }
+}
