@@ -2557,7 +2557,7 @@ private fun InlineTransformCard(
 
                 // Handles are offered only for an integral in-Event range.
                 // Text fields remain authoritative for all other legal ASS intervals.
-                if (handleRange != null) {
+                if (handleRange != null && !sourceConflict) {
                     RangeSlider(
                         value = handleRange.startMs.toFloat()..handleRange.endMs.toFloat(),
                         onValueChange = { range ->
@@ -2568,7 +2568,7 @@ private fun InlineTransformCard(
                             updateFields { old -> old.copy(start = left.toString(), end = right.toString()) }
                             pendingHandleRange = TransformTimingHandleRange(left, right)
                             val now = android.os.SystemClock.uptimeMillis()
-                            if (accelValid && tagsValid && now - lastHandlePreviewAt >= 70L) {
+                            if (!draft.conflict(eventSourceText) && accelValid && tagsValid && now - lastHandlePreviewAt >= 70L) {
                                 lastHandlePreviewAt = now
                                 viewModel.previewEventTransform(
                                     eventId, index,
@@ -2578,7 +2578,7 @@ private fun InlineTransformCard(
                         },
                         onValueChangeFinished = {
                             val finalRange = pendingHandleRange
-                            if (finalRange != null && accelValid && tagsValid) {
+                            if (!draft.conflict(eventSourceText) && finalRange != null && accelValid && tagsValid) {
                                 viewModel.previewEventTransform(
                                     eventId, index,
                                     AssTransform(
@@ -2600,7 +2600,7 @@ private fun InlineTransformCard(
                     tags = tags,
                     onTagsChange = { nextTags ->
                         updateFields { old -> old.copy(tags = nextTags) }
-                        if (timingPairValid && accelValid && nextTags.trimStart().startsWith("\\")) {
+                        if (!draft.conflict(eventSourceText) && timingPairValid && accelValid && nextTags.trimStart().startsWith("\\")) {
                             viewModel.previewEventTransform(
                                 eventId,
                                 index,
