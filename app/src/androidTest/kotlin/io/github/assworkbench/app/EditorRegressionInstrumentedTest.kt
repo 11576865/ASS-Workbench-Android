@@ -1751,6 +1751,33 @@ class EditorRegressionInstrumentedTest {
     }
 
     @Test
+    fun malformedLeadingRawCannotBeUsedForNativeFadeOrBlurWrites() {
+        restoreRecovery()
+        val malformed = "{\\fad(120,180)Broken"
+        composeRule.runOnIdle {
+            viewModel.updateEventText(1L, malformed)
+            val before = viewModel.state.value.document
+            viewModel.previewEventFadeIfSourceMatches(1L, malformed, "fad", 200, 300)
+            assertEquals(null, viewModel.state.value.previewDocument)
+            assertFalse(viewModel.applyEventFadeIfSourceMatches(1L, malformed, "fad", 200, 300))
+            viewModel.previewEventVisualEffectsIfSourceMatches(1L, malformed, 2.5, false)
+            assertEquals(null, viewModel.state.value.previewDocument)
+            assertFalse(viewModel.applyEventVisualEffectsIfSourceMatches(1L, malformed, 2.5, false))
+            assertEquals(before, viewModel.state.value.document)
+        }
+        eventRow(1L).performClick()
+        openTool("EFFECTS")
+        composeRule.onNodeWithTag("effect-fx-malformed")
+            .performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithTag("effect-fade-preview")
+            .performScrollTo().assertIsNotEnabled()
+        composeRule.onNodeWithTag("effect-fade-apply")
+            .performScrollTo().assertIsNotEnabled()
+        composeRule.onNodeWithTag("effect-blur-apply")
+            .performScrollTo().assertIsNotEnabled()
+    }
+
+    @Test
     fun fadeCommitRejectsStaleSourceAndInvalidParametersWithoutChangingDocument() {
         restoreRecovery()
         val original = "{\\pos(12,34)\\blur2\\fad(120,180)}Recovered line"
