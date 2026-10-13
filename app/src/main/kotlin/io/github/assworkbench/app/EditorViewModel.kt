@@ -4104,6 +4104,7 @@ class EditorViewModel(application: Application, private val savedStateHandle: Sa
         blur: Double?,
         softEntry: Boolean,
     ): Boolean {
+        if (blur != null && (!blur.isFinite() || blur !in 0.0..20.0)) return false
         var committed = false
         editDocument("已更新字幕 #" + id + " 的 Blur / Soft Entry。") { doc ->
             val event = doc.events.firstOrNull { it.id == id }
