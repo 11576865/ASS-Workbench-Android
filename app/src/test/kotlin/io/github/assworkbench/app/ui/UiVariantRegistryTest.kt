@@ -9,6 +9,10 @@ class UiVariantRegistryTest {
         assertSame(WorkspacePresentationMode.FIXED, UiVariantRegistry.default)
     }
 
+    @Test fun projectsWithoutPersistedModeStartInStableMainEditor() {
+        assertSame(WorkspacePresentationMode.FIXED, UiVariantRegistry.resolve(null))
+    }
+
     @Test fun onlyStableMainAndUnifiedCanvasAreSelectable() {
         assertEquals(
             listOf(WorkspacePresentationMode.FIXED, WorkspacePresentationMode.SPATIAL_EXPERIMENTAL),
