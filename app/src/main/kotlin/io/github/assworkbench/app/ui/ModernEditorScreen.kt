@@ -67,6 +67,7 @@ import io.github.assworkbench.app.BuildConfig
 import io.github.assworkbench.app.ProjectFileCodec
 import io.github.assworkbench.app.EditorState
 import io.github.assworkbench.app.EditorViewModel
+import io.github.assworkbench.app.proposeEventFadeSource
 import io.github.assworkbench.app.EditorViewModelUiActions
 import io.github.assworkbench.app.toEditorUiState
 import io.github.assworkbench.app.WaveformLiteState
@@ -2242,7 +2243,8 @@ private fun InlineEffectsEditor(
         val nextSource = EventOverrideEditor.updateVisualEffects(
             event.text, blurNumber, softEntry,
         )
-        if (nextSource == event.text || viewModel.applyEventVisualEffectsIfSourceMatches(
+        if (nextSource == event.text) return
+        if (viewModel.applyEventVisualEffectsIfSourceMatches(
                 event.id, event.text, blurNumber, softEntry,
             )) {
             fxDraft.acknowledge(nextSource, appliedBlur = true)
@@ -2261,12 +2263,11 @@ private fun InlineEffectsEditor(
     fun commitFade() {
         if (sourceStale || !fadeIsValid) return
         val complex = selectedComplexFade()
-        val nextSource = when (fadeMode) {
-            "none" -> AssAnimationSemantic.removeFade(event.text)
-            "fad" -> AssAnimationSemantic.patchSimpleFade(event.text, simpleIn!!, simpleOut!!)
-            else -> AssAnimationSemantic.patchComplexFade(event.text, complex!!)
-        }
-        if (nextSource == event.text || viewModel.applyEventFadeIfSourceMatches(
+        val nextSource = proposeEventFadeSource(
+            event.text, fadeMode, simpleIn, simpleOut, complex,
+        ) ?: return
+        if (nextSource == event.text) return
+        if (viewModel.applyEventFadeIfSourceMatches(
                 event.id, event.text, fadeMode, simpleIn, simpleOut, complex,
             )) {
             fxDraft.acknowledge(nextSource, appliedBlur = false)
