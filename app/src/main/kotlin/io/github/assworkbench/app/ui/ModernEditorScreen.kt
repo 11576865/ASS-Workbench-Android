@@ -2443,6 +2443,12 @@ private fun InlineTransformCard(
     var end by remember(transform.rawValue) { mutableStateOf(transform.endMs?.toString().orEmpty()) }
     var accel by remember(transform.rawValue) { mutableStateOf(transform.accel?.toString().orEmpty()) }
     var tags by remember(transform.rawValue) { mutableStateOf(transform.tags) }
+    var pendingHandleRange by remember(eventId, index, transform.rawValue) {
+        mutableStateOf<TransformTimingHandleRange?>(null)
+    }
+    var lastHandlePreviewAt by remember(eventId, index, transform.rawValue) {
+        mutableLongStateOf(0L)
+    }
 
     val startValue = start.takeIf { it.isNotBlank() }?.toDoubleOrNull()
     val endValue = end.takeIf { it.isNotBlank() }?.toDoubleOrNull()
@@ -2452,6 +2458,7 @@ private fun InlineTransformCard(
     val accelValid = accel.isBlank() || (accelValue != null && accelValue > 0.0)
     val tagsValid = tags.trimStart().startsWith("\\")
     val canApply = !transform.malformed && timingPairValid && accelValid && tagsValid
+    val handleRange = transformTimingHandleRange(start, end, eventDurationMs)
 
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -2468,12 +2475,12 @@ private fun InlineTransformCard(
                     Text("删除")
                 }
             }
-            val effectiveStart = transform.startMs?.toLong()?.coerceAtLeast(0L) ?: 0L
-            val effectiveEnd = transform.endMs?.toLong()?.coerceAtMost(eventDurationMs) ?: eventDurationMs
-            val playheadInside = !transform.malformed && previewLocalMs in effectiveStart..effectiveEnd
+            val effectiveStart = startValue?.takeIf { it.isFinite() }?.toLong() ?: 0L
+            val effectiveEnd = endValue?.takeIf { it.isFinite() }?.toLong() ?: eventDurationMs
+            val playheadInside = !transform.malformed && timingPairValid &&
+                previewLocalMs in effectiveStart..effectiveEnd
             Text(
-                (if (playheadInside) "播放头在此 Transform 范围内" else "播放头在范围外") +
-                    " · " + effectiveStart + "–" + effectiveEnd + " ms",
+                (if (playheadInside) "● " else "○ ") + effectiveStart + "–" + effectiveEnd + " ms",
                 style = MaterialTheme.typography.labelSmall,
                 color = if (playheadInside) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -2490,9 +2497,69 @@ private fun InlineTransformCard(
                 )
             } else {
                 Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro)) {
-                    OutlinedTextField(start, { start = it }, label = { Text("Start ms") }, singleLine = true, modifier = Modifier.weight(1f))
-                    OutlinedTextField(end, { end = it }, label = { Text("End ms") }, singleLine = true, modifier = Modifier.weight(1f))
-                    OutlinedTextField(accel, { accel = it }, label = { Text("Accel") }, singleLine = true, modifier = Modifier.weight(1f))
+                    OutlinedTextField(
+                        start,
+                        { start = it; pendingHandleRange = null; viewModel.clearTransientPreview("effects:$eventId") },
+                        label = { Text("Start ms") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f).testTag("effect-transform-start-$index"),
+                    )
+                    OutlinedTextField(
+                        end,
+                        { end = it; pendingHandleRange = null; viewModel.clearTransientPreview("effects:$eventId") },
+                        label = { Text("End ms") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f).testTag("effect-transform-end-$index"),
+                    )
+                    OutlinedTextField(
+                        accel,
+                        { accel = it; pendingHandleRange = null; viewModel.clearTransientPreview("effects:$eventId") },
+                        label = { Text("Accel") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+
+                // Handles are offered only for an integral in-Event range.
+                // Text fields remain authoritative for all other legal ASS intervals.
+                if (handleRange != null) {
+                    RangeSlider(
+                        value = handleRange.startMs.toFloat()..handleRange.endMs.toFloat(),
+                        onValueChange = { range ->
+                            val left = kotlin.math.round(range.start.toDouble()).toLong()
+                                .coerceIn(0L, eventDurationMs)
+                            val right = kotlin.math.round(range.endInclusive.toDouble()).toLong()
+                                .coerceIn(left, eventDurationMs)
+                            start = left.toString()
+                            end = right.toString()
+                            pendingHandleRange = TransformTimingHandleRange(left, right)
+                            val now = android.os.SystemClock.uptimeMillis()
+                            if (accelValid && tagsValid && now - lastHandlePreviewAt >= 70L) {
+                                lastHandlePreviewAt = now
+                                viewModel.previewEventTransform(
+                                    eventId, index,
+                                    AssTransform(left.toDouble(), right.toDouble(), accelValue, tags),
+                                )
+                            }
+                        },
+                        onValueChangeFinished = {
+                            val finalRange = pendingHandleRange
+                            if (finalRange != null && accelValid && tagsValid) {
+                                viewModel.previewEventTransform(
+                                    eventId, index,
+                                    AssTransform(
+                                        finalRange.startMs.toDouble(),
+                                        finalRange.endMs.toDouble(),
+                                        accelValue,
+                                        tags,
+                                    ),
+                                )
+                            }
+                            pendingHandleRange = null
+                        },
+                        valueRange = 0f..eventDurationMs.toFloat(),
+                        modifier = Modifier.fillMaxWidth().testTag("effect-transform-range-$index"),
+                    )
                 }
 
                 TransformVisualPropertyEditor(
@@ -2516,9 +2583,9 @@ private fun InlineTransformCard(
 
                 OutlinedTextField(
                     value = tags,
-                    onValueChange = { tags = it },
+                    onValueChange = { tags = it; viewModel.clearTransientPreview("effects:$eventId") },
                     label = { Text("Transform tags") },
-                    supportingText = { Text("留空 Start/End = 整个 Event；Accel 留空 = ASS 默认。Tags 必须以 \\ 开始。") },
+                    supportingText = null,
                     textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
                     minLines = 1,
                     maxLines = 3,
