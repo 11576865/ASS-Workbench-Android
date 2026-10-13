@@ -5,8 +5,8 @@ import org.junit.Assert.assertSame
 import org.junit.Test
 
 class UiVariantRegistryTest {
-    @Test fun defaultIsTheUnifiedInfiniteCanvas() {
-        assertSame(WorkspacePresentationMode.SPATIAL_EXPERIMENTAL, UiVariantRegistry.default)
+    @Test fun newSessionsUseStableMainEditor() {
+        assertSame(WorkspacePresentationMode.FIXED, UiVariantRegistry.default)
     }
 
     @Test fun onlyStableMainAndUnifiedCanvasAreSelectable() {
