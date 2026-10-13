@@ -2211,6 +2211,7 @@ private fun InlineEffectsEditor(
     val t4 = fields.t4
     val sourceStale = fxDraft.baseSource != event.text
     val sourceConflict = fxDraft.conflict(event.text)
+    val malformedSource = animation.malformedLeadingBlock
     val blurNumber = blur.toDoubleOrNull()
     val blurIsValid = blur.isBlank() ||
         (blurNumber != null && blurNumber.isFinite() && blurNumber in 0.0..20.0)
@@ -2239,7 +2240,7 @@ private fun InlineEffectsEditor(
     }
 
     fun commitVisual() {
-        if (sourceStale || !blurIsValid) return
+        if (sourceStale || malformedSource || !blurIsValid) return
         val nextSource = EventOverrideEditor.updateVisualEffects(
             event.text, blurNumber, softEntry,
         )
@@ -2261,7 +2262,7 @@ private fun InlineEffectsEditor(
         } else null
 
     fun commitFade() {
-        if (sourceStale || !fadeIsValid) return
+        if (sourceStale || malformedSource || !fadeIsValid) return
         val complex = selectedComplexFade()
         val nextSource = proposeEventFadeSource(
             event.text, fadeMode, simpleIn, simpleOut, complex,
@@ -2285,6 +2286,14 @@ private fun InlineEffectsEditor(
     ) {
         Column(Modifier.padding(WorkbenchDimens.Small), verticalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small)) {
             // Keep the daily Event controls above the advanced composition templates.
+            if (malformedSource) {
+                Text(
+                    "Raw 不完整 · 请先修正",
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.labelSmall,
+                    modifier = Modifier.testTag("effect-fx-malformed"),
+                )
+            }
             if (sourceConflict) {
                 Row(
                     Modifier.fillMaxWidth().testTag("effect-fx-conflict"),
@@ -2321,7 +2330,7 @@ private fun InlineEffectsEditor(
                 Spacer(Modifier.weight(1f))
                 Button(
                     onClick = ::commitVisual,
-                    enabled = blurIsValid && !sourceStale,
+                    enabled = blurIsValid && !sourceStale && !malformedSource,
                     modifier = Modifier.testTag("effect-blur-apply"),
                 ) { Text("应用视觉效果") }
             }
@@ -2367,12 +2376,12 @@ private fun InlineEffectsEditor(
                             simpleIn, simpleOut, selectedComplexFade(),
                         )
                     },
-                    enabled = fadeIsValid && !sourceStale,
+                    enabled = fadeIsValid && !sourceStale && !malformedSource,
                     modifier = Modifier.testTag("effect-fade-preview"),
                 ) { Text("预览") }
                 Button(
                     onClick = ::commitFade,
-                    enabled = fadeIsValid && !sourceStale,
+                    enabled = fadeIsValid && !sourceStale && !malformedSource,
                     modifier = Modifier.testTag("effect-fade-apply"),
                 ) { Text("应用") }
             }
