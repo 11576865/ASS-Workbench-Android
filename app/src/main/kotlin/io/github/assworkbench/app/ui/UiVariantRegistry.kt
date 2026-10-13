@@ -83,7 +83,9 @@ internal object UiVariantRegistry {
         WorkspacePresentationMode.SPATIAL_EXPERIMENTAL,
     )
 
-    val default: WorkspacePresentationMode = WorkspacePresentationMode.SPATIAL_EXPERIMENTAL
+    // The production editor opens in the stable host. The canvas remains opt-in.
+    // Do not change resolve(): persisted legacy workspace snapshots keep their migration route.
+    val default: WorkspacePresentationMode = WorkspacePresentationMode.FIXED
 
     fun resolve(persistedName: String?): WorkspacePresentationMode = when (persistedName) {
         WorkspacePresentationMode.FIXED.name -> WorkspacePresentationMode.FIXED
