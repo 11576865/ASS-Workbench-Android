@@ -1,6 +1,18 @@
 package io.github.assworkbench.app
 
+import android.view.View
+import androidx.test.espresso.Espresso.onView
+import androidx.test.espresso.UiController
+import androidx.test.espresso.ViewAction
+import androidx.test.espresso.action.ViewActions
+import androidx.test.espresso.matcher.RootMatchers.withDecorView
+import androidx.test.espresso.matcher.ViewMatchers.isRoot
+import org.hamcrest.Description
+import org.hamcrest.Matcher
+import org.hamcrest.TypeSafeMatcher
+
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import android.content.pm.ActivityInfo
@@ -27,6 +39,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.click
 import androidx.compose.ui.test.swipe
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToNode
@@ -73,11 +86,324 @@ class EditorRegressionInstrumentedTest {
     }
 
     private fun selectUiVariant(tag: String) {
-        composeRule.onNodeWithTag(tag)
-            .performScrollTo()
-            .assertIsDisplayed()
-            .performClick()
+        val choices = composeRule.onAllNodesWithTag(tag)
+            .fetchSemanticsNodes(atLeastOneRootRequired = false)
+        if (choices.isEmpty() && tag == "ui-variant-use-SPATIAL_EXPERIMENTAL") {
+            // Already selected: the two-layout chooser does not offer "Use" twice.
+            composeRule.onNodeWithText("关闭").performClick()
+        } else {
+            composeRule.onNodeWithTag(tag)
+                .performScrollTo().assertIsDisplayed().performClick()
+        }
         composeRule.waitForIdle()
+    }
+
+    @Test fun invalidEventFieldsExplainErrorsAndCannotCommitAcrossHosts() {
+        restoreRecovery()
+        composeRule.runOnIdle { viewModel.focusEvent(1L, seek = false) }
+        for (canvas in listOf(false, true)) {
+            if (canvas) switchToUnifiedCanvas()
+            val before = viewModel.state.value.document
+            openTool("TEXT")
+            composeRule.onNodeWithTag("event-start-1").performScrollTo().performTextReplacement("broken")
+            hideKeyboard()
+            composeRule.onNodeWithTag("event-apply-time-1").assertIsNotEnabled()
+            composeRule.onNodeWithText("输入 ASS 时间或非负毫秒数").assertExists()
+            composeRule.runOnIdle { assertEquals(before, viewModel.state.value.document) }
+            composeRule.onNodeWithTag("event-start-1").performTextReplacement("2000")
+            composeRule.onNodeWithTag("event-end-1").performTextReplacement("1000")
+            hideKeyboard()
+            composeRule.onNodeWithTag("event-apply-time-1").assertIsNotEnabled()
+            composeRule.onNodeWithText("End 不能早于 Start").assertExists()
+            composeRule.onNodeWithTag("event-end-1").performTextReplacement("3000")
+            hideKeyboard()
+            composeRule.onNodeWithTag("event-apply-time-1").performScrollTo().assertIsEnabled().performClick()
+            composeRule.runOnIdle {
+                assertEquals(2000L, viewModel.state.value.document.events.first { it.id == 1L }.start.millis)
+                assertEquals(3000L, viewModel.state.value.document.events.first { it.id == 1L }.end.millis)
+                viewModel.undo()
+            }
+            composeRule.runOnIdle { assertEquals(before, viewModel.state.value.document) }
+            openTool("EVENT")
+            composeRule.onNodeWithTag("event-layer-1").performScrollTo().performTextReplacement("oops")
+            hideKeyboard()
+            composeRule.onNodeWithTag("event-apply-metadata-1").assertIsNotEnabled()
+            composeRule.onNodeWithText("输入有效整数").assertExists()
+            composeRule.runOnIdle { assertEquals(before, viewModel.state.value.document) }
+            composeRule.onNodeWithTag("event-layer-1").performTextReplacement("1000")
+            hideKeyboard()
+            composeRule.onNodeWithTag("event-apply-metadata-1").assertIsNotEnabled()
+            composeRule.onNodeWithText("范围 -999～999").assertExists()
+            composeRule.runOnIdle { assertEquals(before, viewModel.state.value.document) }
+            composeRule.onNodeWithTag("event-layer-1").performTextReplacement("-3")
+            hideKeyboard()
+            composeRule.onNodeWithTag("event-apply-metadata-1").performScrollTo().assertIsEnabled().performClick()
+            composeRule.runOnIdle {
+                assertEquals(-3, viewModel.state.value.document.events.first { it.id == 1L }.layer)
+                viewModel.undo()
+            }
+            composeRule.runOnIdle { assertEquals(before, viewModel.state.value.document) }
+        }
+    }
+
+    @Test fun metadataDraftFollowsHostAndRetainsExternalConflictUntilExplicitApply() {
+        restoreRecovery()
+        composeRule.runOnIdle { viewModel.focusEvent(1L, seek = false) }
+        val before = viewModel.state.value.document
+        openTool("EVENT")
+        composeRule.onNodeWithTag("event-actor-1").performScrollTo().performTextReplacement("Local actor")
+        composeRule.onNodeWithTag("event-layer-1").performScrollTo().performTextReplacement("-03")
+        hideKeyboard()
+        composeRule.onNodeWithTag("event-comment-1").performClick()
+        composeRule.onNodeWithTag("workspace-direct-mode-toggle").performClick()
+        openTool("EVENT")
+        composeRule.onNodeWithTag("event-actor-1").assertTextContains("Local actor")
+        composeRule.onNodeWithTag("event-layer-1").assertTextContains("-03")
+        composeRule.onNodeWithTag("event-comment-1").assertIsSelected()
+        composeRule.runOnIdle {
+            assertEquals(before, viewModel.state.value.document)
+            viewModel.updateFocusedMetadata(0, "External actor", false)
+        }
+        val external = viewModel.state.value.document
+        composeRule.onNodeWithTag("event-metadata-conflict-1").assertExists()
+        composeRule.onNodeWithTag("event-actor-1").assertTextContains("Local actor")
+        composeRule.onNodeWithTag("event-apply-metadata-1").performScrollTo().performClick()
+        composeRule.onNodeWithTag("event-metadata-conflict-1").assertDoesNotExist()
+        composeRule.onNodeWithTag("event-layer-1").assertTextContains("-3")
+        composeRule.runOnIdle {
+            val event = viewModel.state.value.document.events.first { it.id == 1L }
+            assertEquals(-3, event.layer)
+            assertEquals("Local actor", event.name)
+            assertTrue(event.comment)
+            viewModel.undo()
+        }
+        composeRule.runOnIdle { assertEquals(external, viewModel.state.value.document) }
+    }
+
+    @Test fun timingDraftFollowsHostAndExplicitOverwriteKeepsMillisecondValue() {
+        restoreRecovery()
+        composeRule.runOnIdle { viewModel.focusEvent(1L, seek = false) }
+        val before = viewModel.state.value.document
+        openTool("TEXT")
+        composeRule.onNodeWithTag("event-start-1").performScrollTo().performTextReplacement("1251")
+        composeRule.onNodeWithTag("event-end-1").performTextReplacement("4000")
+        hideKeyboard()
+        composeRule.onNodeWithTag("workspace-direct-mode-toggle").performClick()
+        openTool("TEXT")
+        composeRule.onNodeWithTag("event-start-1").assertTextContains("1251")
+        composeRule.onNodeWithTag("event-end-1").assertTextContains("4000")
+        composeRule.runOnIdle {
+            assertEquals(before, viewModel.state.value.document)
+            viewModel.setEventTiming(1L, 1500, 4500)
+        }
+        val external = viewModel.state.value.document
+        composeRule.onNodeWithTag("event-timing-conflict-1").assertExists()
+        composeRule.onNodeWithTag("event-start-1").assertTextContains("1251")
+        composeRule.onNodeWithTag("event-apply-time-1").performScrollTo().assertIsEnabled().performClick()
+        composeRule.onNodeWithTag("event-timing-conflict-1").assertDoesNotExist()
+        composeRule.onNodeWithTag("event-start-1").assertTextContains("0:00:01.25")
+        composeRule.runOnIdle {
+            val event = viewModel.state.value.document.events.first { it.id == 1L }
+            assertEquals(1251L, event.start.millis)
+            assertEquals(4000L, event.end.millis)
+            viewModel.undo()
+        }
+        composeRule.runOnIdle { assertEquals(external, viewModel.state.value.document) }
+    }
+
+    @Test fun directoryDialogKeyboardClosesWithoutDismissingOrSubmittingDraft() {
+        restoreRecovery()
+        // Establish the host through the real two-layout switch, independent of
+        // whichever presentation a preceding fixture persisted.
+        if (composeRule.onAllNodesWithTag("fixed-workspace", useUnmergedTree = true)
+                .fetchSemanticsNodes(atLeastOneRootRequired = false).isEmpty()) {
+            composeRule.onNodeWithTag("workspace-direct-mode-toggle").performClick()
+            composeRule.waitUntil(10_000) {
+                composeRule.onAllNodesWithTag("fixed-workspace", useUnmergedTree = true)
+                    .fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()
+            }
+        }
+        composeRule.runOnIdle { viewModel.focusEvent(1L, seek = false) }
+        openTool("TEXT")
+        composeRule.onNodeWithTag("event-raw-1").performScrollTo().performTextInput(" DIALOG_DRAFT")
+        hideKeyboard()
+        val before = viewModel.state.value.document
+        composeRule.onNodeWithTag("fixed-tool-CAPABILITIES").performClick()
+        composeRule.onNodeWithTag("tool-search").performTextReplacement("STYLE")
+        var dialogRoot: View? = null
+        performInFocusedWindow("Show IME in the directory dialog") { controller, root ->
+            dialogRoot = root
+            val focused = checkNotNull(root.findFocus()) { "Directory dialog must own text focus" }
+            focused.context.getSystemService(android.view.inputmethod.InputMethodManager::class.java)
+                .showSoftInput(focused, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT)
+            controller.loopMainThreadUntilIdle()
+        }
+        composeRule.waitUntil(5_000) {
+            dialogRoot?.rootWindowInsets?.isVisible(android.view.WindowInsets.Type.ime()) == true
+        }
+        hideKeyboard()
+        composeRule.onNodeWithTag("fixed-tool-directory").assertIsDisplayed()
+        composeRule.onNodeWithTag("tool-search").assertTextContains("STYLE")
+        composeRule.onNodeWithTag("fixed-directory-close").performClick()
+        assertEquals("Recovered line DIALOG_DRAFT", rawDraftText(1L))
+        composeRule.runOnIdle { assertEquals(before, viewModel.state.value.document) }
+    }
+
+    @Test fun sharedSubtitleFilterNavigatesResultsWithoutChangingSelectionOrDocumentAcrossHosts() {
+        restoreRecovery()
+        val before = viewModel.state.value
+        composeRule.runOnIdle {
+            viewModel.focusEvent(1L, seek = false)
+            viewModel.toggleSelected(1L)
+        }
+        composeRule.onNodeWithContentDescription("搜索").performClick()
+        if (composeRule.onAllNodesWithTag("subtitle-filter-open-dialog").fetchSemanticsNodes().isNotEmpty()) {
+            composeRule.onNodeWithTag("subtitle-filter-open-dialog").performScrollTo().performClick()
+        }
+        composeRule.onNodeWithTag("subtitle-filter-quick").performTextReplacement("Second")
+        hideKeyboard()
+        if (composeRule.onAllNodesWithTag("subtitle-filter-dialog-done").fetchSemanticsNodes().isNotEmpty()) {
+            composeRule.onNodeWithTag("subtitle-filter-dialog-done").performClick()
+        }
+        composeRule.onNodeWithTag("subtitle-focus-excluded").assertExists()
+        composeRule.runOnIdle {
+            assertEquals(listOf(2L), viewModel.state.value.filteredEvents.map { it.id })
+            assertEquals(1L, viewModel.state.value.focusedEventId)
+        }
+        composeRule.onNodeWithTag("subtitle-result-next").performScrollTo().performClick()
+        composeRule.runOnIdle {
+            assertEquals(2L, viewModel.state.value.focusedEventId)
+            assertEquals(setOf(1L), viewModel.state.value.selectedEventIds)
+        }
+        composeRule.onNodeWithTag("subtitle-result-select-all").performScrollTo().performClick()
+        composeRule.runOnIdle { assertEquals(setOf(2L), viewModel.state.value.selectedEventIds) }
+        composeRule.onNodeWithContentDescription("关闭搜索").performClick()
+        composeRule.onNodeWithTag("workspace-direct-mode-toggle").assertIsDisplayed()
+        switchToUnifiedCanvas()
+        composeRule.runOnIdle {
+            assertEquals(setOf(2L), viewModel.state.value.selectedEventIds)
+            assertEquals("Second", viewModel.state.value.query)
+            assertEquals(before.document, viewModel.state.value.document)
+        }
+        openTool("SUBTITLES")
+        composeRule.onNodeWithTag("subtitle-results").assertExists()
+        composeRule.runOnIdle {
+            assertEquals("Second", viewModel.state.value.query)
+            assertEquals(listOf(2L), viewModel.state.value.filteredEvents.map { it.id })
+            viewModel.focusEvent(1L, seek = false)
+        }
+        composeRule.onNodeWithTag("subtitle-focus-excluded").assertExists()
+        composeRule.onNodeWithTag("subtitle-result-locate").performScrollTo().performClick()
+        composeRule.runOnIdle {
+            assertEquals(io.github.assworkbench.domain.SubtitleFilterState(), viewModel.state.value.subtitleFilter)
+            assertEquals(1L, viewModel.state.value.focusedEventId)
+            assertEquals(setOf(2L), viewModel.state.value.selectedEventIds)
+            assertEquals(before.document, viewModel.state.value.document)
+            assertEquals(before.dirty, viewModel.state.value.dirty)
+            assertEquals(before.canUndo, viewModel.state.value.canUndo)
+        }
+    }
+
+    @Test fun batchReviewStaysExpiredAfterEditUndoEvenWhenUiSkipsIntermediateFrames() {
+        restoreRecovery()
+        composeRule.runOnIdle {
+            viewModel.focusEvent(1L, seek = false)
+            val before = viewModel.state.value
+            val review = io.github.assworkbench.domain.AssBatchReview.create(before.document,
+                io.github.assworkbench.domain.AssBatchRecipe("review", actions = listOf(
+                    io.github.assworkbench.domain.AssBatchAction.SetActor("ReviewedActor"))),
+                before.workspaceSessionId, before.documentRevision)
+            val store = io.github.assworkbench.app.ui.BatchAuthoringDraftStore(before.workspaceSessionId)
+            val draft = store.obtain("BATCH:primary")
+            val ids = before.document.events.mapTo(linkedSetOf()) { it.id }
+            draft.record("rule", before.document, ids, Result.success(review), before.documentRevision)
+
+            viewModel.focusEvent(2L, seek = false)
+            viewModel.setQuery("Second")
+            assertEquals(before.documentRevision, viewModel.state.value.documentRevision)
+            viewModel.focusEvent(1L, seek = false)
+            viewModel.updateFocusedText("intermediate edit")
+            viewModel.undo()
+            val restored = viewModel.state.value
+            assertEquals(before.document, restored.document)
+            assertEquals(before.documentRevision + 2L, restored.documentRevision)
+            assertEquals(null, draft.preview("rule", restored.document, ids, restored.documentRevision))
+            viewModel.applyBatchReview(review)
+            assertEquals(before.document, viewModel.state.value.document)
+            assertTrue(viewModel.state.value.status.contains("已过期"))
+            assertTrue(viewModel.state.value.canRedo)
+
+            val fresh = io.github.assworkbench.domain.AssBatchReview.create(restored.document,
+                io.github.assworkbench.domain.AssBatchRecipe("review", actions = listOf(
+                    io.github.assworkbench.domain.AssBatchAction.SetActor("ReviewedActor"))),
+                restored.workspaceSessionId, restored.documentRevision)
+            viewModel.applyBatchReview(fresh)
+            assertTrue(viewModel.state.value.document.events.all { it.name == "ReviewedActor" })
+            assertEquals(restored.documentRevision + 1L, viewModel.state.value.documentRevision)
+            viewModel.undo()
+            assertEquals(before.document, viewModel.state.value.document)
+        }
+    }
+
+    @Test fun subtitleFilterSavedStateRestoresConditionsAndProjectReplacementClearsThem() {
+        restoreRecovery()
+        composeRule.runOnIdle {
+            val handle = androidx.lifecycle.SavedStateHandle()
+            val first = EditorViewModel(application, handle)
+            val filter = io.github.assworkbench.domain.SubtitleFilterState(
+                quickText = "line", actor = "Alice", kind = io.github.assworkbench.domain.SubtitleEventKind.COMMENT,
+                selectedOnly = true)
+            first.setSubtitleFilter(filter)
+            val restoredHandle = androidx.lifecycle.SavedStateHandle(mapOf(
+                "subtitle-filter" to handle.get<ArrayList<String>>("subtitle-filter")))
+            val restored = EditorViewModel(application, restoredHandle)
+            assertEquals(filter, restored.state.value.subtitleFilter)
+            restored.newSubtitleProject()
+            assertEquals(io.github.assworkbench.domain.SubtitleFilterState(), restored.state.value.subtitleFilter)
+            assertEquals(io.github.assworkbench.domain.SubtitleFilterState(), EditorViewModel(application, restoredHandle).state.value.subtitleFilter)
+        }
+    }
+
+    @Test fun fixedTaskNavigationAndExternalToolCommandKeepTheRequestedEditorConsistent() {
+        restoreRecovery()
+        eventRow(1L).performClick()
+        openTool("STYLE")
+        composeRule.onNodeWithTag("fixed-preview-density").assertIsDisplayed()
+        val before = viewModel.state.value.document
+        composeRule.onNodeWithTag("fixed-tool-SUBTITLES").performScrollTo().performClick()
+        composeRule.onNodeWithTag("fixed-tool-SUBTITLES").assertIsSelected()
+        composeRule.onNodeWithTag("fixed-tool-STYLE").assertIsNotSelected()
+        composeRule.onNodeWithTag("fixed-preview-density").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("工具和更多操作").performClick()
+        composeRule.onNodeWithText("字体管理").performClick()
+        composeRule.onNodeWithTag("fixed-inspector").assertIsDisplayed()
+        composeRule.onNodeWithTag("fixed-tool-SUBTITLES").assertIsNotSelected()
+        openTool("TEXT")
+        composeRule.onNodeWithTag("event-collapse-1").performClick()
+        composeRule.onNodeWithTag("fixed-tool-SUBTITLES").assertIsSelected()
+        assertEquals(before, viewModel.state.value.document)
+    }
+
+    @Test fun eventTextDraftFollowsTheSameToolAcrossMainAndCanvasWithoutImplicitCommit() {
+        restoreRecovery()
+        eventRow(1L).performClick()
+        val before = viewModel.state.value.document
+        composeRule.onNodeWithTag("event-raw-1").performTextInput(" CROSS")
+        hideKeyboard()
+        composeRule.onNodeWithTag("workspace-direct-mode-toggle").performClick()
+        openTool("TEXT")
+        assertEquals("Recovered line CROSS", rawDraftText(1L))
+        assertEquals(before, viewModel.state.value.document)
+        composeRule.onNodeWithTag("event-raw-1").performTextInput(" HOST")
+        hideKeyboard()
+        composeRule.onNodeWithTag("workspace-direct-mode-toggle").performClick()
+        openTool("TEXT")
+        assertEquals("Recovered line CROSS HOST", rawDraftText(1L))
+        assertEquals(before, viewModel.state.value.document)
+        composeRule.onNodeWithTag("event-apply-text-1").performScrollTo().performClick()
+        composeRule.waitUntil(10_000) { eventText(1L) == "Recovered line CROSS HOST" }
+        composeRule.runOnIdle { viewModel.undo() }
+        composeRule.waitUntil(10_000) { viewModel.state.value.document == before }
     }
 
     @Test
@@ -118,89 +444,92 @@ class EditorRegressionInstrumentedTest {
     }
 
     @Test
-    fun pagerWorkspaceSwitchesBetweenRealSubtitlePreviewAndToolPages() {
+    fun mainLayoutSwitchAlwaysReachableAndDoesNotReplaceCanonicalDocument() {
         restoreRecovery()
-
-        composeRule.onNodeWithContentDescription("工具和更多操作").performClick()
-        composeRule.onNodeWithTag("workspace-mode-toggle").performClick()
-        selectUiVariant("ui-variant-use-PAGER_EXPERIMENTAL")
-
-        composeRule.onNodeWithTag("pager-workspace").assertIsDisplayed()
-        composeRule.onNodeWithTag("pager-page-preview").assertIsDisplayed()
-
-        composeRule.onNodeWithTag("pager-nav-SUBTITLES").performClick()
-        composeRule.waitUntil(5_000) {
-            composeRule.onAllNodesWithTag("pager-page-subtitles", useUnmergedTree = true)
-                .fetchSemanticsNodes(atLeastOneRootRequired = false)
-                .isNotEmpty()
+        val original = viewModel.state.value.document
+        // Layout chrome must stay present even if WorkspaceState hides surfaces.
+        if (composeRule.onAllNodesWithTag("spatial-workspace", useUnmergedTree = true)
+                .fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()) {
+            composeRule.onNodeWithContentDescription("切换至标准工作台").performClick()
         }
-
-        composeRule.onNodeWithTag("event-row-1").performClick()
-        composeRule.waitUntil(5_000) {
-            composeRule.onAllNodesWithTag("pager-page-tool", useUnmergedTree = true)
-                .fetchSemanticsNodes(atLeastOneRootRequired = false)
-                .isNotEmpty()
-        }
-        composeRule.onNodeWithTag("event-inspector").assertIsDisplayed()
-
-        composeRule.onNodeWithTag("pager-nav-PREVIEW").performClick()
-        composeRule.waitUntil(5_000) {
-            composeRule.onAllNodesWithTag("pager-page-preview", useUnmergedTree = true)
-                .fetchSemanticsNodes(atLeastOneRootRequired = false)
-                .isNotEmpty()
-        }
+        composeRule.onNodeWithTag("fixed-workspace").assertIsDisplayed()
+        assertEquals(original, viewModel.state.value.document)
+        composeRule.onNodeWithContentDescription("切换至无限画布").performClick()
+        composeRule.onNodeWithTag("spatial-workspace").assertIsDisplayed()
+        assertEquals(original, viewModel.state.value.document)
+        composeRule.onNodeWithContentDescription("切换至标准工作台").performClick()
+        composeRule.onNodeWithTag("fixed-workspace").assertIsDisplayed()
+        assertEquals(original, viewModel.state.value.document)
     }
 
     @Test
-    fun spatialWorkspaceExposesRealNodesAndNavigationControls() {
+    fun unifiedCanvasSwitchesDirectlyBetweenRealPreviewAndSubtitleAuthoring() {
         restoreRecovery()
+        switchToUnifiedCanvas()
+        if (composeRule.onAllNodesWithTag("spatial-tool-switcher")
+                .fetchSemanticsNodes(atLeastOneRootRequired = false).isEmpty()) {
+            composeRule.onNodeWithTag("spatial-quick-preview").performClick()
+        }
+        composeRule.onNodeWithTag("spatial-tool-switcher").performClick()
+        composeRule.onNodeWithTag("spatial-switch-to-subtitles").performClick()
+        composeRule.onNodeWithTag("spatial-native-content-subtitles").assertExists()
+        composeRule.onNodeWithTag("spatial-reference-preview").assertExists()
+        composeRule.onNodeWithTag("spatial-tool-switcher").performClick()
+        composeRule.onNodeWithTag("spatial-switch-to-preview").performClick()
+        composeRule.onNodeWithTag("spatial-native-content-preview").assertExists()
+    }
 
+    @Test
+    fun spatialWorkspaceExposesBoardAndNativeEditorWithoutMovingWorldNodes() {
+        restoreRecovery()
         composeRule.onNodeWithContentDescription("工具和更多操作").performClick()
         composeRule.onNodeWithTag("workspace-mode-toggle").performClick()
         selectUiVariant("ui-variant-use-SPATIAL_EXPERIMENTAL")
 
         composeRule.onNodeWithTag("spatial-workspace").assertIsDisplayed()
-        composeRule.onNodeWithTag("spatial-overview").performClick()
+        // A first-time session may open the video at native size; the board is one tap away.
+        if (composeRule.onAllNodesWithTag("spatial-return-to-board")
+                .fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()) {
+            composeRule.onNodeWithTag("spatial-return-to-board").performClick()
+        }
+        composeRule.onNodeWithTag("spatial-overview").performScrollTo().assertIsDisplayed().performClick()
         composeRule.onNodeWithTag("spatial-node-preview").assertIsDisplayed()
         composeRule.onNodeWithTag("spatial-node-subtitles").assertIsDisplayed()
         composeRule.onNodeWithTag("spatial-node-audio").assertIsDisplayed()
 
         val previewBeforeRail = composeRule.onNodeWithTag("spatial-node-preview")
             .fetchSemanticsNode().boundsInRoot
-        composeRule.onNodeWithTag("spatial-edge-handle-left")
-            .assertIsDisplayed()
-            .performClick()
-        composeRule.waitUntil(5_000) {
-            composeRule.onAllNodesWithTag("spatial-edge-rail-left", useUnmergedTree = true)
-                .fetchSemanticsNodes(atLeastOneRootRequired = false)
-                .isNotEmpty()
-        }
+        composeRule.onNodeWithTag("spatial-edge-handle-left").performClick()
+        composeRule.onNodeWithTag("spatial-edge-rail-left").assertIsDisplayed()
         val previewAfterRail = composeRule.onNodeWithTag("spatial-node-preview")
             .fetchSemanticsNode().boundsInRoot
         assertEquals(previewBeforeRail, previewAfterRail)
+        val railBounds = composeRule.onNodeWithTag("spatial-edge-rail-left").fetchSemanticsNode().boundsInRoot
+        val pinBounds = composeRule.onNodeWithTag("spatial-edge-pin-left").fetchSemanticsNode().boundsInRoot
+        val closeBounds = composeRule.onNodeWithTag("spatial-edge-close-left").fetchSemanticsNode().boundsInRoot
+        assertTrue("Pin must fit inside the rail", pinBounds.left >= railBounds.left && pinBounds.right <= railBounds.right)
+        assertTrue("Close must fit inside the rail", closeBounds.left >= railBounds.left && closeBounds.right <= railBounds.right)
+        assertTrue("Rail actions must not overlap", pinBounds.bottom <= closeBounds.top || pinBounds.right <= closeBounds.left)
 
-        composeRule.onNodeWithTag("spatial-edge-dismiss-left").performClick()
-        composeRule.waitUntil(5_000) {
-            composeRule.onAllNodesWithTag("spatial-edge-rail-left", useUnmergedTree = true)
-                .fetchSemanticsNodes(atLeastOneRootRequired = false)
-                .isEmpty()
-        }
-
-        composeRule.onNodeWithTag("spatial-edge-handle-left").performClick()
-        composeRule.waitUntil(5_000) {
-            composeRule.onAllNodesWithTag("spatial-edge-rail-left", useUnmergedTree = true)
-                .fetchSemanticsNodes(atLeastOneRootRequired = false)
-                .isNotEmpty()
-        }
-        composeRule.onNodeWithTag("spatial-edge-pin-left").performClick()
-        composeRule.onNodeWithTag("spatial-edge-entry-subtitles").performClick()
+        composeRule.onNodeWithTag("spatial-edge-pin-left").assertIsDisplayed().performClick()
+        composeRule.onNodeWithContentDescription("取消驻留").assertIsDisplayed()
+        Log.i("AsswbRegression", "resident-rail:pinned-on-board")
+        composeRule.onNodeWithTag("spatial-edge-entry-subtitles").assertIsDisplayed().performClick()
+        composeRule.onNodeWithTag("spatial-focused-editor").assertIsDisplayed()
+        composeRule.onNodeWithTag("spatial-native-content-subtitles").assertExists()
         composeRule.onNodeWithTag("spatial-edge-rail-left").assertIsDisplayed()
-        composeRule.onNodeWithTag("spatial-node-subtitles").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("取消驻留").assertIsDisplayed()
+        Log.i("AsswbRegression", "resident-rail:retained-in-editor")
+        composeRule.onNodeWithTag("spatial-return-to-board").assertIsDisplayed().performClick()
+        composeRule.onNodeWithTag("spatial-edge-rail-left").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("取消驻留").assertIsDisplayed()
+        Log.i("AsswbRegression", "resident-rail:retained-on-return")
         composeRule.onNodeWithTag("spatial-edge-close-left").performClick()
-
-        composeRule.onNodeWithText("召回").performClick()
-        composeRule.onNodeWithTag("spatial-recall-subtitles").performClick()
         composeRule.onNodeWithTag("spatial-node-subtitles").assertIsDisplayed()
+
+        composeRule.onNodeWithText("召回").performScrollTo().assertIsDisplayed().performClick()
+        composeRule.onNodeWithTag("spatial-recall-subtitles").performClick()
+        composeRule.onNodeWithTag("spatial-native-content-subtitles").assertExists()
     }
 
     @Test fun birdseyeNavigationPreservesSubtitleDocumentAndUndoHistory() {
@@ -217,7 +546,7 @@ class EditorRegressionInstrumentedTest {
         assertEquals(before, viewModel.state.value.document)
         assertEquals(undoBefore, viewModel.state.value.canUndo)
         assertEquals(redoBefore, viewModel.state.value.canRedo)
-        composeRule.onNodeWithTag("spatial-node-audio").assertIsDisplayed()
+        composeRule.onNodeWithTag("spatial-native-content-audio").assertExists()
     }
 
     @Test fun spatialWorkspaceLongPressDragExtractsRotationWithoutEditingAss() =
@@ -239,10 +568,10 @@ class EditorRegressionInstrumentedTest {
         composeRule.onNodeWithTag("workspace-mode-toggle").performClick()
         selectUiVariant("ui-variant-use-SPATIAL_EXPERIMENTAL")
 
-        composeRule.onNodeWithText("＋ 工具").performClick()
+        composeRule.onNodeWithTag("spatial-add-tool").performClick()
         composeRule.waitUntil(5_000) {
             composeRule.onAllNodesWithTag(
-                "spatial-node-CAPABILITIES-primary",
+                "spatial-native-content-CAPABILITIES-primary",
                 useUnmergedTree = true,
             ).fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()
         }
@@ -254,7 +583,7 @@ class EditorRegressionInstrumentedTest {
             .performClick()
         composeRule.waitUntil(5_000) {
             composeRule.onAllNodesWithTag(
-                "spatial-node-POSITION-primary",
+                "spatial-native-content-POSITION-primary",
                 useUnmergedTree = true,
             ).fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()
         }
@@ -277,115 +606,106 @@ class EditorRegressionInstrumentedTest {
                 up()
             }
 
-        composeRule.waitUntil(5_000) {
-            composeRule.onAllNodesWithTag(
-                "spatial-node-parameter-${key}-1",
-                useUnmergedTree = true,
-            ).fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()
-        }
-        composeRule.onNodeWithTag("spatial-node-parameter-${key}-1")
-            .assertIsDisplayed()
+        // A projection is a real ToolInstance, reachable through birdseye even
+        // when the user remains focused in the source parameter editor.
+        composeRule.onNodeWithTag("spatial-birdseye").performClick()
+        composeRule.onNodeWithTag("spatial-birdseye-node-parameter-${key}-1")
+            .performScrollTo().performClick()
+        composeRule.onNodeWithTag("spatial-native-content-parameter-${key}-1").assertExists()
         composeRule.onNodeWithTag(
             "parameter-projection-${control}-parameter-${key}-1"
         ).assertIsDisplayed()
+        composeRule.onNodeWithTag("spatial-return-to-board").performClick()
+        composeRule.onNodeWithTag("spatial-node-parameter-${key}-1").assertExists()
 
         assertEquals(before, viewModel.state.value.document)
         assertFalse("Extracting a workspace projection must not enter ASS Undo", viewModel.state.value.canUndo)
     }
 
     @Test
-    fun toolInstanceWorkspaceSupportsHideAndRestore() {
+    fun unifiedCanvasHidesAndRecallsNativeToolDirectory() {
         restoreRecovery()
+        switchToUnifiedCanvas()
+        composeRule.onNodeWithTag("spatial-add-tool").performClick()
+        composeRule.onNodeWithTag("spatial-native-content-CAPABILITIES-primary").assertExists()
+        composeRule.onNodeWithTag("spatial-menu-CAPABILITIES-primary").performClick()
+        composeRule.onNodeWithText("收回工具").performClick()
+        composeRule.onNodeWithText("召回").performScrollTo().assertIsDisplayed().performClick()
+        composeRule.onNodeWithTag("spatial-recall-CAPABILITIES-primary").performClick()
+        composeRule.onNodeWithTag("spatial-native-content-CAPABILITIES-primary").assertExists()
+    }
 
-        composeRule.onNodeWithContentDescription("工具和更多操作").performClick()
-        composeRule.onNodeWithTag("workspace-mode-toggle").performClick()
-        selectUiVariant("ui-variant-use-TOOL_INSTANCES_EXPERIMENTAL")
-
-        composeRule.onNodeWithTag("tool-instance-workspace").assertIsDisplayed()
-        composeRule.onNodeWithTag("tool-instance-directory").assertIsDisplayed()
-
-        composeRule.onNodeWithTag("tool-instance-directory").performClick()
-        composeRule.waitUntil(5_000) {
-            composeRule.onAllNodesWithTag("surface-CAPABILITIES-primary", useUnmergedTree = true)
-                .fetchSemanticsNodes(atLeastOneRootRequired = false)
-                .isNotEmpty()
+    @Test fun productionTimelineDockResizeDoesNotChangeSubtitleEditingState() {
+        restoreRecovery()
+        switchToUnifiedCanvas()
+        val before = viewModel.state.value
+        composeRule.onNodeWithTag("spatial-timeline-toggle").performClick()
+        val originalHeight = composeRule.onNodeWithTag("spatial-timeline-dock").fetchSemanticsNode().boundsInRoot.height
+        val density = composeRule.activity.resources.displayMetrics.density
+        composeRule.onNodeWithTag("spatial-timeline-resize").performTouchInput {
+            down(center)
+            moveBy(Offset(0f, -100f * density))
+            up()
         }
-
-        composeRule.onNodeWithTag("tool-hide-temporary").performClick()
-        composeRule.onNodeWithTag("tool-hidden-CAPABILITIES-primary").assertIsDisplayed()
-        composeRule.onNodeWithTag("tool-hidden-CAPABILITIES-primary").performClick()
-
-        composeRule.waitUntil(5_000) {
-            composeRule.onAllNodesWithTag("surface-CAPABILITIES-primary", useUnmergedTree = true)
-                .fetchSemanticsNodes(atLeastOneRootRequired = false)
-                .isNotEmpty()
+        val newHeight = composeRule.onNodeWithTag("spatial-timeline-dock").fetchSemanticsNode().boundsInRoot.height
+        assertTrue(newHeight > originalHeight + 32f * density)
+        composeRule.onNodeWithTag("timeline-temporal-canvas").assertExists()
+        composeRule.runOnIdle {
+            val after = viewModel.state.value
+            assertEquals(before.document, after.document)
+            assertEquals(before.focusedEventId, after.focusedEventId)
+            assertEquals(before.selectedEventIds, after.selectedEventIds)
+            assertEquals(before.dirty, after.dirty)
+            assertEquals(before.canUndo, after.canUndo)
         }
     }
 
     @Test
-    fun edgeBookmarkWorkspaceOpensFourEdgeLayersAndBookmarks() {
+    fun unifiedCanvasPreservesPersistentTimelineAndToolNavigation() {
         restoreRecovery()
-
-        composeRule.onNodeWithContentDescription("工具和更多操作").performClick()
-        composeRule.onNodeWithTag("workspace-mode-toggle").performClick()
-        selectUiVariant("ui-variant-use-EDGE_BOOKMARK_EXPERIMENTAL")
-
-        composeRule.onNodeWithTag("edge-bookmark-workspace").assertIsDisplayed()
-        composeRule.onNodeWithTag("edge-bookmark-left").assertIsDisplayed()
-        composeRule.onNodeWithTag("edge-bookmark-right").assertIsDisplayed()
-        composeRule.onNodeWithTag("edge-handle-top").assertIsDisplayed()
-        composeRule.onNodeWithTag("edge-handle-bottom").assertIsDisplayed()
-        composeRule.onNodeWithTag("edge-handle-left").assertIsDisplayed()
-        composeRule.onNodeWithTag("edge-handle-right").assertIsDisplayed()
-
-        composeRule.onNodeWithTag("edge-toggle-top").assertIsDisplayed().performClick()
-        composeRule.waitUntil(5_000) {
-            composeRule.onAllNodesWithTag("edge-layer-top", useUnmergedTree = true)
-                .fetchSemanticsNodes(atLeastOneRootRequired = false)
-                .isNotEmpty()
-        }
-
-        composeRule.onNodeWithTag("edge-toggle-bottom").assertIsDisplayed().performClick()
-        composeRule.waitUntil(5_000) {
-            composeRule.onAllNodesWithTag("edge-layer-bottom", useUnmergedTree = true)
-                .fetchSemanticsNodes(atLeastOneRootRequired = false)
-                .isNotEmpty()
-        }
+        switchToUnifiedCanvas()
+        composeRule.onNodeWithTag("spatial-timeline-toggle").performClick()
+        composeRule.onNodeWithTag("spatial-timeline-dock").assertIsDisplayed()
+        composeRule.onNodeWithTag("spatial-timeline-content").assertExists()
+        composeRule.onNodeWithTag("spatial-timeline-expand").performClick()
+        composeRule.onNodeWithTag("spatial-timeline-dock").assertIsDisplayed()
+        composeRule.onNodeWithTag("spatial-timeline-close").performClick()
+        composeRule.onNodeWithTag("spatial-timeline-dock").assertDoesNotExist()
     }
 
     @Test
-    fun glassLayeredWorkspaceExposesMaterialAndPerformanceControls() {
+    fun unifiedCanvasRetainsTransparentAudioAndInputPassthrough() {
         restoreRecovery()
-
-        composeRule.onNodeWithContentDescription("工具和更多操作").performClick()
-        composeRule.onNodeWithTag("workspace-mode-toggle").performClick()
-        selectUiVariant("ui-variant-use-GLASS_LAYERED_EXPERIMENTAL")
-
-        composeRule.onNodeWithTag("glass-layered-workspace").assertIsDisplayed()
-        composeRule.onNodeWithTag("glass-control-deck").assertIsDisplayed()
-        composeRule.onNodeWithTag("glass-performance-QUALITY").assertIsDisplayed().performClick()
-        composeRule.onNodeWithTag("glass-performance-LOW_COST").assertIsDisplayed().performClick()
-        composeRule.onNodeWithTag("glass-alpha").assertIsDisplayed()
-        composeRule.onNodeWithTag("glass-blur").assertIsDisplayed()
-        composeRule.onNodeWithTag("glass-layer-overview").assertIsDisplayed()
+        switchToUnifiedCanvas()
+        composeRule.onNodeWithTag("spatial-birdseye").performClick()
+        composeRule.onNodeWithTag("spatial-birdseye-node-audio").performScrollTo().performClick()
+        composeRule.onNodeWithTag("spatial-native-content-audio").assertExists()
+        composeRule.onNodeWithTag("spatial-menu-audio").performClick()
+        composeRule.onNodeWithText("恢复实底").performClick()
+        composeRule.onNodeWithTag("spatial-menu-audio").performClick()
+        composeRule.onNodeWithText("透明叠加").performClick()
+        composeRule.onNodeWithTag("spatial-menu-audio").performClick()
+        composeRule.onNodeWithText("穿透操作视频").performClick()
     }
 
     @Test
-    fun precisionLensWorkspaceShowsPrecisionControls() {
+    fun unifiedCanvasCanOpenNativePositionEditorWithoutASecondPrecisionUi() {
         restoreRecovery()
-
-        composeRule.onNodeWithContentDescription("工具和更多操作").performClick()
-        composeRule.onNodeWithTag("workspace-mode-toggle").performClick()
-        selectUiVariant("ui-variant-use-PRECISION_LENS_EXPERIMENTAL")
-
-        composeRule.onNodeWithTag("precision-lens-workspace").assertIsDisplayed()
-        composeRule.onNodeWithTag("precision-controls").assertIsDisplayed()
-        composeRule.onNodeWithTag("precision-gain-COARSE").assertIsDisplayed()
-        composeRule.onNodeWithTag("precision-gain-FINE").assertIsDisplayed()
-        composeRule.onNodeWithTag("precision-lens-LOCAL_FOCUS").assertIsDisplayed()
-        composeRule.onNodeWithTag("precision-lens-FLOATING_LENS").assertIsDisplayed()
-        composeRule.onNodeWithTag("precision-snap-toggle").assertIsDisplayed()
-        composeRule.onNodeWithTag("precision-snap-bypass").assertIsDisplayed()
+        switchToUnifiedCanvas()
+        composeRule.onNodeWithTag("spatial-add-tool").performClick()
+        composeRule.onNodeWithTag("tool-search").performTextReplacement("POSITION")
+        hideKeyboard()
+        composeRule.onNodeWithTag("tool-POSITION").performScrollTo().performClick()
+        composeRule.waitUntil(10_000) {
+            composeRule.onAllNodesWithTag("spatial-native-content-POSITION-primary")
+                .fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()
+        }
+        composeRule.onNodeWithTag("spatial-reference-preview").assertExists()
+        composeRule.onNodeWithTag("spatial-precision-toggle").performClick()
+        composeRule.onNodeWithTag("precision-controls").assertExists()
+        composeRule.onNodeWithTag("precision-gain-FINE").assertExists()
+        composeRule.onNodeWithTag("precision-lens-FLOATING_LENS").assertExists()
+        composeRule.onNodeWithTag("spatial-precision-toggle").performClick()
     }
 
     @Test
@@ -423,6 +743,32 @@ class EditorRegressionInstrumentedTest {
     }
 
     @Test
+    fun rawDraftFromPreviousWorkspaceSessionMustNotLeakIntoSameEventId() {
+        restoreRecovery()
+        val firstSession = viewModel.state.value.workspaceSessionId
+        eventRow(1L).performClick()
+        composeRule.onNodeWithTag("event-raw-1").performTextInput(" PRIOR SESSION")
+        composeRule.onNodeWithTag("event-apply-text-1").assertExists()
+        assertEquals("Recovered line", eventText(1L))
+
+        // Reload an identical fixture as a different project session. The Event
+        // identifier remains 1, but the old project owns its uncommitted draft.
+        composeRule.activityRule.scenario.onActivity { it.restoreDeterministicFixture() }
+        composeRule.waitUntil(10_000) {
+            viewModel.state.value.workspaceSessionId != firstSession &&
+                viewModel.state.value.document.events.size == 2 &&
+                eventText(1L) == "Recovered line"
+        }
+        eventRow(1L).performClick()
+        composeRule.onNodeWithTag("event-raw-1")
+            .assertIsDisplayed()
+            .assertTextContains("Recovered line")
+        // No stale Apply action: the new project's editor is clean, even though
+        // its event ID and canonical text equal those from the previous session.
+        composeRule.onNodeWithTag("event-apply-text-1").assertDoesNotExist()
+    }
+
+    @Test
     fun rawDraftSurvivesActivityRecreation() {
         restoreRecovery()
         // Global search requests LIST once; recreation must restore the later EDITOR page.
@@ -451,10 +797,45 @@ class EditorRegressionInstrumentedTest {
         }
     }
 
+    private fun assertInspectorDraftStillPresent(stage: String) {
+        Log.i("AsswbRegression", "rotation:assert-draft:$stage")
+        // Check both the unsaved payload and the Apply action. Earlier CI logs
+        // ended at "apply-draft" without an assertion exception, obscuring whether
+        // draft loss or commit failure caused this connected-test failure.
+        val draftText = composeRule.onNodeWithTag("event-raw-1")
+            .fetchSemanticsNode().config[
+                androidx.compose.ui.semantics.SemanticsProperties.EditableText
+            ].text
+        assertTrue("Uncommitted raw draft must still contain WORKBENCH after $stage: $draftText",
+            draftText?.contains("WORKBENCH") == true)
+        composeRule.onNodeWithTag("event-apply-text-1").assertExists()
+    }
+
+
+    @Test
+    fun fixedInspectorSharesUncommittedEventDraftAcrossToolInstances() {
+        restoreRecovery()
+        eventRow(1L).performClick()
+        composeRule.onNodeWithTag("event-raw-1").performTextInput(" SWITCH")
+        assertEquals("Recovered line SWITCH", rawDraftText(1L))
+        // Switching to Effects removes the TEXT provider but must not
+        // create a new draft owner for the same fixed Event inspector.
+        openTool("EFFECTS")
+        composeRule.onNodeWithTag("fixed-inspector").assertIsDisplayed()
+        assertEquals("Recovered line", eventText(1L))
+        openTool("TEXT")
+        assertEquals("Recovered line SWITCH", rawDraftText(1L))
+        composeRule.onNodeWithTag("event-apply-text-1").assertExists()
+        assertEquals("Recovered line", eventText(1L))
+        composeRule.onNodeWithTag("event-apply-text-1").performScrollTo().performClick()
+        composeRule.waitUntil(10_000) { eventText(1L) == "Recovered line SWITCH" }
+    }
+
     @Test
     fun inspectorDraftSurvivesToolSwitchAndRotation() {
         Log.i("AsswbRegression", "rotation:restore-recovery")
         restoreRecovery()
+        val draftSessionId = viewModel.state.value.workspaceSessionId
         Log.i("AsswbRegression", "rotation:open-event")
         eventRow(1L).performClick()
         Log.i("AsswbRegression", "rotation:type-draft")
@@ -465,6 +846,7 @@ class EditorRegressionInstrumentedTest {
         Log.i("AsswbRegression", "rotation:switch-text")
         openTool("TEXT")
         composeRule.onNodeWithTag("event-raw-1").assertIsDisplayed()
+        assertInspectorDraftStillPresent("after-tool-switch")
         Log.i("AsswbRegression", "rotation:request-landscape")
         composeRule.activityRule.scenario.onActivity {
             it.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
@@ -474,11 +856,23 @@ class EditorRegressionInstrumentedTest {
             composeRule.activity.resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
         }
         Log.i("AsswbRegression", "rotation:check-landscape")
+        composeRule.waitForIdle()
+        val compactLandscape = composeRule.onAllNodesWithTag("fixed-content-flow", useUnmergedTree = true)
+            .fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()
         val previewNodes = composeRule.onAllNodesWithTag("preview-workspace").fetchSemanticsNodes(atLeastOneRootRequired = false)
-        if (previewNodes.isNotEmpty()) composeRule.onNodeWithTag("preview-workspace").assertIsDisplayed()
+        if (previewNodes.isNotEmpty()) {
+            // Short landscape windows can remain COMPACT. Their saved outer
+            // scroll may intentionally hide the preview while editing.
+            if (compactLandscape) composeRule.onNodeWithTag("preview-workspace").performScrollTo()
+            composeRule.onNodeWithTag("preview-workspace").assertIsDisplayed()
+        }
+        if (compactLandscape) {
+            composeRule.onNodeWithTag("fixed-inspector").performScrollTo().assertIsDisplayed()
+        }
         val listNodes = composeRule.onAllNodesWithTag("subtitle-navigation").fetchSemanticsNodes(atLeastOneRootRequired = false)
         if (listNodes.isNotEmpty()) composeRule.onNodeWithTag("subtitle-navigation").assertIsDisplayed()
         composeRule.onNodeWithTag("event-inspector").assertIsDisplayed()
+        assertInspectorDraftStillPresent("landscape")
         Log.i("AsswbRegression", "rotation:capture-landscape")
         captureLayout("landscape")
         val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
@@ -507,6 +901,9 @@ class EditorRegressionInstrumentedTest {
             assertTrue("Navigation and inspector must not overlap", navigation.right <= inspector.left || navigation.bottom <= inspector.top)
             composeRule.onNodeWithTag("canvas-workspace").assertDoesNotExist()
             composeRule.onNodeWithTag("preview-divider").assertDoesNotExist()
+            assertEquals("Viewport resizing must not replace the editor document session",
+                draftSessionId, viewModel.state.value.workspaceSessionId)
+            assertInspectorDraftStillPresent("tablet-landscape")
             Log.i("AsswbRegression", "rotation:capture-tablet")
             captureLayout("tablet-landscape")
         } finally {
@@ -540,6 +937,7 @@ class EditorRegressionInstrumentedTest {
                 .isNotEmpty()
         }
 
+        assertInspectorDraftStillPresent("after-tablet-reset-and-list-return")
         Log.i("AsswbRegression", "rotation:apply-draft")
         composeRule.onNodeWithTag("event-apply-text-1").performScrollTo().performClick()
         composeRule.waitUntil(5_000) { eventText(1L) == "Recovered line WORKBENCH" }
@@ -550,6 +948,45 @@ class EditorRegressionInstrumentedTest {
             composeRule.activity.resources.configuration.orientation == Configuration.ORIENTATION_PORTRAIT
         }
         captureLayout("portrait")
+    }
+
+    @Test fun compactContentFlowCanScrollPreviewOutWithoutLosingDirtyText() {
+        restoreRecovery()
+        eventRow(1L).performScrollTo().performClick()
+        openTool("TEXT")
+        val before = viewModel.state.value.document
+        composeRule.onNodeWithTag("event-raw-1").performScrollTo().performTextReplacement("flow draft")
+        hideKeyboard()
+        val compact = composeRule.onAllNodesWithTag("fixed-content-flow")
+            .fetchSemanticsNodes(atLeastOneRootRequired = false)
+        if (compact.isNotEmpty()) {
+            composeRule.onNodeWithTag("fixed-preview-size").performScrollTo().assertIsDisplayed()
+            composeRule.onNodeWithTag("fixed-inspector").performScrollTo().assertIsDisplayed()
+            val preview = composeRule.onNodeWithTag("preview-workspace").fetchSemanticsNode().boundsInRoot
+            val flow = composeRule.onNodeWithTag("fixed-content-flow").fetchSemanticsNode().boundsInRoot
+            assertTrue("Preview can leave the editor viewport", preview.bottom <= flow.top + 1f)
+        }
+        assertEquals("flow draft", rawDraftText(1L))
+        assertEquals(before, viewModel.state.value.document)
+    }
+
+    @Test fun independentDirectoryDismissalPreservesDirtyTextAndTaskContext() {
+        restoreRecovery()
+        eventRow(1L).performScrollTo().performClick()
+        openTool("TEXT")
+        val before = viewModel.state.value.document
+        composeRule.onNodeWithTag("event-raw-1").performScrollTo().performTextReplacement("directory draft")
+        hideKeyboard()
+        composeRule.onNodeWithTag("fixed-tool-CAPABILITIES").performClick()
+        composeRule.onNodeWithTag("fixed-tool-directory").assertIsDisplayed()
+        composeRule.onNodeWithTag("fixed-directory-close").performClick()
+        composeRule.onNodeWithTag("event-raw-1").performScrollTo().assertIsDisplayed()
+        assertEquals("directory draft", rawDraftText(1L))
+        assertEquals(before, viewModel.state.value.document)
+        openTool("POSITION")
+        composeRule.onNodeWithTag("fixed-tool-STYLE").assertIsSelected().performClick()
+        composeRule.onNodeWithTag("position-section-PLACEMENT").performScrollTo().assertIsDisplayed()
+        assertEquals(before, viewModel.state.value.document)
     }
 
     @Test
@@ -568,12 +1005,9 @@ class EditorRegressionInstrumentedTest {
         }
         captureLayout("grouped-geometry")
         openTool("TEXT")
-        val compactList = composeRule.onAllNodesWithTag("fixed-page-list").fetchSemanticsNodes(atLeastOneRootRequired = false)
-        if (compactList.isNotEmpty()) {
-            composeRule.onNodeWithTag("fixed-page-list").performClick()
-            eventRow(1L).assertIsDisplayed().performClick()
-            composeRule.onNodeWithTag("event-raw-1").assertIsDisplayed()
-        }
+        showFixedSubtitleList()
+        eventRow(1L).performScrollTo().performClick()
+        composeRule.onNodeWithTag("event-raw-1").performScrollTo().assertIsDisplayed()
         assertEquals(before, viewModel.state.value.document)
     }
 
@@ -770,99 +1204,44 @@ class EditorRegressionInstrumentedTest {
     }
 
     @Test
-    fun canvasWorkspaceSupportsStackHideRestoreWithoutPreviewModes() {
+    fun unifiedCanvasHidesAndRestoresWorldNodeWithoutDeletingToolState() {
         restoreRecovery()
-        switchToCanvas()
-
-        fun waitForSurface(tag: String) {
-            composeRule.waitUntil(timeoutMillis = 10_000) {
-                runCatching {
-                    composeRule.onNodeWithTag(tag).assertIsDisplayed()
-                    true
-                }.getOrDefault(false)
-            }
+        switchToUnifiedCanvas()
+        if (composeRule.onAllNodesWithTag("spatial-return-to-board")
+                .fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()) {
+            composeRule.onNodeWithTag("spatial-return-to-board").performClick()
         }
-
-        openTool("POSITION")
-        waitForSurface("surface-POSITION")
-        val dragHandle = composeRule.onNodeWithTag("surface-drag-POSITION")
-        val before = dragHandle.fetchSemanticsNode().boundsInRoot
-        dragHandle.performTouchInput {
-            swipe(
-                start = center,
-                end = center + androidx.compose.ui.geometry.Offset(140f, 90f),
-                durationMillis = 350,
-            )
-        }
-        composeRule.waitForIdle()
-        val after = dragHandle.fetchSemanticsNode().boundsInRoot
-        assertTrue("Floating surface drag handle should move the surface", after.left > before.left || after.top > before.top)
-
-        openTool("STYLE")
-        waitForSurface("surface-STYLE")
-
-        openTool("FONTS")
-        openTool("QC")
-        waitForSurface("surface-FONTS")
-        waitForSurface("surface-QC")
-
-        composeRule.onNodeWithContentDescription("隐藏全部浮层").performClick()
-        composeRule.waitUntil(timeoutMillis = 10_000) {
-            composeRule.onAllNodesWithTag("surface-drag-POSITION")
-                .fetchSemanticsNodes(atLeastOneRootRequired = false)
-                .isEmpty()
-        }
-
-        composeRule.onNodeWithContentDescription("呼回全部浮层").performClick()
-        composeRule.waitUntil(timeoutMillis = 10_000) {
-            composeRule.onAllNodesWithTag("surface-drag-POSITION")
-                .fetchSemanticsNodes(atLeastOneRootRequired = false)
-                .isNotEmpty()
-        }
-        composeRule.onNodeWithTag("surface-POSITION").assertIsDisplayed()
-        composeRule.onNodeWithTag("surface-FONTS").assertIsDisplayed()
-
-        composeRule.onNodeWithTag("preview-workspace").assertIsDisplayed()
-        listOf("NORMAL", "FOCUS", "FLOATING", "MANIPULATION").forEach {
-            composeRule.onNodeWithTag("preview-mode-$it").assertDoesNotExist()
-        }
-        composeRule.onNodeWithTag("floating-preview").assertDoesNotExist()
-        composeRule.onNodeWithText("跟随系统").assertDoesNotExist()
-        composeRule.onNodeWithText("白天").assertDoesNotExist()
-        captureLayout("floating-workspace")
-
+        val before = viewModel.state.value.document
+        composeRule.onNodeWithTag("spatial-quick-preview").performClick()
+        composeRule.onNodeWithTag("spatial-menu-preview").performClick()
+        composeRule.onNodeWithTag("spatial-hide-preview").performClick()
+        composeRule.onNodeWithTag("spatial-birdseye").performClick()
+        composeRule.onNodeWithTag("spatial-birdseye-node-preview").performScrollTo().performClick()
+        composeRule.onNodeWithTag("spatial-native-content-preview").assertExists()
+        assertEquals(before, viewModel.state.value.document)
     }
 
     @Test
-    fun surfaceResizeAndLayoutLockSurviveRecreationWithoutChangingSubtitle() {
+    fun unifiedCanvasLayoutLockSurvivesRecreationWithoutTouchingSubtitle() {
         restoreRecovery()
-        switchToCanvas()
+        switchToUnifiedCanvas()
         val canonical = viewModel.state.value.document
-        openTool("POSITION")
-        composeRule.waitForIdle()
-        val surface = composeRule.onNodeWithTag("surface-POSITION")
-        val before = surface.fetchSemanticsNode().boundsInRoot
-        composeRule.onNodeWithTag("surface-resize-POSITION").performTouchInput {
-            swipe(start = center, end = center - androidx.compose.ui.geometry.Offset(80f, 100f), durationMillis = 350)
+        if (composeRule.onAllNodesWithTag("spatial-return-to-board")
+                .fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()) {
+            composeRule.onNodeWithTag("spatial-return-to-board").performClick()
         }
-        composeRule.waitForIdle()
-        val resized = surface.fetchSemanticsNode().boundsInRoot
-        assertTrue("Resize must reduce the committed window size", resized.width < before.width || resized.height < before.height)
-        composeRule.onNodeWithTag("surface-lock-POSITION").performClick()
-        val handle = composeRule.onNodeWithTag("surface-drag-POSITION")
-        val locked = handle.fetchSemanticsNode().boundsInRoot
-        handle.performTouchInput {
-            swipe(start = center, end = center + androidx.compose.ui.geometry.Offset(60f, 60f), durationMillis = 350)
-        }
-        composeRule.waitForIdle()
-        assertEquals(locked, handle.fetchSemanticsNode().boundsInRoot)
+        composeRule.onNodeWithTag("spatial-quick-preview").performClick()
+        composeRule.onNodeWithTag("spatial-menu-preview").performClick()
+        composeRule.onNodeWithTag("spatial-layout-lock-preview").performClick()
         composeRule.activityRule.scenario.recreate()
         composeRule.waitForIdle()
         viewModel = composeRule.activity.editorViewModel
-        composeRule.onNodeWithContentDescription("解除布局锁定").assertIsDisplayed()
-        val restored = composeRule.onNodeWithTag("surface-POSITION").fetchSemanticsNode().boundsInRoot
-        assertEquals(resized.width, restored.width, 1f)
-        assertEquals(resized.height, restored.height, 1f)
+        if (composeRule.onAllNodesWithTag("spatial-return-to-board")
+                .fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()) {
+            composeRule.onNodeWithTag("spatial-return-to-board").performClick()
+        }
+        composeRule.onNodeWithTag("spatial-menu-preview").performClick()
+        composeRule.onNodeWithText("解除布局锁").assertIsDisplayed()
         assertEquals(canonical, viewModel.state.value.document)
     }
 
@@ -943,6 +1322,7 @@ class EditorRegressionInstrumentedTest {
         val before = viewModel.state.value.document
 
         openTool("BATCH")
+        composeRule.onNodeWithTag("batch-mode-search").performClick()
         composeRule.onNodeWithTag("search-style-regex")
             .performScrollTo()
             .assertIsDisplayed()
@@ -1022,6 +1402,163 @@ class EditorRegressionInstrumentedTest {
         }
     }
 
+    @Test fun batchActionsRemainAboveVisibleKeyboardAcrossMainAndCanvas() {
+        restoreRecovery()
+        composeRule.activityRule.scenario.onActivity { activity ->
+            androidx.core.view.WindowCompat.setDecorFitsSystemWindows(activity.window, false)
+            activity.window.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+        }
+        repeat(2) { host ->
+            if (host == 1) switchToUnifiedCanvas()
+            openTool("BATCH")
+            composeRule.onNodeWithTag("batch-actor-action").performScrollTo().assertIsDisplayed()
+                .performTextReplacement("KEYBOARD_BATCH")
+            composeRule.waitForIdle()
+            composeRule.onNodeWithTag("batch-actor-action").assertIsDisplayed().performClick()
+            var keyboardRoot: View? = null
+            var showEvidence = "No focused root selected"
+            try {
+                performInFocusedWindow("Show batch IME in the focused window") { controller, root ->
+                    keyboardRoot = root
+                    val focused = checkNotNull(root.findFocus()) { "Batch field must own input focus" }
+                    val accepted = focused.context.getSystemService(android.view.inputmethod.InputMethodManager::class.java)
+                        .showSoftInput(focused, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT)
+                    showEvidence = "host=$host accepted=$accepted windowFocused=${root.hasWindowFocus()} " +
+                        "focusClass=${focused.javaClass.simpleName} hasToken=${focused.windowToken != null}"
+                    controller.loopMainThreadUntilIdle()
+                }
+                composeRule.waitUntil(5_000) {
+                    keyboardRoot?.rootWindowInsets?.isVisible(android.view.WindowInsets.Type.ime()) == true
+                }
+            } catch (error: Exception) {
+                throw AssertionError("Batch IME did not become visible: $showEvidence", error)
+            }
+            composeRule.waitForIdle()
+            val decor = checkNotNull(keyboardRoot)
+            val keyboardTop = decor.height - decor.rootWindowInsets.getInsets(android.view.WindowInsets.Type.ime()).bottom
+            val preview = composeRule.onNodeWithTag("batch-preview-explicit")
+            val apply = composeRule.onNodeWithTag("batch-review-commit")
+            preview.assertIsDisplayed()
+            apply.assertIsDisplayed()
+            assertTrue("Preview must stay above IME", preview.fetchSemanticsNode().boundsInWindow.bottom <= keyboardTop + 1f)
+            assertTrue("Apply must stay above IME", apply.fetchSemanticsNode().boundsInWindow.bottom <= keyboardTop + 1f)
+            preview.performTouchInput { click() }
+            apply.assertIsEnabled()
+            hideKeyboard()
+        }
+    }
+
+    @Test fun batchDraftAndReviewedPreviewFollowSameInstanceAcrossMainAndCanvas() {
+        restoreRecovery()
+        val before = viewModel.state.value.document
+        composeRule.runOnIdle { viewModel.setQuery("Second") }
+        openTool("BATCH")
+        composeRule.onNodeWithTag("batch-scope-RESULTS").performClick()
+        composeRule.onNodeWithTag("batch-actor-action").performScrollTo().performTextReplacement("SHARED_BATCH")
+        hideKeyboard()
+        visibleBatchAction("batch-preview-explicit").performClick()
+        composeRule.onNodeWithTag("batch-review-commit").assertIsEnabled()
+        composeRule.onNodeWithTag("batch-mode-search").performClick()
+        composeRule.onNodeWithTag("batch-mode-rule").performClick()
+        composeRule.onNodeWithTag("batch-review-commit").assertIsEnabled()
+        switchToUnifiedCanvas()
+        openTool("BATCH")
+        composeRule.onNodeWithTag("batch-scope-RESULTS").performScrollTo().assertIsSelected()
+        composeRule.onNodeWithTag("batch-scope-count").assertTextContains("作用范围 1 条")
+        composeRule.onNodeWithTag("batch-actor-action").performScrollTo().assertTextContains("SHARED_BATCH")
+        composeRule.onNodeWithTag("batch-review-commit").assertIsEnabled()
+        composeRule.runOnIdle { assertEquals(before, viewModel.state.value.document) }
+        visibleBatchAction("batch-review-commit").performClick()
+        composeRule.runOnIdle {
+            assertEquals("SHARED_BATCH", viewModel.state.value.document.events.first { it.id == 2L }.name)
+            viewModel.undo()
+            assertEquals(before, viewModel.state.value.document)
+        }
+    }
+
+    @Test fun batchSearchLiteralInputsRestoreButReviewedCommitRequiresFreshPrecheckAfterRecreation() {
+        restoreRecovery()
+        openTool("BATCH")
+        composeRule.onNodeWithTag("batch-mode-search").performClick()
+        composeRule.onNodeWithTag("batch-scope-DOCUMENT").performClick()
+        composeRule.onNodeWithTag("search-pattern").performScrollTo().performTextReplacement("Second")
+        composeRule.onNodeWithTag("search-replacement").performScrollTo().performTextReplacement("RESTORED_SEARCH")
+        hideKeyboard()
+        visibleBatchAction("search-review-preview").performClick()
+        composeRule.onNodeWithTag("search-review-commit").assertIsEnabled()
+        val before = viewModel.state.value.document
+        composeRule.activityRule.scenario.recreate()
+        composeRule.waitForIdle()
+        viewModel = composeRule.activity.editorViewModel
+        openTool("BATCH")
+        composeRule.onNodeWithTag("batch-mode-search").performClick()
+        composeRule.onNodeWithTag("search-pattern").performScrollTo().assertTextContains("Second")
+        composeRule.onNodeWithTag("search-replacement").performScrollTo().assertTextContains("RESTORED_SEARCH")
+        composeRule.onNodeWithTag("search-review-commit").assertIsNotEnabled()
+        composeRule.runOnIdle { assertEquals(before, viewModel.state.value.document) }
+    }
+
+    @Test fun reviewedBatchCommitsOneUndoAndRejectsStaleBaselineAndSession() {
+        restoreRecovery()
+        composeRule.runOnIdle {
+            val before = viewModel.state.value.document
+            val recipe = io.github.assworkbench.domain.AssBatchRecipe("reviewed", actions = listOf(
+                io.github.assworkbench.domain.AssBatchAction.SetActor("Reviewed")))
+            val review = io.github.assworkbench.domain.AssBatchReview.create(before, recipe,
+                viewModel.state.value.workspaceSessionId, viewModel.state.value.documentRevision)
+            viewModel.applyBatchReview(review)
+            assertTrue(viewModel.state.value.document.events.all { it.name == "Reviewed" })
+            viewModel.undo()
+            assertEquals(before, viewModel.state.value.document)
+            viewModel.updateEventText(1L, "external mutation")
+            val changed = viewModel.state.value.document
+            viewModel.applyBatchReview(review)
+            assertEquals(changed, viewModel.state.value.document)
+            assertTrue(viewModel.state.value.status.contains("过期"))
+            val oldSession = io.github.assworkbench.domain.AssBatchReview.create(changed, recipe,
+                viewModel.state.value.workspaceSessionId, viewModel.state.value.documentRevision)
+            viewModel.newSubtitleProject()
+            val replacement = viewModel.state.value.document
+            viewModel.applyBatchReview(oldSession)
+            assertEquals(replacement, viewModel.state.value.document)
+            assertFalse(viewModel.state.value.canUndo)
+        }
+    }
+
+    @Test fun batchUsesSharedResultsAndRequiresFreshPreviewAfterScopeChangeAcrossHosts() {
+        restoreRecovery()
+        composeRule.runOnIdle { viewModel.setQuery("Second") }
+        openTool("BATCH")
+        composeRule.onNodeWithTag("batch-scope-RESULTS").performClick()
+        composeRule.onNodeWithTag("batch-scope-count").assertTextContains("作用范围 1 条")
+        composeRule.onNodeWithTag("batch-actor-action").performScrollTo().performTextReplacement("Reviewed")
+        hideKeyboard()
+        visibleBatchAction("batch-preview-explicit").performClick()
+        composeRule.onNodeWithTag("batch-review-commit").assertIsEnabled()
+        val beforeLocate = viewModel.state.value.document
+        val selectionBeforeLocate = viewModel.state.value.selectedEventIds
+        composeRule.onNodeWithTag("batch-preview-locate-2").performScrollTo().performClick()
+        composeRule.runOnIdle {
+            assertEquals(2L, viewModel.state.value.focusedEventId)
+            assertEquals(selectionBeforeLocate, viewModel.state.value.selectedEventIds)
+            assertEquals(beforeLocate, viewModel.state.value.document)
+        }
+        composeRule.onNodeWithTag("batch-scope-DOCUMENT").performScrollTo().performClick()
+        composeRule.onNodeWithTag("batch-review-commit").assertIsNotEnabled()
+        switchToUnifiedCanvas()
+        openTool("BATCH")
+        composeRule.onNodeWithTag("batch-scope-RESULTS").performScrollTo().performClick()
+        composeRule.onNodeWithTag("batch-scope-count").assertTextContains("作用范围 1 条")
+        composeRule.onNodeWithTag("batch-actor-action").performScrollTo().performTextReplacement("Reviewed")
+        hideKeyboard()
+        visibleBatchAction("batch-preview-explicit").performClick()
+        visibleBatchAction("batch-review-commit").performClick()
+        composeRule.runOnIdle {
+            assertEquals("Reviewed", viewModel.state.value.document.events.first { it.id == 2L }.name)
+            assertFalse(viewModel.state.value.document.events.first { it.id == 1L }.name == "Reviewed")
+        }
+    }
+
     @Test
     fun batchUnknownStyleAndNegativeMarginFailBeforePreview() {
         restoreRecovery()
@@ -1075,6 +1612,7 @@ class EditorRegressionInstrumentedTest {
         val before = viewModel.state.value.document
 
         openTool("BATCH")
+        composeRule.onNodeWithTag("batch-mode-search").performClick()
         composeRule.onNodeWithTag("search-style-regex")
             .performScrollTo()
             .assertIsDisplayed()
@@ -1117,7 +1655,7 @@ class EditorRegressionInstrumentedTest {
         composeRule.onNodeWithTag("batch-karaoke-reveal-accel")
             .assertIsDisplayed()
         composeRule.onNodeWithTag("batch-preview-explicit")
-            .performScrollTo()
+
             .assertIsDisplayed()
         composeRule.onNodeWithTag("batch-preview-pending")
             .performScrollTo()
@@ -1183,16 +1721,7 @@ class EditorRegressionInstrumentedTest {
             .fetchSemanticsNodes(atLeastOneRootRequired = false)
         if (fixedWorkspace.isEmpty()) return
 
-        val navigationGroups = composeRule.onAllNodesWithTag("fixed-group-NAVIGATION", useUnmergedTree = true)
-            .fetchSemanticsNodes(atLeastOneRootRequired = false)
-        if (navigationGroups.isNotEmpty()) {
-            composeRule.onNodeWithTag("fixed-group-NAVIGATION").performScrollTo().performClick()
-        }
-        val pages = composeRule.onAllNodesWithTag("fixed-page-list", useUnmergedTree = true)
-            .fetchSemanticsNodes(atLeastOneRootRequired = false)
-        if (pages.isNotEmpty()) {
-            composeRule.onNodeWithTag("fixed-page-list").performClick()
-        }
+        composeRule.onNodeWithTag("fixed-tool-SUBTITLES").performScrollTo().performClick()
         composeRule.waitUntil(10_000) {
             composeRule.onAllNodesWithTag("subtitle-navigation", useUnmergedTree = true)
                 .fetchSemanticsNodes(atLeastOneRootRequired = false)
@@ -1200,28 +1729,64 @@ class EditorRegressionInstrumentedTest {
         }
     }
 
-    private fun hideKeyboard() {
-        composeRule.activityRule.scenario.onActivity { activity ->
-            activity.getSystemService(android.view.inputmethod.InputMethodManager::class.java)
-                .hideSoftInputFromWindow(activity.window.decorView.windowToken, 0)
+    private fun visibleBatchAction(tag: String): SemanticsNodeInteraction {
+        val action = composeRule.onNodeWithTag(tag)
+        // Fixed actions are outside the tool's inner scroll body. In the compact
+        // main host the entire finite tool pane still belongs to the outer flow.
+        // Canvas/tablet footers have no such scrolling ancestor.
+        if (composeRule.onAllNodesWithTag("fixed-content-flow", useUnmergedTree = true)
+                .fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()) {
+            action.performScrollTo()
         }
-        composeRule.waitUntil(5_000) {
-            composeRule.activity.window.decorView.rootWindowInsets
-                ?.isVisible(android.view.WindowInsets.Type.ime()) != true
+        return action.assertIsDisplayed()
+    }
+
+    private fun performInFocusedWindow(description: String, action: (UiController, View) -> Unit) {
+        // Window focus differs from a child View's input focus. Espresso does
+        // not expose a ViewMatchers.hasWindowFocus API in the pinned version.
+        val focusedDecor = object : TypeSafeMatcher<View>() {
+            override fun describeTo(description: Description) {
+                description.appendText("decor view with window focus")
+            }
+            override fun matchesSafely(view: View): Boolean = view.hasWindowFocus()
+        }
+        onView(isRoot()).inRoot(withDecorView(focusedDecor)).perform(object : ViewAction {
+            override fun getConstraints(): Matcher<View> = isRoot()
+            override fun getDescription(): String = description
+            override fun perform(controller: UiController, view: View) = action(controller, view.rootView)
+        })
+    }
+
+    private fun hideKeyboard() {
+        var imeRoot: View? = null
+        var requestEvidence = "No focused root selected"
+        try {
+            performInFocusedWindow("Close IME in the currently focused window") { controller, root ->
+                imeRoot = root
+                requestEvidence = "rootClass=${root.javaClass.simpleName} windowFocused=${root.hasWindowFocus()} " +
+                    "focusClass=${root.findFocus()?.javaClass?.simpleName} " +
+                    "beforeVisible=${root.rootWindowInsets?.isVisible(android.view.WindowInsets.Type.ime())}"
+                ViewActions.closeSoftKeyboard().perform(controller, root)
+            }
+            composeRule.waitUntil(5_000) {
+                imeRoot?.rootWindowInsets
+                    ?.isVisible(android.view.WindowInsets.Type.ime()) == false
+            }
+        } catch (error: Exception) {
+            throw AssertionError("IME hide did not complete: $requestEvidence", error)
         }
         composeRule.waitForIdle()
     }
 
-    private fun switchToCanvas() {
+    private fun switchToUnifiedCanvas() {
         hideKeyboard()
-        composeRule.onNodeWithContentDescription("工具和更多操作").performClick()
-        composeRule.onNodeWithTag("workspace-mode-toggle").performClick()
-        composeRule.onNodeWithTag("ui-variant-lab").assertIsDisplayed()
-        selectUiVariant("ui-variant-use-CANVAS_EXPERIMENTAL")
+        if (composeRule.onAllNodesWithTag("spatial-workspace", useUnmergedTree = true)
+                .fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()) return
+        composeRule.onNodeWithTag("workspace-direct-mode-toggle")
+            .assertIsDisplayed().performClick()
         composeRule.waitUntil(10_000) {
-            composeRule.onAllNodesWithTag("canvas-workspace", useUnmergedTree = true)
-                .fetchSemanticsNodes(atLeastOneRootRequired = false)
-                .isNotEmpty()
+            composeRule.onAllNodesWithTag("spatial-workspace", useUnmergedTree = true)
+                .fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()
         }
     }
 
@@ -1235,22 +1800,35 @@ class EditorRegressionInstrumentedTest {
                 showFixedSubtitleList()
                 return
             }
-            val group = WorkbenchTool.valueOf(name).group
-            composeRule.onNodeWithTag("fixed-group-${group.name}").performScrollTo().performClick()
-            val fixedTool = composeRule.onAllNodesWithTag("fixed-tool-$name", useUnmergedTree = true)
-                .fetchSemanticsNodes(atLeastOneRootRequired = false)
-            if (fixedTool.isNotEmpty()) {
-                composeRule.onNodeWithTag("fixed-tool-$name").performScrollTo().performClick()
-                composeRule.waitForIdle()
-                return
+            composeRule.onNodeWithTag("fixed-tool-CAPABILITIES").performClick()
+            composeRule.onNodeWithTag("tool-search").performTextReplacement(name)
+            hideKeyboard()
+            composeRule.onNodeWithTag("tool-$name").performScrollTo().assertIsDisplayed().performClick()
+            composeRule.waitForIdle()
+            // Inner performScrollTo only reaches the nearest scroll ancestor.
+            // Expose the finite inspector in the compact outer flow first;
+            // subsequent field scroll/display assertions remain strict.
+            if (composeRule.onAllNodesWithTag("fixed-content-flow", useUnmergedTree = true)
+                    .fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()) {
+                composeRule.onNodeWithTag("fixed-inspector").performScrollTo().assertIsDisplayed()
             }
+            return
         }
-        composeRule.onNodeWithTag("workspace-tools").performClick()
+        composeRule.onNodeWithTag("spatial-add-tool").assertIsDisplayed().performClick()
+        composeRule.waitUntil(10_000) {
+            composeRule.onAllNodesWithTag("tool-search")
+                .fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()
+        }
         composeRule.onNodeWithTag("tool-search").performTextReplacement(name)
         hideKeyboard()
         composeRule.onNodeWithTag("tool-$name").performScrollTo().performClick()
         composeRule.waitForIdle()
     }
+
+    private fun rawDraftText(id: Long): String =
+        composeRule.onNodeWithTag("event-raw-$id").fetchSemanticsNode().config[
+            androidx.compose.ui.semantics.SemanticsProperties.EditableText
+        ].text
 
     private fun eventText(id: Long): String =
         viewModel.state.value.document.events.first { it.id == id }.text

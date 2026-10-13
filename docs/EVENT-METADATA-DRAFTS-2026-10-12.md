@@ -1,0 +1,11 @@
+# 跨 UI 元数据草稿
+
+沿用已批准的共享工作区方向，接续字段校验检查点673d09ca。Actor、Layer、Dialogue/Comment不再由各个InlineEventEditor的rememberSaveable各自拥有，而由会话根级EventMetadataDraftStore按既有工具owner和Event ID共享。主编辑家族沿用EventTextDraftKey.owner，独立实例隔离；关闭独立实例、删除事件时清理，hide和Host切换保留。不存在新文档格式或新自动提交。
+
+三字段作为一个元数据编辑事务保存字面输入和基线，包括无效Layer。外部canonical改变时，干净草稿同步、脏草稿保留并明确提示冲突。重新载入丢弃草稿；以草稿覆盖是显式操作。正常应用只在实际写入值匹配时确认基线，避免Layer字面003被规范化为3后误报自己的提交冲突。Cancel/Undo和原ViewModel写入路径保留。
+
+根级协调包含未显示实例。基本字符串快照只接受同session，支持既有Activity保存恢复机制，但不宣称系统杀进程恢复已贯通；时间字段仍为局部草稿，全部专业工具状态统一仍未完成。此单元不持久化修改授权，也不改变批量修订版本校验。
+
+6项新增领域测试先因缺失API失败，随后完整领域源码和原始资源由Kotlin反射harness运行259/259。新增真实Activity跨Host/外部冲突/显式覆盖/一次Undo回归，以及实际Compose store的owner共享、独立实例、关闭/删除清理、字面恢复及干净/脏同步两项Android测试。Android/Compose编译、设备执行和视觉仍待CI，本地没有SDK。
+
+UIGS查询现有共享草稿/生命周期/owner案例族，追加既有项目侧Pending。不修改Canonical；此前Foundry跨仓库写入被自动审批拒绝，未重试。

@@ -1,9 +1,26 @@
 #!/usr/bin/env bash
 set -uo pipefail
 
+runner_tools_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+report_index=0
+attempt_results_ready=false
+mkdir -p diagnostics/instrumentation || exit 1
+report_session_dir="$(mktemp -d diagnostics/instrumentation/run-XXXXXX)" || exit 1
+
 report_results() {
-  echo "---- instrumentation XML ----"
-  find app/build/outputs/androidTest-results/connected -name 'TEST-*.xml' -type f -print -exec cat {} \; || true
+  report_index=$((report_index + 1))
+  echo "---- instrumentation failure summary (attempt $report_index) ----"
+  local result_dir="app/build/outputs/androidTest-results/connected"
+  local archive_dir="$report_session_dir/attempt-$report_index"
+  if [[ "$attempt_results_ready" != true ]]; then
+    echo "NO XML RESULTS: this attempt could not isolate its result directory"
+    return
+  fi
+  if [[ -d "$result_dir" ]]; then
+    mkdir -p "$archive_dir"
+    cp -R "$result_dir/." "$archive_dir/"
+  fi
+  python3 "$runner_tools_dir/summarize_instrumentation.py" "$archive_dir" || true
   echo "---- instrumentation logcat tails ----"
   find app/build/outputs/androidTest-results/connected -name 'logcat-*.txt' -type f -print | while read -r file; do
     echo "===== $file ====="
@@ -19,6 +36,14 @@ run_attempt() {
   local limit="$1"
   shift
   echo "---- instrumentation attempt (deadline $limit): $* ----"
+  # The previous attempt was archived before this one starts. A compile or
+  # connection failure must not relabel those old XML files as current evidence.
+  attempt_results_ready=false
+  if ! rm -rf -- app/build/outputs/androidTest-results/connected; then
+    echo "Cannot isolate current instrumentation results; failing this attempt"
+    return 1
+  fi
+  attempt_results_ready=true
   timeout --kill-after=30s "$limit" gradle :app:connectedDebugAndroidTest "$@" --stacktrace
   local status=$?
   if [[ "$status" -eq 124 || "$status" -eq 137 ]]; then

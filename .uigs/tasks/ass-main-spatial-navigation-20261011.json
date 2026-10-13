@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "id": "ass-main-spatial-navigation-20261011",
+  "goal": "Continue improving ASS main UI and infinite canvas UI on the active redesign branch.",
+  "status": "work_unit_complete_pending_external_validation",
+  "current_work_unit": "Consistent fixed tool/list navigation and pinned recovery/preview controls.",
+  "completed_units": [
+    "Corrected fixed list/tool group consistency including global commands and Text close.",
+    "Pinned preview density and spatial birdseye outside scrolling strips.",
+    "Added JVM and connected navigation regressions; local pure JVM checks and code review completed."
+  ],
+  "next_units": [
+    "Read exact-head Android CI and emulator results.",
+    "Inspect phone/tablet, large-font and IME visual acceptance before the next bounded UI iteration."
+  ],
+  "branch": "redesign/infinite-canvas-workbench-v2",
+  "pr": 138,
+  "latest_durable_commit": "714f3e12f787d412a80f8607f68cf2b11dc79fad",
+  "external_validation": {
+    "android_ci": "pending",
+    "emulator": "pending",
+    "fontconfig": "pending",
+    "real_device_visual_ime": "pending",
+    "uigs_intake": "local bounded task and acceptance record emitted; downstream processing pending"
+  },
+  "blockers": [
+    "Local Android SDK unavailable; Compose compilation/instrumentation not established.",
+    "Redesign PR #138 remains Draft and unmerged; 240-item ledger acceptance is not complete."
+  ],
+  "updated_at": "2026-10-11"
+}

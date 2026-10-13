@@ -1,0 +1,155 @@
+## Narrow action rail must budget controls inside actual padding / Pending (2026-10-13)
+
+Dedup checked spatial native-density/action reachability family. Source narrow rail88dp has72dp content after padding16, but old Row declared two40dp buttons (80dp). Stack48dp actions with4dp spacing and expose checked pin plus text status; preserve resident identity and scroll list. Added native actual bounds containment/nonoverlap assertions alongside existing residency/geometry tests; native RED/GREEN and device visuals pending. This source-confirmed width defect is not established as historical residency-loss root. Current PR diagnostics left running; product repair stored on independent checkpoint.
+
+Source docs/EMULATOR-FAILURE-TRIAGE-2026-10-12.md. Bug/Case extension only, Canonical unchanged. External intake remains Pending after prior automatic cross-repository rejection, no retry.
+
+## Resident state evidence must span activation and return / Pending (2026-10-13)
+
+Dedup checked spatial state/navigation family. Prior full150/3 rail failure is after return to board, while test never verifies pin toggle or resident rail inside focused editor. Strengthened same native case checks real displayed pin label “取消驻留” and rail at all three boundaries with stage logs. Keep world bounds, native content and recall assertions; no inferred product root or repair. Current c87edd7d full attempt XML empty; cannot certify remaining failure count or rotation pass. New execution pending.
+
+Source docs/EMULATOR-FAILURE-TRIAGE-2026-10-12.md. Case/Test refinement only, Canonical unchanged; external Foundry intake Pending after earlier automatic cross-repository rejection, no retry.
+
+## Orientation is not a layout-profile assertion / Pending (2026-10-13)
+
+Dedup checked viewport/reachability family. d4cd3417 full150/3 native rotation case fails preview display after prior editing scrolled outer flow. Source policy keeps short landscape COMPACT unless width>=720 and height>=420. Actual layout/profile, retained scroll and visibility must be distinguished from orientation label. Existing test now waits idle, uses actual compact-flow presence, scrolls preview into view and asserts display, scrolls inspector back and checks draft; wider profile assertions unchanged. No product reset of user's scroll. Source-level test correction; native pending, no usability claim or Canonical promotion.
+
+Evidence docs/EMULATOR-FAILURE-TRIAGE-2026-10-12.md. Bounded Candidate/Case extension; external intake Pending after prior cross-repository auto-review rejection, no retry.
+
+## Keyboard-safe layout assertions require a verified visible IME / Pending
+
+Dedup: existing focused-window IME Case and viewport/action reachability family. 79aca312 full150/4 native failure occurs before footer geometry checks, waiting for IME appearance. Setup silently skipped Activity.currentFocus=null and commanded/observed Activity window. Revised existing regression refocuses actual displayed field, requires input focus, SHOW_IMPLICIT commands and observes same focused root, preserves5s timeout and adds accepted/Host/focus/token diagnostics. Strict footer visibility/geometry/touch unmodified. No product keyboard defect or repair inferred; native execution pending.
+
+Source docs/EMULATOR-FAILURE-TRIAGE-2026-10-12.md. Candidate/Case extension only, Canonical unchanged. External intake remains Pending after prior automatic cross-repository rejection, no retry.
+
+## Nested scroll reachability requires exposing the outer tool pane / Pending
+
+Dedup checked existing viewport/reachability family and prior footer observation. Source fixed compact flow has finite inspector after reference preview; rule/search inner scroll creates nearer ancestor. Existing native batch field display failures ca6e5d0d/run38267249421 persist after inner performScrollTo. Common test tool navigation now first scrolls the finite fixed-inspector through actual outer flow and asserts display; inner assertions and strict visible-keyboard footer test remain unchanged. This is source-supported test-path correction, native confirmation pending, no established product scrolling failure or usability claim.
+
+Evidence remains partial: full-attempt XML26/5 does not certify all150 tests or a failure reduction. Prior cross-repository automatic rejection remains respected; bounded Candidate/Case update Pending, no Foundry retry or Canonical promotion. See docs/EMULATOR-FAILURE-TRIAGE-2026-10-12.md.
+
+## Selection must retain independent Host navigation / Pending
+
+Dedup checked task/context and spatial Host families. Native a1870711/run38260616254 full150/11: shared-filter test retains selected Event2, then fails finding the more menu while switching Host. Source selectionMode hides both menu and direct layout switch. Existing direct toggle is moved outside selection branch, using unchanged presentation callback; test uses actual displayed toggle and checks selection/query/document immediately after switch. No clearing selection or semantic click bypass. Local source/diff/artifact-policy checks only; native execution pending, other ten failures unresolved.
+
+Append to prior independent-filter access family; single source Case/Candidate extension, no Canonical promotion. External intake remains Pending after prior automatic rejection for cross-repository disclosure/destination authorization; no retry. Evidence: docs/EMULATOR-FAILURE-TRIAGE-2026-10-12.md.
+
+# Candidate / Pending Foundry write
+
+## Selection mode must retain independent filtering access / Pending
+
+Source + native-red case: shared filter test selects an Event before opening search; toolbar selectionMode removes the only search action, yielding missing 搜索 semantics. Selection and filter are independent workspace axes, so keep the existing search toggle available rather than clear selection or weaken the test. Existing failed native regression retains document/selection/filter assertions; repaired product entry native validation pending. Append to existing task/context family, no Canonical promotion. Foundry external write Pending after earlier automatic cross-repository rejection; no retry.
+
+## IME command and observation must target the same active window / Pending
+
+Dedup queried popup/semantic-sync and presentation-isolation families. Native c7dbcd74/38246400875 full146/24 failures; repeated hideKeyboard evidence accepted=false/windowFocused=false/Activity focus null. Source fixed directory is AlertDialog, while helper commanded Activity decor token and observed Activity insets. Repair uses Espresso focused decor root for both standard close action and visibility assertion, retaining deadline/cause and fail-closed null handling.
+
+Added real dialog-visible-keyboard regression retaining dialog/search text/uncommitted raw draft/document. Not a product keyboard behavior change; new native execution pending, no all-failure closure. Source docs/EMULATOR-FAILURE-TRIAGE-2026-10-12.md. Canonical unchanged; Foundry write Pending after prior automatic cross-repository rejection, no retry.
+
+## Timing draft baseline must retain source precision / Pending
+
+Dedup queried shared-draft/owner and precision/identity families. Start/End Host-local buffers now share an instance/session/Event-owned pair, preserve dirty external conflicts and explicit reset/overwrite. Canonical baseline uses actual milliseconds:1049→1041ms has the same ASS display string, so formatted-text equality cannot certify an unchanged source. Own commit acknowledgement checks actual millisecond values and preserves the existing display formatter. Host remount and equivalent external acknowledgement retain literal millisecond input; a two-assertion regression reproduced incidental normalization before its repair.
+
+Evidence: eight new domain cases and full267/267 via Kotlin reflection; Activity Host/conflict/1251ms/Undo and actual store lifecycle/restore/reset native tests added but unexecuted. Process restore and other professional-tool drafts remain incomplete. docs/EVENT-TIMING-DRAFTS-2026-10-12.md. Canonical unchanged, Foundry write Pending after prior automatic cross-repository rejection, no retry.
+
+## Assertion geometry and outer-flow action reachability / Pending
+
+Dedup queried existing geometry/viewport and stable-action evidence families. Side-rail source/test audit: the old overlap assertion used the full-width focused container including navigation above the rail. Compare real native content bounds, and independently check header above rail; do not weaken content visibility or geometry invariance.
+
+Batch preview tests previously clicked fixed footers without asserting on-screen placement. A footer outside a tool's inner scroll may still belong to the compact Host outer content flow. Scroll only when the actual outer flow exists, then require display before touch; leave the keyboard-safe footer regression strict and unscrolled. Native tests pending, batch0 final root not inferred from source alone. docs/EMULATOR-FAILURE-TRIAGE-2026-10-12.md. Canonical unchanged; external Foundry write remains Pending after earlier automatic cross-repository rejection, no retry.
+
+## Retired selector in common native navigation helper / Pending
+
+Dedup matches Foundry stable-action-identity and fictional-selector UI contract families. Exact source audit links named native workspace-tools missing-node failures to a common helper targeting a removed tag. Current production spatial-add-tool opens the real directory in both board and focused stage; three existing regressions already use it. Change the helper to that visible action and wait for real tool-search, preserving downstream draft/document/Undo assertions. Native validation pending.
+
+Separate IME timeout failures now preserve request acceptance/focus/token metadata in the failure message and keep original cause/timeout. No product-keyboard root inferred, no test skipped or failure changed to success. Source docs/EMULATOR-FAILURE-TRIAGE-2026-10-12.md. Foundry write remains Pending after prior automatic cross-repository rejection; no retry or Canonical promotion.
+
+## Same-instance metadata draft continuity / Pending
+
+Dedup found the existing Foundry shared raw draft/owner family. Actor/Layer/type had Host-local rememberSaveable storage; shared immutable metadata buffers now retain literal values under session + tool owner + Event ID, with clean synchronization, dirty external conflict, explicit reload/overwrite and successful-commit acknowledgement. Own numeric normalization must be acknowledged against actual canonical values, otherwise a successful 003→3 Layer commit can appear as an external conflict.
+
+Evidence: six new domain tests, complete domain259/259 via Kotlin reflection; Activity Host/conflict/Undo and actual store lifecycle Android tests added but unexecuted. Time fields and killed-process restore remain outside completed scope. docs/EVENT-METADATA-DRAFTS-2026-10-12.md. Source-only Candidate extension; Canonical unchanged. Foundry external intake Pending after prior automatic cross-repository rejection, no retry.
+
+## Editable numeric input must not silently substitute canonical values / Pending
+
+Dedup queried Foundry numeric coercion/invalid-input observations and bugs. Inline Event time commit silently returned on parse/order failure; Layer parse failure substituted canonical Layer while applying other fields, and VM clamped out-of-range integers. Source-level UI fix ties visible field errors and disabled commit to the existing parser/VM contract, preserving negative Layer and zero/equal timing. App-specific -999..999 is not an ASS standard claim.
+
+Evidence: five new domain cases, full domain253/253 via Kotlin harness; real Activity two-host invalid/repair/Undo test added but unexecuted. Docs/EVENT-FIELD-VALIDATION-2026-10-12.md. No measured usability claim. External intake remains Pending under prior automatic cross-repository rejection; no retry or Canonical promotion.
+
+## Terminal escape rejection in evidence download / Pending
+
+Dedup queried existing spatial evidence-identity and emulator diagnostic observation families. Report job114691954061 in run38212068747 was readable and failed before extraction: gh api rejected terminal escape sequences, explicitly requesting --allow-escape-sequences. This localizes the new report failure only; no product assertion or earlier Transport closed root is established.
+
+Allow escapes only for download to a temporary file, then strip terminal sequences/control characters before printing bounded summaries. A colored-marker/OSC-link regression failed before repair and passed afterward; tools16/16. Actual GitHub report execution pending. Append to existing case; Canonical unchanged, Foundry write remains Pending under prior automatic cross-repository rejection, no retry.
+
+## Independent compact evidence channel / Pending (2026-10-12)
+
+Dedup queried Foundry evidence-identity and Android emulator-offline observation families. Exact eaab9382 Android/Fontconfig succeeded, emulator38194661365 failed; job-log connector returned Transport closed and annotations endpoint was unsupported. No assertion retrieved; log size is not established as the cause.
+
+Existing bounded summaries still share the screenshot-heavy job log. Read-only dependent report downloads the same run/attempt job on the runner and extracts only existing attempt summaries into a separate small job log. Extraction success is distinct from regression success; absent/incomplete summaries fail the report, all attempt/failure identities remain, raw source log remains authoritative. Six parser regressions RED-to-GREEN, complete Python tools15/15; real report/native execution pending. Source docs/EMULATOR-EVIDENCE-CHANNEL-2026-10-12.md. External intake Pending under prior automatic cross-repository rejection; no retry or Canonical promotion.
+
+Destination: 11576865/UIGS-Foundry
+Related family: inbox/candidates/2026-10-03-spatial-canvas-camera-semantic-zoom-gesture-ownership.md
+Source: ASS-Workbench-Android@58e4b4e; docs/MAIN-CANVAS-RECHECK-2026-10-11.md.
+
+Code-level observation: a task entry labelled 排版 invokes STYLE; exact-tool selection activeTool == STYLE leaves POSITION/VECTOR_CLIP without an active category. TaskCategory, ToolInstance and Host have distinct identities. Grouped task navigation should derive selected category from the actual active tool, while exposing actual tool/context independently.
+
+Separate source observation: keeping two presentation routes does not establish preservation of retired-route interaction capabilities. Migration parity needs capability-level evidence; historical 240 UI and all four-edge/glass behaviors remain partial/unverified.
+
+Epistemic level: source inspection and deterministic selection predicate; no new native visual/IME/usability measurement, no broad universal claim. Canonical unchanged. Search performed before recording; existing families related, no verified exact-match promotion.
+
+Status: Pending. Prior automatic approval review rejected Foundry cross-repository disclosure/destination authorization; this check does not retry that rejected external mutation. Source-project record remains available for later ingestion.
+
+## Continuation evidence
+
+Implemented category-level selection, independent directory and root-owned navigation. Important review finding: retaining the same tool enum alone does not preserve active ToolInstance/Binding; invoking openPrimary on task reselection can silently replace a pinned sibling target. Same-tool reselection now changes only presentation mode.
+
+Compact content flow also requires sufficient scroll range: editorHeight = viewport - preview leaves only chrome overflow and cannot scroll the full reference away. A bounded full-viewport pane makes the reference scrollable outside the viewport without unbounded nested LazyColumn measurement. Pure JVM category/layout 13/13 and domain 217/217 pass. Native flow/IME/device execution remains Pending, not usability evidence.
+
+Dedup search repeated against Foundry for `task category host`; returned related role/context candidates but no identical focused case. Append to this existing Pending packet; do not create Canonical or retry rejected cross-repository write.
+
+## Capability-consumer audit and narrow chrome
+
+Historical layout consolidation keeps decode tokens and old Surface fields, but current InfiniteCanvasHost has no consumers for old docking/minimized/tabGroup state, independent four-edge panels or GlassToolWindow. Capability parity needs an executable consumer, not retained serializers/models or route-decode tests. Related Foundry spatial-canvas Candidate already records restoration risks during PR #138; search `migration capability persistence` found that family. Append this focused source evidence here; no Canonical or rejected external retry.
+
+Narrow navigation checks must include optional resident/bookmark rails and actual action-strip overflow: a 320dp no-rail/no-preview fixture can pass while supported combined states collapse the title. Revised production Host retains full-width chrome, reserves rail touch areas below it, and adds a dual-rail + reference action regression. Native results Pending, not measured usability evidence. Source mapping: docs/MULTI-UI-CAPABILITY-MIGRATION-2026-10-11.md.
+
+## Reviewed batch scope continuation / Pending
+
+Dedup search in Foundry inbox for batch / preview baseline found related evidence-identity and operation ownership observations, no identical batch case. Source observation: adding a result scope can accidentally replace a preexisting full-document default. Explicit scope identity, resolved target IDs and a baseline/session checked review receipt prevent unintended scope enlargement or stale commits; document default preservation has deterministic coverage. Full change review must show raw ASS changes because visible text can be unchanged by tag edits.
+
+Evidence: docs/BATCH-REVIEW-2026-10-12.md, AssBatchReviewTest, source diff from0e8d849a; domain235/235. Android connected/visual evidence Pending. Candidate/source case only, no native usability conclusion or Canonical promotion. External intake remains Pending under the prior cross-repository automatic-review rejection; no rejected write retry.
+
+## Same-session batch draft ownership / Pending
+
+Source-only case: observable inputs/preview ownership must use tool instance identity across presentations; separate rememberSaveable providers preserve independent Host values rather than one shared draft. New batch store preserves owner values and reviewed result, primitive snapshot deliberately omits review authority.
+
+Restore caveat: an in-memory session epoch starting at1 is not stable process/project identity. Rejecting mismatched snapshots protects boundaries but cannot substantiate killed-process restoration. Activity recreation retaining a VM is not a killed-process test. This is a scoped source observation, not Canonical.
+
+Dedup: existing Foundry spatial owner/session and evidence identity families searched; append source case here. Evidence domain243/243; Android/process/visual Pending. Destination write remains Pending under prior automatic cross-repository rejection; no retry.
+
+## Batch UI action ownership / Pending
+
+Source case: moving preview/apply outside a long scroll body requires pipeline-specific ownership; two stacked pipelines cannot share an ambiguous fixed apply action. Rule/search pages provide that context. Presentation state changes must not invalidate an already reviewed domain operation; parameter changes must.
+
+Test case: performScrollTo assumes a scrolling ancestor and must be removed when the production action becomes a fixed footer; preserve display/enabled/document assertions. Native320x191 fixture is newly added and Pending, not measured usability evidence.
+
+Bug observation: a nullable Elvis MutableState expression used as a var delegate failed the actual Android Kotlin compile on c89d3447, despite pure domain tests. Explicit state typing/member access source fix awaits exact-head native verification. Dedup search against existing UI/identity/viewport families; source-level intake only, Canonical unchanged. External write remains Pending after prior automatic cross-repository rejection.
+
+IME source review: fixed actions need keyboard-safe host bounds. Consume IME space at the common viewport rather than every spatial node. Added real-Activity two-host keyboard/bounds/touch regression; execution Pending, no measured device conclusion.
+
+## Timeline preferred height versus temporary projection / Pending
+
+Dedup matched Foundry case `2026-10-04-ass-timeline-dock-current-main-reland.md` and spatial acceptance families. Additional source observation: a keyboard/window constraint must project a preferred dock extent, not overwrite the stored extent; drags start from the measured projected height, with candidate state cancelled when viewport/gesture ownership changes. Nearby-only snap avoids large unsolicited release jumps.
+
+Evidence: production `InfiniteCanvasHost`, `TimelineDockPolicy`7/7 (3 existing +4 added); native cancel/owned/suspend restoration and real timeline document-history tests added but unexecuted. Parent6eec59ac Android CI38163363710 passed, not this timeline head. No measured visual/device conclusion or Canonical promotion. External intake remains Pending after prior automatic cross-repository rejection; no retry.
+
+## Nested layout receiver compile evidence / Pending
+
+99cd725a nativeCI all three workflows failed at the same Compose app compile, before touch assertions. `maxHeight` remained lexically visible inside nested RowScope but Kotlin DSL scope marking prevented its implicit receiver access. Capture primitive viewport height at the original BoxWithConstraints boundary before handing it into nested gesture callbacks. Pure policy tests and static review did not establish compilation of this integration. This is an added source/CI evidence case in existing evidence-identity intake; repair Android result Pending, no Canonical promotion or rejected destination write retry.
+
+## Per-attempt instrumentation evidence / Pending
+
+Dedup searched local Foundry candidates for stale/instrumentation/XML/evidence identity; related evidence-identity families exist, append this source case rather than promote Canonical. Source2afe2e9c emulator failed but log transport closed twice; no assertion content was retrieved. XML size is an observed diagnostic output issue, not proven transport root cause.
+
+Review reproduced stale result attribution: if a new attempt fails before writing XML, a shared result directory can report the prior attempt's testcase under the new attempt. Archive raw results first, clear the live directory before the next attempt, fail closed on isolation failure, and isolate repeated runner invocations. Bounded summaries retain every failure identity and link truncated traces to raw files; missing XML is not passing evidence. Tools9/9, native diagnostic result Pending. Source docs/EMULATOR-DIAGNOSTICS-2026-10-12.md. External destination write remains Pending after prior automatic cross-repository rejection; no retry or Canonical promotion.

@@ -17,6 +17,10 @@ internal enum class WorkbenchToolGroup(val title: String) {
     WORKSPACE("工作区"),
 }
 
+/** The second navigation row follows the requested group, including list and directory actions. */
+internal fun fixedNavigationTools(group: WorkbenchToolGroup): List<WorkbenchTool> =
+    WorkbenchTool.entries.filter { it.group == group }
+
 internal enum class ToolContextKind {
     EVENT,
     SELECTION,
@@ -117,3 +121,32 @@ internal enum class PositionSection(val title: String) {
     CLIP("矩形裁剪"),
     STYLE_LAYOUT("Style 布局"),
 }
+
+/** Frequent authoring tasks; every other capability remains in the complete directory. */
+internal fun mainAuthoringTools(): List<WorkbenchTool> = listOf(
+    WorkbenchTool.SUBTITLES, WorkbenchTool.TEXT, WorkbenchTool.STYLE,
+    WorkbenchTool.TIMELINE, WorkbenchTool.CAPABILITIES,
+)
+
+/** Navigation tasks are broader than persisted tool identities. */
+internal enum class WorkbenchTask(val title: String, val defaultTool: WorkbenchTool) {
+    SUBTITLES("字幕", WorkbenchTool.SUBTITLES),
+    TEXT("正文", WorkbenchTool.TEXT),
+    TYPESETTING("排版", WorkbenchTool.STYLE),
+    TIME("时间", WorkbenchTool.TIMELINE),
+    EFFECTS("效果", WorkbenchTool.EFFECTS),
+    OTHER("工具", WorkbenchTool.CAPABILITIES);
+
+    fun toolFor(current: WorkbenchTool): WorkbenchTool =
+        if (current.task == this) current else defaultTool
+}
+
+internal val WorkbenchTool.task: WorkbenchTask
+    get() = when (group) {
+        WorkbenchToolGroup.NAVIGATION -> WorkbenchTask.SUBTITLES
+        WorkbenchToolGroup.TEXT_EVENT -> WorkbenchTask.TEXT
+        WorkbenchToolGroup.TYPESETTING -> WorkbenchTask.TYPESETTING
+        WorkbenchToolGroup.TIME -> WorkbenchTask.TIME
+        WorkbenchToolGroup.EFFECTS -> WorkbenchTask.EFFECTS
+        else -> WorkbenchTask.OTHER
+    }

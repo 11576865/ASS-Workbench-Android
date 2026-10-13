@@ -35,14 +35,14 @@ internal fun UiVariantLabDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("UI 实验室") },
+        title = { Text("工作区布局") },
         text = {
             Column(
                 modifier = Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Text(
-                    "这里保存完整编辑器的不同呈现。新增设计不会覆盖旧设计；可随时回来对比。",
+                    "可选择主界面或无限画布。旧布局名称使用无限画布，工具实例与对象绑定继续沿用；部分旧布局交互尚未提供。",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

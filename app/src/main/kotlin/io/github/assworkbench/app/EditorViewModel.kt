@@ -2,6 +2,7 @@ package io.github.assworkbench.app
 
 import android.app.Application
 import android.net.Uri
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.assworkbench.container.MatroskaReader
@@ -9,12 +10,14 @@ import io.github.assworkbench.container.MatroskaScanResult
 import io.github.assworkbench.container.MatroskaTrackKind
 import io.github.assworkbench.domain.AssCodec
 import io.github.assworkbench.domain.AssDocument
+import io.github.assworkbench.domain.SubtitleFilterState
 import io.github.assworkbench.domain.AssDocumentEditing
 import io.github.assworkbench.domain.AssRoundTripVerifier
 import io.github.assworkbench.domain.AssTextDecoder
 import io.github.assworkbench.domain.AssTextEncoding
 import io.github.assworkbench.domain.SrtCodec
 import io.github.assworkbench.domain.AssLintIssue
+import io.github.assworkbench.domain.AssBatchReview
 import io.github.assworkbench.domain.AssBatchRecipe
 import io.github.assworkbench.domain.AssBatchEngine
 import io.github.assworkbench.domain.EventOverrideEditor
@@ -61,7 +64,7 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.concurrent.atomic.AtomicLong
 
-class EditorViewModel(application: Application) : AndroidViewModel(application) {
+class EditorViewModel(application: Application, private val savedStateHandle: SavedStateHandle = SavedStateHandle()) : AndroidViewModel(application) {
     private val app get() = getApplication<Application>()
     private val history = StartupProbe.stage(application, "viewmodel_history") {
         UndoHistory(AssDocument(), limit = 80)
@@ -101,9 +104,21 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             project = io.github.assworkbench.domain.SubtitleProject(),
             recoveryAvailable = recoveryStore.exists(),
             recoveryLabel = recoveryStore.label(),
+            subtitleFilter = SubtitleFilterState.restore(savedStateHandle.get<ArrayList<String>>("subtitle-filter")),
         )
     )
     val state: StateFlow<EditorState> = _state.asStateFlow()
+
+    // One atomic publication boundary includes direct gesture/import/restore writes,
+    // not just commits in UndoHistory. StateFlow may skip intermediate UI frames.
+    private inline fun updateState(transform: (EditorState) -> EditorState) {
+        _state.update { before ->
+            val next = transform(before)
+            next.copy(documentRevision = io.github.assworkbench.domain.AssDocumentRevision.advance(
+                before.documentRevision, before.document, next.document))
+        }
+    }
+
 
     private val _fxTemplates = MutableStateFlow(initialFxTemplateSnapshot.templates)
     val fxTemplates: StateFlow<List<SavedFxTemplate>> = _fxTemplates.asStateFlow()
@@ -129,7 +144,8 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         containerBaselineScan = null
         val epoch = workspaceEpoch.incrementAndGet()
         if (resetProjectFonts) fontStore.beginProjectFontSession(epoch, refresh = false)
-        _state.update { it.copy(workspaceSessionId = epoch) }
+        savedStateHandle["subtitle-filter"] = arrayListOf<String>()
+        updateState { it.copy(workspaceSessionId = epoch, subtitleFilter = SubtitleFilterState()) }
         return epoch
     }
 
@@ -163,7 +179,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             val tracks = runCatching { withContext(Dispatchers.IO) { MediaTrackCatalog.audioTracks(app, uri) } }
                 .getOrDefault(emptyList())
             if (_state.value.project.videoUri != source) return@launch
-            _state.update { current ->
+            updateState { current ->
                 val selected = current.selectedAudioTrackIndex?.takeIf { index -> tracks.any { it.extractorIndex == index } }
                     ?: tracks.firstOrNull()?.extractorIndex
                 current.copy(audioTracks = tracks, selectedAudioTrackIndex = selected)
@@ -174,7 +190,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             val cuts = runCatching { withContext(Dispatchers.IO) { SceneCutAnalyzer.analyze(app, uri) } }
                 .getOrDefault(emptyList())
             if (_state.value.project.videoUri == source) {
-                _state.update { it.copy(sceneCutsMs = cuts) }
+                updateState { it.copy(sceneCutsMs = cuts) }
             }
         }
     }
@@ -184,7 +200,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         if (current.audioTracks.none { it.extractorIndex == extractorIndex }) return
         if (current.selectedAudioTrackIndex == extractorIndex) return
         cancelSpectrogramAnalysis()
-        _state.update { it.copy(selectedAudioTrackIndex = extractorIndex) }
+        updateState { it.copy(selectedAudioTrackIndex = extractorIndex) }
         current.project.videoUri?.let { launchWaveformAnalysis(Uri.parse(it)) }
     }
 
@@ -192,7 +208,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         val source = uri.toString()
         waveformJob?.cancel()
         waveformSourceUri = source
-        _state.update {
+        updateState {
             it.copy(
                 waveform = WaveformLiteState(
                     sourceUri = source,
@@ -208,7 +224,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             }
             if (waveformSourceUri != source || _state.value.project.videoUri != source) return@launch
             result.onSuccess { envelope ->
-                _state.update {
+                updateState {
                     it.copy(
                         waveform = WaveformLiteState(
                             sourceUri = source,
@@ -219,7 +235,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 }
             }.onFailure { error ->
                 if (error is kotlinx.coroutines.CancellationException) return@onFailure
-                _state.update {
+                updateState {
                     it.copy(
                         waveform = WaveformLiteState(
                             sourceUri = source,
@@ -236,7 +252,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         spectrogramRequest++
         spectrogramJob?.cancel()
         spectrogramJob = null
-        _state.update { it.copy(spectrogram = SpectrogramState()) }
+        updateState { it.copy(spectrogram = SpectrogramState()) }
     }
 
     /** Requested by the evidence mode; never mutates the ASS document or its history. */
@@ -250,13 +266,13 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         cancelSpectrogramAnalysis()
         val request = spectrogramRequest
         val session = current.workspaceSessionId
-        _state.update { it.copy(spectrogram = SpectrogramState(source, track, WaveformLiteStatus.ANALYZING)) }
+        updateState { it.copy(spectrogram = SpectrogramState(source, track, WaveformLiteStatus.ANALYZING)) }
         spectrogramJob = viewModelScope.launch {
             val result = runCatching { withContext(Dispatchers.IO) {
                 WaveformLiteAnalyzer.analyzeSpectrogram(app, Uri.parse(source), track)
             } }
             if (result.exceptionOrNull() is kotlinx.coroutines.CancellationException) return@launch
-            _state.update { state ->
+            updateState { state ->
                 if (request != spectrogramRequest || state.workspaceSessionId != session ||
                     state.project.videoUri != source || state.selectedAudioTrackIndex != track) state
                 else state.copy(spectrogram = result.fold(
@@ -279,7 +295,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         beginWorkspaceBoundary()
         val document = AssDocument()
         history.reset(document)
-        _state.update {
+        updateState {
             it.copy(
                 project = it.project.copy(
                     title = "Untitled.ass",
@@ -315,7 +331,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         val scanEpoch = beginWorkspaceBoundary()
         val blank = AssDocument()
         history.reset(blank)
-        _state.update {
+        updateState {
             EditorState(
                 project = io.github.assworkbench.domain.SubtitleProject(
                     title = displayName(uri) ?: "Matroska project",
@@ -381,7 +397,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 val tracks = scan.subtitleTracks.map {
                     ContainerTrackUi(it.number, it.displayName, it.language, it.packets.size)
                 }
-                _state.update {
+                updateState {
                     it.copy(
                         project = it.project.copy(videoUri = uri.toString()),
                         container = it.container.copy(
@@ -410,7 +426,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                     workspaceEpoch.get() != scanEpoch ||
                     _state.value.container.uri != uri.toString()
                 ) return@onFailure
-                _state.update {
+                updateState {
                     it.copy(
                         container = it.container.copy(loading = false, error = error.message ?: "MKV 扫描失败"),
                         status = "MKV 扫描失败：" + (error.message ?: error::class.java.simpleName),
@@ -430,7 +446,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         val scanEpoch = workspaceEpoch.get()
         val uri = Uri.parse(uriText)
         containerScanJob?.cancel()
-        _state.update {
+        updateState {
             it.copy(
                 container = it.container.copy(loading = true, error = null),
                 status = "正在重新检测 MKV 容器内容……",
@@ -457,7 +473,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 val tracks = scan.subtitleTracks.map {
                     ContainerTrackUi(it.number, it.displayName, it.language, it.packets.size)
                 }
-                _state.update { state ->
+                updateState { state ->
                     val selected = state.container.selectedTrackNumber?.takeIf { number ->
                         scan.subtitleTracks.any { it.number == number }
                     }
@@ -487,7 +503,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                     workspaceEpoch.get() != scanEpoch ||
                     _state.value.container.uri != uriText
                 ) return@onFailure
-                _state.update {
+                updateState {
                     it.copy(
                         container = it.container.copy(
                             loading = false,
@@ -504,11 +520,11 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         if (uris.isEmpty()) return
         val snapshot = _state.value
         if (snapshot.container.uri == null) {
-            _state.update { it.copy(status = "请先打开 MKV 工程，再添加容器附件。") }
+            updateState { it.copy(status = "请先打开 MKV 工程，再添加容器附件。") }
             return
         }
         if (snapshot.container.writeBackBusy) {
-            _state.update { it.copy(status = "MKV 写回进行中；完成后才能修改附件计划。") }
+            updateState { it.copy(status = "MKV 写回进行中；完成后才能修改附件计划。") }
             return
         }
         val next = snapshot.container.pendingAttachments.toMutableList()
@@ -537,7 +553,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             )
             added++
         }
-        _state.update {
+        updateState {
             it.copy(
                 container = it.container.copy(pendingAttachments = next),
                 status = if (added == 0) {
@@ -550,9 +566,9 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun removeContainerAttachment(uri: String) {
-        _state.update { state ->
+        updateState { state ->
             if (state.container.writeBackBusy) {
-                return@update state.copy(status = "MKV 写回进行中；完成后才能修改附件计划。")
+                return@updateState state.copy(status = "MKV 写回进行中；完成后才能修改附件计划。")
             }
             val next = state.container.pendingAttachments.filterNot { it.uri == uri }
             if (next.size == state.container.pendingAttachments.size) {
@@ -568,9 +584,9 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
 
     fun planExistingAttachmentRemoval(target: String, name: String) {
         if (target.isBlank()) return
-        _state.update { state ->
+        updateState { state ->
             if (state.container.writeBackBusy) {
-                return@update state.copy(status = "MKV 写回进行中；完成后才能修改附件计划。")
+                return@updateState state.copy(status = "MKV 写回进行中；完成后才能修改附件计划。")
             }
             val withoutReplacement = state.container.pendingAttachmentReplacements
                 .filterNot { it.target == target }
@@ -596,7 +612,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun cancelExistingAttachmentRemoval(target: String) {
-        _state.update { state ->
+        updateState { state ->
             val next = state.container.pendingAttachmentRemovals.filterNot { it.target == target }
             if (next.size == state.container.pendingAttachmentRemovals.size) state
             else state.copy(
@@ -614,7 +630,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         if (target.isBlank()) return
         val snapshot = _state.value
         if (snapshot.container.writeBackBusy) {
-            _state.update { it.copy(status = "MKV 写回进行中；完成后才能修改附件计划。") }
+            updateState { it.copy(status = "MKV 写回进行中；完成后才能修改附件计划。") }
             return
         }
         val uriText = uri.toString()
@@ -639,7 +655,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             mimeType = mimeType,
             sizeBytes = size,
         )
-        _state.update { state ->
+        updateState { state ->
             state.copy(
                 container = state.container.copy(
                     pendingAttachmentRemovals = state.container.pendingAttachmentRemovals
@@ -655,7 +671,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun cancelExistingAttachmentReplacement(target: String) {
-        _state.update { state ->
+        updateState { state ->
             val next = state.container.pendingAttachmentReplacements.filterNot { it.target == target }
             if (next.size == state.container.pendingAttachmentReplacements.size) state
             else state.copy(
@@ -673,16 +689,16 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     ) {
         val cleanName = name.trim()
         if (target.isBlank() || cleanName.isBlank()) {
-            _state.update { it.copy(status = "附件名称不能为空。") }
+            updateState { it.copy(status = "附件名称不能为空。") }
             return
         }
         if (cleanName.contains('/') || cleanName.contains('\\')) {
-            _state.update { it.copy(status = "附件名称必须是文件名，不能包含路径分隔符。") }
+            updateState { it.copy(status = "附件名称必须是文件名，不能包含路径分隔符。") }
             return
         }
-        _state.update { state ->
+        updateState { state ->
             if (state.container.writeBackBusy) {
-                return@update state.copy(status = "MKV 写回进行中；完成后才能修改附件计划。")
+                return@updateState state.copy(status = "MKV 写回进行中；完成后才能修改附件计划。")
             }
             val current = state.container.resources.firstOrNull { it.attachmentTarget == target }
             if (
@@ -690,7 +706,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 cleanName == current.title &&
                 description == current.attachmentDescription
             ) {
-                return@update state.copy(
+                return@updateState state.copy(
                     container = state.container.copy(
                         pendingAttachmentMetadataEdits = state.container.pendingAttachmentMetadataEdits
                             .filterNot { it.target == target },
@@ -719,7 +735,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun cancelExistingAttachmentMetadata(target: String) {
-        _state.update { state ->
+        updateState { state ->
             val next = state.container.pendingAttachmentMetadataEdits.filterNot { it.target == target }
             if (next.size == state.container.pendingAttachmentMetadataEdits.size) state
             else state.copy(
@@ -735,12 +751,12 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         name: String,
     ) {
         if (target.isBlank()) return
-        _state.update { state ->
+        updateState { state ->
             if (state.container.writeBackBusy) {
-                return@update state.copy(status = "MKV 写回进行中；完成后才能修改轨道计划。")
+                return@updateState state.copy(status = "MKV 写回进行中；完成后才能修改轨道计划。")
             }
             if (state.container.inventoryEvidence == ContainerInventoryEvidence.VERIFIED_OUTPUT) {
-                return@update state.copy(status = "当前显示的是已验证输出快照；请先重新打开该 MKV，再修改其中轨道。")
+                return@updateState state.copy(status = "当前显示的是已验证输出快照；请先重新打开该 MKV，再修改其中轨道。")
             }
             val next = if (state.container.pendingTrackRemovals.any { it.target == target }) {
                 state.container.pendingTrackRemovals
@@ -763,7 +779,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun cancelExistingTrackRemoval(target: String) {
-        _state.update { state ->
+        updateState { state ->
             val next = state.container.pendingTrackRemovals.filterNot { it.target == target }
             if (next.size == state.container.pendingTrackRemovals.size) state
             else state.copy(
@@ -792,23 +808,23 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         val cleanLanguage = language.trim().lowercase()
         val cleanBcp47 = languageBcp47.trim()
         if (cleanLanguage.isNotEmpty() && !cleanLanguage.matches(Regex("[a-z]{3}"))) {
-            _state.update {
+            updateState {
                 it.copy(status = "轨道 legacy Language 请输入 3 字母 ISO 639-2 代码（例如 jpn / eng / und）或留空。")
             }
             return
         }
         if (cleanBcp47.isNotEmpty() && !cleanBcp47.matches(Regex("[A-Za-z0-9]{1,8}(?:-[A-Za-z0-9]{1,8})*"))) {
-            _state.update {
+            updateState {
                 it.copy(status = "轨道 Language IETF / BCP 47 格式无效；例如 ja-JP、en、zh-Hant。")
             }
             return
         }
-        _state.update { state ->
+        updateState { state ->
             if (state.container.writeBackBusy) {
-                return@update state.copy(status = "MKV 写回进行中；完成后才能修改轨道计划。")
+                return@updateState state.copy(status = "MKV 写回进行中；完成后才能修改轨道计划。")
             }
             if (state.container.inventoryEvidence == ContainerInventoryEvidence.VERIFIED_OUTPUT) {
-                return@update state.copy(status = "当前显示的是已验证输出快照；请先重新打开该 MKV，再修改其中轨道。")
+                return@updateState state.copy(status = "当前显示的是已验证输出快照；请先重新打开该 MKV，再修改其中轨道。")
             }
             val current = state.container.resources.firstOrNull { it.trackTarget == target }
             if (
@@ -824,7 +840,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 original == current.trackOriginal &&
                 commentary == current.trackCommentary
             ) {
-                return@update state.copy(
+                return@updateState state.copy(
                     container = state.container.copy(
                         pendingTrackMetadataEdits = state.container.pendingTrackMetadataEdits
                             .filterNot { it.target == target },
@@ -860,7 +876,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun cancelExistingTrackMetadata(target: String) {
-        _state.update { state ->
+        updateState { state ->
             val next = state.container.pendingTrackMetadataEdits.filterNot { it.target == target }
             if (next.size == state.container.pendingTrackMetadataEdits.size) state
             else state.copy(
@@ -872,15 +888,15 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     fun scanContainerTrackImportSource(uri: Uri) {
         val snapshot = _state.value
         if (snapshot.container.uri == null) {
-            _state.update { it.copy(status = "请先打开 MKV 工程，再导入外部轨道。") }
+            updateState { it.copy(status = "请先打开 MKV 工程，再导入外部轨道。") }
             return
         }
         if (snapshot.container.writeBackBusy) {
-            _state.update { it.copy(status = "MKV 写回进行中；完成后才能导入轨道。") }
+            updateState { it.copy(status = "MKV 写回进行中；完成后才能导入轨道。") }
             return
         }
         if (snapshot.container.inventoryEvidence == ContainerInventoryEvidence.VERIFIED_OUTPUT) {
-            _state.update { it.copy(status = "当前显示的是已验证输出快照；请先重新打开该 MKV，再继续修改轨道。") }
+            updateState { it.copy(status = "当前显示的是已验证输出快照；请先重新打开该 MKV，再继续修改轨道。") }
             return
         }
 
@@ -892,7 +908,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         val epoch = workspaceEpoch.get()
         val targetContainerUri = snapshot.container.uri
         trackImportScanJob?.cancel()
-        _state.update {
+        updateState {
             it.copy(
                 container = it.container.copy(
                     trackImportBusy = true,
@@ -1035,7 +1051,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 if (workspaceEpoch.get() != epoch || _state.value.container.uri != targetContainerUri) {
                     return@onSuccess
                 }
-                _state.update {
+                updateState {
                     it.copy(
                         container = it.container.copy(
                             trackImportBusy = false,
@@ -1076,7 +1092,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 if (workspaceEpoch.get() != epoch || _state.value.container.uri != targetContainerUri) {
                     return@onFailure
                 }
-                _state.update {
+                updateState {
                     it.copy(
                         container = it.container.copy(
                             trackImportBusy = false,
@@ -1094,7 +1110,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     fun dismissContainerTrackImportCandidates() {
         trackImportScanJob?.cancel()
         trackImportScanJob = null
-        _state.update {
+        updateState {
             it.copy(
                 container = it.container.copy(
                     trackImportBusy = false,
@@ -1122,23 +1138,23 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         val cleanLanguage = language.trim().lowercase()
         val cleanBcp47 = languageBcp47.trim()
         if (cleanLanguage.isNotEmpty() && !cleanLanguage.matches(Regex("[a-z]{3}"))) {
-            _state.update {
+            updateState {
                 it.copy(status = "导入轨道的 legacy Language 请输入 3 字母 ISO 639-2 代码（例如 jpn / eng / und）或留空。")
             }
             return
         }
         if (cleanBcp47.isNotEmpty() && !cleanBcp47.matches(Regex("[A-Za-z0-9]{1,8}(?:-[A-Za-z0-9]{1,8})*"))) {
-            _state.update {
+            updateState {
                 it.copy(status = "导入轨道的 Language IETF / BCP 47 格式无效；例如 ja-JP、en、zh-Hant。")
             }
             return
         }
-        _state.update { state ->
+        updateState { state ->
             if (state.container.writeBackBusy) {
-                return@update state.copy(status = "MKV 写回进行中；完成后才能修改轨道计划。")
+                return@updateState state.copy(status = "MKV 写回进行中；完成后才能修改轨道计划。")
             }
             if (state.container.inventoryEvidence == ContainerInventoryEvidence.VERIFIED_OUTPUT) {
-                return@update state.copy(status = "当前显示的是已验证输出快照；请先重新打开该 MKV，再继续修改轨道。")
+                return@updateState state.copy(status = "当前显示的是已验证输出快照；请先重新打开该 MKV，再继续修改轨道。")
             }
             val keyExists = state.container.pendingTrackImports.any {
                 it.sourceKind == candidate.sourceKind &&
@@ -1147,7 +1163,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                     it.sourceExtractorIndex == candidate.sourceExtractorIndex
             }
             if (keyExists) {
-                return@update state.copy(status = "该来源 Track 已在待导入计划中。")
+                return@updateState state.copy(status = "该来源 Track 已在待导入计划中。")
             }
             val planned = PendingContainerTrackImportUi(
                 sourceKind = candidate.sourceKind,
@@ -1199,7 +1215,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         sourceTrackNumber: Long?,
         sourceExtractorIndex: Int? = null,
     ) {
-        _state.update { state ->
+        updateState { state ->
             val next = state.container.pendingTrackImports.filterNot {
                 it.sourceKind == sourceKind &&
                     it.sourceUri == sourceUri &&
@@ -1225,7 +1241,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     ) {
         val snapshot = _state.value
         val sourceUri = snapshot.container.uri?.let(Uri::parse) ?: run {
-            _state.update { it.copy(status = "没有已打开的 MKV 工程。") }
+            updateState { it.copy(status = "没有已打开的 MKV 工程。") }
             return
         }
         if (target.isBlank() || snapshot.container.loading || snapshot.container.writeBackBusy ||
@@ -1234,12 +1250,12 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             return
         }
         if (!mkvGoTool.isAvailable()) {
-            _state.update { it.copy(status = "当前 ABI 没有可用的 MKV 附件提取工具。") }
+            updateState { it.copy(status = "当前 ABI 没有可用的 MKV 附件提取工具。") }
             return
         }
         val extractSessionId = snapshot.workspaceSessionId
         val operationId = writeBackSerial.incrementAndGet()
-        _state.update {
+        updateState {
             it.copy(
                 container = it.container.copy(attachmentExtractBusy = true),
                 status = "正在提取附件 $name……",
@@ -1280,7 +1296,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                     _state.value.workspaceSessionId != extractSessionId ||
                     _state.value.container.uri != snapshot.container.uri
                 ) return@onSuccess
-                _state.update {
+                updateState {
                     it.copy(
                         container = it.container.copy(attachmentExtractBusy = false),
                         status = "附件 $name 已提取 · ${formatContainerExtractBytes(bytes)}。",
@@ -1292,7 +1308,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                     _state.value.workspaceSessionId != extractSessionId ||
                     _state.value.container.uri != snapshot.container.uri
                 ) return@onFailure
-                _state.update {
+                updateState {
                     it.copy(
                         container = it.container.copy(attachmentExtractBusy = false),
                         status = "附件提取失败：" + (error.message ?: error::class.java.simpleName),
@@ -1308,17 +1324,17 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             current.container.selectedTrackNumber == trackNumber &&
             current.subtitleLoaded
         ) {
-            _state.update { it.copy(status = "当前已经是所选 ASS 轨。") }
+            updateState { it.copy(status = "当前已经是所选 ASS 轨。") }
             return
         }
         if (current.dirty && !discardUnsaved) {
-            _state.update {
+            updateState {
                 it.copy(status = "当前 ASS 轨有未保存修改；需明确放弃后才能切换轨道。")
             }
             return
         }
         if (current.container.writeBackBusy) {
-            _state.update { it.copy(status = "MKV 写回进行中；完成后才能切换字幕轨。") }
+            updateState { it.copy(status = "MKV 写回进行中；完成后才能切换字幕轨。") }
             return
         }
         val scan = containerScan ?: return
@@ -1327,7 +1343,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         clearPendingRecovery()
         val document = AssCodec.parse(track.toAss())
         history.reset(document)
-        _state.update {
+        updateState {
             it.copy(
                 project = it.project.copy(subtitleUri = null, title = it.container.name + " · " + track.displayName),
                 document = document,
@@ -1352,15 +1368,15 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     fun saveMkvTo(outputUri: Uri) {
         val snapshot = _state.value
         if (snapshot.container.writeBackBusy) {
-            _state.update { it.copy(status = "已有 MKV 写回任务正在进行。") }
+            updateState { it.copy(status = "已有 MKV 写回任务正在进行。") }
             return
         }
         if (snapshot.container.attachmentExtractBusy) {
-            _state.update { it.copy(status = "附件提取进行中；完成后再保存 MKV。") }
+            updateState { it.copy(status = "附件提取进行中；完成后再保存 MKV。") }
             return
         }
         if (snapshot.container.trackImportBusy) {
-            _state.update { it.copy(status = "外部轨道检测进行中；完成后再保存 MKV。") }
+            updateState { it.copy(status = "外部轨道检测进行中；完成后再保存 MKV。") }
             return
         }
         val saveEpoch = workspaceEpoch.get()
@@ -1421,7 +1437,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         val plannedRemovalCount = editPlan.mutations.count {
             it.kind == ContainerMutationKind.REMOVE_ATTACHMENT
         }
-        _state.update {
+        updateState {
             it.copy(
                 container = it.container.copy(writeBackBusy = true),
                 status = buildString {
@@ -1904,7 +1920,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                         (it.sourceExtractorIndex ?: -1).toString(),
                     )
                 }
-                _state.update { state ->
+                updateState { state ->
                     state.copy(
                         dirty = if (documentSaved) false else state.dirty,
                         container = state.container.copy(
@@ -1957,7 +1973,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 }
             }.onFailure { error ->
                 if (error is kotlinx.coroutines.CancellationException) return@onFailure
-                _state.update { state ->
+                updateState { state ->
                     if (
                         !sameMkvWorkspace(
                             state,
@@ -1981,7 +1997,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     fun openPickedVideo(uri: Uri) {
         val current = _state.value
         if (current.container.uri == uri.toString()) {
-            _state.update {
+            updateState {
                 it.copy(
                     project = it.project.copy(videoUri = uri.toString()),
                     status = "当前 MKV 工程已经是参考视频，无需重复载入。",
@@ -1997,7 +2013,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
 
     fun attachVideo(uri: Uri) {
         _playbackPositionMs.value = 0L
-        _state.update {
+        updateState {
             it.copy(
                 project = it.project.copy(videoUri = uri.toString()),
                 audioTracks = emptyList(),
@@ -2027,7 +2043,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         val isSrt = sourceKind == ContainerTrackImportSourceKind.STANDALONE_SRT
         val document = if (isSrt) SrtCodec.parse(decoded.text) else AssCodec.parse(decoded.text)
         history.reset(document)
-        _state.update {
+        updateState {
             it.copy(
                 project = it.project.copy(
                     subtitleUri = if (isSrt) null else uri.toString(),
@@ -2063,14 +2079,14 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
 
     fun importFonts(uris: List<Uri>) {
         if (uris.isEmpty() || _state.value.fontImportBusy) return
-        _state.update { it.copy(fontImportBusy = true, status = "正在验证并注册字体……") }
+        updateState { it.copy(fontImportBusy = true, status = "正在验证并注册字体……") }
         viewModelScope.launch {
             val result = runCatching {
                 withContext(Dispatchers.IO) { fontStore.importAll(uris) }
             }
             result.onSuccess { batch ->
                 if (batch.assets.isEmpty()) {
-                    _state.update {
+                    updateState {
                         it.copy(
                             fontImportBusy = false,
                             status = "字体导入失败" +
@@ -2083,7 +2099,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 val imported = withContext(Dispatchers.IO) { fontStore.listImported() }
                 val families = batch.assets.map { it.metadata.rendererFamily }.distinct()
                 val failureSuffix = if (batch.failures.isEmpty()) "" else " · 失败 " + batch.failures.size + " 个"
-                _state.update {
+                updateState {
                     val packageableShas = imported.asSequence()
                         .filter { font -> font.origin == FontOrigin.MANUAL }
                         .map { font -> font.sha256 }
@@ -2101,7 +2117,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 }
                 refreshFontDiagnostics()
             }.onFailure { error ->
-                _state.update {
+                updateState {
                     it.copy(
                         fontImportBusy = false,
                         status = "字体导入失败：" + (error.message ?: error::class.java.simpleName),
@@ -2112,7 +2128,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun reportError(prefix: String, error: Throwable) {
-        _state.update {
+        updateState {
             it.copy(status = "$prefix：${error.message ?: error::class.java.simpleName}")
         }
     }
@@ -2130,7 +2146,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         }.fold(
             onSuccess = { result ->
                 clearPendingRecovery()
-                _state.update {
+                updateState {
                     it.copy(
                         project = it.project.copy(subtitleUri = uri.toString()),
                         sourceFormat = SubtitleSourceFormat.ASS,
@@ -2145,7 +2161,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 true
             },
             onFailure = { error ->
-                _state.update {
+                updateState {
                     it.copy(
                         dirty = true,
                         status = "字幕保存失败：" + (error.message ?: error::class.java.simpleName) +
@@ -2165,11 +2181,11 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 ?: error("无法写入 SRT")
         }.fold(
             onSuccess = {
-                _state.update { it.copy(status = "SRT 已导出；ASS 工作文档、Style 与高级效果没有被降格或覆盖。") }
+                updateState { it.copy(status = "SRT 已导出；ASS 工作文档、Style 与高级效果没有被降格或覆盖。") }
                 true
             },
             onFailure = { error ->
-                _state.update { it.copy(status = "SRT 导出失败：" + (error.message ?: error::class.java.simpleName)) }
+                updateState { it.copy(status = "SRT 导出失败：" + (error.message ?: error::class.java.simpleName)) }
                 false
             },
         )
@@ -2183,7 +2199,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         val eventIds = snapshot.document.events.mapTo(hashSetOf()) { it.id }
         val focused = snapshot.focusedEventId?.takeIf(eventIds::contains)
             ?: snapshot.document.events.firstOrNull()?.id
-        _state.update { old ->
+        updateState { old ->
             old.copy(
                 project = io.github.assworkbench.domain.SubtitleProject(
                     title = snapshot.title,
@@ -2234,17 +2250,27 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    fun applyBatchReview(review: AssBatchReview) {
+        val current = _state.value
+        val document = runCatching { review.commit(current.document, current.workspaceSessionId, current.documentRevision) }.getOrElse { error ->
+            updateState { it.copy(status = error.message ?: "批处理预览已过期，请重新预检。") }
+            return
+        }
+        if (review.preview.changedEventIds.isEmpty()) return
+        editDocument("批处理预览：修改 ${review.preview.changedEventIds.size} 条字幕。") { document }
+    }
+
     fun applyBatchRecipe(recipe: AssBatchRecipe) {
         val preview = runCatching {
             AssBatchEngine.preview(_state.value.document, recipe)
         }.getOrElse { error ->
-            _state.update {
+            updateState {
                 it.copy(status = "批处理预检失败：" + (error.message ?: error::class.java.simpleName))
             }
             return
         }
         if (preview.changedEventIds.isEmpty()) {
-            _state.update { it.copy(status = "批处理规则没有产生修改。") }
+            updateState { it.copy(status = "批处理规则没有产生修改。") }
             return
         }
         editDocument("批处理 ${recipe.id}：修改 ${preview.changedEventIds.size} 条字幕。") { preview.document }
@@ -2259,11 +2285,11 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         val preview = runCatching {
             AssSubtitleSynchronizer.preview(snapshot.document, anchors, ids)
         }.getOrElse { error ->
-            _state.update { it.copy(status = "同步参数无效：" + (error.message ?: "unknown")) }
+            updateState { it.copy(status = "同步参数无效：" + (error.message ?: "unknown")) }
             return
         }
         if (preview.changedEventIds.isEmpty()) {
-            _state.update { it.copy(status = "同步映射没有产生修改。") }
+            updateState { it.copy(status = "同步映射没有产生修改。") }
             return
         }
         editDocument(
@@ -2278,11 +2304,11 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         val preview = runCatching {
             AssSearchReplace.preview(_state.value.document, query, replacement)
         }.getOrElse { error ->
-            _state.update { it.copy(status = "搜索/替换规则无效：" + (error.message ?: "unknown")) }
+            updateState { it.copy(status = "搜索/替换规则无效：" + (error.message ?: "unknown")) }
             return
         }
         if (preview.changedEventIds.isEmpty()) {
-            _state.update { it.copy(status = "搜索命中 ${preview.hits.size} 条，但替换没有产生修改。") }
+            updateState { it.copy(status = "搜索命中 ${preview.hits.size} 条，但替换没有产生修改。") }
             return
         }
         editDocument(
@@ -2318,7 +2344,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         val plan = runCatching {
             AssKaraokeFxAuthoring.planProgressiveRevealBatch(document, eventIds, spec)
         }.getOrElse { error ->
-            _state.update {
+            updateState {
                 it.copy(
                     previewDocument = null,
                     previewOwnerId = null,
@@ -2327,7 +2353,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             }
             return
         }
-        _state.update {
+        updateState {
             it.copy(
                 previewDocument = plan.document,
                 previewOwnerId = "karaoke-fx",
@@ -2349,7 +2375,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         val plan = runCatching {
             AssKaraokeFxAuthoring.planProgressiveRevealBatch(document, eventIds, spec)
         }.getOrElse { error ->
-            _state.update {
+            updateState {
                 it.copy(status = "Karaoke FX 生成失败：" + (error.message ?: error::class.java.simpleName))
             }
             return
@@ -2362,13 +2388,13 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
 
     fun saveFxTemplate(template: AssFxTemplate) {
         val snapshot = runCatching { fxTemplateStore.save(template) }.getOrElse { error ->
-            _state.update {
+            updateState {
                 it.copy(status = "保存 FX 模板失败：" + (error.message ?: error::class.java.simpleName))
             }
             return
         }
         _fxTemplates.value = snapshot.templates
-        _state.update {
+        updateState {
             it.copy(
                 status = buildString {
                     append("已保存 FX 模板“").append(template.name).append("”。")
@@ -2382,13 +2408,13 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
 
     fun deleteFxTemplate(id: String) {
         val snapshot = runCatching { fxTemplateStore.delete(id) }.getOrElse { error ->
-            _state.update {
+            updateState {
                 it.copy(status = "删除 FX 模板失败：" + (error.message ?: error::class.java.simpleName))
             }
             return
         }
         _fxTemplates.value = snapshot.templates
-        _state.update {
+        updateState {
             it.copy(
                 status = buildString {
                     append("已删除 FX 模板。")
@@ -2418,7 +2444,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 entrance = entrance,
             )
         }.getOrElse { error ->
-            _state.update {
+            updateState {
                 it.copy(
                     previewDocument = null,
                     previewOwnerId = null,
@@ -2427,7 +2453,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             }
             return
         }
-        _state.update { current ->
+        updateState { current ->
             current.copy(
                 previewDocument = result.document,
                 previewOwnerId = "fx-composition",
@@ -2468,7 +2494,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 entrance = entrance,
             )
         }.getOrElse { error ->
-            _state.update {
+            updateState {
                 it.copy(status = "FX 组合失败：" + (error.message ?: error::class.java.simpleName))
             }
             return
@@ -2484,7 +2510,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             append("。")
         }
         editDocument(status) { result.document }
-        _state.update { state ->
+        updateState { state ->
             state.copy(
                 focusedEventId = result.sourceEventIds.firstOrNull()
                     ?.takeIf { id -> state.document.events.any { it.id == id } },
@@ -2504,17 +2530,29 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         return true
     }
 
-    fun setQuery(value: String) = _state.update { it.copy(query = value) }
+    fun setQuery(value: String) = setSubtitleFilter(_state.value.subtitleFilter.copy(quickText = value))
+
+    fun setSubtitleFilter(value: SubtitleFilterState) {
+        savedStateHandle["subtitle-filter"] = ArrayList(value.save())
+        updateState { it.copy(subtitleFilter = value, selectionAnchorId = null) }
+    }
+
+    fun clearSubtitleFilter() = setSubtitleFilter(SubtitleFilterState())
+
+    fun selectAllFilteredEvents() = updateState { state ->
+        state.copy(selectedEventIds = state.filteredEvents.mapTo(linkedSetOf()) { it.id },
+            selectionAnchorId = null, status = "已替换选择为 ${state.filteredEvents.size} 条筛选结果。")
+    }
 
     fun toggleSelected(id: Long) {
-        _state.update {
+        updateState {
             val next = it.selectedEventIds.toMutableSet().apply { if (!add(id)) remove(id) }
             it.copy(selectedEventIds = next, selectionAnchorId = null)
         }
     }
 
     fun beginRangeSelection(id: Long) {
-        _state.update {
+        updateState {
             it.copy(
                 selectedEventIds = it.selectedEventIds + id,
                 selectionAnchorId = id,
@@ -2524,12 +2562,12 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun selectRangeTo(id: Long) {
-        _state.update { state ->
-            val anchor = state.selectionAnchorId ?: return@update state
+        updateState { state ->
+            val anchor = state.selectionAnchorId ?: return@updateState state
             val ordered = state.filteredEvents.map { it.id }
             val a = ordered.indexOf(anchor)
             val b = ordered.indexOf(id)
-            if (a < 0 || b < 0) return@update state.copy(selectionAnchorId = null)
+            if (a < 0 || b < 0) return@updateState state.copy(selectionAnchorId = null)
             val from = minOf(a, b)
             val to = maxOf(a, b)
             val range = ordered.subList(from, to + 1)
@@ -2542,12 +2580,12 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun previewRangeSelection(id: Long) {
-        _state.update { state ->
-            val anchor = state.selectionAnchorId ?: return@update state
+        updateState { state ->
+            val anchor = state.selectionAnchorId ?: return@updateState state
             val ordered = state.filteredEvents.map { it.id }
             val a = ordered.indexOf(anchor)
             val b = ordered.indexOf(id)
-            if (a < 0 || b < 0) return@update state
+            if (a < 0 || b < 0) return@updateState state
             val from = minOf(a, b)
             val to = maxOf(a, b)
             val range = ordered.subList(from, to + 1).toSet()
@@ -2559,7 +2597,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun finishRangeSelection() {
-        _state.update { state ->
+        updateState { state ->
             if (state.selectionAnchorId == null) state
             else state.copy(
                 selectionAnchorId = null,
@@ -2568,7 +2606,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    fun clearSelection() = _state.update {
+    fun clearSelection() = updateState {
         it.copy(selectedEventIds = emptySet(), selectionAnchorId = null, status = "已清除选择。")
     }
 
@@ -2599,18 +2637,13 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
 
     private fun focusRelativeFilteredEvent(direction: Int) {
         val snapshot = _state.value
-        val events = snapshot.filteredEvents
-        if (events.isEmpty()) {
-            _state.update { it.copy(status = "当前筛选没有可导航的字幕。") }
+        val targetId = snapshot.subtitleFilter.relativeTarget(snapshot.document.events,
+            snapshot.selectedEventIds, snapshot.focusedEventId, direction)
+        if (targetId == null) {
+            updateState { it.copy(status = "当前筛选没有可导航的字幕。") }
             return
         }
-        val currentIndex = events.indexOfFirst { it.id == snapshot.focusedEventId }
-        val targetIndex = when {
-            currentIndex < 0 && direction >= 0 -> 0
-            currentIndex < 0 -> events.lastIndex
-            else -> (currentIndex + direction).coerceIn(0, events.lastIndex)
-        }
-        focusEvent(events[targetIndex].id, seek = true)
+        focusEvent(targetId, seek = true)
     }
 
     fun alignSelectedStartToPlayback() {
@@ -2666,7 +2699,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         val nx = x.coerceIn(0.0, state.document.playResX.toDouble())
         val ny = y.coerceIn(0.0, state.document.playResY.toDouble())
         val preview = withEventPosition(state.document, id, nx, ny)
-        _state.update { current ->
+        updateState { current ->
             current.copy(
                 previewDocument = if (preview == state.document) null else preview,
                 previewOwnerId = if (preview == state.document) null else "geometry:$id",
@@ -2706,7 +2739,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             endX = endX,
             endY = endY,
         )
-        _state.update { current ->
+        updateState { current ->
             current.copy(
                 previewDocument = if (preview == state.document) null else preview,
                 previewOwnerId = if (preview == state.document) null else "geometry:$id",
@@ -2761,7 +2794,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         val state = _state.value
         val id = state.focusedEventId ?: return
         val preview = withEventOrigin(state.document, id, x, y)
-        _state.update { current ->
+        updateState { current ->
             current.copy(
                 previewDocument = if (preview == state.document) null else preview,
                 previewOwnerId = if (preview == state.document) null else "geometry:$id",
@@ -2806,7 +2839,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         val state = _state.value
         val id = state.focusedEventId ?: return
         val preview = withEventRotationZ(state.document, id, angle)
-        _state.update { current ->
+        updateState { current ->
             current.copy(
                 previewDocument = if (preview == state.document) null else preview,
                 previewOwnerId = if (preview == state.document) null else "geometry:$id",
@@ -2863,19 +2896,19 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun setGeometryScaleLocked(locked: Boolean) {
-        _state.update { it.copy(geometryScaleLocked = locked) }
+        updateState { it.copy(geometryScaleLocked = locked) }
     }
 
     fun setGeometryScaleSnapStep(step: Double?) {
         val normalized = step?.takeIf { it.isFinite() && it > 0.0 }?.coerceIn(1.0, 100.0)
-        _state.update { it.copy(geometryScaleSnapStep = normalized) }
+        updateState { it.copy(geometryScaleSnapStep = normalized) }
     }
 
     fun previewFocusedScale(scaleX: Double, scaleY: Double) {
         val state = _state.value
         val id = state.focusedEventId ?: return
         val preview = withEventScale(state.document, id, scaleX, scaleY)
-        _state.update { current ->
+        updateState { current ->
             current.copy(
                 previewDocument = if (preview == state.document) null else preview,
                 previewOwnerId = if (preview == state.document) null else "geometry:$id",
@@ -2922,7 +2955,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         val state = _state.value
         val id = state.focusedEventId ?: return
         val preview = withEventShear(state.document, id, shearX, shearY)
-        _state.update { current ->
+        updateState { current ->
             current.copy(
                 previewDocument = if (preview == state.document) null else preview,
                 previewOwnerId = if (preview == state.document) null else "geometry:$id",
@@ -2975,7 +3008,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         val state = _state.value
         val id = state.focusedEventId ?: return
         val preview = withEventRectClip(state.document, id, left, top, right, bottom, inverted)
-        _state.update { current ->
+        updateState { current ->
             current.copy(
                 previewDocument = if (preview == state.document) null else preview,
                 previewOwnerId = if (preview == state.document) null else "geometry:$id",
@@ -3061,7 +3094,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             "Position preview owner must belong to Event #$id."
         }
         val preview = withEventPosition(state.document, id, x, y)
-        _state.update { current ->
+        updateState { current ->
             current.copy(
                 previewDocument = if (preview == state.document) null else preview,
                 previewOwnerId = if (preview == state.document) null else ownerId,
@@ -3081,7 +3114,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         val state = _state.value
         if (state.document.events.none { it.id == id }) return
         val preview = withEventMove(state.document, id, sx, sy, ex, ey)
-        _state.update { current ->
+        updateState { current ->
             current.copy(
                 previewDocument = if (preview == state.document) null else preview,
                 previewOwnerId = if (preview == state.document) null else "geometry:$id",
@@ -3101,7 +3134,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         val state = _state.value
         if (state.document.events.none { it.id == id }) return
         val preview = withEventOrigin(state.document, id, x, y)
-        _state.update { current ->
+        updateState { current ->
             current.copy(
                 previewDocument = if (preview == state.document) null else preview,
                 previewOwnerId = if (preview == state.document) null else "geometry:$id",
@@ -3130,7 +3163,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         val state = _state.value
         if (state.document.events.none { it.id == id }) return
         val preview = withEventRotationX(state.document, id, angle)
-        _state.update { current ->
+        updateState { current ->
             current.copy(
                 previewDocument = if (preview == state.document) null else preview,
                 previewOwnerId = if (preview == state.document) null else "geometry:$id",
@@ -3159,7 +3192,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         val state = _state.value
         if (state.document.events.none { it.id == id }) return
         val preview = withEventRotationY(state.document, id, angle)
-        _state.update { current ->
+        updateState { current ->
             current.copy(
                 previewDocument = if (preview == state.document) null else preview,
                 previewOwnerId = if (preview == state.document) null else "geometry:$id",
@@ -3196,7 +3229,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             "Rotation preview owner must belong to Event #$id."
         }
         val preview = withEventRotationZ(state.document, id, angle)
-        _state.update { current ->
+        updateState { current ->
             current.copy(
                 previewDocument = if (preview == state.document) null else preview,
                 previewOwnerId = if (preview == state.document) null else ownerId,
@@ -3226,7 +3259,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         val state = _state.value
         if (state.document.events.none { it.id == id }) return
         val preview = withEventScale(state.document, id, scaleX, scaleY)
-        _state.update { current ->
+        updateState { current ->
             current.copy(
                 previewDocument = if (preview == state.document) null else preview,
                 previewOwnerId = if (preview == state.document) null else ownerId,
@@ -3256,7 +3289,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         val state = _state.value
         if (state.document.events.none { it.id == id }) return
         val preview = withEventShear(state.document, id, shearX, shearY)
-        _state.update { current ->
+        updateState { current ->
             current.copy(
                 previewDocument = if (preview == state.document) null else preview,
                 previewOwnerId = if (preview == state.document) null else ownerId,
@@ -3292,7 +3325,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         val state = _state.value
         if (state.document.events.none { it.id == id }) return
         val preview = withEventRectClip(state.document, id, left, top, right, bottom, inverted)
-        _state.update { current ->
+        updateState { current ->
             current.copy(
                 previewDocument = if (preview == state.document) null else preview,
                 previewOwnerId = if (preview == state.document) null else "geometry:$id",
@@ -3352,7 +3385,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             positionMs = _playbackPositionMs.value,
         )
         editDocument("已在当前播放位置添加字幕。") { result.document }
-        _state.update {
+        updateState {
             it.copy(
                 focusedEventId = result.focusedEventId,
                 selectedEventIds = result.selectedEventIds,
@@ -3365,7 +3398,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         runCatching { AssDocumentEditing.insertAdjacent(snapshot.document, id, before = true) }
             .onSuccess { result ->
                 editDocument("已在当前字幕前插入一条空字幕。") { result.document }
-                _state.update { it.copy(focusedEventId = result.focusedEventId, selectedEventIds = emptySet(), selectionAnchorId = null) }
+                updateState { it.copy(focusedEventId = result.focusedEventId, selectedEventIds = emptySet(), selectionAnchorId = null) }
             }
             .onFailure { reportError("前插字幕失败", it) }
     }
@@ -3376,7 +3409,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         runCatching { AssDocumentEditing.insertAdjacent(snapshot.document, id, before = false) }
             .onSuccess { result ->
                 editDocument("已在当前字幕后插入一条空字幕。") { result.document }
-                _state.update { it.copy(focusedEventId = result.focusedEventId, selectedEventIds = emptySet(), selectionAnchorId = null) }
+                updateState { it.copy(focusedEventId = result.focusedEventId, selectedEventIds = emptySet(), selectionAnchorId = null) }
             }
             .onFailure { reportError("后插字幕失败", it) }
     }
@@ -3387,7 +3420,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         runCatching { AssDocumentEditing.duplicateEvent(snapshot.document, id) }
             .onSuccess { result ->
                 editDocument("已复制当前字幕。") { result.document }
-                _state.update { it.copy(focusedEventId = result.focusedEventId, selectedEventIds = emptySet(), selectionAnchorId = null) }
+                updateState { it.copy(focusedEventId = result.focusedEventId, selectedEventIds = emptySet(), selectionAnchorId = null) }
             }
             .onFailure { reportError("复制字幕失败", it) }
     }
@@ -3402,7 +3435,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         runCatching { AssDocumentEditing.mergeAdjacent(snapshot.document, id, previous = previous) }
             .onSuccess { result ->
                 editDocument(if (previous) "已与上一条字幕合并。" else "已与下一条字幕合并。") { result.document }
-                _state.update { it.copy(focusedEventId = result.focusedEventId, selectedEventIds = emptySet(), selectionAnchorId = null) }
+                updateState { it.copy(focusedEventId = result.focusedEventId, selectedEventIds = emptySet(), selectionAnchorId = null) }
             }
             .onFailure { reportError(if (previous) "与上一条合并失败" else "与下一条合并失败", it) }
     }
@@ -3415,7 +3448,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         if (ids.isEmpty()) return
         val result = AssDocumentEditing.deleteEvents(snapshot.document, ids)
         editDocument("已删除 " + ids.size + " 条字幕。") { result.document }
-        _state.update {
+        updateState {
             it.copy(
                 focusedEventId = result.focusedEventId,
                 selectedEventIds = emptySet(),
@@ -3437,7 +3470,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         }.onSuccess { result ->
             editDocument("已在当前播放时间和文本光标处分割字幕。") { result.document }
             val newIds = result.document.events.map { it.id }.toSet() - snapshot.document.events.map { it.id }.toSet()
-            _state.update { state ->
+            updateState { state ->
                 state.copy(
                     focusedEventId = result.focusedEventId,
                     selectedEventIds = result.selectedEventIds,
@@ -3458,7 +3491,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             )
         }.onSuccess { result ->
             editDocument("已合并 " + ids.size + " 条字幕。") { result.document }
-            _state.update {
+            updateState {
                 it.copy(
                     focusedEventId = result.focusedEventId,
                     selectedEventIds = emptySet(),
@@ -3532,12 +3565,12 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             snapshot.document.events.firstOrNull { it.id == id }
         } ?: return
         eventFormatClipboard = EventFormatClipboardOps.capture(event)
-        _state.update { it.copy(status = "已复制字幕 #" + event.id + " 的格式到内部剪贴板。") }
+        updateState { it.copy(status = "已复制字幕 #" + event.id + " 的格式到内部剪贴板。") }
     }
 
     fun pasteFormatClipboardToSelected(mode: EventFormatPasteMode) {
         val clipboard = eventFormatClipboard ?: run {
-            _state.update { it.copy(status = "格式剪贴板为空。") }
+            updateState { it.copy(status = "格式剪贴板为空。") }
             return
         }
         val snapshot = _state.value
@@ -3548,7 +3581,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         if ((mode == EventFormatPasteMode.STYLE || mode == EventFormatPasteMode.ALL) &&
             snapshot.document.styles.none { it.name == clipboard.style }
         ) {
-            _state.update {
+            updateState {
                 it.copy(status = "无法粘贴 Style ${clipboard.style}：当前工程不存在该 Style；可改用 Margins / Position / Effects / Overrides。")
             }
             return
@@ -3580,7 +3613,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 }
             })
         }
-        _state.update { it.copy(status = "已替换 " + count + " 条字幕中的" + if (inActor) " Actor。" else "正文。") }
+        updateState { it.copy(status = "已替换 " + count + " 条字幕中的" + if (inActor) " Actor。" else "正文。") }
     }
 
     fun createStyle(name: String, copyFrom: String? = null) {
@@ -3604,14 +3637,14 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         val used = snapshot.document.events.mapTo(hashSetOf()) { it.style }
         val removable = snapshot.document.styles.filterNot { it.name in used }
         if (removable.isEmpty()) {
-            _state.update { it.copy(status = "没有未使用的 Style。") }
+            updateState { it.copy(status = "没有未使用的 Style。") }
             return
         }
         editDocument("已清理未使用 Style。") { doc ->
             val keepAtLeast = if (doc.styles.all { it.name !in used }) doc.styles.firstOrNull()?.name else null
             doc.copy(styles = doc.styles.filter { it.name in used || it.name == keepAtLeast })
         }
-        _state.update { it.copy(status = "已删除 " + removable.size + " 个未使用 Style。") }
+        updateState { it.copy(status = "已删除 " + removable.size + " 个未使用 Style。") }
     }
 
     fun deleteStyle(name: String, replacement: String) {
@@ -3673,9 +3706,9 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun toggleSelectAllVisible() {
-        _state.update { state ->
+        updateState { state ->
             val visibleIds = state.filteredEvents.mapTo(linkedSetOf()) { it.id }
-            if (visibleIds.isEmpty()) return@update state
+            if (visibleIds.isEmpty()) return@updateState state
             val next = state.selectedEventIds.toMutableSet()
             val allVisibleSelected = visibleIds.all { it in next }
             if (allVisibleSelected) next.removeAll(visibleIds) else next.addAll(visibleIds)
@@ -3687,16 +3720,16 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun toggleFontPackaging(sha256: String) {
-        _state.update { state ->
+        updateState { state ->
             val candidate = state.importedFonts.firstOrNull {
                 it.sha256 == sha256 && it.origin == FontOrigin.MANUAL
-            } ?: return@update state
+            } ?: return@updateState state
             val embeddedShas = state.importedFonts.asSequence()
                 .filter { it.origin == FontOrigin.MKV_ATTACHMENT }
                 .map { it.sha256 }
                 .toSet()
             if (candidate.sha256 in embeddedShas) {
-                return@update state.copy(status = "该字体已经作为当前 MKV 附件存在，无需重复封入。")
+                return@updateState state.copy(status = "该字体已经作为当前 MKV 附件存在，无需重复封入。")
             }
             val next = state.fontPackagingSelection.toMutableSet()
             if (!next.add(candidate.sha256)) next.remove(candidate.sha256)
@@ -3712,9 +3745,9 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun selectRequestedFontsForPackaging() {
-        _state.update { state ->
+        updateState { state ->
             if (state.container.uri == null) {
-                return@update state.copy(status = "请先打开 MKV 工程，再选择需要随写回封入的字体。")
+                return@updateState state.copy(status = "请先打开 MKV 工程，再选择需要随写回封入的字体。")
             }
             val requested = FontBindingRewriter.requestedFamilies(state.document)
             val selected = FontPackagingPlanner.selectRequested(
@@ -3729,7 +3762,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun clearFontPackagingSelection() {
-        _state.update {
+        updateState {
             it.copy(
                 fontPackagingSelection = emptySet(),
                 status = "已清空 MKV 字体打包选择。",
@@ -3908,7 +3941,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             borderStyle = borderStyle,
             encoding = encoding,
         )
-        _state.update { state ->
+        updateState { state ->
             state.copy(
                 previewDocument = if (preview == before) null else preview,
                 previewOwnerId = if (preview == before) null else "style:$styleName",
@@ -4035,7 +4068,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     fun previewEventVisualEffects(id: Long, blur: Double?, softEntry: Boolean) {
         val before = _state.value.document
         val preview = withEventVisualEffects(before, id, blur, softEntry)
-        _state.update { state ->
+        updateState { state ->
             state.copy(
                 previewDocument = if (preview == before) null else preview,
                 previewOwnerId = if (preview == before) null else "effects:$id",
@@ -4091,7 +4124,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 text = AssAnimationSemantic.patchTransform(event.text, index, transform),
             )
         })
-        _state.update { state ->
+        updateState { state ->
             state.copy(
                 previewDocument = if (preview == before) null else preview,
                 previewOwnerId = if (preview == before) null else "effects:$id",
@@ -4213,7 +4246,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
             }
             (start + inset).coerceAtMost((end - 1L).coerceAtLeast(start))
         } else null
-        _state.update {
+        updateState {
             it.copy(
                 focusedEventId = id,
                 seekRequestMs = seekInsideEvent ?: it.seekRequestMs,
@@ -4271,7 +4304,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     fun seekPreviewTo(positionMs: Long) {
         val target = positionMs.coerceAtLeast(0L)
         _playbackPositionMs.value = target
-        _state.update {
+        updateState {
             it.copy(
                 seekRequestMs = target,
                 seekRequestNonce = it.seekRequestNonce + 1,
@@ -4281,7 +4314,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
 
     fun restoreRecovery() {
         val snapshot = recoveryStore.read() ?: run {
-            _state.update { it.copy(recoveryAvailable = false, recoveryLabel = "") }
+            updateState { it.copy(recoveryAvailable = false, recoveryLabel = "") }
             return
         }
         _playbackPositionMs.value = 0L
@@ -4292,7 +4325,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         // must still be available on the next launch.
         clearPendingRecovery(clearStored = false)
         history.reset(snapshot.document)
-        _state.update {
+        updateState {
             it.copy(
                 project = snapshot.project,
                 document = snapshot.document,
@@ -4323,7 +4356,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
 
     fun discardRecovery() {
         clearPendingRecovery()
-        _state.update { it.copy(recoveryAvailable = false, recoveryLabel = "", status = "已丢弃恢复日志。") }
+        updateState { it.copy(recoveryAvailable = false, recoveryLabel = "", status = "已丢弃恢复日志。") }
     }
 
     fun rendererConfigDir() = fontStore.mpvConfigDir
@@ -4338,7 +4371,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 )
             }
             .onFailure { error ->
-                _state.update {
+                updateState {
                     it.copy(status = "Fontconfig 缓存重建失败：" + (error.message ?: error::class.java.simpleName))
                 }
             }
@@ -4347,11 +4380,11 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     fun updateRendererDiagnostics(lines: List<String>) {
         val normalized = lines.filter(String::isNotBlank).takeLast(12)
         if (_state.value.rendererDiagnostics == normalized) return
-        _state.update { it.copy(rendererDiagnostics = normalized) }
+        updateState { it.copy(rendererDiagnostics = normalized) }
     }
 
     fun clearTransientPreview(ownerId: String? = null) {
-        _state.update { state ->
+        updateState { state ->
             if (
                 state.previewDocument == null ||
                 (ownerId != null && state.previewOwnerId != ownerId)
@@ -4376,7 +4409,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     private fun publishDocument(document: AssDocument, status: String, dirty: Boolean = true) {
-        _state.update { state ->
+        updateState { state ->
             val validIds = document.events.mapTo(hashSetOf()) { event -> event.id }
             val selected = state.selectedEventIds.filterTo(linkedSetOf()) { id -> id in validIds }
             val focused = when {
@@ -4422,7 +4455,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     private fun refreshFonts(initial: Boolean, status: String? = null) {
         val fallback = fontStore.ensureFallbackFont()
         val imported = fontStore.listImported()
-        _state.update {
+        updateState {
             val packageableShas = FontPackagingPlanner.packageableShas(imported)
             it.copy(
                 importedFonts = imported,
@@ -4470,7 +4503,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 diagnostics to glyphs
             }
 
-            _state.update { current ->
+            updateState { current ->
                 if (
                     current.document != snapshot.document ||
                     current.importedFonts != snapshot.importedFonts ||

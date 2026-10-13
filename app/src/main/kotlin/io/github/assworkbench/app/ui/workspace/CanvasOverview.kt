@@ -41,3 +41,26 @@ internal fun hitCanvasOverview(
     return nodes.filter { distance(it) <= tolerance * tolerance }
         .minWithOrNull(compareBy<CanvasOverviewNode> { distance(it) }.thenByDescending { it.z })?.id
 }
+
+
+/**
+ * Find tools without requiring a precise tap on a tiny map marker. Search is
+ * strictly presentational: it cannot alter world geometry, hidden state,
+ * ToolInstance identity, or source ordering.
+ */
+internal fun filterCanvasOverviewEntries(
+    entries: List<InfiniteCanvasEntry>,
+    nodes: List<InfiniteCanvasNode>,
+    query: String,
+    hiddenOnly: Boolean = false,
+): List<Pair<InfiniteCanvasEntry, InfiniteCanvasNode>> {
+    val byId = nodes.associateBy { it.id }
+    val term = query.trim()
+    return entries.mapNotNull { entry ->
+        byId[entry.id]?.let { entry to it }
+    }.filter { (entry, node) ->
+        (!hiddenOnly || node.hidden) &&
+            (term.isEmpty() || listOf(entry.title, entry.subtitle, entry.id)
+                .any { it.contains(term, ignoreCase = true) })
+    }
+}

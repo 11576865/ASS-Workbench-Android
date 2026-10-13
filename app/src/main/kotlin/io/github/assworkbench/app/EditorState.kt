@@ -1,7 +1,7 @@
 package io.github.assworkbench.app
 
 import io.github.assworkbench.domain.AssDocument
-import io.github.assworkbench.domain.AssInlineSyntax
+import io.github.assworkbench.domain.SubtitleFilterState
 import io.github.assworkbench.domain.AssTextEncoding
 import io.github.assworkbench.domain.SubtitleProject
 import io.github.assworkbench.domain.WaveformEnvelope
@@ -29,6 +29,8 @@ data class SpectrogramState(
 data class EditorState(
     val project: SubtitleProject = SubtitleProject(),
     val document: AssDocument = AssDocument(),
+    /** Monotonic within this VM; navigation/preview/presentation do not advance it. */
+    val documentRevision: Long = 0L,
     val previewDocument: AssDocument? = null,
     /** Owner of the single active transient domain preview. */
     val previewOwnerId: String? = null,
@@ -50,7 +52,7 @@ data class EditorState(
     val selectedEventIds: Set<Long> = emptySet(),
     val selectionAnchorId: Long? = null,
     val focusedEventId: Long? = null,
-    val query: String = "",
+    val subtitleFilter: SubtitleFilterState = SubtitleFilterState(),
     val seekRequestMs: Long? = null,
     val seekRequestNonce: Long = 0L,
     val canUndo: Boolean = false,
@@ -70,10 +72,6 @@ data class EditorState(
     val recoveryLabel: String = "",
     val status: String = "可先打开 ASS，也可先选择参考视频；两者互不依赖。",
 ) {
-    val filteredEvents get() = document.events.filter {
-        query.isBlank() ||
-            AssInlineSyntax.visibleText(it.text).contains(query, ignoreCase = true) ||
-            it.name.contains(query, ignoreCase = true) ||
-            it.style.contains(query, ignoreCase = true)
-    }
+    val query get() = subtitleFilter.quickText
+    val filteredEvents get() = subtitleFilter.apply(document.events, selectedEventIds)
 }

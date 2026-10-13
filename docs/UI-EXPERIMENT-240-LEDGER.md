@@ -4,6 +4,17 @@
 状态：Phase 0 traceability baseline（追踪基线），不是完成宣言。  
 源清单：`ASS-Workbench-Android_超级激进UI实验清单_2026-10-02.txt`。原清单明确属于拟议要求，不是现有能力说明。
 
+## 2026-10-10 UI 收敛说明（PR #138，仍待最新 CI）
+产品层现在只允许选择 **FIXED 标准主界面** 和 **SPATIAL_EXPERIMENTAL 无限画布**。其他八种实验布局从 `UiVariantRegistry.entries` 退出并标记归档；历史 `.asswb` 模式名称经 `resolve()` 定向迁移至无限画布，不清除 ASS、工具实例、绑定或已保存布局。旧完整实验页面的私有组合实现已从 `ModernEditorScreen` 清理；底层被复用的领域工具、原生预览、候选选择器及其必要辅助组件仍保留。
+
+功能统一的代码对应关系：Timeline Dock → 无限画布常驻紧凑/展开真实时间轴；Edge Bookmark → `BOOKMARKED` ToolInstance 侧轨；Subtitle Object → 视频长按冻结时刻的目标消歧；Precision Lens → Position 阶段独占精密操作层；Glass Layered → 世界工具节点透明度和音频穿透；Pager → 原生聚焦编辑/快捷切换；Tool Instances/Canvas → 工作区身份、布局锁、复制、关闭、收回和召回。**此列表是迁移范围和待验证的代码落点，不等于旧清单所有 240 项已完成，也不代表与旧实验完全同等功能。**
+
+下方历史条目仍是 2026-10-02 的逐项追踪基线，不因为界面归并自动改写 `Implemented/Partial/Planned/Blocked` 状态；需在 PR CI、视觉证据和真机验收后逐条更新证据。
+
+## 2026-10-11 当前能力核对（PR #138，未合入）
+
+逐项历史布局能力与当前生产消费者见 `MULTI-UI-CAPABILITY-MIGRATION-2026-10-11.md`。已证实：四边独立边层、玻璃三材质/真实模糊、旧 Surface 停靠/最小化/标签组、时间轴连续高度手势原来缺失，本轮已补源码入口但原生 Pending；前三类仍无当前承接入口。对应旧数据结构与模型测试的保留不能证明功能可达。聚焦切换、实例/绑定、侧轨、两档 Timeline Dock、精密操作及对象候选选择有现行路径；其设备验收独立。下方事实快照及240行仍为历史基线，不能直接用于当前完成度。
+
 ## 事实快照
 
 - current main at Slice E branch point: `73c09f4052af0b7b057794a138a618f7883f4803`
@@ -41,8 +52,8 @@
 | 004 | 双指缩放整个工作区，缩小后工具变成摘要，再放大恢复可操作内容。 | **Partial** | main · #61 gate | `SPATIAL_EXPERIMENTAL` · `SpatialWorkspace` | #61 presentation smoke; item-level mapping absent | Not 240-ID mapped | Not item-mapped；Whole-workspace zoom exists; semantic summary-at-low-zoom is not complete. |
 | 005 | 区分工作区缩放、视频预览缩放、时间轴缩放，不让一个手势同时修改三者。 | **Partial** | main · #61 gate | `SPATIAL_EXPERIMENTAL` · `SpatialWorkspace` | #61 presentation smoke; item-level mapping absent | Not 240-ID mapped | Not item-mapped |
 | 006 | 添加全局鸟瞰图：一眼看到所有工具和预览，点击任一节点飞入其位置。 | **Implemented** | `feat/workspace-clickable-overview` (Pending CI) | `CanvasOverviewDialog` / `CanvasOverview` / `InfiniteCanvasHost` | Five model regressions passed; five connected regressions Pending CI; `CANVAS-BIRDSEYE.md` | Pending capture | Real-device visual/touch acceptance remains separate. |
-| 007 | 添加视口导航历史：回到刚才看的位置，再前进到下一处工作现场。 | **Planned** | main · #61 gate | `SPATIAL_EXPERIMENTAL` · `SpatialWorkspace` | #61 presentation smoke; item-level mapping absent | Not 240-ID mapped | Not item-mapped；No viewport back/forward history evidenced. |
-| 008 | 工具允许放到屏幕之外；边缘显示方向提示，点击可带回视口。 | **Planned** | main · #61 gate | `SPATIAL_EXPERIMENTAL` · `SpatialWorkspace` | #61 presentation smoke; item-level mapping absent | Not 240-ID mapped | Not item-mapped；No off-screen direction indicator/recall evidence. |
+| 007 | 添加视口导航历史：回到刚才看的位置，再前进到下一处工作现场。 | **Partial · PR #138 Pending CI** | `redesign/infinite-canvas-workbench-v2` · PR #138 only (not main) | `CanvasViewportHistory` / `InfiniteCanvasHost` | JVM round-trip/bounds tests and connected birdseye-back/forward regression submitted; latest CI Pending | Not 240-ID mapped | Real-device/rotation/gesture acceptance pending; history covers explicit viewport jumps, not continuous pan frames. |
+| 008 | 工具允许放到屏幕之外；边缘显示方向提示，点击可带回视口。 | **Partial · PR #138 Pending CI** | `redesign/infinite-canvas-workbench-v2` · PR #138 only (not main) | `canvasEdgeCues` / `InfiniteCanvasHost` | JVM direction grouping and Android click-to-recall regression submitted; latest CI Pending | Not 240-ID mapped | Real-device occlusion/touch/device acceptance pending; one nearest candidate per direction, plus count, rather than per-tool edge markers. |
 | 009 | “适合全部内容”把整个工作现场缩到可见范围，“回到当前字幕”只定位对象相关区域。 | **Partial** | main · #61 gate | `SPATIAL_EXPERIMENTAL` · `SpatialWorkspace` | #61 presentation smoke; item-level mapping absent | Not 240-ID mapped | Not item-mapped |
 | 010 | 建立排版岛、时间岛、字体岛等可命名区域；用户能自由摆放并在区域间切换。 | **Planned** | main · #61 gate | `SPATIAL_EXPERIMENTAL` · `SpatialWorkspace` | #61 presentation smoke; item-level mapping absent | Not 240-ID mapped | Not item-mapped；No named spatial islands evidence. |
 | 011 | 允许把视频预览固定在屏幕上，其他工作区节点从它下面移动。 | **Planned** | main · #61 gate | `SPATIAL_EXPERIMENTAL` · `SpatialWorkspace` | #61 presentation smoke; item-level mapping absent | Not 240-ID mapped | Not item-mapped；No screen-pinned preview conversion evidence. |
@@ -148,7 +159,7 @@
 | 081 | ASS Layer 与 UI 轨道分开建模，整理轨道不擅自改写渲染层级。 | **Partial** | main timeline core · #56 historical only | `ModernTimelinePane` + `core/domain/Timeline*`; dedicated Timeline Dock absent from registry | `TimelineViewportPolicyTest` / `AssTimelineSnapTest` / `AssTimelineRelationsTest`; no dock gate | Not 240-ID mapped | Not item-mapped |
 | 082 | 时间轴点击事件同步画面与工具，播放经过事件时不强制替换编辑对象。 | **Partial** | main timeline core · #56 historical only | `ModernTimelinePane` + `core/domain/Timeline*`; dedicated Timeline Dock absent from registry | `TimelineViewportPolicyTest` / `AssTimelineSnapTest` / `AssTimelineRelationsTest`; no dock gate | Not 240-ID mapped | Not item-mapped |
 | 083 | 提供循环播放当前事件、选择范围和手动区间，便于反复检查。 | **Partial** | main timeline core · #56 historical only | `ModernTimelinePane` + `core/domain/Timeline*`; dedicated Timeline Dock absent from registry | `TimelineViewportPolicyTest` / `AssTimelineSnapTest` / `AssTimelineRelationsTest`; no dock gate | Not 240-ID mapped | Not item-mapped |
-| 084 | 时间轴常驻区域可由用户调节高度，保留明确的召回和展开入口。 | **Implemented** | #98 Timeline Dock re-land candidate | `TimelineDockPolicy` bounded resize + snap；`timeline-dock-handle` vertical drag + `timeline-dock-toggle` explicit entry | `TimelineDockPolicyTest` + `UiVariantRegistryTest` + presentation invariant gate | Not 240-ID mapped | DEVICE 未验证；手势体验与触摸命中仍需真机。 |
+| 084 | 时间轴常驻区域可由用户调节高度，保留明确的召回和展开入口。 | **Partial** | branch-only PR #138 · native Pending | `InfiniteCanvasHost` 48dp抓手连续预览/取消/提交 + `TimelineDockPolicy.canvas*`；短窗口保留组合并暂挂 | policy 7/7（含旧3项）；两项native新增未执行；见 `CANVAS-TIMELINE-RESIZE-2026-10-12.md` | No production visual/device evidence | 尚未合入main；首选比例仅会话/Activity saveable，不宣称.asswb持久化或多轨完成。 |
 
 ### 八、时间轴的激进扩展
 
