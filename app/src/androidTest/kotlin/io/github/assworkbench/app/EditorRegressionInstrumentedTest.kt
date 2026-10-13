@@ -1678,6 +1678,10 @@ class EditorRegressionInstrumentedTest {
         val before = viewModel.state.value.document
 
         openTool("EFFECTS")
+        // Daily authoring controls remain reachable above the advanced composition pane.
+        composeRule.onNodeWithTag("effect-blur-value").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithTag("effect-fade-header").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithTag("effect-transform-entry").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithTag("fx-composition-pane")
             .performScrollTo()
             .assertIsDisplayed()
