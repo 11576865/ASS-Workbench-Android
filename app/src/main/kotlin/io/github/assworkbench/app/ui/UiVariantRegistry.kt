@@ -88,6 +88,7 @@ internal object UiVariantRegistry {
     val default: WorkspacePresentationMode = WorkspacePresentationMode.FIXED
 
     fun resolve(persistedName: String?): WorkspacePresentationMode = when (persistedName) {
+        null -> default // A project without an explicit workspace uses the stable UI.
         WorkspacePresentationMode.FIXED.name -> WorkspacePresentationMode.FIXED
         WorkspacePresentationMode.SPATIAL_EXPERIMENTAL.name -> WorkspacePresentationMode.SPATIAL_EXPERIMENTAL
         // Legacy projects preserve their WorkspaceState, surface snapshots and
