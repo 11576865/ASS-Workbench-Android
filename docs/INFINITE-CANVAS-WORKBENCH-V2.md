@@ -1,3 +1,10 @@
+## 2026-10-13: 主工作台默认与紧凑工作区选择（main）
+
+- 新会话及未明确保存工作区模式的工程默认使用 `FIXED` 标准编辑工作台；`SPATIAL_EXPERIMENTAL` 不再是默认入口，但仍可从主界面全局工作区切换图标和“更多 > 工作区”选择。
+- 之前显式保存为 `SPATIAL_EXPERIMENTAL` 的工程继续恢复实验工作区；已归档 UI 名称及其他未知旧标识仍由 `UiVariantRegistry.resolve()` 迁移至统一无限画布，不清除工程、ToolInstance 或 Binding。
+- 工作区选择窗口不再常驻长段历史说明，显示两个紧凑选择项；具体说明通过长按/悬停 Tooltip 提供，实验界面保留显式“实验”标记。顶部工作区图标复用 `TooltipIconButton`。
+- 以上仅为原生 UI 入口、可见文案和配置层调整；**尚未**将 HTML 动画/卡拉 OK 原型的标签编辑逻辑实现进 Kotlin。原生编译、设备视觉与真实 libass 验收以 CI 和仪器测试为准。
+
 # Infinite Canvas Workbench V2 — replacement interaction contract
 
 Status: **implementation branch** (not a stable product release)
