@@ -1,0 +1,70 @@
+{
+  "schema_version": 1,
+  "id": "ass-native-ui-minimal-rollout-20261013",
+  "goal": "将经过评审的平板优先、少字主义 ASS UI 分阶段接入正式 Android Compose 工程；保留完整 18 工具目录、Raw 保真、Karaoke/动画语义与独立实验 Host。",
+  "status": "in_progress",
+  "current_bounded_work_unit": "Native entry and compact UI chrome migration — WORK_UNIT_COMPLETE",
+  "completed_units": [
+    {
+      "name": "FIXED is the new session default",
+      "commit": "a3af731bf103de2fe7304730b7187f34798b7bcf"
+    },
+    {
+      "name": "Update default registry test",
+      "commit": "954a0022b0a6beb118e703700c8585dfd2656fb1"
+    },
+    {
+      "name": "Condense native workspace picker, long-press tooltip",
+      "commit": "1c86237d1bb68ac34ec391f48e810af963d882ac"
+    },
+    {
+      "name": "Tooltip for direct experimental Host switch",
+      "commit": "b21a81815f6370a24c9ba572b91ca1f80670e556"
+    },
+    {
+      "name": "Resolve null workspace to FIXED without legacy rewrite",
+      "commit": "e55353e380e14aaa7ee192a88e7e642cf74b1748"
+    },
+    {
+      "name": "Test missing workspace mode",
+      "commit": "ae09d8747e9e921376fa63f5064f95b4fd398a76"
+    },
+    {
+      "name": "Update infinite canvas docs",
+      "commit": "8a7e960377e87563867192b423d195e51f86aad7"
+    },
+    {
+      "name": "Icon-first compact task toolbar with accessible tooltip",
+      "commit": "3f81b368c0ee415ace1c7152e993d22039eaff3b"
+    }
+  ],
+  "next_units": [
+    "Native CI compile, unit tests and tablet/phone emulator visual capture; correct visible failures",
+    "Integrate native effects editor against existing AssKaraokeFxAuthoring/AssFxComposition and Raw-preserving domain authoring; begin with bounded real ASS write and Undo",
+    "Implement real preview source/time alignment and validate with libass/multifont actual-media samples",
+    "Task-fit tablet refinement of fixed surface and direct professional controls; confirm feature discoverability",
+    "Device and IME/TalkBack touch/longpress acceptance, workspace/data state continuity"
+  ],
+  "repository": "11576865/ASS-Workbench-Android",
+  "branch": "main",
+  "pull_request": null,
+  "latest_durable_code_commit": "3f81b368c0ee415ace1c7152e993d22039eaff3b",
+  "external_validation": {
+    "android_ci": "PENDING_EXTERNAL_VALIDATION",
+    "emulator_regression": "PENDING_EXTERNAL_VALIDATION",
+    "visual_capture": "PENDING_EXTERNAL_VALIDATION",
+    "fontconfig_renderer": "NOT_REQUESTED_BY_THIS_UNIT",
+    "local_gradle": "NOT_EXECUTED"
+  },
+  "blockers": [
+    "No native Gradle compilation or device screenshot has been verified in this chat.",
+    "HTML v6.3 UI and source-aware effects proposal are prototypes, not installed native code."
+  ],
+  "safeguards": [
+    "Persisted legacy variant strings still resolve to SPATIAL_EXPERIMENTAL; null/new defaults to FIXED.",
+    "Never silently replace existing ASS override tokens or delete draft/tool bindings.",
+    "Experimental infinite canvas only via global workspace controls, not fixed task navigation.",
+    "Icon-only compact controls retain content descriptions and explanatory long-press tooltips."
+  ],
+  "updated_at": "2026-10-13T21:02:00+08:00"
+}
