@@ -5,22 +5,42 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccessTime
+import androidx.compose.material.icons.filled.Apps
+import androidx.compose.material.icons.filled.Article
+import androidx.compose.material.icons.filled.AutoFixHigh
+import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.Subtitles
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TooltipBox
+import androidx.compose.material3.TooltipDefaults
+import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 
-/** Stable task entries; complete tool discovery and reference visibility stay reachable. */
+/**
+ * A task is not a second tool registry. Wide tablets show concise task names;
+ * compact windows expose the same actions as icons, with descriptions on long press.
+ * Every persisted WorkbenchTool is still reachable from the complete directory.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun WorkbenchTaskBar(
     activeTool: WorkbenchTool,
@@ -30,36 +50,88 @@ internal fun WorkbenchTaskBar(
     onPreview: () -> Unit,
     onDirectory: () -> Unit,
 ) {
+    val compact = LocalConfiguration.current.screenWidthDp < 600
+    val previewLabel = when (requestedPreview) {
+        PreviewDensity.FULL -> "预览"
+        PreviewDensity.COMPACT -> "紧凑"
+        PreviewDensity.HIDDEN -> "隐藏"
+    }
+    val previewIcon = if (requestedPreview == PreviewDensity.HIDDEN)
+        Icons.Filled.VisibilityOff else Icons.Filled.Visibility
+
     Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh, tonalElevation = 2.dp) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 6.dp),
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 6.dp),
             horizontalArrangement = Arrangement.spacedBy(4.dp),
-            verticalAlignment = Alignment.CenterVertically) {
-            Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Row(
+                Modifier.weight(1f).horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
                 WorkbenchTask.entries.filterNot { it == WorkbenchTask.OTHER }.forEach { task ->
-                    FilterChip(
-                        selected = if (task == WorkbenchTask.SUBTITLES) listRequested
-                            else !listRequested && activeTool.task == task,
-                        onClick = { onTool(task.toolFor(activeTool)) },
-                        label = { Text(task.title) },
-                        modifier = Modifier.testTag("fixed-tool-${task.defaultTool.name}"),
-                    )
+                    val taskIcon = when (task) {
+                        WorkbenchTask.SUBTITLES -> Icons.Filled.Subtitles
+                        WorkbenchTask.TEXT -> Icons.Filled.Article
+                        WorkbenchTask.TYPESETTING -> Icons.Filled.Palette
+                        WorkbenchTask.TIME -> Icons.Filled.AccessTime
+                        WorkbenchTask.EFFECTS -> Icons.Filled.AutoFixHigh
+                        WorkbenchTask.OTHER -> Icons.Filled.Apps
+                    }
+                    TooltipBox(
+                        positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+                        tooltip = { PlainTooltip { Text(task.defaultTool.description) } },
+                        state = rememberTooltipState(),
+                    ) {
+                        FilterChip(
+                            selected = if (task == WorkbenchTask.SUBTITLES) listRequested
+                                else !listRequested && activeTool.task == task,
+                            onClick = { onTool(task.toolFor(activeTool)) },
+                            label = {
+                                if (compact) Icon(taskIcon, contentDescription = null, modifier = Modifier.size(20.dp))
+                                else Text(task.title)
+                            },
+                            modifier = Modifier
+                                .semantics { contentDescription = task.title }
+                                .testTag("fixed-tool-${task.defaultTool.name}"),
+                        )
+                    }
                 }
             }
-            FilterChip(selected = !listRequested && activeTool.task == WorkbenchTask.OTHER,
-                onClick = onDirectory, label = { Text("工具") },
-                modifier = Modifier.testTag("fixed-tool-CAPABILITIES"))
-            FilterChip(selected = requestedPreview != PreviewDensity.HIDDEN,
-                onClick = onPreview,
-                label = { Text(when (requestedPreview) {
-                    PreviewDensity.FULL -> "预览"
-                    PreviewDensity.COMPACT -> "紧凑"
-                    PreviewDensity.HIDDEN -> "隐藏"
-                }) },
-                leadingIcon = {
-                    Icon(if (requestedPreview == PreviewDensity.HIDDEN) Icons.Filled.VisibilityOff
-                        else Icons.Filled.Visibility, "预览 · ${requestedPreview.label}")
-                }, modifier = Modifier.testTag("fixed-preview-density"))
+            TooltipBox(
+                positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+                tooltip = { PlainTooltip { Text("全部专业工具") } },
+                state = rememberTooltipState(),
+            ) {
+                FilterChip(
+                    selected = !listRequested && activeTool.task == WorkbenchTask.OTHER,
+                    onClick = onDirectory,
+                    label = {
+                        if (compact) Icon(Icons.Filled.Apps, contentDescription = null, modifier = Modifier.size(20.dp))
+                        else Text("工具")
+                    },
+                    modifier = Modifier
+                        .semantics { contentDescription = "工具目录" }
+                        .testTag("fixed-tool-CAPABILITIES"),
+                )
+            }
+            TooltipBox(
+                positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+                tooltip = { PlainTooltip { Text("预览：${requestedPreview.label}；点击切换") } },
+                state = rememberTooltipState(),
+            ) {
+                FilterChip(
+                    selected = requestedPreview != PreviewDensity.HIDDEN,
+                    onClick = onPreview,
+                    label = {
+                        if (compact) Icon(previewIcon, contentDescription = null, modifier = Modifier.size(20.dp))
+                        else Text(previewLabel)
+                    },
+                    modifier = Modifier
+                        .semantics { contentDescription = "预览：${requestedPreview.label}" }
+                        .testTag("fixed-preview-density"),
+                )
+            }
         }
     }
 }
