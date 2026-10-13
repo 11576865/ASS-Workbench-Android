@@ -2491,7 +2491,15 @@ private fun InlineTransformCard(
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("Transform #${index + 1}", style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
-                TextButton(onClick = { viewModel.removeEventTransform(eventId, index) }) {
+                TextButton(
+                    onClick = {
+                        if (!draftStore.hasDirtyInEvent(eventId) && !draft.conflict(eventSourceText)) {
+                            viewModel.removeEventTransformIfSourceMatches(eventId, index, eventSourceText)
+                        }
+                    },
+                    enabled = !sourceConflict && !draftStore.hasDirtyInEvent(eventId),
+                    modifier = Modifier.testTag("effect-transform-remove-$index"),
+                ) {
                     Text("删除")
                 }
             }
