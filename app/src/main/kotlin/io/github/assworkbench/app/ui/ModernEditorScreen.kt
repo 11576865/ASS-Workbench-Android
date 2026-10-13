@@ -1491,13 +1491,13 @@ private fun WorkspaceEditScopeBar(summary: WorkspaceEditScopeSummary) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun WorkspaceToolDirectory(onOpenTool: (WorkbenchTool) -> Unit, modifier: Modifier = Modifier) {
     var query by rememberSaveable { mutableStateOf("") }
     Column(modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         OutlinedTextField(query, { query = it }, label = { Text("搜索工具") }, singleLine = true,
             leadingIcon = { Icon(Icons.Filled.Search, null) }, modifier = Modifier.fillMaxWidth().testTag("tool-search"))
-        Text("按编辑对象分区；同一工具在固定界面与 Canvas 中共用。", style = MaterialTheme.typography.bodySmall)
         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             WorkbenchToolGroup.entries.forEach { group ->
                 val entries = WorkbenchTool.entries.filter { it.group == group && it != WorkbenchTool.CAPABILITIES &&
@@ -1506,12 +1506,18 @@ private fun WorkspaceToolDirectory(onOpenTool: (WorkbenchTool) -> Unit, modifier
                 if (entries.isNotEmpty()) {
                     item(key = "group-" + group.name) { Text(group.title, style = MaterialTheme.typography.titleSmall) }
                     items(entries, key = { it.name }) { entry ->
-                        OutlinedButton(onClick = { onOpenTool(entry) }, modifier = Modifier.fillMaxWidth().testTag("tool-${entry.name}")) {
-                            Column(Modifier.weight(1f)) {
-                                Text(entry.title)
-                                Text(entry.description, style = MaterialTheme.typography.labelSmall)
+                        TooltipBox(
+                            positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+                            tooltip = { PlainTooltip { Text(entry.description) } },
+                            state = rememberTooltipState(),
+                        ) {
+                            OutlinedButton(
+                                onClick = { onOpenTool(entry) },
+                                modifier = Modifier.fillMaxWidth().testTag("tool-${entry.name}"),
+                            ) {
+                                Text(entry.title, modifier = Modifier.weight(1f))
+                                Icon(Icons.Filled.OpenInNew, null, Modifier.size(18.dp))
                             }
-                            Icon(Icons.Filled.OpenInNew, null, Modifier.size(18.dp))
                         }
                     }
                 }
