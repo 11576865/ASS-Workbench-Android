@@ -3,7 +3,7 @@
   "id": "ass-native-ui-minimal-rollout-20261013",
   "goal": "将经过评审的平板优先、少字主义 ASS UI 分阶段接入正式 Android Compose 工程；保留完整 18 工具目录、Raw 保真、Karaoke/动画语义与独立实验 Host。",
   "status": "in_progress",
-  "current_bounded_work_unit": "Task-specialist tool discoverability and low-copy native directory — WORK_UNIT_COMPLETE",
+  "current_bounded_work_unit": "Native FX editor hierarchy and copy density — WORK_UNIT_COMPLETE",
   "completed_units": [
     {
       "name": "FIXED is the new session default",
@@ -56,6 +56,30 @@
     {
       "name": "Remove persistent descriptions from searchable tool directory",
       "commit": "f22f4499229d518dd51257115266c76caaa5224c"
+    },
+    {
+      "name": "Task-local specialist tool projection",
+      "commit": "e1b17efa0b86dfb9a24b067311aaeeb1c9cb8833"
+    },
+    {
+      "name": "Context specialist menu in FIXED toolbar",
+      "commit": "a41644dab1642fc652f1703fa50f3cd97fa584c1"
+    },
+    {
+      "name": "Context catalog contract test",
+      "commit": "already present in main, verified latest contents"
+    },
+    {
+      "name": "Prioritize common native effects and collapse redundant explanations",
+      "commit": "b1ea4700b5c23f91d34d2ff72b16fdf1a44db841"
+    },
+    {
+      "name": "Native FX controls stable UI test tags",
+      "commit": "3004d0888f96de8b7df907c48d2c3303e58934e2"
+    },
+    {
+      "name": "Android instrumentation for effects discovery",
+      "commit": "0b1d197d6ddede7ba9d76f16f097c45ee41447c9"
     }
   ],
   "next_units": [
@@ -67,18 +91,17 @@
   "repository": "11576865/ASS-Workbench-Android",
   "branch": "main",
   "pull_request": null,
-  "latest_durable_code_commit": "f22f4499229d518dd51257115266c76caaa5224c",
+  "latest_durable_code_commit": "0b1d197d6ddede7ba9d76f16f097c45ee41447c9",
   "external_validation": {
-    "android_ci": "PENDING_EXTERNAL_VALIDATION — connector returned no PR-scoped workflow runs; combined classic status had no entries",
-    "emulator_regression": "PENDING_EXTERNAL_VALIDATION — newly authored test not executed",
-    "visual_capture": "PENDING_EXTERNAL_VALIDATION — no native screenshots verified",
+    "android_ci": "PENDING_EXTERNAL_VALIDATION",
+    "emulator_regression": "PENDING_EXTERNAL_VALIDATION",
+    "visual_capture": "PENDING_EXTERNAL_VALIDATION",
     "fontconfig_renderer": "NOT_REQUESTED_BY_THIS_UNIT",
     "local_gradle": "NOT_EXECUTED"
   },
   "blockers": [
-    "Native Gradle/Android test environment unavailable in this turn; no compile success may be asserted.",
-    "GitHub connector for workflow runs returns only PR-triggered runs, none for pushed main; classic commit statuses empty.",
-    "Browser HTML v6.3 is design evidence only; animation domain and full layout still require Kotlin integration."
+    "Native compile/Android device render not verified in this turn; source-level tool/test contracts were committed.",
+    "No HTML prototype semantics have been installed as native arbitrary ASS writer."
   ],
   "safeguards": [
     "Persisted legacy variant strings still resolve to SPATIAL_EXPERIMENTAL; null/new defaults to FIXED.",
