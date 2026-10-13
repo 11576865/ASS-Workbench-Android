@@ -1673,6 +1673,42 @@ class EditorRegressionInstrumentedTest {
     }
 
     @Test
+    fun transformDraftSurvivesTaskAndHostSwitchAndBlocksExternalRawConflict() {
+        restoreRecovery()
+        composeRule.runOnIdle {
+            viewModel.updateEventText(1L, "{\\t(120,780,\\fscx140)}Recovered line")
+        }
+        eventRow(1L).performClick()
+        openTool("EFFECTS")
+        composeRule.onNodeWithTag("effect-transform-start-0")
+            .performScrollTo().performTextReplacement("251")
+        hideKeyboard()
+        openTool("TEXT")
+        openTool("EFFECTS")
+        composeRule.onNodeWithTag("effect-transform-start-0")
+            .performScrollTo().assertTextContains("251")
+
+        switchToUnifiedCanvas()
+        openTool("EFFECTS")
+        composeRule.onNodeWithTag("effect-transform-start-0")
+            .performScrollTo().assertTextContains("251")
+        val original = viewModel.state.value.document.events.first { it.id == 1L }.text
+        assertTrue(original.contains("\\t(120,780,"))
+
+        composeRule.runOnIdle {
+            viewModel.updateEventText(1L, "{\\pos(12,34)\\t(120,780,\\fscx140)}Recovered line")
+        }
+        composeRule.onNodeWithTag("effect-transform-conflict-0")
+            .performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithTag("effect-transform-start-0")
+            .assertTextContains("251")
+        composeRule.onNodeWithTag("effect-transform-reload-0")
+            .performScrollTo().performClick()
+        composeRule.onNodeWithTag("effect-transform-start-0")
+            .assertTextContains("120.0")
+    }
+
+    @Test
     fun staleTransformSourceIsRejectedWithoutOverwritingOtherRawEdits() {
         restoreRecovery()
         val baseline = "{\\t(120,780,\\fscx140)}Recovered line"
