@@ -4142,6 +4142,36 @@ class EditorViewModel(application: Application, private val savedStateHandle: Sa
         }
     }
 
+    /**
+     * Source-guarded Form Apply. A Transform index may point to a different
+     * token after an external Raw edit or reordering. Reject rather than
+     * overwriting a now-unrelated ASS override.
+     */
+    fun setEventTransformIfSourceMatches(
+        id: Long,
+        index: Int,
+        expectedSource: String,
+        transform: AssTransform,
+    ): Boolean {
+        var committed = false
+        editDocument("已更新字幕 #" + id + " 的 Transform #" + (index + 1) + "。") { doc ->
+            val current = doc.events.firstOrNull { it.id == id }
+            if (current == null || current.text != expectedSource) {
+                doc
+            } else {
+                val rewritten = AssAnimationSemantic.patchTransform(current.text, index, transform)
+                if (rewritten == current.text) doc
+                else {
+                    committed = true
+                    doc.copy(events = doc.events.map { event ->
+                        if (event.id == id) event.copy(text = rewritten) else event
+                    })
+                }
+            }
+        }
+        return committed
+    }
+
     fun addEventTransform(id: Long, transform: AssTransform) {
         editDocument("已为字幕 #" + id + " 添加 Transform。") { doc ->
             doc.copy(events = doc.events.map { event ->
