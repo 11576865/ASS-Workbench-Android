@@ -3,7 +3,7 @@
   "id": "ass-native-ui-minimal-rollout-20261013",
   "goal": "将经过评审的平板优先、少字主义 ASS UI 分阶段接入正式 Android Compose 工程；保留完整 18 工具目录、Raw 保真、Karaoke/动画语义与独立实验 Host。",
   "status": "in_progress",
-  "current_bounded_work_unit": "Native FX editor hierarchy and copy density — WORK_UNIT_COMPLETE",
+  "current_bounded_work_unit": "Native Transform interval handles + exact timing fallback — WORK_UNIT_COMPLETE",
   "completed_units": [
     {
       "name": "FIXED is the new session default",
@@ -80,28 +80,45 @@
     {
       "name": "Android instrumentation for effects discovery",
       "commit": "0b1d197d6ddede7ba9d76f16f097c45ee41447c9"
+    },
+    {
+      "name": "Native exact Transform interval handle eligibility",
+      "commit": "228f16930942a92925c43ae2e58965ff12a2eec1"
+    },
+    {
+      "name": "Unit tests for integral-double and fractional ASS timing",
+      "commit": "beddb37f4d08603ae11dec3ac998ffee34c4328a"
+    },
+    {
+      "name": "Compose RangeSlider in Event Transform, preview-only until Apply",
+      "commit": "0ff04ce3f9d38822470bbc3f03844642d4799b14"
+    },
+    {
+      "name": "Android instrumentation: interval visibility and fractional exact fallback",
+      "commit": "5768416cdcc0629a571b3dd93ce1d3672fcc9086"
     }
   ],
   "next_units": [
-    "Validate main branch Compose Kotlin build / JVM tests / instrumented test + screenshot. Repair any failures before proceeding.",
-    "Connect effect tools to existing AssKaraokeFxAuthoring/AssFxComposition authoring and undo rather than copying HTML demo writers.",
-    "Validate accurate libass time/provenance rendering on tablet emulator and real media.",
-    "Native task-specific layout density and gestures on portrait tablet; test keyboard, TalkBack and stylus."
+    "Obtain native Gradle build, JVM tests and emulator visual/gesture evidence on exact main SHA; fix concrete failures.",
+    "Audit Transform draft ownership across Event focus/tool/Host transitions and typed fields; do not lose uncommitted edits.",
+    "Connect renderer-backed real ASS source/preview and native save/reopen with correct Undo and unknown tag preservation.",
+    "Review tablet precision manipulator touch target/accessibility after actual Compose screenshots."
   ],
   "repository": "11576865/ASS-Workbench-Android",
   "branch": "main",
   "pull_request": null,
-  "latest_durable_code_commit": "0b1d197d6ddede7ba9d76f16f097c45ee41447c9",
+  "latest_durable_code_commit": "5768416cdcc0629a571b3dd93ce1d3672fcc9086",
   "external_validation": {
-    "android_ci": "PENDING_EXTERNAL_VALIDATION",
-    "emulator_regression": "PENDING_EXTERNAL_VALIDATION",
+    "android_ci": "PENDING_EXTERNAL_VALIDATION (empty combined-status response)",
+    "emulator_regression": "PENDING_EXTERNAL_VALIDATION (no PR-triggered runs on direct main commit)",
     "visual_capture": "PENDING_EXTERNAL_VALIDATION",
     "fontconfig_renderer": "NOT_REQUESTED_BY_THIS_UNIT",
-    "local_gradle": "NOT_EXECUTED"
+    "local_gradle": "NOT_EXECUTED (no accessible local Android toolchain)"
   },
   "blockers": [
-    "Native compile/Android device render not verified in this turn; source-level tool/test contracts were committed.",
-    "No HTML prototype semantics have been installed as native arbitrary ASS writer."
+    "No successful native Gradle or emulator run observed for the new main commit.",
+    "RangeSlider UI semantics/gesture and actual libass preview require device validation.",
+    "Effects drafting via full panel recomposition remains a separate future state-resilience audit."
   ],
   "safeguards": [
     "Persisted legacy variant strings still resolve to SPATIAL_EXPERIMENTAL; null/new defaults to FIXED.",
