@@ -2333,8 +2333,8 @@ private fun InlineEffectsEditor(
             }
             if (fadeMode == "fad") {
                 Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro)) {
-                    OutlinedTextField(fadeIn, { fxDraft.fields = fxDraft.fields.copy(fadeIn = it) }, label = { Text("Fade In ms") }, singleLine = true, modifier = Modifier.weight(1f))
-                    OutlinedTextField(fadeOut, { fxDraft.fields = fxDraft.fields.copy(fadeOut = it) }, label = { Text("Fade Out ms") }, singleLine = true, modifier = Modifier.weight(1f))
+                    OutlinedTextField(fadeIn, { fxDraft.fields = fxDraft.fields.copy(fadeIn = it) }, label = { Text("Fade In ms") }, singleLine = true, modifier = Modifier.weight(1f).testTag("effect-fade-in"))
+                    OutlinedTextField(fadeOut, { fxDraft.fields = fxDraft.fields.copy(fadeOut = it) }, label = { Text("Fade Out ms") }, singleLine = true, modifier = Modifier.weight(1f).testTag("effect-fade-out"))
                 }
             } else if (fadeMode == "fade") {
                 Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro)) {
