@@ -2,6 +2,7 @@ package io.github.assworkbench.app.ui
 
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -9,6 +10,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccessTime
+import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.Article
 import androidx.compose.material.icons.filled.AutoFixHigh
@@ -17,6 +20,10 @@ import androidx.compose.material.icons.filled.Subtitles
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -27,6 +34,10 @@ import androidx.compose.material3.TooltipBox
 import androidx.compose.material3.TooltipDefaults
 import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
@@ -58,6 +69,8 @@ internal fun WorkbenchTaskBar(
     }
     val previewIcon = if (requestedPreview == PreviewDensity.HIDDEN)
         Icons.Filled.VisibilityOff else Icons.Filled.Visibility
+    val contextual = if (listRequested) emptyList() else contextualToolsFor(activeTool)
+    var contextualMenuOpen by remember(activeTool.task, listRequested) { mutableStateOf(false) }
 
     Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh, tonalElevation = 2.dp) {
         Row(
@@ -95,6 +108,48 @@ internal fun WorkbenchTaskBar(
                                 .semantics { contentDescription = task.title }
                                 .testTag("fixed-tool-${task.defaultTool.name}"),
                         )
+                    }
+                }
+            }
+            // Relevant specialized editors are one tap away, not buried in the global catalog.
+            if (contextual.size > 1) {
+                Box {
+                    TooltipBox(
+                        positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+                        tooltip = { PlainTooltip { Text("当前任务工具") } },
+                        state = rememberTooltipState(),
+                    ) {
+                        if (compact) {
+                            IconButton(
+                                onClick = { contextualMenuOpen = true },
+                                modifier = Modifier.testTag("fixed-context-tools"),
+                            ) {
+                                Icon(Icons.Filled.Tune, contentDescription = "当前任务工具")
+                            }
+                        } else {
+                            TextButton(
+                                onClick = { contextualMenuOpen = true },
+                                modifier = Modifier.testTag("fixed-context-tools"),
+                            ) {
+                                Text(activeTool.title)
+                                Icon(Icons.Filled.ExpandMore, contentDescription = null)
+                            }
+                        }
+                    }
+                    DropdownMenu(
+                        expanded = contextualMenuOpen,
+                        onDismissRequest = { contextualMenuOpen = false },
+                    ) {
+                        contextual.forEach { tool ->
+                            DropdownMenuItem(
+                                text = { Text(tool.title) },
+                                onClick = {
+                                    contextualMenuOpen = false
+                                    onTool(tool)
+                                },
+                                modifier = Modifier.testTag("fixed-context-${tool.name}"),
+                            )
+                        }
                     }
                 }
             }
