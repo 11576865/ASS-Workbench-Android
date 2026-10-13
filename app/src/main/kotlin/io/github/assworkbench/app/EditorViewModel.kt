@@ -4076,7 +4076,8 @@ class EditorViewModel(application: Application, private val savedStateHandle: Sa
         softEntry: Boolean,
     ) {
         val current = _state.value.document.events.firstOrNull { it.id == id }
-        if (current?.text != expectedSource) {
+        if (current?.text != expectedSource ||
+            AssAnimationSemantic.inspect(expectedSource).malformedLeadingBlock) {
             clearTransientPreview("effects:$id")
             return
         }
@@ -4105,6 +4106,7 @@ class EditorViewModel(application: Application, private val savedStateHandle: Sa
         softEntry: Boolean,
     ): Boolean {
         if (blur != null && (!blur.isFinite() || blur !in 0.0..20.0)) return false
+        if (AssAnimationSemantic.inspect(expectedSource).malformedLeadingBlock) return false
         var committed = false
         editDocument("已更新字幕 #" + id + " 的 Blur / Soft Entry。") { doc ->
             val event = doc.events.firstOrNull { it.id == id }
