@@ -4131,6 +4131,54 @@ class EditorViewModel(application: Application, private val savedStateHandle: Sa
             )
         })
 
+    /**
+     * Source-aware Fade transaction. Existing \fad and \fade edits share one
+     * canonical Raw Event; stale UI form state must never rewrite an unrelated
+     * override block. All modes remain explicitly committed by the user.
+     */
+    fun applyEventFadeIfSourceMatches(
+        id: Long,
+        expectedSource: String,
+        mode: String,
+        fadeInMs: Int? = null,
+        fadeOutMs: Int? = null,
+        complex: AssComplexFade? = null,
+    ): Boolean {
+        val valid = when (mode) {
+            "none" -> true
+            "fad" -> fadeInMs != null && fadeOutMs != null &&
+                fadeInMs in 0..1_000_000 && fadeOutMs in 0..1_000_000
+            "fade" -> complex != null &&
+                listOf(complex.alpha1, complex.alpha2, complex.alpha3)
+                    .all { it in 0..255 } &&
+                listOf(complex.time1Ms, complex.time2Ms, complex.time3Ms, complex.time4Ms)
+                    .let { it.all { time -> time >= 0 } && it.zipWithNext().all { (a, b) -> a <= b } }
+            else -> false
+        }
+        if (!valid) return false
+        var changed = false
+        editDocument("已更新字幕 #" + id + " 的 Fade。") { doc ->
+            val event = doc.events.firstOrNull { it.id == id }
+            if (event == null || event.text != expectedSource) {
+                doc
+            } else {
+                val nextText = when (mode) {
+                    "none" -> AssAnimationSemantic.removeFade(event.text)
+                    "fad" -> AssAnimationSemantic.patchSimpleFade(event.text, fadeInMs!!, fadeOutMs!!)
+                    else -> AssAnimationSemantic.patchComplexFade(event.text, complex!!)
+                }
+                if (nextText == event.text) doc
+                else {
+                    changed = true
+                    doc.copy(events = doc.events.map { item ->
+                        if (item.id == id) item.copy(text = nextText) else item
+                    })
+                }
+            }
+        }
+        return changed
+    }
+
     fun setEventSimpleFade(id: Long, fadeInMs: Int, fadeOutMs: Int) {
         editDocument("已设置字幕 #" + id + " 的 \\fad。") { doc ->
             doc.copy(events = doc.events.map { event ->
