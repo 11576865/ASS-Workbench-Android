@@ -19,8 +19,16 @@ internal fun transformTimingHandleRange(
     eventDurationMs: Long,
 ): TransformTimingHandleRange? {
     if (eventDurationMs <= 0L || eventDurationMs > 16_000_000L) return null
-    val start = startText.trim().toLongOrNull() ?: return null
-    val end = endText.trim().toLongOrNull() ?: return null
-    if (start < 0L || end < start || end > eventDurationMs) return null
+    // Domain values are Doubles and commonly display as "120.0".
+    // Accept integral decimal notation without quantizing a fractional source.
+    fun exactIntegralMs(text: String): Long? {
+        val value = text.trim().toDoubleOrNull() ?: return null
+        if (!value.isFinite() || value < 0.0 || value > eventDurationMs.toDouble()) return null
+        val integral = value.toLong()
+        return integral.takeIf { integral.toDouble() == value }
+    }
+    val start = exactIntegralMs(startText) ?: return null
+    val end = exactIntegralMs(endText) ?: return null
+    if (end < start) return null
     return TransformTimingHandleRange(start, end)
 }
