@@ -1797,6 +1797,12 @@ class EditorRegressionInstrumentedTest {
             assertFalse(viewModel.applyEventVisualEffectsIfSourceMatches(
                 1L, original, 2.5, false,
             ))
+            assertFalse(viewModel.applyEventVisualEffectsIfSourceMatches(
+                1L, changed, 30.0, false,
+            ))
+            assertFalse(viewModel.applyEventVisualEffectsIfSourceMatches(
+                1L, changed, Double.NaN, false,
+            ))
             assertEquals(before, viewModel.state.value.document)
             viewModel.previewEventVisualEffectsIfSourceMatches(1L, changed, 2.5, false)
             assertTrue(viewModel.state.value.previewDocument != null)
