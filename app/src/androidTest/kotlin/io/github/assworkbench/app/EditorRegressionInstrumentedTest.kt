@@ -1723,9 +1723,14 @@ class EditorRegressionInstrumentedTest {
             viewModel.updateEventText(1L, original)
             viewModel.updateEventText(1L, changed)
             val before = viewModel.state.value.document
+            viewModel.previewEventVisualEffectsIfSourceMatches(1L, original, 2.5, false)
+            assertEquals(null, viewModel.state.value.previewDocument)
             assertFalse(viewModel.applyEventVisualEffectsIfSourceMatches(
                 1L, original, 2.5, false,
             ))
+            assertEquals(before, viewModel.state.value.document)
+            viewModel.previewEventVisualEffectsIfSourceMatches(1L, changed, 2.5, false)
+            assertTrue(viewModel.state.value.previewDocument != null)
             assertEquals(before, viewModel.state.value.document)
             assertTrue(viewModel.applyEventVisualEffectsIfSourceMatches(
                 1L, changed, 2.5, false,
