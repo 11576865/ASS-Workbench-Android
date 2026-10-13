@@ -1715,6 +1715,41 @@ class EditorRegressionInstrumentedTest {
     }
 
     @Test
+    fun fadeCommitRejectsStaleSourceAndInvalidParametersWithoutChangingDocument() {
+        restoreRecovery()
+        val original = "{\\pos(12,34)\\blur2\\fad(120,180)}Recovered line"
+        val changed = "{\\pos(50,60)\\blur2\\fad(120,180)}Recovered line"
+        composeRule.runOnIdle {
+            viewModel.updateEventText(1L, original)
+            viewModel.updateEventText(1L, changed)
+            val before = viewModel.state.value.document
+            assertFalse(viewModel.applyEventFadeIfSourceMatches(
+                1L, original, "fad", 200, 300,
+            ))
+            assertFalse(viewModel.applyEventFadeIfSourceMatches(
+                1L, changed, "fad", -1, 300,
+            ))
+            assertFalse(viewModel.applyEventFadeIfSourceMatches(
+                1L, changed, "fad", 200, 1_000_001,
+            ))
+            assertFalse(viewModel.applyEventFadeIfSourceMatches(
+                1L, changed, "fade",
+                complex = io.github.assworkbench.domain.AssComplexFade(0, 255, 0, 500, 200, 800, 1000),
+            ))
+            assertEquals(before, viewModel.state.value.document)
+            assertTrue(viewModel.applyEventFadeIfSourceMatches(
+                1L, changed, "fad", 200, 300,
+            ))
+            val raw = viewModel.state.value.document.events.first { it.id == 1L }.text
+            assertTrue(raw.contains("\\pos(50,60)"))
+            assertTrue(raw.contains("\\blur2"))
+            assertTrue(raw.contains("\\fad(200,300)"))
+            viewModel.undo()
+            assertEquals(before, viewModel.state.value.document)
+        }
+    }
+
+    @Test
     fun blurApplyDoesNotOverwriteAnExternallyEditedEvent() {
         restoreRecovery()
         val original = "{\\pos(12,34)}Recovered line"
