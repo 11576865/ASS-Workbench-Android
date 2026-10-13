@@ -2216,16 +2216,14 @@ private fun InlineEffectsEditor(
         modifier = Modifier.fillMaxWidth(),
     ) {
         Column(Modifier.padding(WorkbenchDimens.Small), verticalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small)) {
-            FxCompositionPane(event, fxTargetEventIds, viewModel)
-            Divider()
-            Text("视觉效果", style = MaterialTheme.typography.titleSmall)
+            // Keep the daily Event controls above the advanced composition templates.
             ContinuousParameterControl(
                 label = "Blur",
                 valueText = blur,
                 onValueTextChange = { blur = it },
                 range = 0f..20f,
                 step = 0.1,
-                supportingText = "只编辑顶层 \\blur；\\t(...) 内部的 Blur 不会被改写。",
+                supportingText = null,
                 onPreview = { previewVisual(it) },
                 onGestureActive = { active -> if (!active) commitVisual() },
             )
@@ -2236,9 +2234,9 @@ private fun InlineEffectsEditor(
             }
 
             Divider()
-            Text("Fade · \\fad / \\fade", style = MaterialTheme.typography.titleSmall)
+            Text("Fade", style = MaterialTheme.typography.titleSmall)
             if (animation.fadeConflict) {
-                Text("检测到顶层 \\fad 与 \\fade 同时存在；应用任一模式时才会显式消解冲突。", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+                Text("\\fad 与 \\fade 冲突 · 应用将替换", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
             }
             Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro)) {
                 FilterChip(selected = fadeMode == "none", onClick = { fadeMode = "none" }, label = { Text("无") })
@@ -2262,7 +2260,7 @@ private fun InlineEffectsEditor(
                     OutlinedTextField(t3, { t3 = it }, label = { Text("T3") }, singleLine = true, modifier = Modifier.weight(1f))
                     OutlinedTextField(t4, { t4 = it }, label = { Text("T4") }, singleLine = true, modifier = Modifier.weight(1f))
                 }
-                Text("A1/A2/A3：0 不透明，255 透明；T1–T4：相对 Event 起点的毫秒时间。", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("α 0=实 / 255=透 · T=Event ms", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                 Button(onClick = {
@@ -2282,6 +2280,8 @@ private fun InlineEffectsEditor(
 
             Divider()
             InlineTransformWorkspace(event, animation.transforms, playbackPositionMs, viewModel)
+            Divider()
+            FxCompositionPane(event, fxTargetEventIds, viewModel)
         }
     }
 }
@@ -2292,7 +2292,7 @@ private fun InlineTransformWorkspace(
     playbackPositionMs: Long,
     viewModel: EditorViewModel,
 ) {
-    var expanded by rememberSaveable(event.id) { mutableStateOf(false) }
+    var expanded by rememberSaveable(event.id) { mutableStateOf(transforms.isNotEmpty()) }
     var addOpen by rememberSaveable(event.id) { mutableStateOf(false) }
     val malformedCount = transforms.count { it.malformed }
 
@@ -2313,14 +2313,7 @@ private fun InlineTransformWorkspace(
         }
     }
 
-    if (!expanded) {
-        Text(
-            "Transform 是 Event 内随时间变化的 override。展开后可分别编辑每个 \\t(...)；不会建立新的全局 Animation 工作台。",
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        return
-    }
+    if (!expanded) return
 
     AnimationPreviewScrubber(
         event = event,
@@ -2404,7 +2397,7 @@ private fun AnimationPreviewScrubber(
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    "Preview scrub",
+                    "播放头 · 只预览",
                     style = MaterialTheme.typography.labelLarge,
                     modifier = Modifier.weight(1f),
                 )
@@ -2431,11 +2424,6 @@ private fun AnimationPreviewScrubber(
                     onSeek(event.start.millis + localMs)
                 },
                 valueRange = 0f..durationMs.toFloat(),
-            )
-            Text(
-                "拖动只改变预览播放头，不改 Event timing，也不产生 Undo 历史；约 33ms 节流避免连续拖动时过量 seek。",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }
