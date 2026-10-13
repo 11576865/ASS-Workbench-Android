@@ -176,6 +176,7 @@ fun ModernEditorScreen(
     val fixedTool = WorkbenchTool.valueOf(fixedToolName)
     val eventTextDraftStore = rememberEventTextDraftStore(state.workspaceSessionId)
     val transformDraftStore = rememberTransformDraftStore(state.workspaceSessionId)
+    val eventFxDraftStore = rememberEventFxDraftStore(state.workspaceSessionId)
     val eventMetadataDraftStore = rememberEventMetadataDraftStore(state.workspaceSessionId)
     val eventTimingDraftStore = rememberEventTimingDraftStore(state.workspaceSessionId)
     LaunchedEffect(eventTimingDraftStore, state.document.events) {
@@ -188,10 +189,11 @@ fun ModernEditorScreen(
     LaunchedEffect(batchAuthoringDraftStore, state.documentRevision, state.document, state.selectedEventIds, state.subtitleFilter) {
         batchAuthoringDraftStore.reconcile(state.document, state.selectedEventIds, state.subtitleFilter, state.documentRevision)
     }
-    LaunchedEffect(eventTextDraftStore, transformDraftStore, state.document.events.map { it.id }) {
+    LaunchedEffect(eventTextDraftStore, transformDraftStore, eventFxDraftStore, state.document.events.map { it.id }) {
         val ids = state.document.events.mapTo(linkedSetOf()) { it.id }
         eventTextDraftStore.retainEvents(ids)
         transformDraftStore.retainEvents(ids)
+        eventFxDraftStore.retainEvents(ids)
     }
 
     LaunchedEffect(state.workspaceSessionId) {
@@ -322,6 +324,7 @@ fun ModernEditorScreen(
         LocalEventTimingDraftStore provides eventTimingDraftStore,
         LocalEventMetadataDraftStore provides eventMetadataDraftStore,
         LocalTransformDraftStore provides transformDraftStore,
+        LocalEventFxDraftStore provides eventFxDraftStore,
         LocalBatchAuthoringDraftStore provides batchAuthoringDraftStore) {
     Surface(
         modifier = Modifier.fillMaxSize(),
