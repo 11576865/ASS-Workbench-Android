@@ -3,7 +3,7 @@
   "id": "ass-native-ui-minimal-rollout-20261013",
   "goal": "将经过评审的平板优先、少字主义 ASS UI 分阶段接入正式 Android Compose 工程；保留完整 18 工具目录、Raw 保真、Karaoke/动画语义与独立实验 Host。",
   "status": "in_progress",
-  "current_bounded_work_unit": "Safe Transform delete and Blur explicit preview-to-Apply boundary — WORK_UNIT_COMPLETE",
+  "current_bounded_work_unit": "Native Event-scoped Fade/Blur drafts and source-guarded Fade Apply — SOURCE_WORK_COMPLETE; VALIDATION_PENDING",
   "completed_units": [
     {
       "name": "FIXED is the new session default",
@@ -172,29 +172,73 @@
     {
       "name": "Android regression for Blur preview, guarded Apply and Undo",
       "commit": "f176383c4218e407079494b9e44f62ed752bf8b5"
+    },
+    {
+      "name": "Fade/Blur Event-scoped session draft store with save/restore",
+      "commit": "7359ee4c5bdf521a2de6ed4e32ce21d99bf8d0fa"
+    },
+    {
+      "name": "ViewModel source-guarded validated Fade authoring transaction",
+      "commit": "a713fb5b7d07963e67e8fa9e6e96c9a0658d3916"
+    },
+    {
+      "name": "Provide EventFxDraftStore to both native workspace Hosts",
+      "commit": "bfd92ac63fa5619a2234065670bcb35281e9d525"
+    },
+    {
+      "name": "Fade/Blur UI drafts, concise conflict and explicit native Apply",
+      "commit": "33ec3314e86de0e6e54d5d95b2d51572ec25f968"
+    },
+    {
+      "name": "JVM draft lifecycle/rebase/session tests",
+      "commit": "6cc61f954cc37784f1e4d11f191dfe468ecd1d26"
+    },
+    {
+      "name": "Android test for Fade source conflict, numeric validation and Undo",
+      "commit": "b554af442d6197abc6ebc8fd385aee8b78af6821"
+    },
+    {
+      "name": "Tagged native Fade fields for precise accessibility/test routing",
+      "commit": "6b8933c452bba9e5687d956dc54a101f9d517d85"
+    },
+    {
+      "name": "Android test for cross-tool/Host Fade draft conflict handling",
+      "commit": "0f30eead48cddf240e244a533ba20a284c5b19f3"
+    },
+    {
+      "name": "Guard UI rebuild window and avoid out-of-range Blur silently clamped",
+      "commit": "193dc628304c939a7f7345bfef778672a2cbf929"
+    },
+    {
+      "name": "ViewModel bounded Blur authoring rejects out-of-range values",
+      "commit": "9db98c6de37c058358d6bfa024cb1b6c7eb13c79"
+    },
+    {
+      "name": "Android tests for invalid non-finite/out-of-range Blur",
+      "commit": "ade7f88069bc91a957af8d487ed56c0aeee523a6"
     }
   ],
   "next_units": [
-    "Obtain actual native Gradle/CI and emulator output for latest main SHA; fix any compilation or interaction failures before claiming acceptance.",
-    "Make Fade preview/Apply source-guarded and retain Fade/Blur drafts per Event/session without incorrectly converting unknown Raw overrides.",
-    "Validate actual ASS libass preview, Undo, and save/reopen with complex tags; keep experimental canvas separate.",
-    "Tablet layout visual capture and touch/IME/gesture accessibility verification."
+    "Get real main-branch Gradle and device CI results; fix any Kotlin compile or instrumentation failure before further large UI changes.",
+    "Run tablet portrait+landscape UI screenshots and gestures for new Fade/Blur draft behavior; check density and field reachability.",
+    "Integrate Fade preview onto the same actual ASS/libass time/source pipeline; validate real media and unknown override preservation.",
+    "Audit Karaoke authoring with source-guarded drafts and \\\\kt onset semantics, keeping it distinct from duration tags."
   ],
   "repository": "11576865/ASS-Workbench-Android",
   "branch": "main",
   "pull_request": null,
-  "latest_durable_code_commit": "f176383c4218e407079494b9e44f62ed752bf8b5",
+  "latest_durable_code_commit": "ade7f88069bc91a957af8d487ed56c0aeee523a6",
   "external_validation": {
-    "android_ci": "PENDING_EXTERNAL_VALIDATION; no successful native CI or Gradle output verified",
-    "emulator_regression": "PENDING_EXTERNAL_VALIDATION",
+    "android_ci": "PENDING_EXTERNAL_VALIDATION — latest commit combined status returned []",
+    "emulator_regression": "PENDING_EXTERNAL_VALIDATION — PR-only workflow lookup returned []; direct main cannot establish outcome",
     "visual_capture": "PENDING_EXTERNAL_VALIDATION",
     "fontconfig_renderer": "NOT_REQUESTED_BY_THIS_UNIT",
-    "local_gradle": "NOT_EXECUTED; repository not cloned; no Android Gradle toolchain and container cannot resolve GitHub host"
+    "local_gradle": "NOT_EXECUTED — no checked-out Gradle Android workspace available"
   },
   "blockers": [
-    "Native code and instrumentation assertions committed to main; no Android build or emulator execution observed.",
-    "Source-guarded Fade and per-Event Fade/Blur drafts still need the same lifecycle/transaction audit.",
-    "Touch target and state behavior on tablet portrait/landscape require visual and device evidence."
+    "Actual Android Gradle build, JVM test run and instrumented tablet/phone gestures remain unverified for the current main SHA.",
+    "New native Fade/Blur draft/session implementation is source-level committed, but no device screenshot or runtime confirmation available.",
+    "Real renderer-backed Fade preview, full ASS save/reopen and Karaoke draft behavior still require separate integration acceptance."
   ],
   "safeguards": [
     "Persisted legacy variant strings still resolve to SPATIAL_EXPERIMENTAL; null/new defaults to FIXED.",
@@ -202,5 +246,5 @@
     "Experimental infinite canvas only via global workspace controls, not fixed task navigation.",
     "Icon-only compact controls retain content descriptions and explanatory long-press tooltips."
   ],
-  "updated_at": "2026-10-13T23:25:00+08:00"
+  "updated_at": "2026-10-14"
 }
