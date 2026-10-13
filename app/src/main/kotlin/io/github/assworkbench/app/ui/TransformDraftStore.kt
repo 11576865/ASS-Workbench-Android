@@ -88,7 +88,7 @@ internal class TransformDraftStore(
     }
 
     // Each string remains an independent saveable element (no delimiter collision
-    // with arbitrary ASS text); a record is 12 elements after the header.
+    // with arbitrary ASS text); a record is 11 elements after the header.
     fun save(): List<String> = buildList {
         add("v1")
         add(sessionId.toString())
