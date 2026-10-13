@@ -175,6 +175,7 @@ fun ModernEditorScreen(
     }
     val fixedTool = WorkbenchTool.valueOf(fixedToolName)
     val eventTextDraftStore = rememberEventTextDraftStore(state.workspaceSessionId)
+    val transformDraftStore = rememberTransformDraftStore(state.workspaceSessionId)
     val eventMetadataDraftStore = rememberEventMetadataDraftStore(state.workspaceSessionId)
     val eventTimingDraftStore = rememberEventTimingDraftStore(state.workspaceSessionId)
     LaunchedEffect(eventTimingDraftStore, state.document.events) {
@@ -187,8 +188,10 @@ fun ModernEditorScreen(
     LaunchedEffect(batchAuthoringDraftStore, state.documentRevision, state.document, state.selectedEventIds, state.subtitleFilter) {
         batchAuthoringDraftStore.reconcile(state.document, state.selectedEventIds, state.subtitleFilter, state.documentRevision)
     }
-    LaunchedEffect(eventTextDraftStore, state.document.events.map { it.id }) {
-        eventTextDraftStore.retainEvents(state.document.events.mapTo(linkedSetOf()) { it.id })
+    LaunchedEffect(eventTextDraftStore, transformDraftStore, state.document.events.map { it.id }) {
+        val ids = state.document.events.mapTo(linkedSetOf()) { it.id }
+        eventTextDraftStore.retainEvents(ids)
+        transformDraftStore.retainEvents(ids)
     }
 
     LaunchedEffect(state.workspaceSessionId) {
@@ -317,7 +320,9 @@ fun ModernEditorScreen(
     MaterialTheme(colorScheme = workbenchColors(appearance)) {
     CompositionLocalProvider(LocalEventTextDraftStore provides eventTextDraftStore,
         LocalEventTimingDraftStore provides eventTimingDraftStore,
-        LocalEventMetadataDraftStore provides eventMetadataDraftStore, LocalBatchAuthoringDraftStore provides batchAuthoringDraftStore) {
+        LocalEventMetadataDraftStore provides eventMetadataDraftStore,
+        LocalTransformDraftStore provides transformDraftStore,
+        LocalBatchAuthoringDraftStore provides batchAuthoringDraftStore) {
     Surface(
         modifier = Modifier.fillMaxSize(),
         color = MaterialTheme.colorScheme.background,
@@ -2330,8 +2335,9 @@ private fun InlineTransformWorkspace(
         )
     } else {
         transforms.forEachIndexed { index, transform ->
-            key(event.id, index, transform.rawValue) {
+            key(event.id, index) {
                 InlineTransformCard(
+                    eventSourceText = event.text,
                     eventId = event.id,
                     index = index,
                     transform = transform,
@@ -2432,6 +2438,7 @@ private fun AnimationPreviewScrubber(
 
 @Composable
 private fun InlineTransformCard(
+    eventSourceText: String,
     eventId: Long,
     index: Int,
     transform: AssTransform,
@@ -2439,10 +2446,22 @@ private fun InlineTransformCard(
     eventDurationMs: Long,
     viewModel: EditorViewModel,
 ) {
-    var start by remember(transform.rawValue) { mutableStateOf(transform.startMs?.toString().orEmpty()) }
-    var end by remember(transform.rawValue) { mutableStateOf(transform.endMs?.toString().orEmpty()) }
-    var accel by remember(transform.rawValue) { mutableStateOf(transform.accel?.toString().orEmpty()) }
-    var tags by remember(transform.rawValue) { mutableStateOf(transform.tags) }
+    val draftStore = LocalTransformDraftStore.current
+    val draft = remember(draftStore, eventId, index) {
+        draftStore.obtain(eventId, index, eventSourceText, transform)
+    }
+    LaunchedEffect(draft, eventSourceText, transform.rawValue) {
+        draft.reconcile(eventSourceText, TransformDraftFields.from(transform))
+    }
+    val fields = draft.fields
+    val start = fields.start
+    val end = fields.end
+    val accel = fields.accel
+    val tags = fields.tags
+    fun updateFields(change: (TransformDraftFields) -> TransformDraftFields) {
+        draft.fields = change(draft.fields)
+    }
+    val sourceConflict = draft.conflict(eventSourceText)
     var pendingHandleRange by remember(eventId, index, transform.rawValue) {
         mutableStateOf<TransformTimingHandleRange?>(null)
     }
@@ -2457,7 +2476,8 @@ private fun InlineTransformCard(
         (startValue != null && endValue != null && startValue <= endValue)
     val accelValid = accel.isBlank() || (accelValue != null && accelValue > 0.0)
     val tagsValid = tags.trimStart().startsWith("\\")
-    val canApply = !transform.malformed && timingPairValid && accelValid && tagsValid
+    val canApply = !transform.malformed && !sourceConflict &&
+        timingPairValid && accelValid && tagsValid
     val handleRange = transformTimingHandleRange(start, end, eventDurationMs)
 
     Surface(
@@ -2485,6 +2505,21 @@ private fun InlineTransformCard(
                 color = if (playheadInside) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
+            if (sourceConflict) {
+                Row(Modifier.fillMaxWidth().testTag("effect-transform-conflict-$index"),
+                    verticalAlignment = Alignment.CenterVertically) {
+                    Text("ASS 已变化 · 草稿保留",
+                        modifier = Modifier.weight(1f),
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.labelSmall)
+                    TextButton(onClick = {
+                        draft.reset(eventSourceText, TransformDraftFields.from(transform))
+                        viewModel.clearTransientPreview("effects:$eventId")
+                    }, modifier = Modifier.testTag("effect-transform-reload-$index")) {
+                        Text("舍弃草稿")
+                    }
+                }
+            }
             if (transform.malformed) {
                 Text(
                     "该 \\t(...) 无法安全结构化解析，因此保持 Raw-only；除显式删除外不会自动重写。",
@@ -2499,21 +2534,21 @@ private fun InlineTransformCard(
                 Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro)) {
                     OutlinedTextField(
                         start,
-                        { start = it; pendingHandleRange = null; viewModel.clearTransientPreview("effects:$eventId") },
+                        { updateFields { old -> old.copy(start = it) }; pendingHandleRange = null; viewModel.clearTransientPreview("effects:$eventId") },
                         label = { Text("Start ms") },
                         singleLine = true,
                         modifier = Modifier.weight(1f).testTag("effect-transform-start-$index"),
                     )
                     OutlinedTextField(
                         end,
-                        { end = it; pendingHandleRange = null; viewModel.clearTransientPreview("effects:$eventId") },
+                        { updateFields { old -> old.copy(end = it) }; pendingHandleRange = null; viewModel.clearTransientPreview("effects:$eventId") },
                         label = { Text("End ms") },
                         singleLine = true,
                         modifier = Modifier.weight(1f).testTag("effect-transform-end-$index"),
                     )
                     OutlinedTextField(
                         accel,
-                        { accel = it; pendingHandleRange = null; viewModel.clearTransientPreview("effects:$eventId") },
+                        { updateFields { old -> old.copy(accel = it) }; pendingHandleRange = null; viewModel.clearTransientPreview("effects:$eventId") },
                         label = { Text("Accel") },
                         singleLine = true,
                         modifier = Modifier.weight(1f),
@@ -2530,8 +2565,7 @@ private fun InlineTransformCard(
                                 .coerceIn(0L, eventDurationMs)
                             val right = kotlin.math.round(range.endInclusive.toDouble()).toLong()
                                 .coerceIn(left, eventDurationMs)
-                            start = left.toString()
-                            end = right.toString()
+                            updateFields { old -> old.copy(start = left.toString(), end = right.toString()) }
                             pendingHandleRange = TransformTimingHandleRange(left, right)
                             val now = android.os.SystemClock.uptimeMillis()
                             if (accelValid && tagsValid && now - lastHandlePreviewAt >= 70L) {
@@ -2565,7 +2599,7 @@ private fun InlineTransformCard(
                 TransformVisualPropertyEditor(
                     tags = tags,
                     onTagsChange = { nextTags ->
-                        tags = nextTags
+                        updateFields { old -> old.copy(tags = nextTags) }
                         if (timingPairValid && accelValid && nextTags.trimStart().startsWith("\\")) {
                             viewModel.previewEventTransform(
                                 eventId,
@@ -2583,7 +2617,7 @@ private fun InlineTransformCard(
 
                 OutlinedTextField(
                     value = tags,
-                    onValueChange = { tags = it; viewModel.clearTransientPreview("effects:$eventId") },
+                    onValueChange = { updateFields { old -> old.copy(tags = it) }; viewModel.clearTransientPreview("effects:$eventId") },
                     label = { Text("Transform tags") },
                     supportingText = null,
                     textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
@@ -2595,15 +2629,22 @@ private fun InlineTransformCard(
                     Button(
                         enabled = canApply,
                         onClick = {
-                            viewModel.setEventTransform(
-                                eventId,
-                                index,
-                                AssTransform(
-                                    startMs = startValue,
-                                    endMs = endValue,
-                                    accel = accelValue,
-                                    tags = tags,
-                                ),
+                            if (draft.conflict(eventSourceText)) return@Button
+                            val candidate = AssTransform(
+                                startMs = startValue,
+                                endMs = endValue,
+                                accel = accelValue,
+                                tags = tags,
+                            )
+                            val nextSource = AssAnimationSemantic.patchTransform(eventSourceText, index, candidate)
+                            if (nextSource != eventSourceText) {
+                                viewModel.setEventTransform(eventId, index, candidate)
+                            }
+                            // Never treat unchanged/failed canonical writes as a new revision.
+                            draft.reset(
+                                if (nextSource == eventSourceText) eventSourceText else nextSource,
+                                if (nextSource == eventSourceText) TransformDraftFields.from(transform)
+                                else fields,
                             )
                         },
                     ) { Text("应用 Transform") }
