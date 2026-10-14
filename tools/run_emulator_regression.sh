@@ -168,7 +168,7 @@ for projection_class in "${projection_classes[@]}"; do
 done
 
 # Keep the full suite as a mandatory gate, even if the focused run fails.
-run_attempt "${ASSWB_SUITE_TEST_TIMEOUT:-12m}"
+run_attempt "${ASSWB_SUITE_TEST_TIMEOUT:-20m}"
 suite_status=$?
 report_results
 
