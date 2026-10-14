@@ -40,10 +40,13 @@ internal object R3FixedLayoutPolicy {
         val mediaWidth = (width - navigation - inspector - 2f).coerceAtLeast(1f)
         val minTimeline = (height * 0.29f).coerceIn(184f, 320f)
         val targetAspect = mediaAspect.takeIf { it.isFinite() && it in 0.25f..4f } ?: 16f / 9f
+        // R3 design puts a 48dp native playback strip immediately BELOW video.
+        // Budget it together with the displayed (un-stretched) image.
+        val mediaWithTransport = mediaWidth / targetAspect + 48f
         val mediaHeight = when (preview) {
             PreviewDensity.HIDDEN -> 0f
-            PreviewDensity.COMPACT -> min(mediaWidth / targetAspect, height * 0.30f)
-            PreviewDensity.FULL -> min(mediaWidth / targetAspect, (height - minTimeline).coerceAtLeast(0f))
+            PreviewDensity.COMPACT -> min(mediaWithTransport, height * 0.36f)
+            PreviewDensity.FULL -> min(mediaWithTransport, (height - minTimeline).coerceAtLeast(0f))
         }.coerceIn(0f, height)
         return R3FixedGeometry(
             navigationWidthDp = navigation,
