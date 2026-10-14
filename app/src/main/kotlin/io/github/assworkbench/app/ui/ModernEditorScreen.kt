@@ -1052,6 +1052,7 @@ private fun FixedWorkspace(
                 eventEditorStateHolder = eventEditorStateHolder,
                 tool = WorkbenchTool.TEXT,
                 modifier = Modifier.weight(1f),
+                r3Chrome = LocalConfiguration.current.screenWidthDp >= 1180,
             ) { }
             }
         }
@@ -1881,6 +1882,7 @@ private fun EventWorkspace(
     eventEditorStateHolder: SaveableStateHolder,
     tool: WorkbenchTool,
     modifier: Modifier = Modifier,
+    r3Chrome: Boolean = false,
     supportingPane: @Composable () -> Unit,
 ) {
     val uiState = state.toEditorUiState()
@@ -1904,28 +1906,47 @@ private fun EventWorkspace(
     }
     val listPane: @Composable (Modifier) -> Unit = { listModifier ->
     Column(listModifier.background(MaterialTheme.colorScheme.surface).testTag("subtitle-navigation")) {
-        Row(Modifier.fillMaxWidth().height(WorkbenchDimens.PaneHeaderHeight).padding(horizontal = WorkbenchDimens.Small), verticalAlignment = Alignment.CenterVertically) {
-            Text(if (selectionMode) "选择模式" else "字幕", style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
-            Text(if (state.subtitleFilter.isActive) "筛选中" else "全部", style = MaterialTheme.typography.labelSmall)
+        if (r3Chrome) {
+            R3EventNavigatorHeader(
+                filter = state.subtitleFilter,
+                total = state.document.events.size,
+                matched = state.filteredEvents.size,
+                selected = state.selectedEventIds.size,
+                onFilterChange = viewModel::setSubtitleFilter,
+                onPrevious = viewModel::focusPreviousFilteredEvent,
+                onNext = viewModel::focusNextFilteredEvent,
+                onSelectAll = viewModel::selectAllFilteredEvents,
+                onLocate = {
+                    if (state.filteredEvents.none { it.id == state.focusedEventId }) viewModel.clearSubtitleFilter()
+                    locateRevision++
+                },
+                onClear = viewModel::clearSubtitleFilter,
+            )
+        } else {
+            Row(Modifier.fillMaxWidth().height(WorkbenchDimens.PaneHeaderHeight).padding(horizontal = WorkbenchDimens.Small), verticalAlignment = Alignment.CenterVertically) {
+                Text(if (selectionMode) "选择模式" else "字幕", style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
+                Text(if (state.subtitleFilter.isActive) "筛选中" else "全部", style = MaterialTheme.typography.labelSmall)
+            }
+            SubtitleResultsBar(
+                total = state.document.events.size, matched = state.filteredEvents.size,
+                selected = state.selectedEventIds.size,
+                excludedFocus = state.focusedEventId != null && state.filteredEvents.none { it.id == state.focusedEventId },
+                hasFocus = state.document.events.any { it.id == state.focusedEventId },
+                onPrevious = viewModel::focusPreviousFilteredEvent, onNext = viewModel::focusNextFilteredEvent,
+                onSelectAll = viewModel::selectAllFilteredEvents,
+                onLocate = {
+                    if (state.filteredEvents.none { it.id == state.focusedEventId }) viewModel.clearSubtitleFilter()
+                    locateRevision++
+                },
+                onClear = viewModel::clearSubtitleFilter,
+            )
+            Divider()
         }
-        SubtitleResultsBar(
-            total = state.document.events.size, matched = state.filteredEvents.size,
-            selected = state.selectedEventIds.size,
-            excludedFocus = state.focusedEventId != null && state.filteredEvents.none { it.id == state.focusedEventId },
-            hasFocus = state.document.events.any { it.id == state.focusedEventId },
-            onPrevious = viewModel::focusPreviousFilteredEvent, onNext = viewModel::focusNextFilteredEvent,
-            onSelectAll = viewModel::selectAllFilteredEvents,
-            onLocate = {
-                if (state.filteredEvents.none { it.id == state.focusedEventId }) viewModel.clearSubtitleFilter()
-                locateRevision++
-            },
-            onClear = viewModel::clearSubtitleFilter,
-        )
         Divider()
         LazyColumn(
             state = listState,
             modifier = Modifier
-                .fillMaxSize()
+                .then(if (r3Chrome) Modifier.weight(1f) else Modifier.fillMaxSize())
                 .pointerInput(state.filteredEvents) {
                     var lastPreviewId: Long? = null
                     var lastAutoScrollAt = 0L
@@ -1998,6 +2019,16 @@ private fun EventWorkspace(
                     onTool,
                 )
                 Divider()
+            }
+        }
+        if (r3Chrome) {
+            Row(Modifier.fillMaxWidth().height(32.dp)
+                    .background(MaterialTheme.colorScheme.surfaceContainerLow)
+                    .padding(horizontal = 10.dp),
+                verticalAlignment = Alignment.CenterVertically) {
+                Text("${state.document.events.size} 条 · 已选 ${state.selectedEventIds.size} 条",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
