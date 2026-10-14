@@ -1152,18 +1152,18 @@ private fun FixedWorkspace(
                         preview = policy.effectivePreview,
                     )
                     Row(Modifier.fillMaxSize().testTag("r3-fixed-wide")) {
-                        listPane(
-                            Modifier.width(geometry.navigationWidthDp.dp).fillMaxHeight()
-                                .testTag("r3-event-navigation")
-                        )
+                        Box(Modifier.width(geometry.navigationWidthDp.dp).fillMaxHeight()
+                            .testTag("r3-event-navigation")) {
+                            listPane(Modifier.fillMaxSize())
+                        }
                         VerticalDivider()
                         Column(Modifier.weight(1f).fillMaxHeight()
                             .testTag("r3-media-timeline")) {
                             if (previewVisible) {
-                                preview(
-                                    Modifier.fillMaxWidth().height(geometry.mediaHeightDp.dp)
-                                        .testTag("r3-video")
-                                )
+                                Box(Modifier.fillMaxWidth().height(geometry.mediaHeightDp.dp)
+                                    .testTag("r3-video")) {
+                                    preview(Modifier.fillMaxSize())
+                                }
                                 HorizontalDivider()
                             }
                             // The real waveform/event timeline is always reachable in R3.
@@ -1179,10 +1179,10 @@ private fun FixedWorkspace(
                             }
                         }
                         VerticalDivider()
-                        movableInspector(
-                            Modifier.width(geometry.inspectorWidthDp.dp).fillMaxHeight()
-                                .testTag("r3-parameter-inspector")
-                        )
+                        Box(Modifier.width(geometry.inspectorWidthDp.dp).fillMaxHeight()
+                            .testTag("r3-parameter-inspector")) {
+                            movableInspector(Modifier.fillMaxSize())
+                        }
                     }
                 }
 
