@@ -16,11 +16,23 @@ import io.github.assworkbench.domain.AssDocument
 import io.github.assworkbench.domain.AssEffectiveInspector
 import io.github.assworkbench.domain.AssEffectiveValue
 import io.github.assworkbench.domain.AssEvent
+import io.github.assworkbench.app.ui.workspace.WorkspaceBinding
 
 /**
  * Read provenance belongs to the effective value, NOT to the write destination.
  * This panel never opens an editor or changes a ToolInstance binding.
  */
+/**
+ * Provenance can describe a pinned Event, but the shared TEXT tool follows Focus.
+ * Never offer an edit shortcut that could silently retarget to another Event.
+ */
+internal fun r3RawShortcutAllowed(
+    binding: WorkspaceBinding,
+    displayedEventId: Long?,
+    focusedEventId: Long?,
+): Boolean = binding == WorkspaceBinding.FollowFocus &&
+    displayedEventId != null && displayedEventId == focusedEventId
+
 internal data class R3ValueEvidence(
     val label: String,
     val effectiveValue: String,
