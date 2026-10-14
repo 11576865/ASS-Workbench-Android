@@ -1264,10 +1264,9 @@ private fun FixedWorkspace(
                                         // For a pinned/selection-bound inspector this
                                         // would silently edit a different Event, so
                                         // suppress the shortcut until a scoped route exists.
-                                        onOpenRaw = if (
-                                            instance.binding == WorkspaceBinding.FollowFocus &&
-                                            resolvedEvent.id == state.focusedEventId
-                                        ) ({ selectTool(WorkbenchTool.TEXT) }) else null,
+                                        onOpenRaw = if (r3RawShortcutAllowed(
+                                            instance.binding, resolvedEvent.id, state.focusedEventId,
+                                        )) ({ selectTool(WorkbenchTool.TEXT) }) else null,
                                     )
                                     HorizontalDivider()
                                 }
