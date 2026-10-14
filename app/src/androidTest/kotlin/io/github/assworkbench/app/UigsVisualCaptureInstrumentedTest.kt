@@ -183,9 +183,27 @@ class UigsVisualCaptureInstrumentedTest {
             // Pixel Launcher ANR obscured the earlier R3 evidence thumbnail.
             val activeRoot = instrumentation.uiAutomation.rootInActiveWindow
             val activePackage = activeRoot?.packageName?.toString()
-            check(activePackage == instrumentation.targetContext.packageName) {
-                "R3_NATIVE_SCREEN_OCCLUDED: foreground window belongs to " +
-                    "${activePackage ?: "<none>"} instead of " +
+            // A headless Android Emulator may return no accessibility root
+            // despite the Activity's decor owning the focused window. Treat
+            // this as inconclusive, not as proof of a system dialog. The
+            // focused, shown target Activity is the independent fallback.
+            var targetDecorFocused = false
+            var targetDecorShown = false
+            composeRule.activityRule.scenario.onActivity { activity ->
+                val decor = activity.window.decorView
+                targetDecorFocused = decor.hasWindowFocus()
+                targetDecorShown = decor.isShown && !activity.isFinishing && !activity.isDestroyed
+            }
+            Log.i("AsswbVisual",
+                "R3_FOREGROUND_EVIDENCE: accessibility=${activePackage ?: "<none>"} " +
+                    "targetDecorFocused=$targetDecorFocused targetDecorShown=$targetDecorShown")
+            check(
+                (activePackage == instrumentation.targetContext.packageName ||
+                    (activePackage == null && targetDecorFocused)) && targetDecorShown
+            ) {
+                "R3_NATIVE_SCREEN_OCCLUDED: active accessibility root=" +
+                    "${activePackage ?: "<none>"}; target decor focused=$targetDecorFocused " +
+                    "shown=$targetDecorShown; expected " +
                     instrumentation.targetContext.packageName
             }
         }
