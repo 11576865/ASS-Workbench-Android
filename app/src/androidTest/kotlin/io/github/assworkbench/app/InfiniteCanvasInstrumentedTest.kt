@@ -67,7 +67,7 @@ class InfiniteCanvasInstrumentedTest {
         val editor = composeRule.onNodeWithTag("spatial-focused-editor").fetchSemanticsNode().boundsInRoot
         val header = composeRule.onNodeWithTag("spatial-focused-header").fetchSemanticsNode().boundsInRoot
         for (tag in listOf("spatial-return-to-board", "spatial-tool-switcher", "spatial-add-tool",
-                "spatial-birdseye", "spatial-menu-POSITION-primary")) {
+                "spatial-capability-menu", "spatial-birdseye", "spatial-menu-POSITION-primary")) {
             val bounds = composeRule.onNodeWithTag(tag).assertIsDisplayed().fetchSemanticsNode().boundsInRoot
             assertTrue("$tag stays inside narrow editor", bounds.left >= editor.left && bounds.right <= editor.right)
         }
@@ -88,13 +88,16 @@ class InfiniteCanvasInstrumentedTest {
         composeRule.runOnIdle { owned = true }
         composeRule.onNodeWithTag("spatial-document-undo").assertIsNotEnabled()
         composeRule.onNodeWithTag("spatial-precision-toggle").performScrollTo().assertIsNotEnabled()
+        composeRule.onNodeWithTag("spatial-capability-menu").assertIsNotEnabled()
         assertEquals(originalNodes, saved.second)
     }
 
     @Test fun birdseyeRemainsVisibleOnNarrowCanvasWithoutScrollingTheToolbar() {
         val fixture = OverviewFixture(listOf(InfiniteCanvasNode("preview", x = 10_000f)))
         showOverviewFixture(fixture, Modifier.width(320.dp).fillMaxHeight())
-        composeRule.onNodeWithTag("spatial-birdseye").assertIsDisplayed().performClick()
+        composeRule.onNodeWithTag("spatial-birdseye").assertIsDisplayed()
+        composeRule.onNodeWithTag("spatial-capability-menu").assertIsDisplayed().performClick()
+        composeRule.onNodeWithTag("spatial-capability-overview").assertIsDisplayed().performClick()
         composeRule.onNodeWithTag("spatial-birdseye-node-preview").performScrollTo().performClick()
         composeRule.onNodeWithTag("spatial-native-content-preview").assertExists()
         assertEquals(fixture.nodes, fixture.saved.second)
