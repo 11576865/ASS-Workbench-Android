@@ -76,6 +76,10 @@ timeout 10s adb shell wm density 160 || r3_status=1
 timeout 10s adb shell settings put system user_rotation 1 || r3_status=1
 timeout 10s adb shell wm size || true
 timeout 10s adb shell wm density || true
+# Instrumentation may uninstall the debug app on return; an indexed PNG logcat
+# envelope is therefore the durable transport, independent of app file access.
+timeout 10s adb logcat -G 8M || true
+timeout 10s adb logcat -c || true
 if [[ "$r3_status" -eq 0 ]]; then
   run_attempt "${ASSWB_R3_TEST_TIMEOUT:-5m}" \
     "-Pandroid.testInstrumentationRunnerArguments.class=io.github.assworkbench.app.UigsVisualCaptureInstrumentedTest#captureR3FixedReferenceWhenExpanded"
@@ -109,6 +113,19 @@ if [[ "$r3_status" -eq 0 ]]; then
         echo "R3_NATIVE_CAPTURE_DIAGNOSTIC: collected bytes=$(wc -c < "$r3_output")"
         head -c 40 "$r3_output" | od -An -tx1 || true
       fi
+    fi
+  fi
+  if [[ "$r3_valid" != true ]]; then
+    echo "R3_NATIVE_CAPTURE_DIAGNOSTIC: app removed by instrumentation; recovering SHA-verified PNG logcat envelope"
+    r3_logcat="$report_session_dir/r3-capture.logcat.txt"
+    if timeout 20s adb logcat -d -s AsswbVisual:I '*:S' > "$r3_logcat" &&
+        python3 "$runner_tools_dir/extract_r3_png_logcat.py" "$r3_logcat" "$r3_output" --name "$r3_capture" &&
+        python3 "$runner_tools_dir/verify_r3_png_capture.py" "$r3_output" \
+          --width 1600 --height 960; then
+      echo "R3_NATIVE_CAPTURE_SOURCE: sha256-verified-logcat"
+      r3_valid=true
+    else
+      echo "R3_NATIVE_CAPTURE_DIAGNOSTIC: no complete trustworthy PNG in logcat"
     fi
   fi
   if [[ "$r3_valid" == true ]]; then
