@@ -1076,7 +1076,7 @@ private fun AuthoritativeMpvPreview(
                 }
             }
         }
-        if (r3DockedTransport && !videoUri.isNullOrBlank() && positionEditEventId == null) {
+        if (r3DockedTransport && !videoUri.isNullOrBlank()) {
             Surface(
                 modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth()
                     .height(48.dp).testTag("r3-preview-transport"),
