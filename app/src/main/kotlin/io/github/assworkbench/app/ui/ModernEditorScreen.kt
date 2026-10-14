@@ -1602,6 +1602,7 @@ private fun ModernAppBar(
     val uiState = state.toEditorUiState()
     val uiActions = remember(viewModel) { EditorViewModelUiActions(viewModel) }
     val compactToolbar = LocalConfiguration.current.screenWidthDp < 480
+    val r3WideHeader = LocalConfiguration.current.screenWidthDp >= 1180
     var moreMenuOpen by remember { mutableStateOf(false) }
     Surface(tonalElevation = 2.dp) {
         Row(
@@ -1609,17 +1610,41 @@ private fun ModernAppBar(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(2.dp),
         ) {
-            TooltipIconButton(
-                label = if (workspaceMode == WorkspacePresentationMode.FIXED)
-                    "切换至实验性无限画布" else "返回标准工作台",
-                onClick = onToggleWorkspaceMode,
-                modifier = Modifier.size(40.dp).testTag("workspace-direct-mode-toggle"),
-            ) {
-                Icon(
-                    if (workspaceMode == WorkspacePresentationMode.FIXED)
-                        Icons.Filled.DashboardCustomize else Icons.Filled.Dashboard,
-                    contentDescription = null,
-                )
+            if (r3WideHeader) {
+                // R3's persistent identity is separate from the current document
+                // and does not replace the existing project/ASS save workflow.
+                TooltipIconButton(label = "文件与工程菜单", onClick = onOpenMenu) {
+                    Icon(Icons.Filled.Menu, null)
+                }
+                Text("ASS Workbench", style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface)
+                VerticalDivider(Modifier.height(26.dp).padding(horizontal = 8.dp))
+                TextButton(
+                    onClick = onToggleWorkspaceMode,
+                    modifier = Modifier.testTag("workspace-direct-mode-toggle"),
+                ) {
+                    Icon(
+                        if (workspaceMode == WorkspacePresentationMode.FIXED)
+                            Icons.Filled.DashboardCustomize else Icons.Filled.Dashboard,
+                        null, Modifier.size(18.dp),
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text(if (workspaceMode == WorkspacePresentationMode.FIXED)
+                        "∞ 无限画布" else "主 UI")
+                }
+            } else {
+                TooltipIconButton(
+                    label = if (workspaceMode == WorkspacePresentationMode.FIXED)
+                        "切换至实验性无限画布" else "返回标准工作台",
+                    onClick = onToggleWorkspaceMode,
+                    modifier = Modifier.size(40.dp).testTag("workspace-direct-mode-toggle"),
+                ) {
+                    Icon(
+                        if (workspaceMode == WorkspacePresentationMode.FIXED)
+                            Icons.Filled.DashboardCustomize else Icons.Filled.Dashboard,
+                        contentDescription = null,
+                    )
+                }
             }
             if (selectionMode) {
                 IconButton(onClick = uiActions::clearSelection) { Icon(Icons.Filled.Close, "退出多选") }
