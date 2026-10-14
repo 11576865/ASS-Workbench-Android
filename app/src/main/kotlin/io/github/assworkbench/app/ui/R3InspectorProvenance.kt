@@ -2,6 +2,7 @@ package io.github.assworkbench.app.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
@@ -56,6 +57,7 @@ internal fun R3InspectorProvenance(
     document: AssDocument,
     event: AssEvent,
     modifier: Modifier = Modifier,
+    onOpenRaw: (() -> Unit)? = null,
 ) {
     val result = remember(document, event) {
         runCatching {
@@ -105,6 +107,31 @@ internal fun R3InspectorProvenance(
                 Text("只读来源；写入范围以实际工具为准",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                    Text("Raw ASS · 当前 Event", style = MaterialTheme.typography.labelMedium,
+                        modifier = Modifier.weight(1f))
+                    if (onOpenRaw != null) {
+                        TextButton(
+                            onClick = onOpenRaw,
+                            modifier = Modifier.testTag("r3-open-raw-editor"),
+                        ) { Text("编辑 ↗") }
+                    }
+                }
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    modifier = Modifier.fillMaxWidth().testTag("r3-raw-event-value"),
+                ) {
+                    SelectionContainer {
+                        Text(
+                            event.text.ifEmpty { "（空字幕）" },
+                            modifier = Modifier.fillMaxWidth().padding(8.dp),
+                            style = MaterialTheme.typography.bodySmall,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
             }.onFailure {
                 Text("来源未解析：请使用 Raw ASS 或 QC 核查",
                     style = MaterialTheme.typography.labelSmall,
