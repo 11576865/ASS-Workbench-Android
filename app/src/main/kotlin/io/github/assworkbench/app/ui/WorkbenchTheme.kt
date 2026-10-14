@@ -16,19 +16,23 @@ enum class WorkbenchAppearance(val label: String) {
 }
 
 private val DarkWorkbenchColors = darkColorScheme(
-    primary = Color(0xFFB5A8FF), onPrimary = Color(0xFF27165B),
-    primaryContainer = Color(0xFF3A3466), onPrimaryContainer = Color(0xFFE9E1FF),
-    secondary = Color(0xFF91D9DF), onSecondary = Color(0xFF00363A),
-    secondaryContainer = Color(0xFF1B424A), onSecondaryContainer = Color(0xFFBDF2F5),
-    tertiary = Color(0xFFE8BE7B), onTertiary = Color(0xFF432D09),
-    background = Color(0xFF0B0E14), onBackground = Color(0xFFE8EBF3),
-    surface = Color(0xFF11151E), onSurface = Color(0xFFE8EBF3),
-    surfaceVariant = Color(0xFF202633), onSurfaceVariant = Color(0xFFC1C7D4),
-    surfaceContainer = Color(0xFF151A24),
-    surfaceContainerHigh = Color(0xFF1B202C),
-    surfaceContainerHighest = Color(0xFF232A38),
-    outline = Color(0xFF8C94A7), outlineVariant = Color(0xFF3B4353),
-    error = Color(0xFFFFB4AB), onError = Color(0xFF690005),
+    // R3 reference: dark navy shell, restrained cyan selection and actionable
+    // controls. The same color tokens are shared by FIXED and independent SPATIAL.
+    primary = Color(0xFF34D0E7), onPrimary = Color(0xFF032132),
+    primaryContainer = Color(0xFF123A4C), onPrimaryContainer = Color(0xFFD8F6FF),
+    secondary = Color(0xFF77C9E6), onSecondary = Color(0xFF042131),
+    secondaryContainer = Color(0xFF193D54), onSecondaryContainer = Color(0xFFD4F1FF),
+    tertiary = Color(0xFFFFC05C), onTertiary = Color(0xFF392100),
+    background = Color(0xFF0A1929), onBackground = Color(0xFFE8F0F6),
+    surface = Color(0xFF0A1929), onSurface = Color(0xFFE8F0F6),
+    surfaceVariant = Color(0xFF102A3C), onSurfaceVariant = Color(0xFF97B3C5),
+    surfaceContainerLowest = Color(0xFF071726),
+    surfaceContainerLow = Color(0xFF0B1F30),
+    surfaceContainer = Color(0xFF102638),
+    surfaceContainerHigh = Color(0xFF132E42),
+    surfaceContainerHighest = Color(0xFF19394D),
+    outline = Color(0xFF48677C), outlineVariant = Color(0xFF23465C),
+    error = Color(0xFFFFAFA5), onError = Color(0xFF571A16),
 )
 
 private val LightWorkbenchColors = lightColorScheme(
