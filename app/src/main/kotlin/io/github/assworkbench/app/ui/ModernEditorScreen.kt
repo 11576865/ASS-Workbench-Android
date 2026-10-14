@@ -1656,15 +1656,18 @@ private fun ModernAppBar(
             if (r3WideHeader) {
                 // R3's persistent identity is separate from the current document
                 // and does not replace the existing project/ASS save workflow.
-                TooltipIconButton(label = "文件与工程菜单", onClick = onOpenMenu) {
-                    Icon(Icons.Filled.Menu, null)
-                }
                 Text("ASS Workbench", style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurface)
                 VerticalDivider(Modifier.height(26.dp).padding(horizontal = 8.dp))
                 TextButton(
                     onClick = onToggleWorkspaceMode,
-                    modifier = Modifier.testTag("workspace-direct-mode-toggle"),
+                    modifier = Modifier
+                        .testTag("workspace-direct-mode-toggle")
+                        .semantics {
+                            contentDescription =
+                                if (workspaceMode == WorkspacePresentationMode.FIXED)
+                                    "切换至无限画布" else "切换至标准工作台"
+                        },
                 ) {
                     Icon(
                         if (workspaceMode == WorkspacePresentationMode.FIXED)
@@ -1678,7 +1681,7 @@ private fun ModernAppBar(
             } else {
                 TooltipIconButton(
                     label = if (workspaceMode == WorkspacePresentationMode.FIXED)
-                        "切换至实验性无限画布" else "返回标准工作台",
+                        "切换至无限画布" else "切换至标准工作台",
                     onClick = onToggleWorkspaceMode,
                     modifier = Modifier.size(40.dp).testTag("workspace-direct-mode-toggle"),
                 ) {
