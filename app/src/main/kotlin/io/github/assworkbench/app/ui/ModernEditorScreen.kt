@@ -1181,7 +1181,50 @@ private fun FixedWorkspace(
                         VerticalDivider()
                         Box(Modifier.width(geometry.inspectorWidthDp.dp).fillMaxHeight()
                             .testTag("r3-parameter-inspector")) {
-                            movableInspector(Modifier.fillMaxSize())
+                            Column(Modifier.fillMaxSize()) {
+                                val activeScope = WorkspaceEditScopeResolver.resolve(
+                                    tool = activeTool,
+                                    instance = instance,
+                                    document = state.document,
+                                    editorUiState = state.toEditorUiState(),
+                                )
+                                val bindingLabel = when (val binding = instance.binding) {
+                                    WorkspaceBinding.FollowFocus -> "跟随焦点"
+                                    WorkspaceBinding.FollowSelection -> "当前选择集"
+                                    is WorkspaceBinding.PinnedEvent -> "固定 #${binding.eventId}"
+                                }
+                                Surface(
+                                    modifier = Modifier.fillMaxWidth().testTag("r3-inspector-context"),
+                                    color = MaterialTheme.colorScheme.surfaceContainerLow,
+                                ) {
+                                    Column(
+                                        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 9.dp),
+                                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                                    ) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text(
+                                                state.focusedEventId?.let { "字幕 #$it" } ?: "未选择字幕",
+                                                style = MaterialTheme.typography.titleMedium,
+                                                modifier = Modifier.weight(1f),
+                                            )
+                                            Text("绑定：$bindingLabel",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        }
+                                        Text(
+                                            activeScope?.let { "写入：${it.where} · 影响 ${it.howMany} 条" }
+                                                ?: "只读工具 · 无 ASS 写入",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = if (activeScope?.unresolved == true) MaterialTheme.colorScheme.error
+                                                else MaterialTheme.colorScheme.primary,
+                                        )
+                                    }
+                                }
+                                HorizontalDivider()
+                                Box(Modifier.weight(1f).fillMaxWidth()) {
+                                    movableInspector(Modifier.fillMaxSize())
+                                }
+                            }
                         }
                     }
                 }
