@@ -704,6 +704,8 @@ internal fun InfiniteCanvasHost(
                         SpatialCapabilityMenu(
                             enabled = !gestureOwned,
                             timelineVisible = timelineDockVisible,
+
+                            showLabel = viewportW >= 720f,
                             onOpenDirectory = ::showToolPicker,
                             onOpenToolList = { toolDrawerOpen = true },
                             onOpenOverview = { birdseyeOpen = true },
@@ -1184,6 +1186,8 @@ internal fun InfiniteCanvasHost(
                 SpatialCapabilityMenu(
                     enabled = !gestureOwned,
                     timelineVisible = timelineDockVisible,
+
+                    showLabel = viewportW >= 720f,
                     onOpenDirectory = ::showToolPicker,
                     onOpenToolList = { toolDrawerOpen = true },
                     onOpenOverview = { birdseyeOpen = true },
@@ -1205,10 +1209,12 @@ internal fun InfiniteCanvasHost(
  * This does not introduce another presentation, tool registry, or document owner.
  * Actions delegate to the same production callbacks as their existing controls.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun SpatialCapabilityMenu(
     enabled: Boolean,
     timelineVisible: Boolean,
+    showLabel: Boolean = false,
     onOpenDirectory: () -> Unit,
     onOpenToolList: () -> Unit,
     onOpenOverview: () -> Unit,
@@ -1219,12 +1225,30 @@ internal fun SpatialCapabilityMenu(
     var expanded by remember { mutableStateOf(false) }
     LaunchedEffect(enabled) { if (!enabled) expanded = false }
     Box {
-        IconButton(
-            enabled = enabled,
-            onClick = { expanded = true },
-            modifier = Modifier.testTag("spatial-capability-menu"),
+        TooltipBox(
+            positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+            tooltip = { PlainTooltip { Text("空间功能：工具、鸟瞰、时间轴和精密操纵") } },
+            state = rememberTooltipState(),
         ) {
-            Icon(Icons.Filled.Tune, "空间功能")
+            if (showLabel) {
+                TextButton(
+                    enabled = enabled,
+                    onClick = { expanded = true },
+                    modifier = Modifier.testTag("spatial-capability-menu"),
+                ) {
+                    Icon(Icons.Filled.Tune, null, Modifier.size(18.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("空间功能")
+                }
+            } else {
+                IconButton(
+                    enabled = enabled,
+                    onClick = { expanded = true },
+                    modifier = Modifier.testTag("spatial-capability-menu"),
+                ) {
+                    Icon(Icons.Filled.Tune, "空间功能")
+                }
+            }
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             DropdownMenuItem(
