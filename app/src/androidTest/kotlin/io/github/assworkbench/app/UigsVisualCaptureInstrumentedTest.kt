@@ -159,6 +159,18 @@ class UigsVisualCaptureInstrumentedTest {
     private fun captureDisplay(fileName: String) {
         composeRule.waitForIdle()
         val instrumentation = InstrumentationRegistry.getInstrumentation()
+        if (fileName.startsWith("ASS.R3.")) {
+            // A compositor image with a system ANR/permission dialog is genuine
+            // PNG but not a valid screenshot of the target product. An observed
+            // Pixel Launcher ANR obscured the earlier R3 evidence thumbnail.
+            val activeRoot = instrumentation.uiAutomation.rootInActiveWindow
+            val activePackage = activeRoot?.packageName?.toString()
+            check(activePackage == instrumentation.targetContext.packageName) {
+                "R3_NATIVE_SCREEN_OCCLUDED: foreground window belongs to " +
+                    "${activePackage ?: "<none>"} instead of " +
+                    instrumentation.targetContext.packageName
+            }
+        }
         val bitmap = instrumentation.uiAutomation.takeScreenshot()
         val target = instrumentation.targetContext.filesDir.resolve(fileName)
         FileOutputStream(target).use { stream ->
