@@ -82,7 +82,8 @@ timeout 10s adb logcat -G 8M || true
 timeout 10s adb logcat -c || true
 if [[ "$r3_status" -eq 0 ]]; then
   run_attempt "${ASSWB_R3_TEST_TIMEOUT:-5m}" \
-    "-Pandroid.testInstrumentationRunnerArguments.class=io.github.assworkbench.app.UigsVisualCaptureInstrumentedTest#captureR3FixedReferenceWhenExpanded"
+    "-Pandroid.testInstrumentationRunnerArguments.class=io.github.assworkbench.app.UigsVisualCaptureInstrumentedTest#captureR3FixedReferenceWhenExpanded" \
+    "-Pandroid.testInstrumentationRunnerArguments.r3StrictCapture=true"
   r3_status=$?
   report_results
   # The test writes the original PNG into its private filesDir and mirrors it
