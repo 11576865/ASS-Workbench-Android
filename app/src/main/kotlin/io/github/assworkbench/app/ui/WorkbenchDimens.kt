@@ -17,7 +17,7 @@ internal object WorkbenchDimens {
     val XLarge = 24.dp
 
     val MinTouchTarget = 48.dp
-    val AppBarHeight = 48.dp
+    val AppBarHeight = 56.dp
     val PaneHeaderHeight = 48.dp
     val ListRowMinHeight = 48.dp
     val TransportHeight = 48.dp
