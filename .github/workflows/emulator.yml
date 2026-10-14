@@ -17,7 +17,7 @@ concurrency:
 jobs:
   editor-regression:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 45
 
     steps:
       - uses: actions/checkout@v4
@@ -76,6 +76,18 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.7.1'
+
+      # Build the exact-head APKs before starting the constrained emulator
+      # session. A 180s compile/install window inside the R3 compositor test
+      # previously expired while Kotlin instrumentation classes were still
+      # compiling, so no actual screenshot test ran.
+      - name: Prebuild exact-head app and instrumentation APKs
+        shell: bash
+        run: |
+          set -euxo pipefail
+          gradle :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace
+          test -s app/build/outputs/apk/debug/app-debug.apk
+          test -s app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
 
       - name: Enable KVM
         shell: bash

@@ -921,8 +921,13 @@ internal fun InfiniteCanvasHost(
                         verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         IconToggleButton(checked = toolDrawerResident,
                             onCheckedChange = { toolDrawerResident = it },
-                            modifier = Modifier.size(48.dp).testTag("spatial-edge-pin-left")) {
-                            Icon(Icons.Filled.PushPin, if (toolDrawerResident) "取消驻留" else "驻留")
+                            modifier = Modifier.size(48.dp)
+                                .testTag("spatial-edge-pin-left")
+                                .semantics {
+                                    contentDescription =
+                                        if (toolDrawerResident) "取消驻留" else "驻留"
+                                }) {
+                            Icon(Icons.Filled.PushPin, contentDescription = null)
                         }
                         Text(if (toolDrawerResident) "已驻留" else "临时目录",
                             style = MaterialTheme.typography.labelSmall,

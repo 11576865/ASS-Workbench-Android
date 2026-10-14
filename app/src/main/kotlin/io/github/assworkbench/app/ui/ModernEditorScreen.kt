@@ -126,7 +126,7 @@ fun ModernEditorScreen(
     onSaveMkv: () -> Unit,
     rendererEnabled: Boolean,
     onEnableRenderer: () -> Unit,
-    appearance: WorkbenchAppearance = WorkbenchAppearance.SYSTEM,
+    appearance: WorkbenchAppearance = WorkbenchAppearance.DARK,
     onAppearanceChange: (WorkbenchAppearance) -> Unit = {},
     initialWorkspaceModeName: String = UiVariantRegistry.default.name,
 ) {
@@ -554,6 +554,9 @@ fun ModernEditorScreen(
                     onSaveMkv = onSaveMkv,
                     eventEditorStateHolder = eventEditorStateHolder,
                     onOpenVideo = onOpenReferenceVideo,
+                    onToggleSpatialHost = {
+                        selectWorkspaceMode(WorkspacePresentationMode.SPATIAL_EXPERIMENTAL)
+                    },
                     rendererEnabled = rendererEnabled,
                     onEnableRenderer = onEnableRenderer,
                     interactionRegistry = interactionRegistry,
@@ -995,6 +998,7 @@ private fun FixedWorkspace(
     onSaveMkv: () -> Unit,
     eventEditorStateHolder: SaveableStateHolder,
     onOpenVideo: () -> Unit,
+    onToggleSpatialHost: () -> Unit,
     rendererEnabled: Boolean,
     onEnableRenderer: () -> Unit,
     interactionRegistry: InteractionOverlayRegistry,
@@ -1006,6 +1010,8 @@ private fun FixedWorkspace(
     // Navigation is session-root state; reopening this host preserves the chosen task.
     var directoryOpen by rememberSaveable { mutableStateOf(false) }
     var previewScale by rememberSaveable { mutableFloatStateOf(1f) }
+    // Media dimensions are observational. They never become ASS or project layout state.
+    var r3MediaAspect by remember(state.project.videoUri) { mutableFloatStateOf(16f / 9f) }
 
     var previewDensityName by rememberSaveable { mutableStateOf(PreviewDensity.FULL.name) }
     val requestedPreview = runCatching { PreviewDensity.valueOf(previewDensityName) }
@@ -1018,9 +1024,21 @@ private fun FixedWorkspace(
     }
 
     val listPane: @Composable (Modifier) -> Unit = { paneModifier ->
-        SubtitleNavigationHost(state.subtitleFilter, searchOpen,
-            viewModel::setSubtitleFilter, onCloseSearch, paneModifier) {
-            EventWorkspace(
+        Column(paneModifier) {
+            if (LocalConfiguration.current.screenWidthDp >= 1180) {
+                OutlinedTextField(
+                    value = state.subtitleFilter.quickText,
+                    onValueChange = viewModel::setQuery,
+                    placeholder = { Text("内容 / 时间 / 样式 / ID") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp)
+                        .heightIn(min = 48.dp).testTag("r3-subtitle-search"),
+                    textStyle = MaterialTheme.typography.bodySmall,
+                )
+            }
+            SubtitleNavigationHost(state.subtitleFilter, searchOpen,
+                viewModel::setSubtitleFilter, onCloseSearch, Modifier.weight(1f)) {
+                EventWorkspace(
                 state = state,
                 viewModel = viewModel,
                 issuesByEvent = issues.groupBy { it.eventId },
@@ -1034,10 +1052,11 @@ private fun FixedWorkspace(
                 eventEditorStateHolder = eventEditorStateHolder,
                 tool = WorkbenchTool.TEXT,
                 modifier = Modifier.weight(1f),
+                r3Chrome = LocalConfiguration.current.screenWidthDp >= 1180,
             ) { }
+            }
         }
     }
-
     val inspector: @Composable (Modifier) -> Unit = { paneModifier ->
         Surface(
             modifier = paneModifier.testTag("fixed-inspector"),
@@ -1094,6 +1113,7 @@ private fun FixedWorkspace(
             },
             onPreview = { previewDensityName = requestedPreview.next().name },
             onDirectory = { directoryOpen = true },
+            onToggleSpatialHost = onToggleSpatialHost,
         )
 
         BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
@@ -1130,25 +1150,132 @@ private fun FixedWorkspace(
                     onEditEventPosition = onEditEventPosition,
                     interactionRegistry = if (activeTool == WorkbenchTool.POSITION) interactionRegistry else null,
                     viewportGesturesEnabled = positionTargetId == null,
+                    r3DockedTransport = policy.profile == WorkbenchLayoutProfile.THREE_PANE,
+                    onVideoAspectRatio = { aspect ->
+                        if (aspect.isFinite() && aspect in 0.25f..4f) r3MediaAspect = aspect
+                    },
                     modifier = previewModifier.testTag("preview-workspace"),
                 )
             }
 
             when (policy.profile) {
-                WorkbenchLayoutProfile.THREE_PANE -> Row(Modifier.fillMaxSize()) {
-                    if (previewVisible) {
-                        val previewWeight = if (policy.effectivePreview == PreviewDensity.COMPACT) 0.22f else 0.32f
-                        preview(Modifier.weight(previewWeight).fillMaxHeight())
+                WorkbenchLayoutProfile.THREE_PANE -> {
+                    // R3 design reference: EVENT navigator | VIDEO + REAL TIMELINE | inspector.
+                    // Retain the existing production editor and player instead of drawing
+                    // placeholder imagery or duplicating state between two mock surfaces.
+                    val geometry = R3FixedLayoutPolicy.resolve(
+                        widthDp = maxWidth.value,
+                        heightDp = maxHeight.value,
+                        mediaAspect = r3MediaAspect,
+                        preview = policy.effectivePreview,
+                    )
+                    Row(Modifier.fillMaxSize().testTag("r3-fixed-wide")) {
+                        Box(Modifier.width(geometry.navigationWidthDp.dp).fillMaxHeight()
+                            .testTag("r3-event-navigation")) {
+                            listPane(Modifier.fillMaxSize())
+                        }
                         VerticalDivider()
-                        listPane(
-                            Modifier.weight((1f - previewWeight - inspectorFraction).coerceAtLeast(0.20f))
-                                .fillMaxHeight()
-                        )
-                    } else {
-                        listPane(Modifier.weight(1f - inspectorFraction).fillMaxHeight())
+                        Column(Modifier.weight(1f).fillMaxHeight()
+                            .testTag("r3-media-timeline")) {
+                            if (previewVisible) {
+                                Box(Modifier.fillMaxWidth().height(geometry.mediaHeightDp.dp)
+                                    .testTag("r3-video")) {
+                                    preview(Modifier.fillMaxSize())
+                                }
+                                HorizontalDivider()
+                            }
+                            // The real waveform/event timeline is always reachable in R3.
+                            // Its playback PTS comes from the same EditorViewModel as the video.
+                            Box(Modifier.weight(1f).fillMaxWidth()
+                                .testTag("r3-timeline-dock")) {
+                                ModernTimelinePane(
+                                    state = state,
+                                    viewModel = viewModel,
+                                    compact = geometry.timelineHeightDp < 260f,
+                                    modifier = Modifier.fillMaxSize(),
+                                )
+                            }
+                        }
+                        VerticalDivider()
+                        Box(Modifier.width(geometry.inspectorWidthDp.dp).fillMaxHeight()
+                            .testTag("r3-parameter-inspector")) {
+                            Column(Modifier.fillMaxSize()) {
+                                val activeScope = WorkspaceEditScopeResolver.resolve(
+                                    tool = activeTool,
+                                    instance = instance,
+                                    document = state.document,
+                                    editorUiState = state.toEditorUiState(),
+                                )
+                                val bindingState = instance.resolveUiBinding(state.toEditorUiState())
+                                val resolvedEvent = bindingState.eventId?.let { id ->
+                                    state.document.events.firstOrNull { it.id == id }
+                                }
+                                val contextTitle = when {
+                                    bindingState.unresolvedPinnedEventId != null ->
+                                        "固定目标 #${bindingState.unresolvedPinnedEventId} 已失效"
+                                    instance.binding == WorkspaceBinding.FollowSelection ->
+                                        "选中 ${state.selectedEventIds.size} 条字幕"
+                                    resolvedEvent != null -> "字幕 #${resolvedEvent.id}"
+                                    else -> "未选择字幕"
+                                }
+                                val bindingLabel = when (val binding = instance.binding) {
+                                    WorkspaceBinding.FollowFocus -> "跟随焦点"
+                                    WorkspaceBinding.FollowSelection -> "当前选择集"
+                                    is WorkspaceBinding.PinnedEvent -> "固定 #${binding.eventId}"
+                                }
+                                Surface(
+                                    modifier = Modifier.fillMaxWidth().testTag("r3-inspector-context"),
+                                    color = MaterialTheme.colorScheme.surfaceContainerLow,
+                                ) {
+                                    Column(
+                                        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 9.dp),
+                                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                                    ) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text(
+                                                contextTitle,
+                                                style = MaterialTheme.typography.titleMedium,
+                                                modifier = Modifier.weight(1f),
+                                            )
+                                            Text("绑定：$bindingLabel",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        }
+                                        Text(
+                                            activeScope?.let { "写入：${it.where} · 影响 ${it.howMany} 条" }
+                                                ?: "只读工具 · 无 ASS 写入",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = if (activeScope?.unresolved == true) MaterialTheme.colorScheme.error
+                                                else MaterialTheme.colorScheme.primary,
+                                        )
+                                    }
+                                }
+                                HorizontalDivider()
+                                // Effective values are read-only evidence. They must never
+                                // change the binding or write scope of the live editor.
+                                if ((activeTool == WorkbenchTool.POSITION ||
+                                        activeTool == WorkbenchTool.STYLE) &&
+                                    resolvedEvent != null) {
+                                    R3InspectorProvenance(
+                                        document = state.document,
+                                        event = resolvedEvent,
+                                        modifier = Modifier.fillMaxWidth(),
+                                        // Switching to TEXT follows Focus by default.
+                                        // For a pinned/selection-bound inspector this
+                                        // would silently edit a different Event, so
+                                        // suppress the shortcut until a scoped route exists.
+                                        onOpenRaw = if (r3RawShortcutAllowed(
+                                            instance.binding, resolvedEvent.id, state.focusedEventId,
+                                        )) ({ selectTool(WorkbenchTool.TEXT) }) else null,
+                                    )
+                                    HorizontalDivider()
+                                }
+                                Box(Modifier.weight(1f).fillMaxWidth()) {
+                                    movableInspector(Modifier.fillMaxSize())
+                                }
+                            }
+                        }
                     }
-                    VerticalDivider()
-                    movableInspector(Modifier.weight(inspectorFraction).fillMaxHeight())
                 }
 
                 WorkbenchLayoutProfile.DUAL_PANE -> Row(Modifier.fillMaxSize()) {
@@ -1192,7 +1319,16 @@ private fun FixedWorkspace(
         }
     }
     if (directoryOpen) {
-        AlertDialog(
+        val screen = LocalConfiguration.current
+        if (screen.screenWidthDp >= 1180 && screen.screenHeightDp >= 560) {
+            R3ToolCatalogDialog(
+                onDismiss = { directoryOpen = false },
+                onOpenTool = { tool ->
+                    directoryOpen = false
+                    selectTool(tool)
+                },
+            )
+        } else AlertDialog(
             onDismissRequest = { directoryOpen = false },
             title = { Text("工具目录") },
             text = {
@@ -1222,6 +1358,7 @@ private fun WorkbenchPreview(
     onEnableRenderer: () -> Unit,
     onEditEventPosition: (Long) -> Unit = { id -> viewModel.focusEvent(id, seek = false) },
     onVideoAspectRatio: (Float) -> Unit = {},
+    r3DockedTransport: Boolean = false,
     interactionRegistry: InteractionOverlayRegistry? = null,
     viewportGesturesEnabled: Boolean = false,
     onObjectLongPress: ((PreviewObjectPick) -> Unit)? = null,
@@ -1311,6 +1448,7 @@ private fun WorkbenchPreview(
         rendererEnabled = rendererEnabled,
         onEnableRenderer = onEnableRenderer,
         fillViewport = true,
+        r3DockedTransport = r3DockedTransport,
         onVideoAspectRatio = onVideoAspectRatio,
         interactionRegistry = interactionRegistry,
         viewportGesturesEnabled = viewportGesturesEnabled,
@@ -1565,6 +1703,7 @@ private fun ModernAppBar(
     val uiState = state.toEditorUiState()
     val uiActions = remember(viewModel) { EditorViewModelUiActions(viewModel) }
     val compactToolbar = LocalConfiguration.current.screenWidthDp < 480
+    val r3WideHeader = LocalConfiguration.current.screenWidthDp >= 1180
     var moreMenuOpen by remember { mutableStateOf(false) }
     Surface(tonalElevation = 2.dp) {
         Row(
@@ -1572,17 +1711,44 @@ private fun ModernAppBar(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(2.dp),
         ) {
-            TooltipIconButton(
-                label = if (workspaceMode == WorkspacePresentationMode.FIXED)
-                    "切换至实验性无限画布" else "返回标准工作台",
-                onClick = onToggleWorkspaceMode,
-                modifier = Modifier.size(40.dp).testTag("workspace-direct-mode-toggle"),
-            ) {
-                Icon(
-                    if (workspaceMode == WorkspacePresentationMode.FIXED)
-                        Icons.Filled.DashboardCustomize else Icons.Filled.Dashboard,
-                    contentDescription = null,
-                )
+            if (r3WideHeader) {
+                // R3's persistent identity is separate from the current document
+                // and does not replace the existing project/ASS save workflow.
+                Text("ASS Workbench", style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface)
+                VerticalDivider(Modifier.height(26.dp).padding(horizontal = 8.dp))
+                if (workspaceMode == WorkspacePresentationMode.SPATIAL_EXPERIMENTAL) TextButton(
+                    onClick = onToggleWorkspaceMode,
+                    modifier = Modifier
+                        .testTag("workspace-direct-mode-toggle")
+                        .semantics {
+                            contentDescription =
+                                if (workspaceMode == WorkspacePresentationMode.FIXED)
+                                    "切换至无限画布" else "切换至标准工作台"
+                        },
+                ) {
+                    Icon(
+                        if (workspaceMode == WorkspacePresentationMode.FIXED)
+                            Icons.Filled.DashboardCustomize else Icons.Filled.Dashboard,
+                        null, Modifier.size(18.dp),
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text(if (workspaceMode == WorkspacePresentationMode.FIXED)
+                        "∞ 无限画布" else "主 UI")
+                }
+            } else {
+                TooltipIconButton(
+                    label = if (workspaceMode == WorkspacePresentationMode.FIXED)
+                        "切换至无限画布" else "切换至标准工作台",
+                    onClick = onToggleWorkspaceMode,
+                    modifier = Modifier.size(40.dp).testTag("workspace-direct-mode-toggle"),
+                ) {
+                    Icon(
+                        if (workspaceMode == WorkspacePresentationMode.FIXED)
+                            Icons.Filled.DashboardCustomize else Icons.Filled.Dashboard,
+                        contentDescription = null,
+                    )
+                }
             }
             if (selectionMode) {
                 IconButton(onClick = uiActions::clearSelection) { Icon(Icons.Filled.Close, "退出多选") }
@@ -1722,6 +1888,7 @@ private fun EventWorkspace(
     eventEditorStateHolder: SaveableStateHolder,
     tool: WorkbenchTool,
     modifier: Modifier = Modifier,
+    r3Chrome: Boolean = false,
     supportingPane: @Composable () -> Unit,
 ) {
     val uiState = state.toEditorUiState()
@@ -1745,28 +1912,47 @@ private fun EventWorkspace(
     }
     val listPane: @Composable (Modifier) -> Unit = { listModifier ->
     Column(listModifier.background(MaterialTheme.colorScheme.surface).testTag("subtitle-navigation")) {
-        Row(Modifier.fillMaxWidth().height(WorkbenchDimens.PaneHeaderHeight).padding(horizontal = WorkbenchDimens.Small), verticalAlignment = Alignment.CenterVertically) {
-            Text(if (selectionMode) "选择模式" else "字幕", style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
-            Text(if (state.subtitleFilter.isActive) "筛选中" else "全部", style = MaterialTheme.typography.labelSmall)
+        if (r3Chrome) {
+            R3EventNavigatorHeader(
+                filter = state.subtitleFilter,
+                total = state.document.events.size,
+                matched = state.filteredEvents.size,
+                selected = state.selectedEventIds.size,
+                onFilterChange = viewModel::setSubtitleFilter,
+                onPrevious = viewModel::focusPreviousFilteredEvent,
+                onNext = viewModel::focusNextFilteredEvent,
+                onSelectAll = viewModel::selectAllFilteredEvents,
+                onLocate = {
+                    if (state.filteredEvents.none { it.id == state.focusedEventId }) viewModel.clearSubtitleFilter()
+                    locateRevision++
+                },
+                onClear = viewModel::clearSubtitleFilter,
+            )
+        } else {
+            Row(Modifier.fillMaxWidth().height(WorkbenchDimens.PaneHeaderHeight).padding(horizontal = WorkbenchDimens.Small), verticalAlignment = Alignment.CenterVertically) {
+                Text(if (selectionMode) "选择模式" else "字幕", style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
+                Text(if (state.subtitleFilter.isActive) "筛选中" else "全部", style = MaterialTheme.typography.labelSmall)
+            }
+            SubtitleResultsBar(
+                total = state.document.events.size, matched = state.filteredEvents.size,
+                selected = state.selectedEventIds.size,
+                excludedFocus = state.focusedEventId != null && state.filteredEvents.none { it.id == state.focusedEventId },
+                hasFocus = state.document.events.any { it.id == state.focusedEventId },
+                onPrevious = viewModel::focusPreviousFilteredEvent, onNext = viewModel::focusNextFilteredEvent,
+                onSelectAll = viewModel::selectAllFilteredEvents,
+                onLocate = {
+                    if (state.filteredEvents.none { it.id == state.focusedEventId }) viewModel.clearSubtitleFilter()
+                    locateRevision++
+                },
+                onClear = viewModel::clearSubtitleFilter,
+            )
+            Divider()
         }
-        SubtitleResultsBar(
-            total = state.document.events.size, matched = state.filteredEvents.size,
-            selected = state.selectedEventIds.size,
-            excludedFocus = state.focusedEventId != null && state.filteredEvents.none { it.id == state.focusedEventId },
-            hasFocus = state.document.events.any { it.id == state.focusedEventId },
-            onPrevious = viewModel::focusPreviousFilteredEvent, onNext = viewModel::focusNextFilteredEvent,
-            onSelectAll = viewModel::selectAllFilteredEvents,
-            onLocate = {
-                if (state.filteredEvents.none { it.id == state.focusedEventId }) viewModel.clearSubtitleFilter()
-                locateRevision++
-            },
-            onClear = viewModel::clearSubtitleFilter,
-        )
         Divider()
         LazyColumn(
             state = listState,
             modifier = Modifier
-                .fillMaxSize()
+                .then(if (r3Chrome) Modifier.weight(1f) else Modifier.fillMaxSize())
                 .pointerInput(state.filteredEvents) {
                     var lastPreviewId: Long? = null
                     var lastAutoScrollAt = 0L
@@ -1839,6 +2025,16 @@ private fun EventWorkspace(
                     onTool,
                 )
                 Divider()
+            }
+        }
+        if (r3Chrome) {
+            Row(Modifier.fillMaxWidth().height(32.dp)
+                    .background(MaterialTheme.colorScheme.surfaceContainerLow)
+                    .padding(horizontal = 10.dp),
+                verticalAlignment = Alignment.CenterVertically) {
+                Text("${state.document.events.size} 条 · 已选 ${state.selectedEventIds.size} 条",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
@@ -1984,6 +2180,10 @@ private fun InlineEventEditor(
         metadataDraft.reconcile(EventMetadataValues.from(event))
     }
     val playbackPositionMs by viewModel.playbackPositionMs.collectAsState()
+    val r3UseWriteReview = LocalConfiguration.current.screenWidthDp >= 1180
+    var r3ReviewOpen by rememberSaveable(state.workspaceSessionId, event.id) {
+        mutableStateOf(false)
+    }
 
     LaunchedEffect(rawDraft, event.text) {
         rawDraft.reconcile(event.text)
@@ -2072,12 +2272,42 @@ private fun InlineEventEditor(
                 rawBaseText = event.text
             }) { Text(if (rawExternalConflict) "重新载入" else "还原") }
             Button(
-                onClick = { viewModel.updateEventText(event.id, rawField.text) },
+                onClick = {
+                    if (r3UseWriteReview) r3ReviewOpen = true
+                    else viewModel.updateEventText(event.id, rawField.text)
+                },
                 modifier = Modifier.testTag("event-apply-text-${event.id}"),
             ) {
-                Text(if (rawExternalConflict) "以草稿覆盖" else "应用正文")
+                Text(if (r3UseWriteReview) "核对并应用"
+                    else if (rawExternalConflict) "以草稿覆盖" else "应用正文")
             }
         }
+    }
+    if (r3UseWriteReview && r3ReviewOpen && rawDirty) {
+        val receipt = R3TextWriteReceipt(
+            eventId = event.id,
+            eventStyle = event.style,
+            baseText = rawBaseText,
+            canonicalText = event.text,
+            draftText = rawField.text,
+        )
+        R3TextWriteReviewDialog(
+            receipt = receipt,
+            currentEventText = event.text,
+            document = state.document,
+            event = event,
+            onDismiss = { r3ReviewOpen = false },
+            onConfirm = {
+                val latest = viewModel.state.value
+                val latestText = latest.document.events.firstOrNull { it.id == receipt.eventId }?.text
+                // The draft stays untouched if document/session/revision changed.
+                if (latest.workspaceSessionId == state.workspaceSessionId &&
+                    receipt.mayCommit(latestText)) {
+                    viewModel.updateEventText(receipt.eventId, receipt.draftText)
+                    r3ReviewOpen = false
+                }
+            },
+        )
     }
     if (rawExternalConflict) {
         Text(

@@ -63,7 +63,91 @@ run_attempt() {
   return "$status"
 }
 
-# Run the projection regressions first, independently of the full editor suite.
+# Run the tablet capture before the long full suite; otherwise job-timeout may
+# consume the capture window. Pixel 6 has portrait-native metrics, so 960x1600
+# rotates to landscape 1600x960. Native test also requests landscape explicitly.
+r3_status=0
+r3_capture="ASS.R3.FIXED.PRODUCTION_REFERENCE.png"
+r3_output="$report_session_dir/$r3_capture"
+echo "---- R3 expanded native capture (landscape 1600x960 px at 160 dpi) ----"
+timeout 10s adb shell settings put system accelerometer_rotation 0 || true
+timeout 10s adb shell wm size 960x1600 || r3_status=1
+timeout 10s adb shell wm density 160 || r3_status=1
+timeout 10s adb shell settings put system user_rotation 1 || r3_status=1
+timeout 10s adb shell wm size || true
+timeout 10s adb shell wm density || true
+# Gradle connectedDebugAndroidTest uninstalls the debug APK after each run.
+# The previous 163932-byte compositor PNG was valid inside the Activity, but
+# later adb extraction saw only a 52-byte run-as failure and Android logd
+# dropped chunks 53..78 of 79. Do not transport image bytes through logcat.
+# Use APKs prebuilt in emulator.yml (outside the device run), invoke ONLY
+# the R3 test with am instrument, and leave the installed app intact until adb exec-out
+# run-as copies its real PNG bytes to the runner.
+if [[ "$r3_status" -eq 0 ]]; then
+  if test -s app/build/outputs/apk/debug/app-debug.apk &&
+      test -s app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk &&
+      timeout 45s adb install -r -t app/build/outputs/apk/debug/app-debug.apk &&
+      timeout 45s adb install -r -t app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk; then
+    instrument_log="$report_session_dir/r3-instrumentation.txt"
+    echo "---- direct R3 AndroidJUnitRunner: preserve installed app until capture ----"
+    if timeout 180s adb shell am instrument -w \
+        -e class 'io.github.assworkbench.app.UigsVisualCaptureInstrumentedTest#captureR3FixedReferenceWhenExpanded' \
+        -e r3StrictCapture true \
+        'io.github.assworkbench.app.test/androidx.test.runner.AndroidJUnitRunner' \
+        > "$instrument_log" 2>&1; then
+      # Android am instrument may exit 0 when JUnit reports a test failure.
+      # Require positive proof that exactly this test finished successfully.
+      if python3 "$runner_tools_dir/verify_r3_instrumentation.py" "$instrument_log"; then
+        echo "R3_INSTRUMENTATION_SUCCESS: single native expanded test passed"
+      else
+        cat "$instrument_log"
+        r3_status=1
+      fi
+    else
+      echo "R3_INSTRUMENTATION_FAILED: am instrument command failed/timed out"
+      tail -n 85 "$instrument_log" || true
+      r3_status=1
+    fi
+    if [[ "$r3_status" -eq 0 ]]; then
+      if timeout 15s adb exec-out run-as io.github.assworkbench.app \
+          cat "files/$r3_capture" > "$r3_output" 2>/dev/null &&
+          python3 "$runner_tools_dir/verify_r3_png_capture.py" "$r3_output" \
+            --width 1600 --height 960; then
+        echo "R3_NATIVE_CAPTURE_VALID: sha256=$(sha256sum "$r3_output" | cut -d' ' -f1) size=$(wc -c < "$r3_output")"
+        echo "R3_NATIVE_CAPTURE_SOURCE: app-private-run-as-before-uninstall"
+      else
+        echo "R3_NATIVE_CAPTURE_MISSING: direct instrumentation passed but app-private PNG unavailable/invalid"
+        if [[ -f "$r3_output" ]]; then
+          echo "R3_NATIVE_CAPTURE_DIAGNOSTIC: bytes=$(wc -c < "$r3_output")"
+        fi
+        r3_status=1
+      fi
+    fi
+  else
+    echo "R3_INSTRUMENTATION_SETUP_FAILED: prebuilt exact-head APKs missing or adb install failed"
+    r3_status=1
+  fi
+fi
+# Direct adb install uses the prebuilt debug APK signature. Gradle may
+# regenerate an APK signed with a different ephemeral CI key on its next
+# invocation. Uninstall BOTH direct-capture packages before Gradle installs
+# its own app/test APKs. Do this after file extraction, never before it.
+echo "---- isolate direct capture APKs before Gradle emulator suite ----"
+if ! timeout 30s adb uninstall io.github.assworkbench.app.test; then
+  echo "R3_CAPTURE_CLEANUP_FAILED: test package could not be uninstalled"
+  r3_status=1
+fi
+if ! timeout 30s adb uninstall io.github.assworkbench.app; then
+  echo "R3_CAPTURE_CLEANUP_FAILED: target package could not be uninstalled"
+  r3_status=1
+fi
+timeout 10s adb shell wm size reset || true
+timeout 10s adb shell wm density reset || true
+timeout 10s adb shell settings put system user_rotation 0 || true
+timeout 10s adb shell settings put system accelerometer_rotation 1 || true
+echo "R3_CAPTURE_EXIT_STATUS=$r3_status"
+
+# Run the projection regressions after R3 capture, independently of the full editor suite.
 # Report immediately because the second Gradle invocation overwrites the output.
 projection_status=0
 projection_classes=(
@@ -84,9 +168,11 @@ for projection_class in "${projection_classes[@]}"; do
 done
 
 # Keep the full suite as a mandatory gate, even if the focused run fails.
-run_attempt "${ASSWB_SUITE_TEST_TIMEOUT:-12m}"
+run_attempt "${ASSWB_SUITE_TEST_TIMEOUT:-20m}"
 suite_status=$?
 report_results
 
+# All three gates are mandatory and independent of status from earlier attempts.
+if [[ "$r3_status" -ne 0 ]]; then exit "$r3_status"; fi
 if [[ "$projection_status" -ne 0 ]]; then exit "$projection_status"; fi
 exit "$suite_status"

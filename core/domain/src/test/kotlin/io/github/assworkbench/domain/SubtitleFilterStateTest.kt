@@ -18,6 +18,14 @@ class SubtitleFilterStateTest {
         assertEquals(listOf(90L), SubtitleFilterState(quickText = "[x]").apply(events).map { it.id })
         assertEquals(emptyList(), SubtitleFilterState(quickText = "pos").apply(events))
     }
+    @Test fun quickSearchFindsStableEventIdAndDisplayedTimeWithoutMutatingEvents() {
+        assertEquals(listOf(90L), SubtitleFilterState(quickText = "#90").apply(events).map { it.id })
+        assertEquals(listOf(90L, 3L), SubtitleFilterState(quickText = "0:00:01.00")
+            .apply(events).map { it.id })
+        assertEquals(listOf(70L), SubtitleFilterState(quickText = "0:00:03.00")
+            .apply(events).map { it.id })
+        assertEquals(listOf(90L, 3L, 70L), events.map { it.id })
+    }
     @Test fun fieldConditionsAreCombinedWithAnd() {
         assertEquals(listOf(90L), SubtitleFilterState(quickText = "hello", text = "[x]", actor = "ali", style = "tit").apply(events).map { it.id })
         assertEquals(emptyList(), SubtitleFilterState(text = "hello", actor = "bob").apply(events))

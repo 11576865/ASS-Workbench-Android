@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -24,6 +25,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -60,6 +62,7 @@ internal fun WorkbenchTaskBar(
     onTool: (WorkbenchTool) -> Unit,
     onPreview: () -> Unit,
     onDirectory: () -> Unit,
+    onToggleSpatialHost: (() -> Unit)? = null,
 ) {
     val compact = LocalConfiguration.current.screenWidthDp < 600
     val previewLabel = when (requestedPreview) {
@@ -74,7 +77,7 @@ internal fun WorkbenchTaskBar(
 
     Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh, tonalElevation = 2.dp) {
         Row(
-            Modifier.fillMaxWidth().padding(horizontal = 6.dp),
+            Modifier.fillMaxWidth().height(50.dp).padding(horizontal = 6.dp),
             horizontalArrangement = Arrangement.spacedBy(4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -169,6 +172,24 @@ internal fun WorkbenchTaskBar(
                         .semantics { contentDescription = "工具目录" }
                         .testTag("fixed-tool-CAPABILITIES"),
                 )
+            }
+            if (onToggleSpatialHost != null && LocalConfiguration.current.screenWidthDp >= 1180) {
+                // The R3 reference puts the two independent UI hosts in the
+                // task strip, not beside the document title or inside a tool.
+                Surface(
+                    modifier = Modifier.testTag("fixed-r3-main-host"),
+                    shape = MaterialTheme.shapes.small,
+                    color = MaterialTheme.colorScheme.primary,
+                ) {
+                    Text("主 UI", color = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 9.dp),
+                        style = MaterialTheme.typography.labelMedium)
+                }
+                OutlinedButton(onClick = onToggleSpatialHost,
+                    modifier = Modifier.testTag("fixed-r3-spatial-switch")
+                        .semantics { contentDescription = "切换至无限画布" }) {
+                    Text("∞ 无限画布")
+                }
             }
             TooltipBox(
                 positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),

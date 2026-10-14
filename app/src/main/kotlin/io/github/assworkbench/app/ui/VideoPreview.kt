@@ -162,6 +162,7 @@ internal fun VideoPreview(
     rendererEnabled: Boolean = true,
     onEnableRenderer: () -> Unit = {},
     fillViewport: Boolean = false,
+    r3DockedTransport: Boolean = false,
     onVideoAspectRatio: (Float) -> Unit = {},
     interactionRegistry: InteractionOverlayRegistry? = null,
     viewportGesturesEnabled: Boolean = false,
@@ -267,6 +268,7 @@ internal fun VideoPreview(
             onOpenVideo = onOpenVideo,
             onOpenTimeline = onOpenTimeline,
             fillViewport = fillViewport,
+            r3DockedTransport = r3DockedTransport,
             onVideoAspectRatio = onVideoAspectRatio,
             interactionRegistry = interactionRegistry,
             viewportGesturesEnabled = viewportGesturesEnabled,
@@ -573,6 +575,7 @@ private fun AuthoritativeMpvPreview(
     onOpenVideo: () -> Unit,
     onOpenTimeline: () -> Unit,
     fillViewport: Boolean,
+    r3DockedTransport: Boolean,
     onVideoAspectRatio: (Float) -> Unit,
     interactionRegistry: InteractionOverlayRegistry?,
     viewportGesturesEnabled: Boolean,
@@ -819,10 +822,15 @@ private fun AuthoritativeMpvPreview(
                 16f / 9f
             }
         }
-        val canvasWidth = if (fillViewport) minOf(maxWidth, maxHeight * reportedAspect) else maxWidth
+        // R3: reference video gets the image aspect; transport owns a separate
+        // fixed-height strip rather than obscuring subtitle glyphs or handles.
+        val transportHeight = if (r3DockedTransport && !videoUri.isNullOrBlank()) 48.dp else 0.dp
+        val imageHeightBudget = (maxHeight - transportHeight).coerceAtLeast(1.dp)
+        val canvasWidth = if (fillViewport) minOf(maxWidth, imageHeightBudget * reportedAspect) else maxWidth
         val canvasModifier = Modifier
             .width(canvasWidth)
             .aspectRatio(reportedAspect)
+            .then(if (r3DockedTransport) Modifier.align(Alignment.TopCenter) else Modifier)
             .clipToBounds()
             .graphicsLayer {
                 scaleX = viewportScale
@@ -888,6 +896,41 @@ private fun AuthoritativeMpvPreview(
                     Modifier
                 },
             )
+        val transportContent: @Composable () -> Unit = {
+            PlaybackBar(
+                playback = playback,
+                estimatedFrameNumber = estimatedFrameNumber,
+                estimatedVideoFps = estimatedVideoFps,
+                document = document,
+                focusedEventId = focusedEventId,
+                onFocusEvent = onFocusEvent,
+                onSetEventTiming = onSetEventTiming,
+                onPlayPause = {
+                    playbackControlsVisible = true
+                    val shouldPause = playback.status == MpvPlaybackState.Status.Playing ||
+                        playback.status == MpvPlaybackState.Status.Buffering
+                    mpv[MpvProperties.Pause] = shouldPause
+                },
+                onFrameBack = {
+                    playbackControlsVisible = true
+                    mpv.command("frame-back-step")
+                },
+                onFrameForward = {
+                    playbackControlsVisible = true
+                    mpv.command("frame-step")
+                },
+                onSeek = { seconds ->
+                    playbackControlsVisible = true
+                    mpv.command("seek", seconds.toString(), "absolute+exact")
+                },
+                onInteractionChanged = { active ->
+                    transportInteracting = active
+                    if (active) playbackControlsVisible = true
+                },
+                onOpenTimeline = onOpenTimeline,
+                compactTransport = r3DockedTransport,
+            )
+        }
         Box(canvasModifier, contentAlignment = Alignment.Center) {
             if (videoUri.isNullOrBlank()) {
                 Surface(
@@ -1020,7 +1063,7 @@ private fun AuthoritativeMpvPreview(
                     modifier = Modifier.align(Alignment.TopCenter).padding(12.dp),
                 )
             }
-            if (!videoUri.isNullOrBlank() && positionEditEventId == null) {
+            if (!r3DockedTransport && !videoUri.isNullOrBlank() && positionEditEventId == null) {
                 AnimatedVisibility(
                     visible = playbackControlsVisible,
                     enter = fadeIn(),
@@ -1028,40 +1071,18 @@ private fun AuthoritativeMpvPreview(
                     modifier = Modifier.align(Alignment.BottomCenter),
                 ) {
                     Surface(color = Color.Black.copy(alpha = 0.62f)) {
-                        PlaybackBar(
-                            playback = playback,
-                            estimatedFrameNumber = estimatedFrameNumber,
-                            estimatedVideoFps = estimatedVideoFps,
-                            document = document,
-                            focusedEventId = focusedEventId,
-                            onFocusEvent = onFocusEvent,
-                            onSetEventTiming = onSetEventTiming,
-                            onPlayPause = {
-                                playbackControlsVisible = true
-                                val shouldPause = playback.status == MpvPlaybackState.Status.Playing ||
-                                    playback.status == MpvPlaybackState.Status.Buffering
-                                mpv[MpvProperties.Pause] = shouldPause
-                            },
-                            onFrameBack = {
-                                playbackControlsVisible = true
-                                mpv.command("frame-back-step")
-                            },
-                            onFrameForward = {
-                                playbackControlsVisible = true
-                                mpv.command("frame-step")
-                            },
-                            onSeek = { seconds ->
-                                playbackControlsVisible = true
-                                mpv.command("seek", seconds.toString(), "absolute+exact")
-                            },
-                            onInteractionChanged = { active ->
-                                transportInteracting = active
-                                if (active) playbackControlsVisible = true
-                            },
-                            onOpenTimeline = onOpenTimeline,
-                        )
+                        transportContent()
                     }
                 }
+            }
+        }
+        if (r3DockedTransport && !videoUri.isNullOrBlank()) {
+            Surface(
+                modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth()
+                    .height(48.dp).testTag("r3-preview-transport"),
+                color = MaterialTheme.colorScheme.surfaceContainer,
+            ) {
+                transportContent()
             }
         }
     }
@@ -2251,6 +2272,7 @@ private fun PlaybackBar(
     onSeek: (Double) -> Unit,
     onInteractionChanged: (Boolean) -> Unit,
     onOpenTimeline: () -> Unit,
+    compactTransport: Boolean = false,
 ) {
     val duration = (playback.durationSeconds ?: 0.0).coerceAtLeast(0.0)
     val position = (playback.positionSeconds ?: 0.0)
@@ -2367,7 +2389,7 @@ private fun PlaybackBar(
                     if (showClock) Text(formatClock(duration), style = MaterialTheme.typography.labelSmall)
                 }
 
-                Row(
+                if (!compactTransport) Row(
                     Modifier
                         .fillMaxWidth()
                         .height(40.dp),

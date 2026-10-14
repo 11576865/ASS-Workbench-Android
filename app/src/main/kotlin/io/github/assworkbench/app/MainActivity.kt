@@ -96,8 +96,8 @@ class MainActivity : ComponentActivity() {
             }
             var appearanceName by rememberSaveable {
                 mutableStateOf(
-                    appearancePrefs.getString("appearance", WorkbenchAppearance.SYSTEM.name)
-                        ?: WorkbenchAppearance.SYSTEM.name
+                    appearancePrefs.getString("appearance", WorkbenchAppearance.DARK.name)
+                        ?: WorkbenchAppearance.DARK.name
                 )
             }
             val appearance = runCatching { WorkbenchAppearance.valueOf(appearanceName) }
