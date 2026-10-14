@@ -1,6 +1,8 @@
 package io.github.assworkbench.app
 
 import android.graphics.Bitmap
+import android.util.Base64
+import android.util.Log
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -10,6 +12,7 @@ import androidx.compose.ui.test.performTextReplacement
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.assworkbench.app.ui.WorkbenchTool
+import java.io.ByteArrayOutputStream
 import java.io.FileOutputStream
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -163,6 +166,40 @@ class UigsVisualCaptureInstrumentedTest {
                 "Android compositor screenshot must encode as PNG",
                 bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream),
             )
+        }
+        // Debug-only R3 evidence mirror. Android 15's run-as may refuse access
+        // to the app-private file even when test pixels were captured correctly.
+        // App-specific external storage is a separate adb-readable extraction path.
+        // The Base64 thumbnail is supplemental review evidence from the very same
+        // compositor bitmap; it is never a substitute for the full PNG gate.
+        if (fileName.startsWith("ASS.R3.")) {
+            val mirrorFolder = checkNotNull(instrumentation.targetContext.getExternalFilesDir("uigs-capture")) {
+                "R3 external capture directory is unavailable"
+            }
+            check(mirrorFolder.isDirectory || mirrorFolder.mkdirs()) {
+                "Cannot create R3 adb-readable evidence directory"
+            }
+            val mirror = mirrorFolder.resolve(fileName)
+            target.copyTo(mirror, overwrite = true)
+            assertTrue("R3 mirrored compositor PNG must be nonempty",
+                mirror.isFile && mirror.length() == target.length())
+            Log.i("AsswbVisual",
+                "R3_NATIVE_FILE:${mirror.absolutePath}:bytes=${mirror.length()}")
+
+            val thumbnailWidth = 900
+            val thumbnailHeight = (bitmap.height * (thumbnailWidth.toFloat() / bitmap.width)).toInt()
+            val thumbnail = Bitmap.createScaledBitmap(bitmap, thumbnailWidth, thumbnailHeight, true)
+            val thumbOutput = ByteArrayOutputStream()
+            check(thumbnail.compress(Bitmap.CompressFormat.JPEG, 70, thumbOutput)) {
+                "Could not encode R3 compositor preview"
+            }
+            thumbnail.recycle()
+            Base64.encodeToString(thumbOutput.toByteArray(), Base64.NO_WRAP)
+                .chunked(2800)
+                .forEachIndexed { index, part ->
+                    Log.i("AsswbVisual", "R3_PREVIEW_JPEG:$index:$part")
+                }
+            Log.i("AsswbVisual", "R3_PREVIEW_JPEG_END")
         }
         bitmap.recycle()
         assertTrue(
