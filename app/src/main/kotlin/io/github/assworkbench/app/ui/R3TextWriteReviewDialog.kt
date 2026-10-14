@@ -12,6 +12,8 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import io.github.assworkbench.domain.AssDocument
+import io.github.assworkbench.domain.AssEvent
 import io.github.assworkbench.domain.RawEventDraftPolicy
 import io.github.assworkbench.domain.RawEventDraftState
 
@@ -49,22 +51,35 @@ internal fun R3TextWriteReviewDialog(
     currentEventText: String?,
     onDismiss: () -> Unit,
     onConfirm: () -> Unit,
+    document: AssDocument? = null,
+    event: AssEvent? = null,
 ) {
     val canCommit = receipt.mayCommit(currentEventText)
+    val summary = if (document != null && event != null)
+        r3WriteSourceSummary(document, event, receipt) else null
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false),
     ) {
-        Surface(
-            modifier = Modifier.fillMaxWidth(0.82f).widthIn(max = 610.dp)
-                .testTag("r3-write-review"),
+        BoxWithConstraints(
+            Modifier.fillMaxWidth(0.84f).fillMaxHeight(0.82f),
+        ) {
+            // At the 1600x960 R3 reference size, write intent and read provenance
+            // are independent panes. Compact hosts keep the single review pane.
+            val twoPane = maxWidth >= 1040.dp && document != null && event != null
+            Row(Modifier.fillMaxSize(),
+                horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                Surface(
+                    modifier = Modifier.weight(1f).fillMaxHeight()
+                        .testTag("r3-write-review"),
             color = MaterialTheme.colorScheme.surfaceContainer,
             shape = MaterialTheme.shapes.large,
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
             shadowElevation = 18.dp,
         ) {
             Column(
-                Modifier.fillMaxWidth().padding(22.dp),
+                Modifier.fillMaxSize().verticalScroll(rememberScrollState())
+                    .padding(22.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
                 Text("应用更改 · 写入核对",
@@ -145,6 +160,16 @@ internal fun R3TextWriteReviewDialog(
                         enabled = canCommit,
                         onClick = onConfirm,
                     ) { Text("确认应用") }
+                }
+            }
+                }
+                if (twoPane) {
+                    R3WriteSourceDetails(
+                        receipt = receipt,
+                        summary = summary,
+                        onBack = onDismiss,
+                        modifier = Modifier.weight(1f).fillMaxHeight(),
+                    )
                 }
             }
         }
