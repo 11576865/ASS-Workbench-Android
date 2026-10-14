@@ -2294,6 +2294,8 @@ private fun InlineEventEditor(
         R3TextWriteReviewDialog(
             receipt = receipt,
             currentEventText = event.text,
+            document = state.document,
+            event = event,
             onDismiss = { r3ReviewOpen = false },
             onConfirm = {
                 val latest = viewModel.state.value
