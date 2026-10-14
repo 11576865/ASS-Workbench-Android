@@ -704,7 +704,6 @@ internal fun InfiniteCanvasHost(
                         SpatialCapabilityMenu(
                             enabled = !gestureOwned,
                             timelineVisible = timelineDockVisible,
-
                             showLabel = viewportW >= 720f,
                             onOpenDirectory = ::showToolPicker,
                             onOpenToolList = { toolDrawerOpen = true },
@@ -1186,7 +1185,6 @@ internal fun InfiniteCanvasHost(
                 SpatialCapabilityMenu(
                     enabled = !gestureOwned,
                     timelineVisible = timelineDockVisible,
-
                     showLabel = viewportW >= 720f,
                     onOpenDirectory = ::showToolPicker,
                     onOpenToolList = { toolDrawerOpen = true },
