@@ -14,15 +14,39 @@ import sys
 R3_TEST = "captureR3FixedReferenceWhenExpanded"
 
 
+R3_CLASS = "io.github.assworkbench.app.UigsVisualCaptureInstrumentedTest"
+
+
 def validate_output(raw: str) -> None:
-    if R3_TEST not in raw:
-        raise ValueError("the requested R3 test is absent from instrumentation output")
-    if not re.search(r"(?m)^OK \(1 test\)\s*$", raw):
-        raise ValueError("AndroidJUnitRunner did not report exactly one passing test")
-    if not re.search(r"(?m)^INSTRUMENTATION_CODE: -1\s*$", raw):
-        raise ValueError("Android instrumentation did not finish with success code -1")
-    if any(token in raw for token in ("FAILURES!!!", "INSTRUMENTATION_ABORTED", "INSTRUMENTATION_FAILED")):
+    # The AndroidJUnitRunner text output on API 35 has two valid formats:
+    # verbose INSTRUMENTATION_STATUS: test=... + INSTRUMENTATION_CODE:-1,
+    # or default human JUnit summary "Class:. / Time / OK (1 test)".
+    # We intentionally invoke exactly one test with `am instrument -e class`.
+    # Accept the terse report only for the exact class, not any passing suite.
+    if any(token in raw for token in (
+        "FAILURES!!!", "INSTRUMENTATION_ABORTED", "INSTRUMENTATION_FAILED",
+        "INSTRUMENTATION_STATUS_CODE: -2", "INSTRUMENTATION_RESULT: shortMsg=",
+    )):
         raise ValueError("Android instrumentation contains a failure marker")
+    if not re.search(r"(?m)^OK \(1 test\)[ \t]*$", raw):
+        raise ValueError("AndroidJUnitRunner did not report exactly one passing test")
+
+    if "INSTRUMENTATION_STATUS:" in raw:
+        if R3_TEST not in raw or f"class={R3_CLASS}" not in raw:
+            raise ValueError("the requested R3 test is absent from instrumentation output")
+        if not re.search(r"(?m)^INSTRUMENTATION_CODE: -1[ \t]*$", raw):
+            raise ValueError("Android instrumentation did not finish with success code -1")
+        return
+
+    if R3_TEST in raw and not re.search(r"(?m)^INSTRUMENTATION_CODE: -1[ \t]*$", raw):
+        # A partially truncated verbose receipt must not be treated as terse.
+        raise ValueError("Android instrumentation did not finish with success code -1")
+    if not re.search(
+        rf"(?m)^{re.escape(R3_CLASS)}:\.[ \t]*$", raw
+    ):
+        raise ValueError("the requested R3 test is absent from instrumentation output")
+    if not re.search(r"(?m)^Time: [0-9]+(?:\.[0-9]+)?[ \t]*$", raw):
+        raise ValueError("AndroidJUnitRunner terse summary omitted timing evidence")
 
 
 def main() -> int:
