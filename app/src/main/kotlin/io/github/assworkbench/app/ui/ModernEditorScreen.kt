@@ -1501,8 +1501,9 @@ private fun WorkspaceEditScopeBar(summary: WorkspaceEditScopeSummary) {
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
+/** Shared production directory used by FIXED and the focused SPATIAL editor. */
 @Composable
-private fun WorkspaceToolDirectory(onOpenTool: (WorkbenchTool) -> Unit, modifier: Modifier = Modifier) {
+internal fun WorkspaceToolDirectory(onOpenTool: (WorkbenchTool) -> Unit, modifier: Modifier = Modifier) {
     var query by rememberSaveable { mutableStateOf("") }
     Column(modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         OutlinedTextField(query, { query = it }, label = { Text("搜索工具") }, singleLine = true,
