@@ -102,7 +102,14 @@ class UigsVisualCaptureInstrumentedTest {
             config.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
         }
         val config = composeRule.activity.resources.configuration
-        check(config.screenWidthDp >= 1180 && config.screenHeightDp >= 560) {
+        val expanded = config.screenWidthDp >= 1180 && config.screenHeightDp >= 560
+        // This class also participates in the normal, narrow Pixel 6 suite.
+        // Only the dedicated expanded-screen test invocation has a strict gate:
+        // the native screenshot validator independently requires the PNG file.
+        val strict = androidx.test.platform.app.InstrumentationRegistry.getArguments()
+            .getString("r3StrictCapture") == "true"
+        if (!expanded && !strict) return
+        check(expanded) {
             "R3_NATIVE_LAYOUT_UNAVAILABLE: observed ${config.screenWidthDp}x${config.screenHeightDp}dp " +
                 "orientation=${config.orientation}; expected expanded landscape host"
         }
