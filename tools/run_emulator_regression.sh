@@ -81,20 +81,40 @@ if [[ "$r3_status" -eq 0 ]]; then
     "-Pandroid.testInstrumentationRunnerArguments.class=io.github.assworkbench.app.UigsVisualCaptureInstrumentedTest#captureR3FixedReferenceWhenExpanded"
   r3_status=$?
   report_results
-  # A successful Gradle invocation is not evidence: the test may have skipped.
-  # A failed exec-out may output a short plaintext run-as error to stdout.
-  # Validate complete pixel data, PNG CRCs, dimensions and zlib stream.
-  if timeout 15s adb exec-out run-as io.github.assworkbench.app \
-      cat "files/$r3_capture" > "$r3_output" 2>/dev/null; then
-    if python3 "$runner_tools_dir/verify_r3_png_capture.py" "$r3_output" \
+  # The test writes the original PNG into its private filesDir and mirrors it
+  # into app-specific external storage. ADB run-as is not reliable on all
+  # emulator system images: try the public debug mirror, then private fallback.
+  # Both must pass full decoded PNG integrity and reference dimensions.
+  r3_valid=false
+  external_capture="/sdcard/Android/data/io.github.assworkbench.app/files/uigs-capture/$r3_capture"
+  if timeout 15s adb exec-out cat "$external_capture" > "$r3_output" 2>/dev/null &&
+      python3 "$runner_tools_dir/verify_r3_png_capture.py" "$r3_output" \
         --width 1600 --height 960; then
-      echo "R3_NATIVE_CAPTURE_VALID: sha256=$(sha256sum "$r3_output" | cut -d' ' -f1) size=$(wc -c < "$r3_output")"
-    else
-      echo "R3_NATIVE_CAPTURE_INVALID: output rejected by PNG validator"
-      r3_status=1
-    fi
+    echo "R3_NATIVE_CAPTURE_SOURCE: external-debug-mirror"
+    r3_valid=true
   else
-    echo "R3_NATIVE_CAPTURE_MISSING: run-as could not retrieve screenshot"
+    echo "R3_NATIVE_CAPTURE_DIAGNOSTIC: external path failed/invalid; checking app-private fallback"
+    timeout 10s adb shell ls -l "$external_capture" || true
+    if timeout 15s adb exec-out run-as io.github.assworkbench.app \
+        cat "files/$r3_capture" > "$r3_output" 2>/dev/null &&
+        python3 "$runner_tools_dir/verify_r3_png_capture.py" "$r3_output" \
+          --width 1600 --height 960; then
+      echo "R3_NATIVE_CAPTURE_SOURCE: app-private-run-as"
+      r3_valid=true
+    else
+      echo "R3_NATIVE_CAPTURE_DIAGNOSTIC: private path failed/invalid"
+      timeout 10s adb shell run-as io.github.assworkbench.app \
+        ls -l "files/$r3_capture" || true
+      if [[ -f "$r3_output" ]]; then
+        echo "R3_NATIVE_CAPTURE_DIAGNOSTIC: collected bytes=$(wc -c < "$r3_output")"
+        head -c 40 "$r3_output" | od -An -tx1 || true
+      fi
+    fi
+  fi
+  if [[ "$r3_valid" == true ]]; then
+    echo "R3_NATIVE_CAPTURE_VALID: sha256=$(sha256sum "$r3_output" | cut -d' ' -f1) size=$(wc -c < "$r3_output")"
+  else
+    echo "R3_NATIVE_CAPTURE_MISSING: no valid 1600x960 compositor PNG"
     r3_status=1
   fi
 fi
