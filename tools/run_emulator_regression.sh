@@ -128,8 +128,19 @@ if [[ "$r3_status" -eq 0 ]]; then
     r3_status=1
   fi
 fi
-# Do not mix this one-shot capture with the later standard Gradle suite: its
-# normal install/uninstall cycle and XML isolation remain unchanged.
+# Direct adb install uses the prebuilt debug APK signature. Gradle may
+# regenerate an APK signed with a different ephemeral CI key on its next
+# invocation. Uninstall BOTH direct-capture packages before Gradle installs
+# its own app/test APKs. Do this after file extraction, never before it.
+echo "---- isolate direct capture APKs before Gradle emulator suite ----"
+if ! timeout 30s adb uninstall io.github.assworkbench.app.test; then
+  echo "R3_CAPTURE_CLEANUP_FAILED: test package could not be uninstalled"
+  r3_status=1
+fi
+if ! timeout 30s adb uninstall io.github.assworkbench.app; then
+  echo "R3_CAPTURE_CLEANUP_FAILED: target package could not be uninstalled"
+  r3_status=1
+fi
 timeout 10s adb shell wm size reset || true
 timeout 10s adb shell wm density reset || true
 timeout 10s adb shell settings put system user_rotation 0 || true
