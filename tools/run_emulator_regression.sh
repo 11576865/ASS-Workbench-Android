@@ -76,66 +76,59 @@ timeout 10s adb shell wm density 160 || r3_status=1
 timeout 10s adb shell settings put system user_rotation 1 || r3_status=1
 timeout 10s adb shell wm size || true
 timeout 10s adb shell wm density || true
-# Instrumentation may uninstall the debug app on return; an indexed PNG logcat
-# envelope is therefore the durable transport, independent of app file access.
-timeout 10s adb logcat -G 8M || true
-timeout 10s adb logcat -c || true
+# Gradle connectedDebugAndroidTest uninstalls the debug APK after each run.
+# The previous 163932-byte compositor PNG was valid inside the Activity, but
+# later adb extraction saw only a 52-byte run-as failure and Android logd
+# dropped chunks 53..78 of 79. Do not transport image bytes through logcat.
+# Install the same debug/test APKs and invoke ONLY the R3 test with am
+# instrument, leaving the debuggable package installed until adb exec-out
+# run-as copies its real PNG bytes to the runner.
 if [[ "$r3_status" -eq 0 ]]; then
-  run_attempt "${ASSWB_R3_TEST_TIMEOUT:-5m}" \
-    "-Pandroid.testInstrumentationRunnerArguments.class=io.github.assworkbench.app.UigsVisualCaptureInstrumentedTest#captureR3FixedReferenceWhenExpanded" \
-    "-Pandroid.testInstrumentationRunnerArguments.r3StrictCapture=true"
-  r3_status=$?
-  report_results
-  # The test writes the original PNG into its private filesDir and mirrors it
-  # into app-specific external storage. ADB run-as is not reliable on all
-  # emulator system images: try the public debug mirror, then private fallback.
-  # Both must pass full decoded PNG integrity and reference dimensions.
-  r3_valid=false
-  external_capture="/sdcard/Android/data/io.github.assworkbench.app/files/uigs-capture/$r3_capture"
-  if timeout 15s adb exec-out cat "$external_capture" > "$r3_output" 2>/dev/null &&
-      python3 "$runner_tools_dir/verify_r3_png_capture.py" "$r3_output" \
-        --width 1600 --height 960; then
-    echo "R3_NATIVE_CAPTURE_SOURCE: external-debug-mirror"
-    r3_valid=true
-  else
-    echo "R3_NATIVE_CAPTURE_DIAGNOSTIC: external path failed/invalid; checking app-private fallback"
-    timeout 10s adb shell ls -l "$external_capture" || true
-    if timeout 15s adb exec-out run-as io.github.assworkbench.app \
-        cat "files/$r3_capture" > "$r3_output" 2>/dev/null &&
-        python3 "$runner_tools_dir/verify_r3_png_capture.py" "$r3_output" \
-          --width 1600 --height 960; then
-      echo "R3_NATIVE_CAPTURE_SOURCE: app-private-run-as"
-      r3_valid=true
+  if timeout 180s gradle :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace &&
+      timeout 45s adb install -r -t app/build/outputs/apk/debug/app-debug.apk &&
+      timeout 45s adb install -r -t app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk; then
+    instrument_log="$report_session_dir/r3-instrumentation.txt"
+    echo "---- direct R3 AndroidJUnitRunner: preserve installed app until capture ----"
+    if timeout 180s adb shell am instrument -w \
+        -e class 'io.github.assworkbench.app.UigsVisualCaptureInstrumentedTest#captureR3FixedReferenceWhenExpanded' \
+        -e r3StrictCapture true \
+        'io.github.assworkbench.app.test/androidx.test.runner.AndroidJUnitRunner' \
+        > "$instrument_log" 2>&1; then
+      # Android am instrument may exit 0 when JUnit reports a test failure.
+      # Require positive proof that exactly this test finished successfully.
+      if python3 "$runner_tools_dir/verify_r3_instrumentation.py" "$instrument_log"; then
+        echo "R3_INSTRUMENTATION_SUCCESS: single native expanded test passed"
+      else
+        cat "$instrument_log"
+        r3_status=1
+      fi
     else
-      echo "R3_NATIVE_CAPTURE_DIAGNOSTIC: private path failed/invalid"
-      timeout 10s adb shell run-as io.github.assworkbench.app \
-        ls -l "files/$r3_capture" || true
-      if [[ -f "$r3_output" ]]; then
-        echo "R3_NATIVE_CAPTURE_DIAGNOSTIC: collected bytes=$(wc -c < "$r3_output")"
-        head -c 40 "$r3_output" | od -An -tx1 || true
+      echo "R3_INSTRUMENTATION_FAILED: am instrument command failed/timed out"
+      tail -n 85 "$instrument_log" || true
+      r3_status=1
+    fi
+    if [[ "$r3_status" -eq 0 ]]; then
+      if timeout 15s adb exec-out run-as io.github.assworkbench.app \
+          cat "files/$r3_capture" > "$r3_output" 2>/dev/null &&
+          python3 "$runner_tools_dir/verify_r3_png_capture.py" "$r3_output" \
+            --width 1600 --height 960; then
+        echo "R3_NATIVE_CAPTURE_VALID: sha256=$(sha256sum "$r3_output" | cut -d' ' -f1) size=$(wc -c < "$r3_output")"
+        echo "R3_NATIVE_CAPTURE_SOURCE: app-private-run-as-before-uninstall"
+      else
+        echo "R3_NATIVE_CAPTURE_MISSING: direct instrumentation passed but app-private PNG unavailable/invalid"
+        if [[ -f "$r3_output" ]]; then
+          echo "R3_NATIVE_CAPTURE_DIAGNOSTIC: bytes=$(wc -c < "$r3_output")"
+        fi
+        r3_status=1
       fi
     fi
-  fi
-  if [[ "$r3_valid" != true ]]; then
-    echo "R3_NATIVE_CAPTURE_DIAGNOSTIC: app removed by instrumentation; recovering SHA-verified PNG logcat envelope"
-    r3_logcat="$report_session_dir/r3-capture.logcat.txt"
-    if timeout 20s adb logcat -d -s AsswbVisual:I '*:S' > "$r3_logcat" &&
-        python3 "$runner_tools_dir/extract_r3_png_logcat.py" "$r3_logcat" "$r3_output" --name "$r3_capture" &&
-        python3 "$runner_tools_dir/verify_r3_png_capture.py" "$r3_output" \
-          --width 1600 --height 960; then
-      echo "R3_NATIVE_CAPTURE_SOURCE: sha256-verified-logcat"
-      r3_valid=true
-    else
-      echo "R3_NATIVE_CAPTURE_DIAGNOSTIC: no complete trustworthy PNG in logcat"
-    fi
-  fi
-  if [[ "$r3_valid" == true ]]; then
-    echo "R3_NATIVE_CAPTURE_VALID: sha256=$(sha256sum "$r3_output" | cut -d' ' -f1) size=$(wc -c < "$r3_output")"
   else
-    echo "R3_NATIVE_CAPTURE_MISSING: no valid 1600x960 compositor PNG"
+    echo "R3_INSTRUMENTATION_SETUP_FAILED: could not build or install exact-head debug/test APKs"
     r3_status=1
   fi
 fi
+# Do not mix this one-shot capture with the later standard Gradle suite: its
+# normal install/uninstall cycle and XML isolation remain unchanged.
 timeout 10s adb shell wm size reset || true
 timeout 10s adb shell wm density reset || true
 timeout 10s adb shell settings put system user_rotation 0 || true
