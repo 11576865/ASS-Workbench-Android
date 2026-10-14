@@ -1024,9 +1024,21 @@ private fun FixedWorkspace(
     }
 
     val listPane: @Composable (Modifier) -> Unit = { paneModifier ->
-        SubtitleNavigationHost(state.subtitleFilter, searchOpen,
-            viewModel::setSubtitleFilter, onCloseSearch, paneModifier) {
-            EventWorkspace(
+        Column(paneModifier) {
+            if (LocalConfiguration.current.screenWidthDp >= 1180) {
+                OutlinedTextField(
+                    value = state.subtitleFilter.quickText,
+                    onValueChange = viewModel::setQuery,
+                    placeholder = { Text("内容 / 时间 / 样式 / ID") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp)
+                        .heightIn(min = 48.dp).testTag("r3-subtitle-search"),
+                    textStyle = MaterialTheme.typography.bodySmall,
+                )
+            }
+            SubtitleNavigationHost(state.subtitleFilter, searchOpen,
+                viewModel::setSubtitleFilter, onCloseSearch, Modifier.weight(1f)) {
+                EventWorkspace(
                 state = state,
                 viewModel = viewModel,
                 issuesByEvent = issues.groupBy { it.eventId },
@@ -1041,9 +1053,9 @@ private fun FixedWorkspace(
                 tool = WorkbenchTool.TEXT,
                 modifier = Modifier.weight(1f),
             ) { }
+            }
         }
     }
-
     val inspector: @Composable (Modifier) -> Unit = { paneModifier ->
         Surface(
             modifier = paneModifier.testTag("fixed-inspector"),
