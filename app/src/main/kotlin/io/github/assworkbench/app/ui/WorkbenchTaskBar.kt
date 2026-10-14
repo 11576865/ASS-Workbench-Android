@@ -25,7 +25,6 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.Button
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -177,11 +176,15 @@ internal fun WorkbenchTaskBar(
             if (onToggleSpatialHost != null && LocalConfiguration.current.screenWidthDp >= 1180) {
                 // The R3 reference puts the two independent UI hosts in the
                 // task strip, not beside the document title or inside a tool.
-                FilterChip(selected = true, onClick = {},
+                Surface(
                     modifier = Modifier.testTag("fixed-r3-main-host"),
-                    label = {
-                        Text("主 UI")
-                    })
+                    shape = MaterialTheme.shapes.small,
+                    color = MaterialTheme.colorScheme.primary,
+                ) {
+                    Text("主 UI", color = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 9.dp),
+                        style = MaterialTheme.typography.labelMedium)
+                }
                 OutlinedButton(onClick = onToggleSpatialHost,
                     modifier = Modifier.testTag("fixed-r3-spatial-switch")
                         .semantics { contentDescription = "切换至无限画布" }) {
