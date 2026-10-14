@@ -23,8 +23,10 @@ jobs:
       - name: Validate Actions artifact policy
         run: python3 tools/check_artifact_policy.py
 
-      - name: Validate R3 native screenshot evidence parser
-        run: python3 -m unittest discover -s tools -p test_verify_r3_png_capture.py -v
+      - name: Validate R3 native screenshot evidence parsers
+        run: |
+          python3 -m unittest discover -s tools -p test_verify_r3_png_capture.py -v
+          python3 -m unittest discover -s tools -p test_extract_r3_png_logcat.py -v
 
       - uses: actions/checkout@v4
         with:
