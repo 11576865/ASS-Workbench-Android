@@ -88,5 +88,40 @@ run_attempt "${ASSWB_SUITE_TEST_TIMEOUT:-12m}"
 suite_status=$?
 report_results
 
+# Separate, exact R3 design-reference capture. The ordinary Pixel 6 suite
+# intentionally skips this test; it cannot provide 1600x960-equivalent evidence.
+# Emulator overrides are ephemeral and always reset before the job exits.
+r3_status=0
+r3_capture="ASS.R3.FIXED.PRODUCTION_REFERENCE.png"
+r3_output="$report_session_dir/$r3_capture"
+echo "---- R3 expanded native capture (1600x960 pixels at 160 dpi) ----"
+timeout 10s adb shell settings put system accelerometer_rotation 0 || true
+timeout 10s adb shell settings put system user_rotation 1 || true
+timeout 10s adb shell wm size 1600x960 || r3_status=1
+timeout 10s adb shell wm density 160 || r3_status=1
+timeout 10s adb shell wm size || true
+timeout 10s adb shell wm density || true
+if [[ "$r3_status" -eq 0 ]]; then
+  # One targeted instrumented method, not the full suite repeated on a tablet.
+  run_attempt "${ASSWB_R3_TEST_TIMEOUT:-5m}" \
+    "-Pandroid.testInstrumentationRunnerArguments.class=io.github.assworkbench.app.UigsVisualCaptureInstrumentedTest#captureR3FixedReferenceWhenExpanded"
+  r3_status=$?
+  report_results
+  # A skipped test may return zero. It is not R3 capture evidence.
+  if ! timeout 15s adb exec-out run-as io.github.assworkbench.app \
+      cat "files/$r3_capture" > "$r3_output" 2>/dev/null ||
+      [[ ! -s "$r3_output" ]]; then
+    echo "R3_NATIVE_CAPTURE_MISSING: targeted test had no compositor PNG"
+    r3_status=1
+  else
+    echo "R3_NATIVE_CAPTURE_PRESENT: sha256=$(sha256sum "$r3_output" | cut -d' ' -f1) size=$(wc -c < "$r3_output")"
+  fi
+fi
+timeout 10s adb shell wm size reset || true
+timeout 10s adb shell wm density reset || true
+timeout 10s adb shell settings put system accelerometer_rotation 1 || true
+echo "R3_CAPTURE_EXIT_STATUS=$r3_status"
+# Preserve the original regression failure; capture is a distinct mandatory gate.
 if [[ "$projection_status" -ne 0 ]]; then exit "$projection_status"; fi
-exit "$suite_status"
+if [[ "$suite_status" -ne 0 ]]; then exit "$suite_status"; fi
+exit "$r3_status"
