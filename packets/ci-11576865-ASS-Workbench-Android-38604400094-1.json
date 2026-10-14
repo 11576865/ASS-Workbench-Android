@@ -1,0 +1,44 @@
+{
+  "packet_version": 1,
+  "packet_id": "ci-11576865-ASS-Workbench-Android-38604400094-1",
+  "status": "pending",
+  "record_type": "ci_failure",
+  "title": "Android CI: failure",
+  "summary": "Tracked CI workflow did not complete successfully. Source adapter captured failed job/step evidence when available.",
+  "source_repository": "11576865/ASS-Workbench-Android",
+  "source_event": "workflow_run",
+  "source_ref": "feat/r3-fixed-visual-layout-20261014",
+  "source_sha": "3c69e84523a58a8b7872d5ff80596c4c65c58ce2",
+  "source_url": "https://github.com/11576865/ASS-Workbench-Android/actions/runs/38604400094",
+  "created_at": "2026-10-14T17:11:08+00:00",
+  "dedupe_key": "workflow_run:11576865/ASS-Workbench-Android:38604400094:1",
+  "routing_hints": [
+    "interface-grammar",
+    "operations",
+    "red-reason",
+    "reliability"
+  ],
+  "evidence": {
+    "workflow": "Android CI",
+    "run_id": "38604400094",
+    "run_attempt": "1",
+    "conclusion": "failure",
+    "trigger_event": "pull_request",
+    "failed_jobs": [
+      {
+        "id": 115991459172,
+        "name": "build",
+        "conclusion": "failure"
+      }
+    ],
+    "failed_steps": [
+      {
+        "job": "build",
+        "number": 4,
+        "name": "Validate R3 native screenshot evidence parsers",
+        "conclusion": "failure"
+      }
+    ],
+    "capture_error": ""
+  }
+}
