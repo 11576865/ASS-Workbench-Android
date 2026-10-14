@@ -1132,6 +1132,7 @@ private fun FixedWorkspace(
                     onEditEventPosition = onEditEventPosition,
                     interactionRegistry = if (activeTool == WorkbenchTool.POSITION) interactionRegistry else null,
                     viewportGesturesEnabled = positionTargetId == null,
+                    r3DockedTransport = policy.profile == WorkbenchLayoutProfile.THREE_PANE,
                     onVideoAspectRatio = { aspect ->
                         if (aspect.isFinite() && aspect in 0.25f..4f) r3MediaAspect = aspect
                     },
@@ -1256,6 +1257,7 @@ private fun WorkbenchPreview(
     onEnableRenderer: () -> Unit,
     onEditEventPosition: (Long) -> Unit = { id -> viewModel.focusEvent(id, seek = false) },
     onVideoAspectRatio: (Float) -> Unit = {},
+    r3DockedTransport: Boolean = false,
     interactionRegistry: InteractionOverlayRegistry? = null,
     viewportGesturesEnabled: Boolean = false,
     onObjectLongPress: ((PreviewObjectPick) -> Unit)? = null,
@@ -1345,6 +1347,7 @@ private fun WorkbenchPreview(
         rendererEnabled = rendererEnabled,
         onEnableRenderer = onEnableRenderer,
         fillViewport = true,
+        r3DockedTransport = r3DockedTransport,
         onVideoAspectRatio = onVideoAspectRatio,
         interactionRegistry = interactionRegistry,
         viewportGesturesEnabled = viewportGesturesEnabled,
