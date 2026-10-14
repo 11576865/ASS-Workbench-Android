@@ -1247,6 +1247,7 @@ private fun FixedWorkspace(
                                         document = state.document,
                                         event = resolvedEvent,
                                         modifier = Modifier.fillMaxWidth(),
+                                        onOpenRaw = { selectTool(WorkbenchTool.TEXT) },
                                     )
                                     HorizontalDivider()
                                 }
