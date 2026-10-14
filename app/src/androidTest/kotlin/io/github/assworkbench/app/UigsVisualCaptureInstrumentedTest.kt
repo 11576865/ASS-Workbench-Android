@@ -12,6 +12,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import io.github.assworkbench.app.ui.WorkbenchTool
 import java.io.FileOutputStream
 import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -79,6 +80,41 @@ class UigsVisualCaptureInstrumentedTest {
             captureDisplay("ASS.${tool.name}_TOOL.FIXTURE_LANDSCAPE.png")
         }
 
+    }
+
+    /**
+     * A compositor screenshot of the real R3 window, for visual diff against
+     * ASS_Workbench_R3_FIXED.png. A phone emulator must not masquerade as the
+     * 1600x960 reference, so only a usable expanded window can capture this.
+     */
+    @Test
+    fun captureR3FixedReferenceWhenExpanded() {
+        val config = composeRule.activity.resources.configuration
+        assumeTrue("R3 three-column reference requires expanded window",
+            config.screenWidthDp >= 1180 && config.screenHeightDp >= 560)
+
+        composeRule.runOnUiThread { composeRule.activity.restoreDeterministicFixture() }
+        composeRule.waitUntil(timeoutMillis = 10_000) {
+            viewModel.state.value.subtitleLoaded &&
+                viewModel.state.value.document.events.size == 2
+        }
+        viewModel.focusEvent(1L, seek = false)
+        composeRule.waitForIdle()
+
+        val nav = composeRule.onNodeWithTag("r3-event-navigation", useUnmergedTree = true)
+            .assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+        val media = composeRule.onNodeWithTag("r3-video", useUnmergedTree = true)
+            .assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+        val timeline = composeRule.onNodeWithTag("r3-timeline-dock", useUnmergedTree = true)
+            .assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+        val inspector = composeRule.onNodeWithTag("r3-parameter-inspector", useUnmergedTree = true)
+            .assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+
+        assertTrue("R3 navigator must precede video", nav.right <= media.left + 2f)
+        assertTrue("R3 video must be above the same live timeline", media.bottom <= timeline.top + 2f)
+        assertTrue("R3 timeline must precede inspector", timeline.right <= inspector.left + 2f)
+        assertTrue("R3 media should lead the center region", media.height > 0f)
+        captureDisplay("ASS.R3.FIXED.PRODUCTION_REFERENCE.png")
     }
 
     private fun openFixedTool(tool: WorkbenchTool) {
