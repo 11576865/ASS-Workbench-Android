@@ -1294,7 +1294,16 @@ private fun FixedWorkspace(
         }
     }
     if (directoryOpen) {
-        AlertDialog(
+        val screen = LocalConfiguration.current
+        if (screen.screenWidthDp >= 1180 && screen.screenHeightDp >= 560) {
+            R3ToolCatalogDialog(
+                onDismiss = { directoryOpen = false },
+                onOpenTool = { tool ->
+                    directoryOpen = false
+                    selectTool(tool)
+                },
+            )
+        } else AlertDialog(
             onDismissRequest = { directoryOpen = false },
             title = { Text("工具目录") },
             text = {
