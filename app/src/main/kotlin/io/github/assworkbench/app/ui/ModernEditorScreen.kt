@@ -2180,6 +2180,10 @@ private fun InlineEventEditor(
         metadataDraft.reconcile(EventMetadataValues.from(event))
     }
     val playbackPositionMs by viewModel.playbackPositionMs.collectAsState()
+    val r3UseWriteReview = LocalConfiguration.current.screenWidthDp >= 1180
+    var r3ReviewOpen by rememberSaveable(state.workspaceSessionId, event.id) {
+        mutableStateOf(false)
+    }
 
     LaunchedEffect(rawDraft, event.text) {
         rawDraft.reconcile(event.text)
@@ -2268,12 +2272,40 @@ private fun InlineEventEditor(
                 rawBaseText = event.text
             }) { Text(if (rawExternalConflict) "重新载入" else "还原") }
             Button(
-                onClick = { viewModel.updateEventText(event.id, rawField.text) },
+                onClick = {
+                    if (r3UseWriteReview) r3ReviewOpen = true
+                    else viewModel.updateEventText(event.id, rawField.text)
+                },
                 modifier = Modifier.testTag("event-apply-text-${event.id}"),
             ) {
-                Text(if (rawExternalConflict) "以草稿覆盖" else "应用正文")
+                Text(if (r3UseWriteReview) "核对并应用"
+                    else if (rawExternalConflict) "以草稿覆盖" else "应用正文")
             }
         }
+    }
+    if (r3UseWriteReview && r3ReviewOpen && rawDirty) {
+        val receipt = R3TextWriteReceipt(
+            eventId = event.id,
+            eventStyle = event.style,
+            baseText = rawBaseText,
+            canonicalText = event.text,
+            draftText = rawField.text,
+        )
+        R3TextWriteReviewDialog(
+            receipt = receipt,
+            currentEventText = event.text,
+            onDismiss = { r3ReviewOpen = false },
+            onConfirm = {
+                val latest = viewModel.state.value
+                val latestText = latest.document.events.firstOrNull { it.id == receipt.eventId }?.text
+                // The draft stays untouched if document/session/revision changed.
+                if (latest.workspaceSessionId == state.workspaceSessionId &&
+                    receipt.mayCommit(latestText)) {
+                    viewModel.updateEventText(receipt.eventId, receipt.draftText)
+                    r3ReviewOpen = false
+                }
+            },
+        )
     }
     if (rawExternalConflict) {
         Text(
