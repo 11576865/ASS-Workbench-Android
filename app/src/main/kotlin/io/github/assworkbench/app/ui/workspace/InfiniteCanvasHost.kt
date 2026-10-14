@@ -701,6 +701,17 @@ internal fun InfiniteCanvasHost(
                             modifier = Modifier.testTag("spatial-add-tool")) {
                             Icon(Icons.Filled.Add, "添加工具")
                         }
+                        SpatialCapabilityMenu(
+                            enabled = !gestureOwned,
+                            timelineVisible = timelineDockVisible,
+                            showLabel = viewportW >= 720f,
+                            onOpenDirectory = ::showToolPicker,
+                            onOpenToolList = { toolDrawerOpen = true },
+                            onOpenOverview = { birdseyeOpen = true },
+                            onToggleTimeline = { timelineDockVisible = !timelineDockVisible },
+                            onTogglePrecision = if (entry.id.startsWith("POSITION:")) onTogglePrecision else null,
+                            precisionEnabled = precisionEnabled,
+                        )
                         IconButton(onClick = { birdseyeOpen = true }, enabled = !gestureOwned,
                             modifier = Modifier.testTag("spatial-birdseye")) {
                             Icon(Icons.Filled.Apps, "鸟瞰")
@@ -1171,12 +1182,99 @@ internal fun InfiniteCanvasHost(
                     }
                 }
                 VerticalDivider(Modifier.height(26.dp).padding(horizontal = 4.dp))
+                SpatialCapabilityMenu(
+                    enabled = !gestureOwned,
+                    timelineVisible = timelineDockVisible,
+                    showLabel = viewportW >= 720f,
+                    onOpenDirectory = ::showToolPicker,
+                    onOpenToolList = { toolDrawerOpen = true },
+                    onOpenOverview = { birdseyeOpen = true },
+                    onToggleTimeline = { timelineDockVisible = !timelineDockVisible },
+                )
                 TextButton(onClick = { birdseyeOpen = true }, enabled = !gestureOwned,
                     modifier = Modifier.testTag("spatial-birdseye")) {
                     Icon(Icons.Filled.Map, null, Modifier.size(18.dp))
                     Spacer(Modifier.width(4.dp))
                     Text("鸟瞰")
                 }
+            }
+        }
+    }
+}
+
+/**
+ * A fixed-density, always-visible entry to *working* spatial capabilities.
+ * This does not introduce another presentation, tool registry, or document owner.
+ * Actions delegate to the same production callbacks as their existing controls.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun SpatialCapabilityMenu(
+    enabled: Boolean,
+    timelineVisible: Boolean,
+    showLabel: Boolean = false,
+    onOpenDirectory: () -> Unit,
+    onOpenToolList: () -> Unit,
+    onOpenOverview: () -> Unit,
+    onToggleTimeline: () -> Unit,
+    onTogglePrecision: (() -> Unit)? = null,
+    precisionEnabled: Boolean = false,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    LaunchedEffect(enabled) { if (!enabled) expanded = false }
+    Box {
+        TooltipBox(
+            positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+            tooltip = { PlainTooltip { Text("空间功能：工具、鸟瞰、时间轴和精密操纵") } },
+            state = rememberTooltipState(),
+        ) {
+            if (showLabel) {
+                TextButton(
+                    enabled = enabled,
+                    onClick = { expanded = true },
+                    modifier = Modifier.testTag("spatial-capability-menu"),
+                ) {
+                    Icon(Icons.Filled.Tune, null, Modifier.size(18.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("空间功能")
+                }
+            } else {
+                IconButton(
+                    enabled = enabled,
+                    onClick = { expanded = true },
+                    modifier = Modifier.testTag("spatial-capability-menu"),
+                ) {
+                    Icon(Icons.Filled.Tune, "空间功能")
+                }
+            }
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            DropdownMenuItem(
+                text = { Text("专业工具目录") },
+                modifier = Modifier.testTag("spatial-capability-directory"),
+                onClick = { expanded = false; onOpenDirectory() },
+            )
+            DropdownMenuItem(
+                text = { Text("工具实例列表") },
+                modifier = Modifier.testTag("spatial-capability-tool-list"),
+                onClick = { expanded = false; onOpenToolList() },
+            )
+            DropdownMenuItem(
+                text = { Text("鸟瞰画布") },
+                modifier = Modifier.testTag("spatial-capability-overview"),
+                onClick = { expanded = false; onOpenOverview() },
+            )
+            DropdownMenuItem(
+                text = { Text(if (timelineVisible) "收起常驻时间轴" else "显示常驻时间轴") },
+                modifier = Modifier.testTag("spatial-capability-timeline"),
+                onClick = { expanded = false; onToggleTimeline() },
+            )
+            if (onTogglePrecision != null) {
+                DropdownMenuItem(
+                    text = { Text(if (precisionEnabled) "关闭精密操控" else "开启精密操控") },
+                    modifier = Modifier.testTag("spatial-capability-precision"),
+                    onClick = { expanded = false; onTogglePrecision() },
+                )
             }
         }
     }
