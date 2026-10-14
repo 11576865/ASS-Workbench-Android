@@ -186,6 +186,23 @@ class UigsVisualCaptureInstrumentedTest {
             Log.i("AsswbVisual",
                 "R3_NATIVE_FILE:${mirror.absolutePath}:bytes=${mirror.length()}")
 
+            // Gradle's connectedAndroidTest may uninstall the test/debug host
+            // before the shell regains control. Stream the compositor PNG into
+            // a bounded, indexed Android logcat evidence envelope while this
+            // instrumentation process is still alive. Never depend on run-as.
+            val pngBytes = target.readBytes()
+            check(pngBytes.size in 1024..5_000_000) {
+                "R3 screenshot has unexpected PNG size: ${pngBytes.size}"
+            }
+            val pngSha = java.security.MessageDigest.getInstance("SHA-256")
+                .digest(pngBytes).joinToString("") { "%02x".format(it.toInt() and 255) }
+            val pngChunks = Base64.encodeToString(pngBytes, Base64.NO_WRAP).chunked(2800)
+            Log.i("AsswbVisual", "R3_PNG_BEGIN:$fileName:${pngBytes.size}:$pngSha:${pngChunks.size}")
+            pngChunks.forEachIndexed { index, part ->
+                Log.i("AsswbVisual", "R3_PNG:$index:$part")
+            }
+            Log.i("AsswbVisual", "R3_PNG_END:$fileName")
+
             val thumbnailWidth = 900
             val thumbnailHeight = (bitmap.height * (thumbnailWidth.toFloat() / bitmap.width)).toInt()
             val thumbnail = Bitmap.createScaledBitmap(bitmap, thumbnailWidth, thumbnailHeight, true)
