@@ -1,6 +1,7 @@
 package io.github.assworkbench.app.ui
 
 import io.github.assworkbench.domain.AssEffectiveValue
+import io.github.assworkbench.app.ui.workspace.WorkspaceBinding
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -8,6 +9,14 @@ import org.junit.Test
 
 /** Provenance is descriptive read evidence, not an implicit write operation. */
 class R3InspectorProvenanceTest {
+    @Test fun rawShortcutNeverSilentlyRetargetsPinnedOrSelectionEvidence() {
+        assertTrue(r3RawShortcutAllowed(WorkspaceBinding.FollowFocus, 39L, 39L))
+        assertFalse(r3RawShortcutAllowed(WorkspaceBinding.FollowFocus, 39L, 40L))
+        assertFalse(r3RawShortcutAllowed(WorkspaceBinding.FollowFocus, null, 39L))
+        assertFalse(r3RawShortcutAllowed(WorkspaceBinding.PinnedEvent(39L), 39L, 39L))
+        assertFalse(r3RawShortcutAllowed(WorkspaceBinding.FollowSelection, 39L, 39L))
+    }
+
     @Test fun eventOverrideAndInheritedStyleKeepDifferentReadLabels() {
         val override = r3ValueEvidence(AssEffectiveValue(
             name = "Size", styleValue = "42", overrideValue = "52",
