@@ -80,11 +80,12 @@ timeout 10s adb shell wm density || true
 # The previous 163932-byte compositor PNG was valid inside the Activity, but
 # later adb extraction saw only a 52-byte run-as failure and Android logd
 # dropped chunks 53..78 of 79. Do not transport image bytes through logcat.
-# Install the same debug/test APKs and invoke ONLY the R3 test with am
-# instrument, leaving the debuggable package installed until adb exec-out
+# Use APKs prebuilt in emulator.yml (outside the device run), invoke ONLY
+# the R3 test with am instrument, and leave the installed app intact until adb exec-out
 # run-as copies its real PNG bytes to the runner.
 if [[ "$r3_status" -eq 0 ]]; then
-  if timeout 180s gradle :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace &&
+  if test -s app/build/outputs/apk/debug/app-debug.apk &&
+      test -s app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk &&
       timeout 45s adb install -r -t app/build/outputs/apk/debug/app-debug.apk &&
       timeout 45s adb install -r -t app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk; then
     instrument_log="$report_session_dir/r3-instrumentation.txt"
@@ -123,7 +124,7 @@ if [[ "$r3_status" -eq 0 ]]; then
       fi
     fi
   else
-    echo "R3_INSTRUMENTATION_SETUP_FAILED: could not build or install exact-head debug/test APKs"
+    echo "R3_INSTRUMENTATION_SETUP_FAILED: prebuilt exact-head APKs missing or adb install failed"
     r3_status=1
   fi
 fi
