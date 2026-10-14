@@ -14,6 +14,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import io.github.assworkbench.app.ui.WorkbenchTool
 import java.io.ByteArrayOutputStream
 import java.io.FileOutputStream
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -27,6 +28,21 @@ import org.junit.runner.RunWith
  * UiAutomation.takeScreenshot() captures the Android display/compositor rather
  * than a Compose node bitmap.
  */
+/**
+ * UiAutomation may have no accessibility root on headless emulators. Trust a
+ * visible, foreground-focus-owned target Activity in that case; never trust
+ * a root belonging to another process (e.g. launcher ANR overlay).
+ */
+internal fun r3ScreenshotForegroundIsTrusted(
+    accessibilityPackage: String?,
+    targetPackage: String,
+    decorFocused: Boolean,
+    decorShown: Boolean,
+): Boolean = decorShown && (
+    accessibilityPackage == targetPackage ||
+        (accessibilityPackage == null && decorFocused)
+)
+
 @RunWith(AndroidJUnit4::class)
 class UigsVisualCaptureInstrumentedTest {
     @get:Rule
@@ -34,6 +50,16 @@ class UigsVisualCaptureInstrumentedTest {
 
     private val viewModel: EditorViewModel
         get() = composeRule.activity.editorViewModel
+
+    @Test
+    fun screenOwnershipRejectsSystemOverlayAndUnfocusedFallback() {
+        val target = "io.github.assworkbench.app"
+        assertTrue(r3ScreenshotForegroundIsTrusted(target, target, false, true))
+        assertTrue(r3ScreenshotForegroundIsTrusted(null, target, true, true))
+        assertFalse(r3ScreenshotForegroundIsTrusted(null, target, false, true))
+        assertFalse(r3ScreenshotForegroundIsTrusted("com.google.android.apps.nexuslauncher", target, true, true))
+        assertFalse(r3ScreenshotForegroundIsTrusted(target, target, true, false))
+    }
 
     @Test
     fun captureFixedToolFixturesLandscape() {
@@ -198,8 +224,12 @@ class UigsVisualCaptureInstrumentedTest {
                 "R3_FOREGROUND_EVIDENCE: accessibility=${activePackage ?: "<none>"} " +
                     "targetDecorFocused=$targetDecorFocused targetDecorShown=$targetDecorShown")
             check(
-                (activePackage == instrumentation.targetContext.packageName ||
-                    (activePackage == null && targetDecorFocused)) && targetDecorShown
+                r3ScreenshotForegroundIsTrusted(
+                    accessibilityPackage = activePackage,
+                    targetPackage = instrumentation.targetContext.packageName,
+                    decorFocused = targetDecorFocused,
+                    decorShown = targetDecorShown,
+                )
             ) {
                 "R3_NATIVE_SCREEN_OCCLUDED: active accessibility root=" +
                     "${activePackage ?: "<none>"}; target decor focused=$targetDecorFocused " +
