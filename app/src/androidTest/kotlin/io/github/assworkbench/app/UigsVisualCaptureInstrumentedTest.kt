@@ -12,7 +12,6 @@ import androidx.test.platform.app.InstrumentationRegistry
 import io.github.assworkbench.app.ui.WorkbenchTool
 import java.io.FileOutputStream
 import org.junit.Assert.assertTrue
-import org.junit.Assume.assumeTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -89,9 +88,21 @@ class UigsVisualCaptureInstrumentedTest {
      */
     @Test
     fun captureR3FixedReferenceWhenExpanded() {
+        // Emulator wm-size overrides may be expressed in the device's natural
+        // portrait orientation. Explicitly request a landscape Activity here;
+        // otherwise 1600x960 override can still render as 960x1600 dp.
+        composeRule.activityRule.scenario.onActivity { activity ->
+            activity.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+        }
+        composeRule.waitUntil(timeoutMillis = 15_000) {
+            val config = composeRule.activity.resources.configuration
+            config.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+        }
         val config = composeRule.activity.resources.configuration
-        assumeTrue("R3 three-column reference requires expanded window",
-            config.screenWidthDp >= 1180 && config.screenHeightDp >= 560)
+        check(config.screenWidthDp >= 1180 && config.screenHeightDp >= 560) {
+            "R3_NATIVE_LAYOUT_UNAVAILABLE: observed ${config.screenWidthDp}x${config.screenHeightDp}dp " +
+                "orientation=${config.orientation}; expected expanded landscape host"
+        }
 
         composeRule.runOnUiThread { composeRule.activity.restoreDeterministicFixture() }
         composeRule.waitUntil(timeoutMillis = 10_000) {
