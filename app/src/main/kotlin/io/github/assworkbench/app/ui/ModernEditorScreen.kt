@@ -126,7 +126,7 @@ fun ModernEditorScreen(
     onSaveMkv: () -> Unit,
     rendererEnabled: Boolean,
     onEnableRenderer: () -> Unit,
-    appearance: WorkbenchAppearance = WorkbenchAppearance.SYSTEM,
+    appearance: WorkbenchAppearance = WorkbenchAppearance.DARK,
     onAppearanceChange: (WorkbenchAppearance) -> Unit = {},
     initialWorkspaceModeName: String = UiVariantRegistry.default.name,
 ) {
