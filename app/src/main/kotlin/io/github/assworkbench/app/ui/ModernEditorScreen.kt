@@ -1006,6 +1006,8 @@ private fun FixedWorkspace(
     // Navigation is session-root state; reopening this host preserves the chosen task.
     var directoryOpen by rememberSaveable { mutableStateOf(false) }
     var previewScale by rememberSaveable { mutableFloatStateOf(1f) }
+    // Media dimensions are observational. They never become ASS or project layout state.
+    var r3MediaAspect by remember(state.project.videoUri) { mutableFloatStateOf(16f / 9f) }
 
     var previewDensityName by rememberSaveable { mutableStateOf(PreviewDensity.FULL.name) }
     val requestedPreview = runCatching { PreviewDensity.valueOf(previewDensityName) }
@@ -1130,25 +1132,57 @@ private fun FixedWorkspace(
                     onEditEventPosition = onEditEventPosition,
                     interactionRegistry = if (activeTool == WorkbenchTool.POSITION) interactionRegistry else null,
                     viewportGesturesEnabled = positionTargetId == null,
+                    onVideoAspectRatio = { aspect ->
+                        if (aspect.isFinite() && aspect in 0.25f..4f) r3MediaAspect = aspect
+                    },
                     modifier = previewModifier.testTag("preview-workspace"),
                 )
             }
 
             when (policy.profile) {
-                WorkbenchLayoutProfile.THREE_PANE -> Row(Modifier.fillMaxSize()) {
-                    if (previewVisible) {
-                        val previewWeight = if (policy.effectivePreview == PreviewDensity.COMPACT) 0.22f else 0.32f
-                        preview(Modifier.weight(previewWeight).fillMaxHeight())
-                        VerticalDivider()
+                WorkbenchLayoutProfile.THREE_PANE -> {
+                    // R3 design reference: EVENT navigator | VIDEO + REAL TIMELINE | inspector.
+                    // Retain the existing production editor and player instead of drawing
+                    // placeholder imagery or duplicating state between two mock surfaces.
+                    val geometry = R3FixedLayoutPolicy.resolve(
+                        widthDp = maxWidth.value,
+                        heightDp = maxHeight.value,
+                        mediaAspect = r3MediaAspect,
+                        preview = policy.effectivePreview,
+                    )
+                    Row(Modifier.fillMaxSize().testTag("r3-fixed-wide")) {
                         listPane(
-                            Modifier.weight((1f - previewWeight - inspectorFraction).coerceAtLeast(0.20f))
-                                .fillMaxHeight()
+                            Modifier.width(geometry.navigationWidthDp.dp).fillMaxHeight()
+                                .testTag("r3-event-navigation")
                         )
-                    } else {
-                        listPane(Modifier.weight(1f - inspectorFraction).fillMaxHeight())
+                        VerticalDivider()
+                        Column(Modifier.weight(1f).fillMaxHeight()
+                            .testTag("r3-media-timeline")) {
+                            if (previewVisible) {
+                                preview(
+                                    Modifier.fillMaxWidth().height(geometry.mediaHeightDp.dp)
+                                        .testTag("r3-video")
+                                )
+                                HorizontalDivider()
+                            }
+                            // The real waveform/event timeline is always reachable in R3.
+                            // Its playback PTS comes from the same EditorViewModel as the video.
+                            Box(Modifier.weight(1f).fillMaxWidth()
+                                .testTag("r3-timeline-dock")) {
+                                ModernTimelinePane(
+                                    state = state,
+                                    viewModel = viewModel,
+                                    compact = geometry.timelineHeightDp < 260f,
+                                    modifier = Modifier.fillMaxSize(),
+                                )
+                            }
+                        }
+                        VerticalDivider()
+                        movableInspector(
+                            Modifier.width(geometry.inspectorWidthDp.dp).fillMaxHeight()
+                                .testTag("r3-parameter-inspector")
+                        )
                     }
-                    VerticalDivider()
-                    movableInspector(Modifier.weight(inspectorFraction).fillMaxHeight())
                 }
 
                 WorkbenchLayoutProfile.DUAL_PANE -> Row(Modifier.fillMaxSize()) {
