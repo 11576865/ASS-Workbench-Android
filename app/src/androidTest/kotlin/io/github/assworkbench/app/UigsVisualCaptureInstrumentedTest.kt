@@ -121,6 +121,11 @@ class UigsVisualCaptureInstrumentedTest {
         }
         viewModel.focusEvent(1L, seek = false)
         composeRule.waitForIdle()
+        // The R3 drawing shows an Event-local POSITION inspector. The default
+        // Style editor is valid but would be the wrong visual comparison subject.
+        composeRule.onNodeWithTag("fixed-context-tools").performClick()
+        composeRule.onNodeWithTag("fixed-context-POSITION").performClick()
+        composeRule.waitForIdle()
 
         val nav = composeRule.onNodeWithTag("r3-event-navigation", useUnmergedTree = true)
             .assertIsDisplayed().fetchSemanticsNode().boundsInRoot
@@ -142,6 +147,8 @@ class UigsVisualCaptureInstrumentedTest {
         composeRule.onNodeWithTag("r3-inspector-context", useUnmergedTree = true)
             .assertIsDisplayed()
         composeRule.onNodeWithTag("r3-parameter-provenance", useUnmergedTree = true)
+            .assertIsDisplayed()
+        composeRule.onNodeWithTag("r3-raw-event-value", useUnmergedTree = true)
             .assertIsDisplayed()
         captureDisplay("ASS.R3.FIXED.PRODUCTION_REFERENCE.png")
     }
