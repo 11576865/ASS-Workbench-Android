@@ -19,7 +19,19 @@ data class SubtitleFilterState(
         if (kind == SubtitleEventKind.COMMENT && !event.comment) return@filter false
         if (kind == SubtitleEventKind.DIALOGUE && event.comment) return@filter false
         val visible = AssInlineSyntax.visibleText(event.text)
-        (quickText.isBlank() || visible.contains(quickText, true) || event.name.contains(quickText, true) || event.style.contains(quickText, true)) &&
+        // The R3 Event navigator exposes a single visible search for text,
+        // Actor, Style, displayed ASS timestamps, and stable event IDs.
+        // Advanced field-specific filters remain independent AND conditions.
+        val quick = quickText.trim()
+        val idQuery = quick.removePrefix("#")
+        val matchesQuick = quick.isEmpty() ||
+            visible.contains(quick, ignoreCase = true) ||
+            event.name.contains(quick, ignoreCase = true) ||
+            event.style.contains(quick, ignoreCase = true) ||
+            (idQuery.isNotEmpty() && event.id.toString() == idQuery) ||
+            event.start.toAss().contains(quick, ignoreCase = true) ||
+            event.end.toAss().contains(quick, ignoreCase = true)
+        matchesQuick &&
             (text.isBlank() || visible.contains(text, true)) &&
             (actor.isBlank() || event.name.contains(actor, true)) &&
             (style.isBlank() || event.style.contains(style, true))
