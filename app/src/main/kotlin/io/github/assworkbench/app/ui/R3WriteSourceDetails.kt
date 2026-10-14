@@ -11,7 +11,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import io.github.assworkbench.domain.AssDocument
 import io.github.assworkbench.domain.AssEffectiveInspector
-import io.github.assworkbench.domain.AssEffectiveValue
 import io.github.assworkbench.domain.AssEvent
 
 /**
@@ -73,7 +72,10 @@ internal fun r3WriteSourceSummary(
             draftValue = candidate.effectiveValue,
             styleValue = current.styleValue,
             originLabel = origin,
-            styleLabel = current.effectiveStyle ?: event.style,
+            // styleValue is the Event's declared Style baseline even when
+            // a leading \\r switches the current rendered span to another Style.
+            // Label it with event.style to avoid misattributing the baseline.
+            styleLabel = event.style,
             changedEffectiveProperties = changed.size,
             spanOrTimeDependent = current.spanDependent || candidate.spanDependent,
         )
@@ -153,6 +155,11 @@ internal fun R3WriteSourceDetails(
                         style = MaterialTheme.typography.titleSmall)
                     Text("Event #${receipt.eventId} · 局部 Text · 影响 1 条",
                         color = MaterialTheme.colorScheme.primary)
+                    if (summary.changedEffectiveProperties == 0) {
+                        Text("草稿没有改变已识别的首段有效样式值；更改可能仅涉及正文或其他 ASS 语义。",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodySmall)
+                    }
                     if (summary.changedEffectiveProperties > 1) {
                         Text("注意：草稿涉及 ${summary.changedEffectiveProperties} 项有效值变化；此处仅展示首个重点参数。",
                             color = MaterialTheme.colorScheme.tertiary,
