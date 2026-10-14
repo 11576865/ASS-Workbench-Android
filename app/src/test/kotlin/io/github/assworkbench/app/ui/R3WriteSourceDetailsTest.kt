@@ -50,6 +50,26 @@ class R3WriteSourceDetailsTest {
         assertNull(r3WriteSourceSummary(document, event, malformed))
     }
 
+    @Test fun styleResetRetainsTruthfulEventStyleBaseline() {
+        val resetEvent = event.copy(text = "{\\\\rAlternate}当前已切换 Style")
+        val resetDocument = document.copy(
+            styles = document.styles + AssStyle(name = "Alternate", fontSize = 24.0),
+            events = listOf(resetEvent),
+        )
+        val resetReceipt = receipt.copy(
+            baseText = resetEvent.text,
+            canonicalText = resetEvent.text,
+            draftText = "{\\\\rAlternate\\\\fs52}当前已切换 Style",
+        )
+        val summary = r3WriteSourceSummary(resetDocument, resetEvent, resetReceipt)
+        assertNotNull(summary)
+        assertEquals("36", summary!!.styleValue)
+        assertEquals("Opening", summary.styleLabel)
+        assertEquals("Style · Alternate", summary.originLabel)
+        assertEquals("24", summary.originalValue)
+        assertEquals("52", summary.draftValue)
+    }
+
     @Test fun rawChangeWithNoEffectiveValueDifferenceIsNotClaimedAsSizeEdit() {
         val changedWords = receipt.copy(draftText = "{\\pos(960,720)\\fs48}新的字幕正文")
         val summary = r3WriteSourceSummary(document, event, changedWords)
