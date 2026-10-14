@@ -1188,6 +1188,18 @@ private fun FixedWorkspace(
                                     document = state.document,
                                     editorUiState = state.toEditorUiState(),
                                 )
+                                val bindingState = instance.resolveUiBinding(state.toEditorUiState())
+                                val resolvedEvent = bindingState.eventId?.let { id ->
+                                    state.document.events.firstOrNull { it.id == id }
+                                }
+                                val contextTitle = when {
+                                    bindingState.unresolvedPinnedEventId != null ->
+                                        "固定目标 #${bindingState.unresolvedPinnedEventId} 已失效"
+                                    instance.binding == WorkspaceBinding.FollowSelection ->
+                                        "选中 ${state.selectedEventIds.size} 条字幕"
+                                    resolvedEvent != null -> "字幕 #${resolvedEvent.id}"
+                                    else -> "未选择字幕"
+                                }
                                 val bindingLabel = when (val binding = instance.binding) {
                                     WorkspaceBinding.FollowFocus -> "跟随焦点"
                                     WorkspaceBinding.FollowSelection -> "当前选择集"
@@ -1203,7 +1215,7 @@ private fun FixedWorkspace(
                                     ) {
                                         Row(verticalAlignment = Alignment.CenterVertically) {
                                             Text(
-                                                state.focusedEventId?.let { "字幕 #$it" } ?: "未选择字幕",
+                                                contextTitle,
                                                 style = MaterialTheme.typography.titleMedium,
                                                 modifier = Modifier.weight(1f),
                                             )
@@ -1221,6 +1233,18 @@ private fun FixedWorkspace(
                                     }
                                 }
                                 HorizontalDivider()
+                                // Effective values are read-only evidence. They must never
+                                // change the binding or write scope of the live editor.
+                                if ((activeTool == WorkbenchTool.POSITION ||
+                                        activeTool == WorkbenchTool.STYLE) &&
+                                    resolvedEvent != null) {
+                                    R3InspectorProvenance(
+                                        document = state.document,
+                                        event = resolvedEvent,
+                                        modifier = Modifier.fillMaxWidth(),
+                                    )
+                                    HorizontalDivider()
+                                }
                                 Box(Modifier.weight(1f).fillMaxWidth()) {
                                     movableInspector(Modifier.fillMaxSize())
                                 }
