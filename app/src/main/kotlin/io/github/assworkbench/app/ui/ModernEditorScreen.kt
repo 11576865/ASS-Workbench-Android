@@ -554,6 +554,9 @@ fun ModernEditorScreen(
                     onSaveMkv = onSaveMkv,
                     eventEditorStateHolder = eventEditorStateHolder,
                     onOpenVideo = onOpenReferenceVideo,
+                    onToggleSpatialHost = {
+                        selectWorkspaceMode(WorkspacePresentationMode.SPATIAL_EXPERIMENTAL)
+                    },
                     rendererEnabled = rendererEnabled,
                     onEnableRenderer = onEnableRenderer,
                     interactionRegistry = interactionRegistry,
@@ -995,6 +998,7 @@ private fun FixedWorkspace(
     onSaveMkv: () -> Unit,
     eventEditorStateHolder: SaveableStateHolder,
     onOpenVideo: () -> Unit,
+    onToggleSpatialHost: () -> Unit,
     rendererEnabled: Boolean,
     onEnableRenderer: () -> Unit,
     interactionRegistry: InteractionOverlayRegistry,
@@ -1096,6 +1100,7 @@ private fun FixedWorkspace(
             },
             onPreview = { previewDensityName = requestedPreview.next().name },
             onDirectory = { directoryOpen = true },
+            onToggleSpatialHost = onToggleSpatialHost,
         )
 
         BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
@@ -1692,7 +1697,7 @@ private fun ModernAppBar(
                 Text("ASS Workbench", style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurface)
                 VerticalDivider(Modifier.height(26.dp).padding(horizontal = 8.dp))
-                TextButton(
+                if (workspaceMode == WorkspacePresentationMode.SPATIAL_EXPERIMENTAL) TextButton(
                     onClick = onToggleWorkspaceMode,
                     modifier = Modifier
                         .testTag("workspace-direct-mode-toggle")
