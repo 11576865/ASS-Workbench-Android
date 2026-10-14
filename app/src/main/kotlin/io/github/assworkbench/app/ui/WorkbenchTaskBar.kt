@@ -74,7 +74,7 @@ internal fun WorkbenchTaskBar(
 
     Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh, tonalElevation = 2.dp) {
         Row(
-            Modifier.fillMaxWidth().padding(horizontal = 6.dp),
+            Modifier.fillMaxWidth().height(50.dp).padding(horizontal = 6.dp),
             horizontalArrangement = Arrangement.spacedBy(4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
