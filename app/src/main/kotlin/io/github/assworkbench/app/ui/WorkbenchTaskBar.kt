@@ -25,6 +25,8 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -61,6 +63,7 @@ internal fun WorkbenchTaskBar(
     onTool: (WorkbenchTool) -> Unit,
     onPreview: () -> Unit,
     onDirectory: () -> Unit,
+    onToggleSpatialHost: (() -> Unit)? = null,
 ) {
     val compact = LocalConfiguration.current.screenWidthDp < 600
     val previewLabel = when (requestedPreview) {
@@ -170,6 +173,20 @@ internal fun WorkbenchTaskBar(
                         .semantics { contentDescription = "工具目录" }
                         .testTag("fixed-tool-CAPABILITIES"),
                 )
+            }
+            if (onToggleSpatialHost != null && LocalConfiguration.current.screenWidthDp >= 1180) {
+                // The R3 reference puts the two independent UI hosts in the
+                // task strip, not beside the document title or inside a tool.
+                FilterChip(selected = true, onClick = {},
+                    modifier = Modifier.testTag("fixed-r3-main-host"),
+                    label = {
+                        Text("主 UI")
+                    })
+                OutlinedButton(onClick = onToggleSpatialHost,
+                    modifier = Modifier.testTag("fixed-r3-spatial-switch")
+                        .semantics { contentDescription = "切换至无限画布" }) {
+                    Text("∞ 无限画布")
+                }
             }
             TooltipBox(
                 positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
