@@ -1260,7 +1260,14 @@ private fun FixedWorkspace(
                                         document = state.document,
                                         event = resolvedEvent,
                                         modifier = Modifier.fillMaxWidth(),
-                                        onOpenRaw = { selectTool(WorkbenchTool.TEXT) },
+                                        // Switching to TEXT follows Focus by default.
+                                        // For a pinned/selection-bound inspector this
+                                        // would silently edit a different Event, so
+                                        // suppress the shortcut until a scoped route exists.
+                                        onOpenRaw = if (
+                                            instance.binding == WorkspaceBinding.FollowFocus &&
+                                            resolvedEvent.id == state.focusedEventId
+                                        ) ({ selectTool(WorkbenchTool.TEXT) }) else null,
                                     )
                                     HorizontalDivider()
                                 }
