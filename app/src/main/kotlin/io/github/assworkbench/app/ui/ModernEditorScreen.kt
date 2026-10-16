@@ -1149,6 +1149,9 @@ private fun FixedWorkspace(
         }
 
         BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
+            // Capture the parent constraints in this scope; nested Row/Column/Box
+            // receivers must not implicitly resolve the outer maxHeight.
+            val availableHeightDp = maxHeight.value
             val density = LocalDensity.current
             val imeVisible = WindowInsets.ime.getBottom(density) > 0
             val policy = AdaptiveWorkspacePolicy.resolve(
@@ -1348,7 +1351,7 @@ private fun FixedWorkspace(
                             ) {
                                 if (previewVisible) {
                                     val visualHeight = policy.previewHeightDp.coerceAtMost(
-                                        maxHeight.value * 0.43f
+                                        availableHeightDp * 0.43f
                                     )
                                     Box(Modifier.fillMaxWidth().height(visualHeight.dp)
                                         .testTag("fixed-v11-compact-video")) {
@@ -1363,7 +1366,7 @@ private fun FixedWorkspace(
                                     ModernTimelinePane(
                                         state = state,
                                         viewModel = viewModel,
-                                        compact = maxHeight.value < 620f || imeVisible,
+                                        compact = availableHeightDp < 620f || imeVisible,
                                         modifier = Modifier.fillMaxSize(),
                                     )
                                 }
