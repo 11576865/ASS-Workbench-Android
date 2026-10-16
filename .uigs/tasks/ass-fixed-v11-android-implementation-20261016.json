@@ -1,7 +1,7 @@
 {
   "id": "ass-fixed-v11-android-implementation-20261016",
-  "goal": "Implement frozen FIXED Tablet V1.1 design as real Compose UI using existing model and retaining all prior SPATIAL code unchanged. First bounded work unit: native high-density subtitle grid in wide FIXED R3.",
-  "status": "Work Unit Complete / Pending External Validation",
+  "goal": "Implement the frozen FIXED Tablet V1.1 design as native Compose UI, progressively, preserving existing business model/drafts and leaving SPATIAL UI outside this scope.",
+  "status": "Work Unit Complete / Durable Checkpoint / Pending External Validation",
   "design_basis": {
     "figma_file": "https://www.figma.com/design/5yNY5dMnmpmaOnYxDlEhY5",
     "fixed_page": "85:2",
@@ -14,31 +14,36 @@
   "base_branch": "feat/r3-fixed-visual-layout-20261014",
   "base_pr": 148,
   "pull_request": "https://github.com/11576865/ASS-Workbench-Android/pull/149",
-  "current_bounded_work_unit": "Compose Event grid header and compact Event rows, reuse existing list selection/focus/range state, preserve current compact list and inspector draft ownership.",
+  "current_bounded_work_unit": "Wide FIXED V1.1 subtitle/timing workscene switch: keep EventWorkspace, ToolInstance and inspector composition stable; give live timeline priority in timing view; add read-only bound timing context.",
   "completed_units": [
     "Created implementation branch from existing R3 visual-layout work to avoid duplicating video/timeline infrastructure.",
     "Created FixedV11EventGrid.kt as real Material3 Compose UI with index/start/end/Style/text/QC.",
     "Wired grid only for the existing wide r3Chrome route within EventWorkspace, preserving event identity, onClick, long-click, filter ordering and ListState.",
     "Added Compose instrumented tests for grid fields and delegated tap/long press.",
-    "Created draft stacked pull request #149 against existing R3 branch, keeping main and SPATIAL code unchanged."
+    "Created draft stacked pull request #149 against existing R3 branch, keeping main and SPATIAL code unchanged.",
+    "Added FixedV11WorkspaceTabs.kt: presentation-only tabs for subtitle authoring vs professional timing without switching WorkbenchTool, Focus, Selection or Binding.",
+    "Extended R3FixedLayoutPolicy with timingPriority (default false): preserve video and user preview preference, allocate >=66% of remaining wide pane to existing ModernTimelinePane when precise timing selected.",
+    "Wired tab state per workspace session into FixedWorkspace and read-only timing context above the unchanged movableInspector; no duplicate media clock or event write target.",
+    "Added JVM geometry tests and Compose instrumented tab/sibling-draft and missing-binding tests (committed, execution pending)."
   ],
   "next_units": [
-    "Integrate frozen V1.1 workspace task switching and specialized timing layout without modifying SPATIAL UI.",
+    "Run Android JVM/Compose instrumentation tests on this exact head and verify real inspector draft and event binding continuity on emulator.",
     "Implement 1024x768 FIXED subtitle drawer as responsive Compose UI and test with IME.",
     "Add runtime screenshots and exact-source visual comparison to Figma fixed baseline.",
     "Validate save/review, real video/libass, media PTS and waveform on emulator and physical tablet."
   ],
-  "latest_durable_commit": "8e60097ceb955ff4cf9dc4a95eefedf0b634021a",
+  "latest_durable_commit": "5d56ee971438ae3fead474aca705ce80b40e79c7",
   "external_validation": {
-    "android_ci": "Pending External Validation",
-    "android_emulator": "Pending External Validation",
+    "android_ci": "Pending External Validation; no successful exact-head run observed or claimed",
+    "android_emulator": "Pending External Validation; instrumented tests submitted as source only",
     "real_tablet": "Not started",
     "figma_visual_parity": "Not started"
   },
   "blockers": [
     "Build/tests unavailable synchronously through GitHub file-edit connector; do not claim compilation succeeded.",
     "Base R3 visual-layout PR #148 remains draft and is a dependency.",
-    "Source visuals are reference designs, not native screenshots. SPATIAL implementation and UI are outside current scope."
+    "Source visuals are reference designs, not native screenshots. SPATIAL implementation and UI are outside current scope.",
+    "Layout-only draft-retention Compose test cannot substitute for real InlineEventEditor/IME lifecycle instrumentation."
   ],
   "updated_at": "2026-10-16",
   "handoff_rules": [
