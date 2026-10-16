@@ -32,6 +32,7 @@ internal object R3FixedLayoutPolicy {
         heightDp: Float,
         mediaAspect: Float,
         preview: PreviewDensity,
+        timingPriority: Boolean = false,
     ): R3FixedGeometry {
         val width = widthDp.coerceAtLeast(0f)
         val height = heightDp.coerceAtLeast(0f)
@@ -47,12 +48,16 @@ internal object R3FixedLayoutPolicy {
             PreviewDensity.HIDDEN -> 0f
             PreviewDensity.COMPACT -> min(mediaWithTransport, height * 0.36f)
             PreviewDensity.FULL -> min(mediaWithTransport, (height - minTimeline).coerceAtLeast(0f))
-        }.coerceIn(0f, height)
+        }
+        // V1.1 precise timing allocates more area to the SAME timeline.
+        // The media clock, Event identity, and raw draft remain unchanged.
+        val timingCap = if (timingPriority) height * 0.34f else height
+        val boundedMediaHeight = mediaHeight.coerceAtMost(timingCap).coerceIn(0f, height)
         return R3FixedGeometry(
             navigationWidthDp = navigation,
             inspectorWidthDp = inspector,
-            mediaHeightDp = mediaHeight,
-            timelineHeightDp = (height - mediaHeight).coerceAtLeast(0f),
+            mediaHeightDp = boundedMediaHeight,
+            timelineHeightDp = (height - boundedMediaHeight).coerceAtLeast(0f),
         )
     }
 }
