@@ -1949,6 +1949,7 @@ private fun EventWorkspace(
             Divider()
         }
         Divider()
+        if (r3Chrome) FixedV11EventGridHeader()
         LazyColumn(
             state = listState,
             modifier = Modifier
@@ -2005,25 +2006,46 @@ private fun EventWorkspace(
                 },
         ) {
             items(state.filteredEvents, key = { it.id }) { event ->
-                ModernEventRow(
-                    event, event.id == uiState.focus.eventId, false,
-                    event.id in uiState.selection.eventIds, selectionMode, issuesByEvent[event.id].orEmpty(),
-                    state, viewModel, eventEditorStateHolder,
-                    {
-                        if (selectionMode) uiActions.toggleSelection(event.id)
-                        else {
-                            uiActions.focusEvent(event.id, seek = true)
-                            onExpandedChange(if (expandedEventId == event.id) null else event.id)
-                        }
-                    },
-                    {
-                        if (event.id !in uiState.selection.eventIds) {
-                            uiActions.toggleSelection(event.id)
-                        }
-                    },
-                    { onExpandedChange(null) },
-                    onTool,
-                )
+                val openEvent: () -> Unit = {
+                    if (selectionMode) uiActions.toggleSelection(event.id)
+                    else {
+                        uiActions.focusEvent(event.id, seek = true)
+                        onExpandedChange(if (expandedEventId == event.id) null else event.id)
+                    }
+                }
+                val selectEvent: () -> Unit = {
+                    if (event.id !in uiState.selection.eventIds) {
+                        uiActions.toggleSelection(event.id)
+                    }
+                }
+                if (r3Chrome) {
+                    // V1.1 changes only the event navigator's presentation.
+                    // Keep the same stable IDs, filter order and ViewModel actions.
+                    FixedV11EventGridRow(
+                        eventId = event.id,
+                        start = event.start.toAss().removePrefix("0:"),
+                        end = event.end.toAss().removePrefix("0:"),
+                        styleName = event.style,
+                        visibleText = AssInlineSyntax.visibleText(event.text),
+                        focused = event.id == uiState.focus.eventId,
+                        selected = event.id in uiState.selection.eventIds,
+                        selectionMode = selectionMode,
+                        issues = issuesByEvent[event.id].orEmpty(),
+                        onClick = openEvent,
+                        onLongClick = selectEvent,
+                    )
+                } else {
+                    ModernEventRow(
+                        event, event.id == uiState.focus.eventId, false,
+                        event.id in uiState.selection.eventIds, selectionMode,
+                        issuesByEvent[event.id].orEmpty(),
+                        state, viewModel, eventEditorStateHolder,
+                        openEvent,
+                        selectEvent,
+                        { onExpandedChange(null) },
+                        onTool,
+                    )
+                }
                 Divider()
             }
         }
