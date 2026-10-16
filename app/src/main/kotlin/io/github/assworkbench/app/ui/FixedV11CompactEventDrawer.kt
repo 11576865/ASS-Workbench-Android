@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.DrawerState
-import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
@@ -101,4 +100,23 @@ internal fun FixedV11CompactEventDrawer(
             Box(Modifier.weight(1f).fillMaxWidth()) { content() }
         }
     }
+}
+
+/**
+ * A tablet drawer remains mounted when the IME reduces usable height below the
+ * usual dual-pane threshold. Otherwise opening the keyboard from the drawer's
+ * existing search/filter editor would dispose its EventWorkspace mid-input.
+ *
+ * Only a user-open drawer can temporarily retain this presentation. A hidden
+ * drawer never forces phone or other narrow layouts into dual-pane mode.
+ */
+internal object FixedV11CompactDrawerPolicy {
+    fun effectiveProfile(
+        adaptive: WorkbenchLayoutProfile,
+        widthDp: Float,
+        drawerOpen: Boolean,
+    ): WorkbenchLayoutProfile =
+        if (drawerOpen && widthDp >= 720f && widthDp < 1180f &&
+            adaptive == WorkbenchLayoutProfile.COMPACT
+        ) WorkbenchLayoutProfile.DUAL_PANE else adaptive
 }
