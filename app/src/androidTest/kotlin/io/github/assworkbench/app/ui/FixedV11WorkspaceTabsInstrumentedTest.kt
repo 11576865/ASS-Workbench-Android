@@ -12,6 +12,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertTextContains
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -88,6 +89,8 @@ class FixedV11WorkspaceTabsInstrumentedTest {
         composeRule.onNodeWithText("未找到可读取的事件；此面板不改变写入对象")
             .assertIsDisplayed()
         composeRule.onNodeWithTag("fixed-v11-timing-pts")
-            .assertTextContains("80800 ms")
+            // Compose assertTextContains defaults to exact text matching unless
+            // substring=true; verify the complete visible read-only PTS label.
+            .assertTextEquals("媒体 PTS 80800 ms · 时间轴与视频共享时钟")
     }
 }
