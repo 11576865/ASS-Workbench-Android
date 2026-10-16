@@ -14,7 +14,7 @@
   "base_branch": "feat/r3-fixed-visual-layout-20261014",
   "base_pr": 148,
   "pull_request": "https://github.com/11576865/ASS-Workbench-Android/pull/149",
-  "current_bounded_work_unit": "Configure scoped exact-branch Android CI for stacked draft PR #149, validate that it compiles Kotlin sources and instrumentation classes, runs core/app JVM tests, and surfaces build failures without merging to main.",
+  "current_bounded_work_unit": "Close stacked PR #149 CI trigger gap: enable pull_request checks specifically for R3 base branch in addition to branch push, then inspect the exact-head PR run once.",
   "completed_units": [
     "Created implementation branch from existing R3 visual-layout work to avoid duplicating video/timeline infrastructure.",
     "Created FixedV11EventGrid.kt as real Material3 Compose UI with index/start/end/Style/text/QC.",
@@ -33,18 +33,20 @@
     "Added Compose instrumented tests for event-table presentation, open/close, long-press selection, callback focus and sibling draft continuity; runtime tests remain pending.",
     "Analyzed repository .github/workflows/android.yml and emulator.yml: both are auto-triggered only for main pushes/PRs targeting main, so stacked PR #149 receives no automatic runs from those workflows.",
     "Added .github/workflows/fixed-v11-validation.yml scoped to pushes on feat/fixed-v11-event-grid-20261016 and workflow_dispatch; Java 21, SDK 36, Gradle 9.7.1, Kotlin/debugAndroidTest compilation plus JVM unit tests; no uploaded APK artifacts.",
-    "Read one exact-head status result for 0c4b62980b3f305defefe967295587ed77936a09: zero PR-triggered runs and no combined statuses. Connector does not prove whether branch-push workflow actually ran."
+    "Read one exact-head status result for 0c4b62980b3f305defefe967295587ed77936a09: zero PR-triggered runs and no combined statuses. Connector does not prove whether branch-push workflow actually ran.",
+    "Updated .github/workflows/fixed-v11-validation.yml to add pull_request.branches: [feat/r3-fixed-visual-layout-20261014] while retaining scoped push trigger. This makes the checks eligible to appear directly on stacked PR #149.",
+    "Performed one immediate PR-triggered workflow/combined-status read at 1f6486c32df2c64b15df73ba0e0301545928eac1; both returned no runs/status entries yet; execution cannot be inferred."
   ],
   "next_units": [
-    "Obtain an authoritative run ID/result for branch workflow FIXED V1.1 Branch Validation and inspect failing job logs if any. Do not count no-PR-run as pass.",
+    "Identify first authoritative FIXED V1.1 Branch Validation PR run for exact new head; if failed, inspect its job logs and make one bounded repair; do not infer pass from empty status.",
     "Run Android JVM/Compose instrumentation tests on this exact head and verify real inspector draft and event binding continuity on emulator.",
     "Add runtime screenshots and exact-source visual comparison to Figma fixed baseline.",
     "Validate save/review, real video/libass, media PTS and waveform on emulator and physical tablet.",
     "After successful compile: execute Android Emulator Regression on the exact feature head and capture 1440/1024 production UI screenshots with drawer/IME; do not assert visual parity before evidence."
   ],
-  "latest_durable_commit": "0c4b62980b3f305defefe967295587ed77936a09",
+  "latest_durable_commit": "1f6486c32df2c64b15df73ba0e0301545928eac1",
   "external_validation": {
-    "android_ci": "Validation workflow committed at 0c4b6298; execution/result UNKNOWN. Connector immediate status is PR-trigger-filtered and returned no run.",
+    "android_ci": "Scoped push + pull_request(base R3) workflow present at 1f6486c32df2c64b15df73ba0e0301545928eac1. Immediate PR-only status read empty; execution and result PENDING.",
     "android_emulator": "Not started for latest commit; requires successful build and runnable emulator job.",
     "real_tablet": "Not started",
     "figma_visual_parity": "Not started; requires real 1440×900 and 1024×768 Android screenshots"
