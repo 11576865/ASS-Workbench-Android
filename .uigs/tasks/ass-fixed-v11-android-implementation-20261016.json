@@ -14,7 +14,7 @@
   "base_branch": "feat/r3-fixed-visual-layout-20261014",
   "base_pr": 148,
   "pull_request": "https://github.com/11576865/ASS-Workbench-Android/pull/149",
-  "current_bounded_work_unit": "Wide FIXED V1.1 subtitle/timing workscene switch: keep EventWorkspace, ToolInstance and inspector composition stable; give live timeline priority in timing view; add read-only bound timing context.",
+  "current_bounded_work_unit": "1024×768 FIXED: render existing EventWorkspace in a ModalNavigationDrawer, use the native media-clock timeline and same movableInspector in the dual-pane body; retain the opened drawer across IME-induced height compaction.",
   "completed_units": [
     "Created implementation branch from existing R3 visual-layout work to avoid duplicating video/timeline infrastructure.",
     "Created FixedV11EventGrid.kt as real Material3 Compose UI with index/start/end/Style/text/QC.",
@@ -24,26 +24,34 @@
     "Added FixedV11WorkspaceTabs.kt: presentation-only tabs for subtitle authoring vs professional timing without switching WorkbenchTool, Focus, Selection or Binding.",
     "Extended R3FixedLayoutPolicy with timingPriority (default false): preserve video and user preview preference, allocate >=66% of remaining wide pane to existing ModernTimelinePane when precise timing selected.",
     "Wired tab state per workspace session into FixedWorkspace and read-only timing context above the unchanged movableInspector; no duplicate media clock or event write target.",
-    "Added JVM geometry tests and Compose instrumented tab/sibling-draft and missing-binding tests (committed, execution pending)."
+    "Added JVM geometry tests and Compose instrumented tab/sibling-draft and missing-binding tests (committed, execution pending).",
+    "Added FixedV11CompactEventDrawer.kt with accessible open/close controls, a finite-height table container, summary counts, and no additional Event selection or draft store.",
+    "Converted DUAL_PANE to FIXED V1.1 drawer + real WorkbenchPreview + ModernTimelinePane + existing movableInspector; the wide THREE_PANE and narrow COMPACT fallbacks are preserved.",
+    "Enabled the same FixedV11EventGridHeader/Row for tablet drawer while preserving EventWorkspace's listState, event-id keys, focus and range-selection callbacks.",
+    "Closing the drawer on a focused Event and keeping it open for multi-selection are expressed through existing EventWorkspace callback paths.",
+    "Added FixedV11CompactDrawerPolicy to keep an open tablet drawer mounted when IME pressure switches the default adaptive profile to COMPACT, and added JVM tests for keyboard, closure, phone and wide-host behavior.",
+    "Added Compose instrumented tests for event-table presentation, open/close, long-press selection, callback focus and sibling draft continuity; runtime tests remain pending."
   ],
   "next_units": [
+    "Run exact-head JVM/Android instrumented tests and capture emulator screenshots of 1024×768 with both closed/open drawer and visible IME; verify real InlineEventEditor draft continuity and list selection persistence.",
     "Run Android JVM/Compose instrumentation tests on this exact head and verify real inspector draft and event binding continuity on emulator.",
-    "Implement 1024x768 FIXED subtitle drawer as responsive Compose UI and test with IME.",
     "Add runtime screenshots and exact-source visual comparison to Figma fixed baseline.",
     "Validate save/review, real video/libass, media PTS and waveform on emulator and physical tablet."
   ],
-  "latest_durable_commit": "5d56ee971438ae3fead474aca705ce80b40e79c7",
+  "latest_durable_commit": "2fe29899abb75141a9ee8e5669c5ac7e13f5bf47",
   "external_validation": {
-    "android_ci": "Pending External Validation; no successful exact-head run observed or claimed",
-    "android_emulator": "Pending External Validation; instrumented tests submitted as source only",
+    "android_ci": "Pending External Validation; exact head build/tests not yet confirmed",
+    "android_emulator": "Pending External Validation; Compose tests committed, not executed",
     "real_tablet": "Not started",
-    "figma_visual_parity": "Not started"
+    "figma_visual_parity": "Not started; requires real 1440×900 and 1024×768 Android screenshots"
   },
   "blockers": [
     "Build/tests unavailable synchronously through GitHub file-edit connector; do not claim compilation succeeded.",
     "Base R3 visual-layout PR #148 remains draft and is a dependency.",
     "Source visuals are reference designs, not native screenshots. SPATIAL implementation and UI are outside current scope.",
-    "Layout-only draft-retention Compose test cannot substitute for real InlineEventEditor/IME lifecycle instrumentation."
+    "Layout-only draft-retention Compose test cannot substitute for real InlineEventEditor/IME lifecycle instrumentation.",
+    "IME behavior is protected in layout policy and unexecuted tests only; real keyboard/window inset behavior remains device-dependent.",
+    "Dual-pane mode now includes the actual ModernTimelinePane; performance and touch interplay need real device verification."
   ],
   "updated_at": "2026-10-16",
   "handoff_rules": [
