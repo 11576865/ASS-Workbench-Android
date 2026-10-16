@@ -1010,6 +1010,10 @@ private fun FixedWorkspace(
     // Navigation is session-root state; reopening this host preserves the chosen task.
     var directoryOpen by rememberSaveable { mutableStateOf(false) }
     var previewScale by rememberSaveable { mutableFloatStateOf(1f) }
+    // The drawer and its coroutine scope belong to FIXED, above adaptive
+    // profile changes. No Event/ToolInstance state is stored in the drawer.
+    val v11EventDrawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+    val v11DrawerScope = rememberCoroutineScope()
     // Layout mode belongs to the FIXED session, never to a new ToolInstance.
     // Switching must leave Focus/Selection, unsaved drafts and Undo untouched.
     var fixedV11ModeName by rememberSaveable(state.workspaceSessionId) {
@@ -1053,13 +1057,21 @@ private fun FixedWorkspace(
                 onExpandedChange = { next ->
                     val target = next ?: expandedEventId
                     onExpandedChange(target)
-                    if (target != null) selectTool(WorkbenchTool.TEXT)
+                    if (target != null) {
+                        selectTool(WorkbenchTool.TEXT)
+                        // A focused Event exits the overlay. Long-press selection
+                        // remains in the drawer for multi-select operations.
+                        if (v11EventDrawerState.isOpen) {
+                            v11DrawerScope.launch { v11EventDrawerState.close() }
+                        }
+                    }
                 },
                 onTool = ::selectTool,
                 eventEditorStateHolder = eventEditorStateHolder,
                 tool = WorkbenchTool.TEXT,
                 modifier = Modifier.weight(1f),
                 r3Chrome = LocalConfiguration.current.screenWidthDp >= 1180,
+                v11CompactGrid = LocalConfiguration.current.screenWidthDp in 720..1179,
             ) { }
             }
         }
@@ -1109,6 +1121,7 @@ private fun FixedWorkspace(
     }
 
     Column(modifier) {
+        val v11DrawerAvailable = LocalConfiguration.current.screenWidthDp in 720..1179
         WorkbenchTaskBar(
             activeTool = activeTool,
             listRequested = listRequested,
@@ -1116,6 +1129,9 @@ private fun FixedWorkspace(
             onTool = { tool ->
                 if (tool == WorkbenchTool.SUBTITLES) {
                     onListRequested(true)
+                    if (v11DrawerAvailable) {
+                        v11DrawerScope.launch { v11EventDrawerState.open() }
+                    }
                 } else selectTool(tool)
             },
             onPreview = { previewDensityName = requestedPreview.next().name },
@@ -1304,19 +1320,51 @@ private fun FixedWorkspace(
                     }
                 }
 
-                WorkbenchLayoutProfile.DUAL_PANE -> Row(Modifier.fillMaxSize()) {
-                    Column(Modifier.weight(1f - inspectorFraction).fillMaxHeight()) {
-                        if (previewVisible) {
-                            preview(
-                                Modifier.fillMaxWidth()
-                                    .height(policy.previewHeightDp.dp)
+                WorkbenchLayoutProfile.DUAL_PANE -> {
+                    // FIXED V1.1 compact-tablet layout: same EventWorkspace in an
+                    // on-demand drawer, same live video/timeline and inspector.
+                    // Unlike the old DUAL_PANE layout, the grid no longer displaces
+                    // the audio timing tools for the whole editing session.
+                    FixedV11CompactEventDrawer(
+                        drawerState = v11EventDrawerState,
+                        total = state.document.events.size,
+                        selected = state.selectedEventIds.size,
+                        onOpen = { v11DrawerScope.launch { v11EventDrawerState.open() } },
+                        onClose = { v11DrawerScope.launch { v11EventDrawerState.close() } },
+                        eventList = { listModifier -> listPane(listModifier) },
+                    ) {
+                        Row(Modifier.fillMaxSize().testTag("fixed-v11-compact-two-pane")) {
+                            Column(
+                                Modifier.weight(1f - inspectorFraction).fillMaxHeight(),
+                            ) {
+                                if (previewVisible) {
+                                    val visualHeight = policy.previewHeightDp.coerceAtMost(
+                                        maxHeight.value * 0.43f
+                                    )
+                                    Box(Modifier.fillMaxWidth().height(visualHeight.dp)
+                                        .testTag("fixed-v11-compact-video")) {
+                                        preview(Modifier.fillMaxSize())
+                                    }
+                                    HorizontalDivider()
+                                }
+                                // This is the real media-clock-bound timeline, not
+                                // a screenshot, waveform clone, or second ViewModel.
+                                Box(Modifier.weight(1f).fillMaxWidth()
+                                    .testTag("fixed-v11-compact-timeline")) {
+                                    ModernTimelinePane(
+                                        state = state,
+                                        viewModel = viewModel,
+                                        compact = maxHeight.value < 620f || imeVisible,
+                                        modifier = Modifier.fillMaxSize(),
+                                    )
+                                }
+                            }
+                            VerticalDivider()
+                            movableInspector(
+                                Modifier.weight(inspectorFraction).fillMaxHeight()
                             )
-                            HorizontalDivider()
                         }
-                        listPane(Modifier.weight(1f).fillMaxWidth())
                     }
-                    VerticalDivider()
-                    movableInspector(Modifier.weight(inspectorFraction).fillMaxHeight())
                 }
 
                 WorkbenchLayoutProfile.COMPACT -> {
@@ -1915,6 +1963,7 @@ private fun EventWorkspace(
     tool: WorkbenchTool,
     modifier: Modifier = Modifier,
     r3Chrome: Boolean = false,
+    v11CompactGrid: Boolean = false,
     supportingPane: @Composable () -> Unit,
 ) {
     val uiState = state.toEditorUiState()
@@ -1975,7 +2024,7 @@ private fun EventWorkspace(
             Divider()
         }
         Divider()
-        if (r3Chrome) FixedV11EventGridHeader()
+        if (r3Chrome || v11CompactGrid) FixedV11EventGridHeader()
         LazyColumn(
             state = listState,
             modifier = Modifier
@@ -2044,7 +2093,7 @@ private fun EventWorkspace(
                         uiActions.toggleSelection(event.id)
                     }
                 }
-                if (r3Chrome) {
+                if (r3Chrome || v11CompactGrid) {
                     // V1.1 changes only the event navigator's presentation.
                     // Keep the same stable IDs, filter order and ViewModel actions.
                     FixedV11EventGridRow(
