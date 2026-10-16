@@ -1,7 +1,7 @@
 {
   "id": "ass-fixed-v11-android-implementation-20261016",
   "goal": "Implement the frozen FIXED Tablet V1.1 design as native Compose UI, progressively, preserving existing business model/drafts and leaving SPATIAL UI outside this scope.",
-  "status": "Work Unit Complete / Durable Checkpoint / Pending External Emulator Validation",
+  "status": "Work Unit Complete / Durable Checkpoint / Pending External Emulator Revalidation",
   "design_basis": {
     "figma_file": "https://www.figma.com/design/5yNY5dMnmpmaOnYxDlEhY5",
     "fixed_page": "85:2",
@@ -14,7 +14,7 @@
   "base_branch": "feat/r3-fixed-visual-layout-20261014",
   "base_pr": 148,
   "pull_request": "https://github.com/11576865/ASS-Workbench-Android/pull/149",
-  "current_bounded_work_unit": "Close FIXED V1.1 source validation on actual passing PR CI #38892406947 and enable existing Android Emulator Regression (already captures R3 native 1600×960 and full connected AndroidTest) for the stacked PR #149 without changing main.",
+  "current_bounded_work_unit": "Inspect exact-head Android Emulator Regression #38906758867 (failed 171 instrumented, 7 failures), repair two V1.1-owned Compose test assertion mismatches without weakening rendered-cell evidence, and checkpoint five other outstanding integration failures.",
   "completed_units": [
     "Created implementation branch from existing R3 visual-layout work to avoid duplicating video/timeline infrastructure.",
     "Created FixedV11EventGrid.kt as real Material3 Compose UI with index/start/end/Style/text/QC.",
@@ -46,20 +46,26 @@
     "Validated repair checkpoint b192b61a7499183d84c80e5111bd00cbb944768f via FIXED V1.1 Branch Validation run #38892406947: completed SUCCESS, Android Kotlin + AndroidTest source compilation and core/app JVM suites all passed.",
     "Read job 116945207872 step conclusions: compilation and JVM tests both successful. This proves source+JVM for that exact tested head, not Android emulator behavior or 1440/1024 screenshot acceptance.",
     "Reviewed existing .github/workflows/emulator.yml and tools/run_emulator_regression.sh; existing emulator runs full Android connected test suite, dedicated R3 visual capture at 1600×960, and evidence extraction; 1440×900 and 1024×768 parity are NOT provided by that existing capture.",
-    "Updated only feature-branch .github/workflows/emulator.yml to add pull_request target feat/r3-fixed-visual-layout-20261014, preserving main trigger and existing native emulator test steps. Change committed fa757ce455fc3dfbf14f9de83c571c814276de24."
+    "Updated only feature-branch .github/workflows/emulator.yml to add pull_request target feat/r3-fixed-visual-layout-20261014, preserving main trigger and existing native emulator test steps. Change committed fa757ce455fc3dfbf14f9de83c571c814276de24.",
+    "Exact-head branch CI #38906758860 PASS at checkpoint a79e8c20ea112cf8c2f3ed9f9c9f1b192be31ab0.",
+    "Android Emulator Regression #38906758867 completed FAILURE at same exact head. App/test APK prebuild, x86_64 MKV fixture, emulator boot and native R3 reference capture succeeded. Capture validated SHA-256 26ee6884ae28449e661121bcf9cf3fad711a06a4198e348a4bdf2c62be5f7d7c at 1600x960 (not exact V1.1 acceptance size). Four projection test families passed; full connected suite 171 tests, 7 failed, 0 errors, 0 skipped.",
+    "Two failures in newly authored V1.1 tests: FixedV11EventGridInstrumentedTest had assertIsDisplayed() on a structural group Row; FixedV11WorkspaceTabsInstrumentedTest used assertTextContains with an expected partial PTS while rendered full PTS string was present. Captured semantics showed text: '媒体 PTS 80800 ms · 时间轴与视频共享时钟'.",
+    "Commit 14c7f4ca6d8f79891f546624d0b1e4755e5765eb: assert structural group exists and preserve/strengthen individually rendered Event number, time, Style, text visibility assertions (no production UI changes).",
+    "Commit a29a42ce1bc779837d835881688eb2c7e3f81ce9: assert exactly the full visible media PTS read-only label (no production code changes).",
+    "Other five regression failures remain live, NOT suppressed or described as resolved: EditorRegression inspector draft survive tool switch/rotation 5s timeout; spatial unpin '取消驻留' not displayed; BATCH task entry 'tool-BATCH' absent in two workflows; POSITION task entry 'tool-POSITION' absent in tool-instance visual capture. Their ownership/cause still requires comparison against parent R3 before targeted repair. No SPATIAL production edits in this unit."
   ],
   "next_units": [
-    "Inspect a single authoritative exact-head Android Emulator Regression pull_request run for stacked PR #149; when queued/in progress, stop and leave Pending External Validation.",
-    "If emulator job concludes failure, read specific test/log and perform one bounded fix on implementation branch; do not suppress the failure.",
-    "After emulator suite, produce native 1440×900 / 1024×768 FIXED-only screenshots and compare with Figma baseline, using actual app and editor drafts. Existing 1600×960 R3 capture is preliminary only.",
-    "Check real InlineEventEditor write-review/IME/draft retention and media PTS/libass on emulator and real tablet before final acceptance."
+    "Inspect one authoritative post-assertion-fix exact-head Android Emulator Regression run; source-level test corrections are not runtime proof. Do not loop/poll same generation.",
+    "Investigate the five remaining failed instrumented tests against the parent R3 baseline, especially inspector draft-rotation and BATCH/POSITION tool discoverability; do not dismiss or weaken assertions.",
+    "Capture Android FIXED V1.1 1440×900 and 1024×768 screen evidence from real app; compare Figma page 85:2. Existing 1600×960 R3 shot only proves baseline capture works.",
+    "Check actual InlineEventEditor drafts, IME, selection, PTS and media/libass on emulator/tablet before production acceptance."
   ],
-  "latest_durable_commit": "fa757ce455fc3dfbf14f9de83c571c814276de24",
+  "latest_durable_commit": "a29a42ce1bc779837d835881688eb2c7e3f81ce9",
   "external_validation": {
-    "android_ci": "External Validation Complete for source/JVM at b192b61a7499183d84c80e5111bd00cbb944768f: run 38892406947 SUCCESS, both Android Kotlin + AndroidTest Kotlin compile and JVM test steps passed.",
-    "android_emulator": "Pending External Validation. Branch-scoped existing Android Emulator Regression PR trigger committed fa757ce455fc3dfbf14f9de83c571c814276de24; execution/result not yet verified.",
+    "android_ci": "Source CI #38906758860 SUCCESS on a79e8c20: Android Kotlin + AndroidTest Kotlin and core/app JVM pass. New test-only patch pending full CI re-run.",
+    "android_emulator": "Run #38906758867 FAILURE at a79e8c20: APKs/native R3 capture/projection suites PASS, full suite 171 tests / 7 fail. New FIXED V1.1 assertion test corrections committed 14c7f4c, a29a42c; post-fix emulator validation PENDING.",
     "real_tablet": "Not started",
-    "figma_visual_parity": "Pending. Existing R3 native capture is 1600×960, not exact 1440×900 / 1024×768 FIXED V1.1 acceptance."
+    "figma_visual_parity": "R3 native 1600x960 capture valid SHA256 26ee6884ae28449e661121bcf9cf3fad711a06a4198e348a4bdf2c62be5f7d7c; FIXED V1.1 1440x900 / 1024x768 captures not done."
   },
   "blockers": [
     "Base R3 visual-layout PR #148 remains draft and is a dependency.",
@@ -67,9 +73,11 @@
     "Layout-only draft-retention Compose test cannot substitute for real InlineEventEditor/IME lifecycle instrumentation.",
     "IME behavior is protected in layout policy and unexecuted tests only; real keyboard/window inset behavior remains device-dependent.",
     "Dual-pane mode now includes the actual ModernTimelinePane; performance and touch interplay need real device verification.",
-    "All emulator instrumentation, 1600×960 native R3 capture, device IME and 1440/1024 FIXED design parity remain unverified on the feature head."
+    "All emulator instrumentation, 1600×960 native R3 capture, device IME and 1440/1024 FIXED design parity remain unverified on the feature head.",
+    "Full emulator regression #38906758867 failed: 7/171 instrumentation including 2 V1.1 test semantics and five other inspector/tool catalog/spatial regression cases. No acceptance until exact-head re-test.",
+    "Existing tool-BATCH/tool-POSITION UI tag not found in three tests, spatial pinned button not displayed, and inspector draft rotation timeout; may be upstream R3 or V1.1 integration regression, attribution unverified."
   ],
-  "updated_at": "2026-10-16",
+  "updated_at": "2026-10-17",
   "handoff_rules": [
     "No automatic merge to main, no updates to original SPATIAL implementation.",
     "One coherent increment per branch/PR; inspect CI for exact head only once.",
