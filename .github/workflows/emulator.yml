@@ -4,7 +4,9 @@ on:
   push:
     branches: [ main ]
   pull_request:
-    branches: [ main ]
+    # FIXED V1.1 stacked PR #149 targets R3, not main. This is a branch-only
+    # opt-in; the production main workflow remains unchanged until merge.
+    branches: [ main, feat/r3-fixed-visual-layout-20261014 ]
   workflow_dispatch:
 
 permissions:
