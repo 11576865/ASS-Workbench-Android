@@ -1157,10 +1157,19 @@ private fun FixedWorkspace(
                 imeVisible = imeVisible,
                 requestedPreview = requestedPreview,
             )
+            // Keep an OPEN Event drawer alive while the IME changes the
+            // adaptive height profile. The underlying inspector remains movable.
+            val displayProfile = FixedV11CompactDrawerPolicy.effectiveProfile(
+                adaptive = policy.profile,
+                widthDp = maxWidth.value,
+                drawerOpen = v11EventDrawerState.isOpen,
+            )
             val briefInspector = activeTool == WorkbenchTool.PROJECT || activeTool == WorkbenchTool.EVENT
-            val inspectorFraction = when (policy.profile) {
+            val inspectorFraction = when (displayProfile) {
                 WorkbenchLayoutProfile.THREE_PANE -> if (briefInspector) 0.30f else policy.inspectorFraction
-                WorkbenchLayoutProfile.DUAL_PANE -> if (briefInspector) 0.38f else policy.inspectorFraction
+                WorkbenchLayoutProfile.DUAL_PANE ->
+                    if (briefInspector) 0.38f else if (policy.profile == WorkbenchLayoutProfile.COMPACT) 0.46f
+                    else policy.inspectorFraction
                 WorkbenchLayoutProfile.COMPACT -> 1f
             }
             val previewVisible = policy.effectivePreview != PreviewDensity.HIDDEN
@@ -1190,7 +1199,7 @@ private fun FixedWorkspace(
                 )
             }
 
-            when (policy.profile) {
+            when (displayProfile) {
                 WorkbenchLayoutProfile.THREE_PANE -> {
                     // R3 design reference: EVENT navigator | VIDEO + REAL TIMELINE | inspector.
                     // Retain the existing production editor and player instead of drawing
