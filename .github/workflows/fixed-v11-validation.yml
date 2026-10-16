@@ -7,6 +7,9 @@ on:
   push:
     branches:
       - feat/fixed-v11-event-grid-20261016
+  pull_request:
+    branches:
+      - feat/r3-fixed-visual-layout-20261014
   workflow_dispatch:
 
 permissions:
