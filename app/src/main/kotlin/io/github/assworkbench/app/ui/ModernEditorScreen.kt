@@ -1010,6 +1010,13 @@ private fun FixedWorkspace(
     // Navigation is session-root state; reopening this host preserves the chosen task.
     var directoryOpen by rememberSaveable { mutableStateOf(false) }
     var previewScale by rememberSaveable { mutableFloatStateOf(1f) }
+    // Layout mode belongs to the FIXED session, never to a new ToolInstance.
+    // Switching must leave Focus/Selection, unsaved drafts and Undo untouched.
+    var fixedV11ModeName by rememberSaveable(state.workspaceSessionId) {
+        mutableStateOf(FixedV11WorkspaceMode.SUBTITLE_EDIT.name)
+    }
+    val fixedV11Mode = runCatching { FixedV11WorkspaceMode.valueOf(fixedV11ModeName) }
+        .getOrDefault(FixedV11WorkspaceMode.SUBTITLE_EDIT)
     // Media dimensions are observational. They never become ASS or project layout state.
     var r3MediaAspect by remember(state.project.videoUri) { mutableFloatStateOf(16f / 9f) }
 
@@ -1116,6 +1123,15 @@ private fun FixedWorkspace(
             onToggleSpatialHost = onToggleSpatialHost,
         )
 
+        // The V1.1 task-scene switch changes geometry only; it does NOT call
+        // onActiveTool, change Binding or rebuild the live inspector.
+        if (LocalConfiguration.current.screenWidthDp >= 1180) {
+            FixedV11WorkspaceTabs(
+                selected = fixedV11Mode,
+                onSelect = { mode -> fixedV11ModeName = mode.name },
+            )
+        }
+
         BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
             val density = LocalDensity.current
             val imeVisible = WindowInsets.ime.getBottom(density) > 0
@@ -1168,6 +1184,7 @@ private fun FixedWorkspace(
                         heightDp = maxHeight.value,
                         mediaAspect = r3MediaAspect,
                         preview = policy.effectivePreview,
+                        timingPriority = fixedV11Mode == FixedV11WorkspaceMode.PRECISE_TIMING,
                     )
                     Row(Modifier.fillMaxSize().testTag("r3-fixed-wide")) {
                         Box(Modifier.width(geometry.navigationWidthDp.dp).fillMaxHeight()
@@ -1251,6 +1268,15 @@ private fun FixedWorkspace(
                                     }
                                 }
                                 HorizontalDivider()
+                                if (fixedV11Mode == FixedV11WorkspaceMode.PRECISE_TIMING) {
+                                    val mediaPositionMs by viewModel.playbackPositionMs.collectAsState()
+                                    FixedV11TimingContext(
+                                        event = resolvedEvent,
+                                        bindingDescription = bindingLabel,
+                                        mediaPositionMs = mediaPositionMs,
+                                    )
+                                    HorizontalDivider()
+                                }
                                 // Effective values are read-only evidence. They must never
                                 // change the binding or write scope of the live editor.
                                 if ((activeTool == WorkbenchTool.POSITION ||
