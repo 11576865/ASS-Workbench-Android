@@ -14,7 +14,7 @@
   "base_branch": "feat/r3-fixed-visual-layout-20261014",
   "base_pr": 148,
   "pull_request": "https://github.com/11576865/ASS-Workbench-Android/pull/149",
-  "current_bounded_work_unit": "Exact-head Android CI #38885202379 failed in :app:compileDebugKotlin; repair the two nested Compose receiver maxHeight failures in ModernEditorScreen.kt and checkpoint.",
+  "current_bounded_work_unit": "Real CI #38888581101 post-maxHeight repair: Kotlin + AndroidTest source compile passed; app:testDebugUnitTest failed 1/261 R3WriteSourceDetailsTest fixture. Correct triple over-escaped ASS tags in one test and checkpoint.",
   "completed_units": [
     "Created implementation branch from existing R3 visual-layout work to avoid duplicating video/timeline infrastructure.",
     "Created FixedV11EventGrid.kt as real Material3 Compose UI with index/start/end/Style/text/QC.",
@@ -39,19 +39,22 @@
     "Obtained actual pull_request-triggered FIXED V1.1 validation run 38885202379 (conclusion failure) on prior head b61de8748872043c9700698df93c127d09ef0f0d.",
     "Read job 116921246085 logs: only two Kotlin errors at ModernEditorScreen.kt:1351:41 and :1366:51, outer BoxWithConstraints.maxHeight inaccessible via implicit receiver in nested layout lambdas; JVM tests skipped.",
     "Applied bounded repair in commit 324b50d7e2d34448be065e1aabd2f80aa379d420: capture val availableHeightDp = maxHeight.value before nesting and use it for media cap and compact timeline mode; no behavior/state ownership change.",
-    "Per AGENTS.md, did not poll the repair generation's CI in this work unit."
+    "Per AGENTS.md, did not poll the repair generation's CI in this work unit.",
+    "Read authoritative post-repair exact-head PR CI #38888581101, completed failure. Compile Android/debugAndroidTest source step SUCCESS, confirming previous maxHeight receiver issue is repaired.",
+    "Read job 116932661298 logs: app:testDebugUnitTest ran 261 tests with one failure, R3WriteSourceDetailsTest.styleResetRetainsTruthfulEventStyleBaseline at line 65 assertNotNull; unit test suite incomplete. Core module tests ran in same job but full-suite success cannot be claimed.",
+    "Root cause: two physical Kotlin backslash escapes were doubled in the test's ASS style-reset fixture: {\\\\\\\\rAlternate} and {\\\\\\\\rAlternate\\\\\\\\fs52} yielded double literal ASS slashes at runtime, invalid source attribution. Scoped test-only fix ca71cbb007ed0af60d7d6b212d4d2da3cc4bb447 replaces three over-escaped tag spellings with normal Kotlin \\\\r / \\\\fs; production parser and assertion unchanged."
   ],
   "next_units": [
-    "Inspect a single authoritative pull_request-triggered FIXED V1.1 Branch Validation run on the new exact repair/checkpoint head; if success, proceed to emulator. Do not infer success from the source patch.",
+    "Inspect one authoritative post-fixture exact-head PR validation run. If compile and all JVM tests pass, proceed to emulator; do not claim green from source patch.",
     "Run Android JVM/Compose instrumentation tests on this exact head and verify real inspector draft and event binding continuity on emulator.",
     "Add runtime screenshots and exact-source visual comparison to Figma fixed baseline.",
     "Validate save/review, real video/libass, media PTS and waveform on emulator and physical tablet.",
     "After successful compile: execute Android Emulator Regression on the exact feature head and capture 1440/1024 production UI screenshots with drawer/IME; do not assert visual parity before evidence."
   ],
-  "latest_durable_commit": "324b50d7e2d34448be065e1aabd2f80aa379d420",
+  "latest_durable_commit": "ca71cbb007ed0af60d7d6b212d4d2da3cc4bb447",
   "external_validation": {
-    "android_ci": "Real CI #38885202379 failed :app:compileDebugKotlin (two maxHeight receiver errors). Scoped repair commit 324b50d7 applied; next exact-head CI PENDING, not polled.",
-    "android_emulator": "Blocked until compile and instrumentation compilation succeed; no Android emulator acceptance yet.",
+    "android_ci": "CI #38888581101: compile Kotlin + AndroidTest sources PASS; JVM 261 tests executed, 1 fail in malformed ASS test fixture. Fix ca71cbb committed; new exact-head result PENDING (not polled).",
+    "android_emulator": "PENDING: compilation succeeded but full JVM suite not green as of prior head; no emulator E2E evidence.",
     "real_tablet": "Not started",
     "figma_visual_parity": "Not started; requires real 1440×900 and 1024×768 Android screenshots"
   },
@@ -64,7 +67,8 @@
     "Dual-pane mode now includes the actual ModernTimelinePane; performance and touch interplay need real device verification.",
     "GitHub connector's available commit workflow run lookup is pull-request-trigger filtered; cannot confirm branch-push verification run ID or outcome through this lookup.",
     "Default Android CI/emulator workflows do not auto-run on a PR based on another feature branch. Scoped branch validation workflow now exists but outcome unverified.",
-    "CI job 116921246085 recorded two Kotlin implicit-receiver errors (ModernEditorScreen.kt 1351 and 1366); repaired once, awaiting new exact-head CI evidence."
+    "CI job 116921246085 recorded two Kotlin implicit-receiver errors (ModernEditorScreen.kt 1351 and 1366); repaired once, awaiting new exact-head CI evidence.",
+    "CI #38888581101 failed at R3WriteSourceDetailsTest.kt:65 (1/261 tests): test fixture had 4 literal source backslashes per ASS tag instead of 2 for a Kotlin-escaped single ASS backslash; fixed test source once; exact new head unverified."
   ],
   "updated_at": "2026-10-16",
   "handoff_rules": [
