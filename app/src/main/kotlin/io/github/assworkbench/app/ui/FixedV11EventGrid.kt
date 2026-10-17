@@ -111,7 +111,13 @@ internal fun FixedV11EventGridRow(
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        // The text/QC Row must occupy the event width. Without an explicit
+        // finite width, its weighted Text can measure at zero width on-device
+        // even while the Event and timing cells above are visible.
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             Text(visibleText.ifBlank { "（空字幕）" },
                 modifier = Modifier.weight(1f).testTag("fixed-v11-grid-text-$eventId"),
                 maxLines = 1, overflow = TextOverflow.Ellipsis,
