@@ -14,7 +14,7 @@
   "base_branch": "feat/r3-fixed-visual-layout-20261014",
   "base_pr": 148,
   "pull_request": "https://github.com/11576865/ASS-Workbench-Android/pull/149",
-  "current_bounded_work_unit": "Source CI #38930055526 pass; emulator #38930055528 171 tests, four failures. Repair FIXED V1.1 weighted subtitle text Row width, preserve other three regression blockers.",
+  "current_bounded_work_unit": "Review exact-head source CI #38998011682 and Android Emulator Regression #38998011161, repair only the FIXED V1.1 subtitle body bounds and instrumented test fixture, leaving 4 other runtime failures open.",
   "completed_units": [
     "Created implementation branch from existing R3 visual-layout work to avoid duplicating video/timeline infrastructure.",
     "Created FixedV11EventGrid.kt as real Material3 Compose UI with index/start/end/Style/text/QC.",
@@ -58,19 +58,26 @@
     "Source CI #38930055526 SUCCESS at checkpoint 90633f8a; Android Kotlin, AndroidTest Kotlin and JVM steps passed.",
     "Emulator #38930055528 FAILURE on same head: native R3 1600x960 capture and four projection test families passed, full instrumented suite 171 tests/4 failures.",
     "Four current failures: FIXED grid visible-text tag not displayed; inspector draft-rotation test times out in hideKeyboard() before re-opening navigation; batchDraftAndReviewedPreviewFollowSameInstanceAcrossMainAndCanvas cannot locate tool-BATCH; spatialWorkspaceExposesBoardAndNativeEditorWithoutMovingWorldNodes cannot display 取消驻留.",
-    "Production FIXED V1.1 row's text/QC child Row had no fillMaxWidth, allowing weighted Text to measure zero width. Added Modifier.fillMaxWidth() in fix commit 18f09bf3dbbf285028248dd6061a17eb847bfcce, without altering any strict assertions or state owners. New exact-head compile and emulator effects unverified."
+    "Production FIXED V1.1 row's text/QC child Row had no fillMaxWidth, allowing weighted Text to measure zero width. Added Modifier.fillMaxWidth() in fix commit 18f09bf3dbbf285028248dd6061a17eb847bfcce, without altering any strict assertions or state owners. New exact-head compile and emulator effects unverified.",
+    "Recovered actual PR #149 head 8d91fc36840ec5dadc35594ec6fc06cf729baebc and its R3 base 822a668bb0a0312ac16a4ae73339c489f157557e using get_pr_info; parent #148 still draft.",
+    "Read exact-head FIXED V1.1 Branch Validation #38998011682: success. Android Emulator Regression #38998011161: failure; emulator editor-regression job 117294784756 failed, evidence job succeeded, R3 native PNG capture remained valid SHA256 26ee6884ae28449e661121bcf9cf3fad711a06a4198e348a4bdf2c62be5f7d7c.",
+    "Emulator #38998011161 full 171 instrumented tests: 5 failures: batchDraftAndReviewedPreviewFollowSameInstanceAcrossMainAndCanvas (tool-BATCH missing); inspectorDraftSurvivesToolSwitchAndRotation (hideKeyboard wait timeout at EditorRegressionInstrumentedTest.kt:2027); spatialWorkspaceExposesBoardAndNativeEditorWithoutMovingWorldNodes (取消驻留 not visible); transformFieldsProjectExternalPreviewAndRestoreDrafts (SetText target geometry-shear-x-1-value left semantics tree); FixedV11EventGridInstrumentedTest.wideGridExposesEventTimesStyleAndTextWithoutAddingEditorState (body node not displayed). All five remain real failures until externally re-run.",
+    "Repaired only the FIXED subtitle grid text layout: commit b6c727affef36b3b9116eada9ad506c580062f31 reserves min height; for no-QC event rows uses direct fillMaxWidth instead of weighted Text while still reserving weight when a QC button exists.",
+    "Modified FIXED V1.1 instrumented fixture in d58dd0c63d66a3ba30ac06ca331992165d33b749 to set finite fillMaxWidth Column and verify actual body Text via unmerged semantics, retaining assertIsDisplayed on tagged body and visible Chinese subtitle content. No tests disabled or success claimed.",
+    "No production changes outside FixedV11EventGrid.kt and no SPATIAL host edits. Post-patch CI deliberately not polled in this same bounded repair generation per AGENTS.md."
   ],
   "next_units": [
-    "Inspect one exact-head post-width-fix source and emulator CI; validate visible subtitle text, do not disable assertIsDisplayed.",
-    "Investigate prior remaining three failures: inspector IME hide/rotation, BATCH tool discovery, SPATIAL unpin; compare with parent R3 baseline before any SPATIAL implementation edits.",
-    "Produce real Android FIXED V1.1 1440x900 and 1024x768 screenshots and compare with Figma page 85:2 once runtime regression stable."
+    "Inspect one authoritative exact-head FIXED V1.1 source + emulator CI after body text layout/test patch; compare specific grid test and four remaining runtime errors without assuming success.",
+    "Isolate and repair true inspector IME/rotation recovery regression, BATCH tool navigation, spatial unpin and transform field lifecycle test against parent R3 baseline one bounded unit at a time; do not suppress any failures.",
+    "Capture 1440×900 and 1024×768 real Android FIXED V1.1 screens and compare to frozen Figma page 85:2; existing R3 1600×960 screenshot is insufficient.",
+    "Do not merge PR #148/#149 until required CI and visual/runtime gates met."
   ],
-  "latest_durable_commit": "18f09bf3dbbf285028248dd6061a17eb847bfcce",
+  "latest_durable_commit": "d58dd0c63d66a3ba30ac06ca331992165d33b749",
   "external_validation": {
-    "android_ci": "Source/JVM run #38930055526 SUCCESS on prior 90633f8a. New production row width commit 18f09bf not yet externally compiled.",
-    "android_emulator": "Run #38930055528 completed FAILURE: 171 tests, 4 failures. One FIXED grid text visibility case patched (unverified); three inspector/BATCH/SPATIAL runtime cases remain.",
+    "android_ci": "Exact prior head 8d91fc3: FIXED V1.1 Branch Validation #38998011682 SUCCESS. New text layout/test patch compilation result PENDING.",
+    "android_emulator": "Exact prior head 8d91fc3: Android Emulator Regression #38998011161 FAILED full 171 tests/5 failures; latest b6c727af + d58dd0c6 subtitle text bounds/fixture fix PENDING external rerun; four other failures remain unresolved.",
     "real_tablet": "Not started",
-    "figma_visual_parity": "R3 native 1600x960 screenshot captured, but true FIXED 1440x900 and 1024x768 screenshots/parity not obtained."
+    "figma_visual_parity": "R3 1600x960 native screenshot verified again in emulator #38998011161 (SHA256 26ee6884...), but FIXED V1.1 1440x900 and 1024x768 target captures still NOT obtained."
   },
   "blockers": [
     "Base R3 visual-layout PR #148 remains draft and is a dependency.",
@@ -82,7 +89,9 @@
     "Full emulator regression #38906758867 failed: 7/171 instrumentation including 2 V1.1 test semantics and five other inspector/tool catalog/spatial regression cases. No acceptance until exact-head re-test.",
     "Existing tool-BATCH/tool-POSITION UI tag not found in three tests, spatial pinned button not displayed, and inspector draft rotation timeout; may be upstream R3 or V1.1 integration regression, attribution unverified.",
     "Emulator #38930055528: 4/171 failures (grid text visibility, inspector IME hide/rotation, BATCH entry, SPATIAL unpin). Row-width repair submitted but untested.",
-    "Post-layout source compile and emulator tests for 18f09bf3 are pending."
+    "Post-layout source compile and emulator tests for 18f09bf3 are pending.",
+    "Emulator #38998011161 had five failures (grid visible text, BATCH entry, inspector IME hide timeout, spatial unpin visibility and transform SetText node disposal); no green emulator evidence for this head.",
+    "Grid text min-height/direct full-width plus strict unmerged body visibility test committed once; new source/emulator result PENDING."
   ],
   "updated_at": "2026-10-17",
   "handoff_rules": [
