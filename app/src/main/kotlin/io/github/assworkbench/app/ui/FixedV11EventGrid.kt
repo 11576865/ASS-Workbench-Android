@@ -111,15 +111,18 @@ internal fun FixedV11EventGridRow(
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        // The text/QC Row must occupy the event width. Without an explicit
-        // finite width, its weighted Text can measure at zero width on-device
-        // even while the Event and timing cells above are visible.
+        // A no-QC row has no competing sibling and must not depend on
+        // weight allocation for its subtitle body. Keep a finite text height
+        // and retain weight only when a QC button needs the trailing space.
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().heightIn(min = 22.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            val textWidth = if (issues.isEmpty()) Modifier.fillMaxWidth()
+                else Modifier.weight(1f)
             Text(visibleText.ifBlank { "（空字幕）" },
-                modifier = Modifier.weight(1f).testTag("fixed-v11-grid-text-$eventId"),
+                modifier = textWidth.heightIn(min = 20.dp)
+                    .testTag("fixed-v11-grid-text-$eventId"),
                 maxLines = 1, overflow = TextOverflow.Ellipsis,
                 style = MaterialTheme.typography.bodySmall)
             if (issues.isNotEmpty()) {
