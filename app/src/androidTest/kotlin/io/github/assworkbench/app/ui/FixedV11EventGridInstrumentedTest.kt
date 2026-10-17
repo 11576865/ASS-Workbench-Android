@@ -1,6 +1,8 @@
 package io.github.assworkbench.app.ui
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.ui.Modifier
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -22,7 +24,9 @@ class FixedV11EventGridInstrumentedTest {
     @Test fun wideGridExposesEventTimesStyleAndTextWithoutAddingEditorState() {
         composeRule.setContent {
             MaterialTheme {
-                Column {
+                // Model the finite-width navigation pane; do not let the
+                // fixture depend on wrap-content root measurement.
+                Column(Modifier.fillMaxWidth()) {
                     FixedV11EventGridHeader()
                     FixedV11EventGridRow(
                         eventId = 39L,
@@ -51,7 +55,13 @@ class FixedV11EventGridInstrumentedTest {
         composeRule.onNodeWithText("1:20.800").assertIsDisplayed()
         composeRule.onNodeWithText("1:22.400").assertIsDisplayed()
         composeRule.onNodeWithText("Opening").assertIsDisplayed()
-        composeRule.onNodeWithTag("fixed-v11-grid-text-39").assertIsDisplayed()
+        // Inspect the painted unmerged Text semantics rather than a merged
+        // clickable parent. Both the user-visible body and the tagged body
+        // must occupy actual on-screen bounds.
+        composeRule.onNodeWithTag("fixed-v11-grid-text-39", useUnmergedTree = true)
+            .assertIsDisplayed()
+        composeRule.onNodeWithText("世界依然值得凝视", useUnmergedTree = true)
+            .assertIsDisplayed()
     }
 
     @Test fun tapAndLongPressUseProvidedExistingNavigationActions() {
