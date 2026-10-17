@@ -1010,6 +1010,17 @@ private fun FixedWorkspace(
     // Navigation is session-root state; reopening this host preserves the chosen task.
     var directoryOpen by rememberSaveable { mutableStateOf(false) }
     var previewScale by rememberSaveable { mutableFloatStateOf(1f) }
+    // The drawer and its coroutine scope belong to FIXED, above adaptive
+    // profile changes. No Event/ToolInstance state is stored in the drawer.
+    val v11EventDrawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+    val v11DrawerScope = rememberCoroutineScope()
+    // Layout mode belongs to the FIXED session, never to a new ToolInstance.
+    // Switching must leave Focus/Selection, unsaved drafts and Undo untouched.
+    var fixedV11ModeName by rememberSaveable(state.workspaceSessionId) {
+        mutableStateOf(FixedV11WorkspaceMode.SUBTITLE_EDIT.name)
+    }
+    val fixedV11Mode = runCatching { FixedV11WorkspaceMode.valueOf(fixedV11ModeName) }
+        .getOrDefault(FixedV11WorkspaceMode.SUBTITLE_EDIT)
     // Media dimensions are observational. They never become ASS or project layout state.
     var r3MediaAspect by remember(state.project.videoUri) { mutableFloatStateOf(16f / 9f) }
 
@@ -1046,13 +1057,21 @@ private fun FixedWorkspace(
                 onExpandedChange = { next ->
                     val target = next ?: expandedEventId
                     onExpandedChange(target)
-                    if (target != null) selectTool(WorkbenchTool.TEXT)
+                    if (target != null) {
+                        selectTool(WorkbenchTool.TEXT)
+                        // A focused Event exits the overlay. Long-press selection
+                        // remains in the drawer for multi-select operations.
+                        if (v11EventDrawerState.isOpen) {
+                            v11DrawerScope.launch { v11EventDrawerState.close() }
+                        }
+                    }
                 },
                 onTool = ::selectTool,
                 eventEditorStateHolder = eventEditorStateHolder,
                 tool = WorkbenchTool.TEXT,
                 modifier = Modifier.weight(1f),
                 r3Chrome = LocalConfiguration.current.screenWidthDp >= 1180,
+                v11CompactGrid = LocalConfiguration.current.screenWidthDp in 720..1179,
             ) { }
             }
         }
@@ -1102,6 +1121,7 @@ private fun FixedWorkspace(
     }
 
     Column(modifier) {
+        val v11DrawerAvailable = LocalConfiguration.current.screenWidthDp in 720..1179
         WorkbenchTaskBar(
             activeTool = activeTool,
             listRequested = listRequested,
@@ -1109,6 +1129,9 @@ private fun FixedWorkspace(
             onTool = { tool ->
                 if (tool == WorkbenchTool.SUBTITLES) {
                     onListRequested(true)
+                    if (v11DrawerAvailable) {
+                        v11DrawerScope.launch { v11EventDrawerState.open() }
+                    }
                 } else selectTool(tool)
             },
             onPreview = { previewDensityName = requestedPreview.next().name },
@@ -1116,7 +1139,19 @@ private fun FixedWorkspace(
             onToggleSpatialHost = onToggleSpatialHost,
         )
 
+        // The V1.1 task-scene switch changes geometry only; it does NOT call
+        // onActiveTool, change Binding or rebuild the live inspector.
+        if (LocalConfiguration.current.screenWidthDp >= 1180) {
+            FixedV11WorkspaceTabs(
+                selected = fixedV11Mode,
+                onSelect = { mode -> fixedV11ModeName = mode.name },
+            )
+        }
+
         BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
+            // Capture the parent constraints in this scope; nested Row/Column/Box
+            // receivers must not implicitly resolve the outer maxHeight.
+            val availableHeightDp = maxHeight.value
             val density = LocalDensity.current
             val imeVisible = WindowInsets.ime.getBottom(density) > 0
             val policy = AdaptiveWorkspacePolicy.resolve(
@@ -1125,10 +1160,19 @@ private fun FixedWorkspace(
                 imeVisible = imeVisible,
                 requestedPreview = requestedPreview,
             )
+            // Keep an OPEN Event drawer alive while the IME changes the
+            // adaptive height profile. The underlying inspector remains movable.
+            val displayProfile = FixedV11CompactDrawerPolicy.effectiveProfile(
+                adaptive = policy.profile,
+                widthDp = maxWidth.value,
+                drawerOpen = v11EventDrawerState.isOpen,
+            )
             val briefInspector = activeTool == WorkbenchTool.PROJECT || activeTool == WorkbenchTool.EVENT
-            val inspectorFraction = when (policy.profile) {
+            val inspectorFraction = when (displayProfile) {
                 WorkbenchLayoutProfile.THREE_PANE -> if (briefInspector) 0.30f else policy.inspectorFraction
-                WorkbenchLayoutProfile.DUAL_PANE -> if (briefInspector) 0.38f else policy.inspectorFraction
+                WorkbenchLayoutProfile.DUAL_PANE ->
+                    if (briefInspector) 0.38f else if (policy.profile == WorkbenchLayoutProfile.COMPACT) 0.46f
+                    else policy.inspectorFraction
                 WorkbenchLayoutProfile.COMPACT -> 1f
             }
             val previewVisible = policy.effectivePreview != PreviewDensity.HIDDEN
@@ -1158,7 +1202,7 @@ private fun FixedWorkspace(
                 )
             }
 
-            when (policy.profile) {
+            when (displayProfile) {
                 WorkbenchLayoutProfile.THREE_PANE -> {
                     // R3 design reference: EVENT navigator | VIDEO + REAL TIMELINE | inspector.
                     // Retain the existing production editor and player instead of drawing
@@ -1168,6 +1212,7 @@ private fun FixedWorkspace(
                         heightDp = maxHeight.value,
                         mediaAspect = r3MediaAspect,
                         preview = policy.effectivePreview,
+                        timingPriority = fixedV11Mode == FixedV11WorkspaceMode.PRECISE_TIMING,
                     )
                     Row(Modifier.fillMaxSize().testTag("r3-fixed-wide")) {
                         Box(Modifier.width(geometry.navigationWidthDp.dp).fillMaxHeight()
@@ -1251,6 +1296,15 @@ private fun FixedWorkspace(
                                     }
                                 }
                                 HorizontalDivider()
+                                if (fixedV11Mode == FixedV11WorkspaceMode.PRECISE_TIMING) {
+                                    val mediaPositionMs by viewModel.playbackPositionMs.collectAsState()
+                                    FixedV11TimingContext(
+                                        event = resolvedEvent,
+                                        bindingDescription = bindingLabel,
+                                        mediaPositionMs = mediaPositionMs,
+                                    )
+                                    HorizontalDivider()
+                                }
                                 // Effective values are read-only evidence. They must never
                                 // change the binding or write scope of the live editor.
                                 if ((activeTool == WorkbenchTool.POSITION ||
@@ -1278,19 +1332,51 @@ private fun FixedWorkspace(
                     }
                 }
 
-                WorkbenchLayoutProfile.DUAL_PANE -> Row(Modifier.fillMaxSize()) {
-                    Column(Modifier.weight(1f - inspectorFraction).fillMaxHeight()) {
-                        if (previewVisible) {
-                            preview(
-                                Modifier.fillMaxWidth()
-                                    .height(policy.previewHeightDp.dp)
+                WorkbenchLayoutProfile.DUAL_PANE -> {
+                    // FIXED V1.1 compact-tablet layout: same EventWorkspace in an
+                    // on-demand drawer, same live video/timeline and inspector.
+                    // Unlike the old DUAL_PANE layout, the grid no longer displaces
+                    // the audio timing tools for the whole editing session.
+                    FixedV11CompactEventDrawer(
+                        drawerState = v11EventDrawerState,
+                        total = state.document.events.size,
+                        selected = state.selectedEventIds.size,
+                        onOpen = { v11DrawerScope.launch { v11EventDrawerState.open() } },
+                        onClose = { v11DrawerScope.launch { v11EventDrawerState.close() } },
+                        eventList = { listModifier -> listPane(listModifier) },
+                    ) {
+                        Row(Modifier.fillMaxSize().testTag("fixed-v11-compact-two-pane")) {
+                            Column(
+                                Modifier.weight(1f - inspectorFraction).fillMaxHeight(),
+                            ) {
+                                if (previewVisible) {
+                                    val visualHeight = policy.previewHeightDp.coerceAtMost(
+                                        availableHeightDp * 0.43f
+                                    )
+                                    Box(Modifier.fillMaxWidth().height(visualHeight.dp)
+                                        .testTag("fixed-v11-compact-video")) {
+                                        preview(Modifier.fillMaxSize())
+                                    }
+                                    HorizontalDivider()
+                                }
+                                // This is the real media-clock-bound timeline, not
+                                // a screenshot, waveform clone, or second ViewModel.
+                                Box(Modifier.weight(1f).fillMaxWidth()
+                                    .testTag("fixed-v11-compact-timeline")) {
+                                    ModernTimelinePane(
+                                        state = state,
+                                        viewModel = viewModel,
+                                        compact = availableHeightDp < 620f || imeVisible,
+                                        modifier = Modifier.fillMaxSize(),
+                                    )
+                                }
+                            }
+                            VerticalDivider()
+                            movableInspector(
+                                Modifier.weight(inspectorFraction).fillMaxHeight()
                             )
-                            HorizontalDivider()
                         }
-                        listPane(Modifier.weight(1f).fillMaxWidth())
                     }
-                    VerticalDivider()
-                    movableInspector(Modifier.weight(inspectorFraction).fillMaxHeight())
                 }
 
                 WorkbenchLayoutProfile.COMPACT -> {
@@ -1889,6 +1975,7 @@ private fun EventWorkspace(
     tool: WorkbenchTool,
     modifier: Modifier = Modifier,
     r3Chrome: Boolean = false,
+    v11CompactGrid: Boolean = false,
     supportingPane: @Composable () -> Unit,
 ) {
     val uiState = state.toEditorUiState()
@@ -1949,6 +2036,7 @@ private fun EventWorkspace(
             Divider()
         }
         Divider()
+        if (r3Chrome || v11CompactGrid) FixedV11EventGridHeader()
         LazyColumn(
             state = listState,
             modifier = Modifier
@@ -2005,25 +2093,46 @@ private fun EventWorkspace(
                 },
         ) {
             items(state.filteredEvents, key = { it.id }) { event ->
-                ModernEventRow(
-                    event, event.id == uiState.focus.eventId, false,
-                    event.id in uiState.selection.eventIds, selectionMode, issuesByEvent[event.id].orEmpty(),
-                    state, viewModel, eventEditorStateHolder,
-                    {
-                        if (selectionMode) uiActions.toggleSelection(event.id)
-                        else {
-                            uiActions.focusEvent(event.id, seek = true)
-                            onExpandedChange(if (expandedEventId == event.id) null else event.id)
-                        }
-                    },
-                    {
-                        if (event.id !in uiState.selection.eventIds) {
-                            uiActions.toggleSelection(event.id)
-                        }
-                    },
-                    { onExpandedChange(null) },
-                    onTool,
-                )
+                val openEvent: () -> Unit = {
+                    if (selectionMode) uiActions.toggleSelection(event.id)
+                    else {
+                        uiActions.focusEvent(event.id, seek = true)
+                        onExpandedChange(if (expandedEventId == event.id) null else event.id)
+                    }
+                }
+                val selectEvent: () -> Unit = {
+                    if (event.id !in uiState.selection.eventIds) {
+                        uiActions.toggleSelection(event.id)
+                    }
+                }
+                if (r3Chrome || v11CompactGrid) {
+                    // V1.1 changes only the event navigator's presentation.
+                    // Keep the same stable IDs, filter order and ViewModel actions.
+                    FixedV11EventGridRow(
+                        eventId = event.id,
+                        start = event.start.toAss().removePrefix("0:"),
+                        end = event.end.toAss().removePrefix("0:"),
+                        styleName = event.style,
+                        visibleText = AssInlineSyntax.visibleText(event.text),
+                        focused = event.id == uiState.focus.eventId,
+                        selected = event.id in uiState.selection.eventIds,
+                        selectionMode = selectionMode,
+                        issues = issuesByEvent[event.id].orEmpty(),
+                        onClick = openEvent,
+                        onLongClick = selectEvent,
+                    )
+                } else {
+                    ModernEventRow(
+                        event, event.id == uiState.focus.eventId, false,
+                        event.id in uiState.selection.eventIds, selectionMode,
+                        issuesByEvent[event.id].orEmpty(),
+                        state, viewModel, eventEditorStateHolder,
+                        openEvent,
+                        selectEvent,
+                        { onExpandedChange(null) },
+                        onTool,
+                    )
+                }
                 Divider()
             }
         }

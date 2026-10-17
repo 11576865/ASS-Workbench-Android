@@ -1,0 +1,56 @@
+name: FIXED V1.1 Branch Validation
+
+# Draft PR #149 targets the R3 feature branch, while the normal Android CI
+# workflow only listens for PRs against main. Validate this exact source branch
+# without changing the production CI scope or the PR's merge base.
+on:
+  push:
+    branches:
+      - feat/fixed-v11-event-grid-20261016
+  pull_request:
+    branches:
+      - feat/r3-fixed-visual-layout-20261014
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fixed-v11-validation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compile-and-unit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify repository Actions artifact constraints
+        run: python3 tools/check_artifact_policy.py
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: 'platform-tools'
+      - name: Install SDK 36
+        shell: bash
+        run: |
+          set -euxo pipefail
+          sdkmanager "platforms;android-36" >/dev/null
+          test -d "$ANDROID_HOME/platforms/android-36"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.7.1'
+      - name: Compile Android and all instrumentation sources
+        run: gradle :app:compileDebugKotlin :app:compileDebugAndroidTestKotlin --stacktrace
+      - name: Execute JVM tests (including FIXED V1.1 policies)
+        run: gradle :core:domain:test :core:fonts:test :core:container:test :app:testDebugUnitTest --stacktrace
+      - name: Summarize source-only validation
+        shell: bash
+        run: |
+          echo "FIXED V1.1 branch head: $GITHUB_SHA"
+          echo "Android compile + JVM tests passed. Emulator/IME and visual parity remain separate gates."
+# Intentionally no APK upload or retained test artifacts. Emulator screenshot
+# evidence requires the dedicated Android Emulator Regression workflow later.
