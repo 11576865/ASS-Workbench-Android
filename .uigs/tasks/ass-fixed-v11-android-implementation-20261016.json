@@ -14,7 +14,7 @@
   "base_branch": "feat/r3-fixed-visual-layout-20261014",
   "base_pr": 148,
   "pull_request": "https://github.com/11576865/ASS-Workbench-Android/pull/149",
-  "current_bounded_work_unit": "Review exact-head source CI #38998011682 and Android Emulator Regression #38998011161, repair only the FIXED V1.1 subtitle body bounds and instrumented test fixture, leaving 4 other runtime failures open.",
+  "current_bounded_work_unit": "Fix exact-head #39020954103 R3 catalog search usability and instrumented FIXED tool routing, preserving both presentation hosts and domain state; new exact-head CI Pending.",
   "completed_units": [
     "Created implementation branch from existing R3 visual-layout work to avoid duplicating video/timeline infrastructure.",
     "Created FixedV11EventGrid.kt as real Material3 Compose UI with index/start/end/Style/text/QC.",
@@ -64,18 +64,23 @@
     "Emulator #38998011161 full 171 instrumented tests: 5 failures: batchDraftAndReviewedPreviewFollowSameInstanceAcrossMainAndCanvas (tool-BATCH missing); inspectorDraftSurvivesToolSwitchAndRotation (hideKeyboard wait timeout at EditorRegressionInstrumentedTest.kt:2027); spatialWorkspaceExposesBoardAndNativeEditorWithoutMovingWorldNodes (取消驻留 not visible); transformFieldsProjectExternalPreviewAndRestoreDrafts (SetText target geometry-shear-x-1-value left semantics tree); FixedV11EventGridInstrumentedTest.wideGridExposesEventTimesStyleAndTextWithoutAddingEditorState (body node not displayed). All five remain real failures until externally re-run.",
     "Repaired only the FIXED subtitle grid text layout: commit b6c727affef36b3b9116eada9ad506c580062f31 reserves min height; for no-QC event rows uses direct fillMaxWidth instead of weighted Text while still reserving weight when a QC button exists.",
     "Modified FIXED V1.1 instrumented fixture in d58dd0c63d66a3ba30ac06ca331992165d33b749 to set finite fillMaxWidth Column and verify actual body Text via unmerged semantics, retaining assertIsDisplayed on tagged body and visible Chinese subtitle content. No tests disabled or success claimed.",
-    "No production changes outside FixedV11EventGrid.kt and no SPATIAL host edits. Post-patch CI deliberately not polled in this same bounded repair generation per AGENTS.md."
+    "No production changes outside FixedV11EventGrid.kt and no SPATIAL host edits. Post-patch CI deliberately not polled in this same bounded repair generation per AGENTS.md.",
+    "Read exact-head 753e5f34 Android Emulator Regression #39020954103: 171 instrumentation tests, 6 failures, 0 skipped; sibling FIXED V1.1 Branch Validation #39020954114 SUCCESS. Three old openTool() failures used obsolete tool-* selectors while expanded R3 catalog publishes r3-tool-* tags; other failures concern inspector IME, spatial unpin and geometry shear field lifecycle.",
+    "Commit fd73fa2c: filter out nonmatching R3 catalog groups before four-column chunking, so late-group matching tools are first-row composed/reachable; report explicit r3-tool-empty state when nothing matches. Keeps original 18 Tool identities and callbacks.",
+    "Commit 048005e7: update shared Android editor-regression openTool helper to detect the actual expanded R3 catalog, search using r3-tool-search and select r3-tool-<ID>; retain original shared-directory routing for compact FIXED and spatial-add-tool routing for SPATIAL.",
+    "Commit e4a779bf: add Android Compose regression that BATCH (seventh group) is visible after filtering, that nonmatching Position tool is absent, and that an unmatched search displays an explicit empty state. All new tests require a new emulator run; no test skipped or muted."
   ],
   "next_units": [
-    "Inspect one authoritative exact-head FIXED V1.1 source + emulator CI after body text layout/test patch; compare specific grid test and four remaining runtime errors without assuming success.",
+    "Inspect one exact-head FIXED branch CI and Emulator Regression outcome after e4a779bf; if still red, localize each failing assertion without relabeling all six as fixed.",
+    "Resolve remaining inspector IME/rotation, SPATIAL unpin, and shear field lifecycle failures in separate bounded units after source-backed attribution; do not casually change SPATIAL production inside FIXED-only branch.",
     "Isolate and repair true inspector IME/rotation recovery regression, BATCH tool navigation, spatial unpin and transform field lifecycle test against parent R3 baseline one bounded unit at a time; do not suppress any failures.",
     "Capture 1440×900 and 1024×768 real Android FIXED V1.1 screens and compare to frozen Figma page 85:2; existing R3 1600×960 screenshot is insufficient.",
     "Do not merge PR #148/#149 until required CI and visual/runtime gates met."
   ],
-  "latest_durable_commit": "d58dd0c63d66a3ba30ac06ca331992165d33b749",
+  "latest_durable_commit": "e4a779bf026162476a64d51468702455a2d0604f",
   "external_validation": {
-    "android_ci": "Exact prior head 8d91fc3: FIXED V1.1 Branch Validation #38998011682 SUCCESS. New text layout/test patch compilation result PENDING.",
-    "android_emulator": "Exact prior head 8d91fc3: Android Emulator Regression #38998011161 FAILED full 171 tests/5 failures; latest b6c727af + d58dd0c6 subtitle text bounds/fixture fix PENDING external rerun; four other failures remain unresolved.",
+    "android_ci": "Exact previous head 753e5f34: FIXED V1.1 Branch Validation #39020954114 SUCCESS. New e4a779bf code/test head: Pending CI.",
+    "android_emulator": "Exact previous head 753e5f34: Android Emulator Regression #39020954103 FAIL, 171 tests/6 failures (inspector IME, BATCH/EVENT/EFFECTS old catalog tags, SPATIAL unpin, shear field node disposal). New e4a779bf head: Pending CI; no successful evidence inferred.",
     "real_tablet": "Not started",
     "figma_visual_parity": "R3 1600x960 native screenshot verified again in emulator #38998011161 (SHA256 26ee6884...), but FIXED V1.1 1440x900 and 1024x768 target captures still NOT obtained."
   },
@@ -91,9 +96,10 @@
     "Emulator #38930055528: 4/171 failures (grid text visibility, inspector IME hide/rotation, BATCH entry, SPATIAL unpin). Row-width repair submitted but untested.",
     "Post-layout source compile and emulator tests for 18f09bf3 are pending.",
     "Emulator #38998011161 had five failures (grid visible text, BATCH entry, inspector IME hide timeout, spatial unpin visibility and transform SetText node disposal); no green emulator evidence for this head.",
-    "Grid text min-height/direct full-width plus strict unmerged body visibility test committed once; new source/emulator result PENDING."
+    "Grid text min-height/direct full-width plus strict unmerged body visibility test committed once; new source/emulator result PENDING.",
+    "The prior emulator reports three missing tool-* nodes because the shared test driver used legacy dialog selectors on expanded R3; scoped driver repair is submitted but unverified on a new exact head."
   ],
-  "updated_at": "2026-10-17",
+  "updated_at": "2026-10-22",
   "handoff_rules": [
     "No automatic merge to main, no updates to original SPATIAL implementation.",
     "One coherent increment per branch/PR; inspect CI for exact head only once.",
