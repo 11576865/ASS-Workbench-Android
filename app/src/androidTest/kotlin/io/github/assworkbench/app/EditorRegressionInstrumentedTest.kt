@@ -2056,10 +2056,22 @@ class EditorRegressionInstrumentedTest {
                 showFixedSubtitleList()
                 return
             }
-            composeRule.onNodeWithTag("fixed-tool-CAPABILITIES").performClick()
-            composeRule.onNodeWithTag("tool-search").performTextReplacement(name)
-            hideKeyboard()
-            composeRule.onNodeWithTag("tool-$name").performScrollTo().assertIsDisplayed().performClick()
+            composeRule.onNodeWithTag("fixed-tool-CAPABILITIES").assertIsDisplayed().performClick()
+            // FIXED uses a full R3 catalog on expanded tablets, but keeps the
+            // shared directory in compact windows. Both must select the real
+            // WorkbenchTool; legacy `tool-*` tags do not exist in the R3 dialog.
+            val r3Catalog = composeRule.onAllNodesWithTag("r3-tool-catalog", useUnmergedTree = true)
+                .fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()
+            if (r3Catalog) {
+                composeRule.onNodeWithTag("r3-tool-search").performTextReplacement(name)
+                composeRule.onNodeWithTag("r3-tool-$name")
+                    .performScrollTo().assertIsDisplayed().performClick()
+            } else {
+                composeRule.onNodeWithTag("tool-search").performTextReplacement(name)
+                hideKeyboard()
+                composeRule.onNodeWithTag("tool-$name")
+                    .performScrollTo().assertIsDisplayed().performClick()
+            }
             composeRule.waitForIdle()
             // Inner performScrollTo only reaches the nearest scroll ancestor.
             // Expose the finite inspector in the compact outer flow first;
