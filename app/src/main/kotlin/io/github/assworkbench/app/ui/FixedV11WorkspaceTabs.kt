@@ -1,14 +1,22 @@
 package io.github.assworkbench.app.ui
 
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.background
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -16,45 +24,66 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import io.github.assworkbench.domain.*
 
 /**
- * Presentation-only FIXED workspace mode, not a WorkbenchTool replacement.
- * Switching changes space allocation of the EXISTING video and timeline;
- * Focus/Selection, inspector identity, drafts, write target and Undo do not change.
+ * Figma 85:21: four task scenes with an underline and live binding context.
+ * Callback routing stays in FIXED; this composable owns no editor or tool state.
  */
-internal enum class FixedV11WorkspaceMode { SUBTITLE_EDIT, PRECISE_TIMING }
-
 @Composable
 internal fun FixedV11WorkspaceTabs(
     selected: FixedV11WorkspaceMode,
     onSelect: (FixedV11WorkspaceMode) -> Unit,
     modifier: Modifier = Modifier,
+    contextDescription: String = "",
 ) {
     Surface(modifier = modifier.fillMaxWidth().testTag("fixed-v11-workspace-tabs"),
-        color = MaterialTheme.colorScheme.surfaceContainer) {
-        Row(
-            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
-                .heightIn(min = 48.dp).padding(horizontal = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            FilterChip(
-                selected = selected == FixedV11WorkspaceMode.SUBTITLE_EDIT,
-                onClick = { onSelect(FixedV11WorkspaceMode.SUBTITLE_EDIT) },
-                label = { Text("字幕编辑") },
-                modifier = Modifier.testTag("fixed-v11-tab-subtitle"),
-            )
-            FilterChip(
-                selected = selected == FixedV11WorkspaceMode.PRECISE_TIMING,
-                onClick = { onSelect(FixedV11WorkspaceMode.PRECISE_TIMING) },
-                label = { Text("专业校时") },
-                modifier = Modifier.testTag("fixed-v11-tab-timing"),
-            )
-            Text("FIXED · 同一工程与编辑状态",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
+        color = MaterialTheme.colorScheme.surfaceContainerLow) {
+        Column {
+            Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(horizontal = 14.dp),
+                verticalAlignment = Alignment.CenterVertically) {
+                Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()).selectableGroup(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FixedV11WorkspaceMode.entries.forEach { mode ->
+                        val active = selected == mode
+                        Box(Modifier.width(mode.widthDp.dp).height(48.dp)
+                            .selectable(selected = active, role = Role.Tab, onClick = { onSelect(mode) })
+                            .testTag("fixed-v11-tab-${mode.tag}")) {
+                            Box(Modifier.matchParentSize().padding(vertical = 5.dp)
+                                .background(
+                                    if (active) MaterialTheme.colorScheme.surfaceContainerHigh
+                                    else MaterialTheme.colorScheme.surfaceContainerLow,
+                                    RoundedCornerShape(5.dp),
+                                ))
+                            Text(mode.title,
+                                modifier = Modifier.align(Alignment.CenterStart).padding(start = 13.dp),
+                                style = MaterialTheme.typography.labelLarge.copy(fontSize = 13.sp),
+                                fontWeight = if (active) FontWeight.Bold else FontWeight.Medium,
+                                color = if (active) MaterialTheme.colorScheme.primary
+                                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                            )
+                            if (active) Box(Modifier.align(Alignment.BottomCenter)
+                                .padding(start = 8.dp, end = 8.dp, bottom = 5.dp)
+                                .fillMaxWidth().height(3.dp)
+                                .background(MaterialTheme.colorScheme.primary)
+                                .testTag("fixed-v11-tab-indicator"))
+                        }
+                    }
+                }
+                if (contextDescription.isNotBlank()) Text(contextDescription,
+                    modifier = Modifier.widthIn(max = 360.dp).padding(start = 16.dp)
+                        .testTag("fixed-v11-workspace-context"),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         }
     }
 }

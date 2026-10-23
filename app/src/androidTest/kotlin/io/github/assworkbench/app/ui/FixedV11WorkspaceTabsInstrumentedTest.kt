@@ -11,6 +11,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -18,6 +20,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextReplacement
+import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -27,6 +30,30 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class FixedV11WorkspaceTabsInstrumentedTest {
     @get:Rule val composeRule = createComposeRule()
+
+    @Test fun allFourScenesAreReachableAndExposeOneSelectedTabWithRealContext() {
+        val selected = mutableListOf<FixedV11WorkspaceMode>()
+        composeRule.setContent {
+            MaterialTheme {
+                var mode by rememberSaveable { mutableStateOf(FixedV11WorkspaceMode.SUBTITLE_EDIT) }
+                FixedV11WorkspaceTabs(
+                    selected = mode,
+                    onSelect = { selected += it; mode = it },
+                    contextDescription = "POSITION · Event #39 · 固定绑定",
+                )
+            }
+        }
+        composeRule.onNodeWithTag("fixed-v11-workspace-context")
+            .assertTextEquals("POSITION · Event #39 · 固定绑定")
+        for (mode in FixedV11WorkspaceMode.entries) {
+            composeRule.onNodeWithTag("fixed-v11-tab-${mode.tag}")
+                .performScrollTo().assertIsDisplayed().performClick().assertIsSelected()
+            FixedV11WorkspaceMode.entries.filter { it != mode }.forEach { other ->
+                composeRule.onNodeWithTag("fixed-v11-tab-${other.tag}").assertIsNotSelected()
+            }
+        }
+        composeRule.runOnIdle { assertEquals(FixedV11WorkspaceMode.entries.toList(), selected) }
+    }
 
     @Test fun switchingTimingAndBackDoesNotCallToolOrDiscardSiblingDraft() {
         val modes = mutableListOf<FixedV11WorkspaceMode>()

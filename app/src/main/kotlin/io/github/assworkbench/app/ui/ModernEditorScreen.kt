@@ -1019,8 +1019,9 @@ private fun FixedWorkspace(
     var fixedV11ModeName by rememberSaveable(state.workspaceSessionId) {
         mutableStateOf(FixedV11WorkspaceMode.SUBTITLE_EDIT.name)
     }
-    val fixedV11Mode = runCatching { FixedV11WorkspaceMode.valueOf(fixedV11ModeName) }
-        .getOrDefault(FixedV11WorkspaceMode.SUBTITLE_EDIT)
+    val fixedV11Mode = fixedV11SceneForTool(activeTool,
+        runCatching { FixedV11WorkspaceMode.valueOf(fixedV11ModeName) }
+            .getOrDefault(FixedV11WorkspaceMode.SUBTITLE_EDIT))
     // Media dimensions are observational. They never become ASS or project layout state.
     var r3MediaAspect by remember(state.project.videoUri) { mutableFloatStateOf(16f / 9f) }
 
@@ -1139,12 +1140,29 @@ private fun FixedWorkspace(
             onToggleSpatialHost = onToggleSpatialHost,
         )
 
-        // The V1.1 task-scene switch changes geometry only; it does NOT call
-        // onActiveTool, change Binding or rebuild the live inspector.
+        // Existing subtitle/timing scenes keep their layout-only behavior.
+        // Specialist scenes route through the same tool command as the directory.
         if (LocalConfiguration.current.screenWidthDp >= 1180) {
+            val tabBinding = instance.resolveUiBinding(state.toEditorUiState())
+            val tabTarget = when {
+                tabBinding.unresolvedPinnedEventId != null -> "固定 #${tabBinding.unresolvedPinnedEventId} 已失效"
+                instance.binding == WorkspaceBinding.FollowSelection -> "选中 ${state.selectedEventIds.size} 条"
+                tabBinding.eventId != null -> "Event #${tabBinding.eventId}"
+                else -> "未选择字幕"
+            }
+            val tabBindingLabel = when (instance.binding) {
+                WorkspaceBinding.FollowFocus -> "跟随焦点"
+                WorkspaceBinding.FollowSelection -> "当前选择集"
+                is WorkspaceBinding.PinnedEvent -> "固定绑定"
+            }
             FixedV11WorkspaceTabs(
                 selected = fixedV11Mode,
-                onSelect = { mode -> fixedV11ModeName = mode.name },
+                onSelect = { mode ->
+                    fixedV11ModeName = mode.name
+                    val nextTool = mode.toolFor(activeTool)
+                    if (nextTool != activeTool) selectTool(nextTool)
+                },
+                contextDescription = "${activeTool.name} · $tabTarget · $tabBindingLabel",
             )
         }
 
