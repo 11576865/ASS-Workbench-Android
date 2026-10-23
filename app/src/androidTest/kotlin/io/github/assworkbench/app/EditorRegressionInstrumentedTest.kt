@@ -2104,8 +2104,12 @@ class EditorRegressionInstrumentedTest {
                 .fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()
         }
         composeRule.onNodeWithTag("tool-search").performTextReplacement(name)
-        hideKeyboard()
-        composeRule.onNodeWithTag("tool-$name").performScrollTo().performClick()
+        // Selecting a result must work with the search IME still open.
+        // Calling Espresso closeSoftKeyboard before the click can dismiss the
+        // enclosing spatial add-tool dialog on some device/IME combinations;
+        // the selection is then missing even though the query matched.
+        composeRule.onNodeWithTag("tool-$name")
+            .performScrollTo().assertIsDisplayed().performClick()
         composeRule.waitForIdle()
     }
 
