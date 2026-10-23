@@ -920,7 +920,9 @@ class EditorRegressionInstrumentedTest {
                 .isNotEmpty()
         }
         Log.i("AsswbRegression", "rotation:select-event")
-        eventRow(1L)
+        // Navigation was already requested above. eventRow() requests it a
+        // second time and can replace the responsive host after node lookup.
+        composeRule.onNodeWithTag("event-row-1")
             .performScrollTo()
             .assertIsDisplayed()
             .performClick()
@@ -2075,7 +2077,8 @@ class EditorRegressionInstrumentedTest {
                     .performScrollTo().assertIsDisplayed().performClick()
             } else {
                 composeRule.onNodeWithTag("tool-search").performTextReplacement(name)
-                hideKeyboard()
+                // Select while the directory still owns the search IME. Closing
+                // it through Espresso can dismiss this compact dialog itself.
                 composeRule.onNodeWithTag("tool-$name")
                     .performScrollTo().assertIsDisplayed().performClick()
             }

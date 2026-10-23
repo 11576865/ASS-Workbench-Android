@@ -146,6 +146,13 @@ for v11_dimensions in "1440 900" "1024 768"; do
       python3 "$runner_tools_dir/verify_r3_png_capture.py" "$report_session_dir/$v11_name" \
         --width "$v11_width" --height "$v11_height"; then
     echo "V11_NATIVE_CAPTURE_VALID: file=$v11_name sha256=$(sha256sum "$report_session_dir/$v11_name" | cut -d' ' -f1) size=$(wc -c < "$report_session_dir/$v11_name")"
+    # Emit runner-owned bytes immediately after run-as extraction. Android logd
+    # can drop chunks before the later diagnostic tail and is not this transport.
+    if ! python3 "$runner_tools_dir/emit_native_capture_evidence.py" \
+        --capture "$report_session_dir/$v11_name" --width "$v11_width" --height "$v11_height"; then
+      echo "V11_NATIVE_CAPTURE_FAILED: evidence transport $v11_name"
+      r3_status=1
+    fi
   else
     echo "V11_NATIVE_CAPTURE_FAILED: $v11_name"
     tail -n 85 "$v11_log" 2>/dev/null || true

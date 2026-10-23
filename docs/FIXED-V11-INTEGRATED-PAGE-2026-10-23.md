@@ -33,3 +33,35 @@ The capture host contains two deterministic Events and disables renderer/media. 
 ## UIGS Intake
 
 Foundry dedupe located the exact existing Candidate: inbox/candidates/2026-10-14-product-block-delivery-over-pr-fragmentation.md. Append the new explicit user feedback and this source response after durable product checkpoint; no Canonical modification or general productivity claim.
+
+## Verified source checkpoint and recoverable visual evidence
+
+Source `020e20761b024b64502c8ea582c163db86aa2ca9` passed source/JVM workflow
+`39956067332`. Emulator workflow `39956067357` validated both complete native
+captures: 1440×900 (134758 bytes, SHA256
+`2f8be9e6b8abce36284927958a2e009c6fb4a7c4f40ce3f1ca30852711e9e472`) and
+1024×768 (89506 bytes, SHA256
+`1e3460a7a2c9c49af7d8e56871f08423ce4fd61ae317fcadfe45347d591e89ad`).
+The four projection groups passed 22 tests. The full suite ran 179 tests with
+4 failures, 0 errors and 0 skipped. This is **not** a full regression pass.
+
+The complete editor job log could not be downloaded through the connector
+(internal/transport errors). Therefore, the native bitmaps have not yet been
+visually assessed against Figma. Capture integrity is not visual parity.
+
+Two independent `native-visual-<size>` jobs now recover one full compositor
+PNG each from the original job's runner-owned, run-as file envelope. Android logcat chunks are excluded because logd has dropped image chunks in earlier runs. They require its matching valid gate
+receipt and verify byte count, SHA256, PNG CRC and decoded dimensions before
+emitting a bounded, ordered envelope. They record run, attempt, tested merge SHA,
+source head SHA and the original regression result. These jobs do not alter
+regression status, upload artifacts, replace the image with a thumbnail, or
+claim media renderer coverage. A missing/oversized/corrupt capture fails explicitly.
+Seven local defensive tests cover valid round-trip, wrong dimensions, missing or
+forged receipt, missing chunks, a forged non-PNG payload and exclusion of Android logcat envelopes.
+
+The bounded repair also removes compact directory `hideKeyboard()` before
+result selection (the same dialog-dismissal problem already handled in the
+spatial/capture drivers), and avoids requesting subtitle navigation twice after
+rotation. All existing display, draft persistence, document, undo and lifecycle
+assertions remain. Both repair effects require new Android execution. The spatial
+pin and geometry-field failures remain unresolved and visible.
