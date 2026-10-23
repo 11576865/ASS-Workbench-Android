@@ -570,19 +570,10 @@ class EditorRegressionInstrumentedTest {
         composeRule.onNodeWithTag("workspace-mode-toggle").performClick()
         selectUiVariant("ui-variant-use-SPATIAL_EXPERIMENTAL")
 
-        composeRule.onNodeWithTag("spatial-add-tool").performClick()
-        composeRule.waitUntil(5_000) {
-            composeRule.onAllNodesWithTag(
-                "spatial-native-content-CAPABILITIES-primary",
-                useUnmergedTree = true,
-            ).fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()
-        }
-        composeRule.onNodeWithTag("tool-search")
-            .performTextReplacement("POSITION")
-        hideKeyboard()
-        composeRule.onNodeWithTag("tool-POSITION")
-            .performScrollTo()
-            .performClick()
+        // Use the same searchable directory driver as the other spatial tests.
+        // Do not close the search IME between filtering and choosing its result:
+        // that old duplicate path can dismiss the directory before selection.
+        openTool("POSITION")
         composeRule.waitUntil(5_000) {
             composeRule.onAllNodesWithTag(
                 "spatial-native-content-POSITION-primary",

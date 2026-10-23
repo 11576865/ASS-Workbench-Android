@@ -14,7 +14,7 @@
   "base_branch": "feat/r3-fixed-visual-layout-20261014",
   "base_pr": 148,
   "pull_request": "https://github.com/11576865/ASS-Workbench-Android/pull/149",
-  "current_bounded_work_unit": "2026-10-23: Figma 85:337 contextual inspector Event/Style/Position tab navigation with explicit FollowFocus-only target guard and central Raw dock retained for Event metadata.",
+  "current_bounded_work_unit": "2026-10-23: audit completed 176-test regression and consolidate the duplicate spatial parameter-extraction directory driver into maintained openTool; no product UI/domain edits.",
   "completed_units": [
     "Created implementation branch from existing R3 visual-layout work to avoid duplicating video/timeline infrastructure.",
     "Created FixedV11EventGrid.kt as real Material3 Compose UI with index/start/end/Style/text/QC.",
@@ -80,38 +80,31 @@
     "Audited prior exact head 1f38dec: source/JVM #39895419325 SUCCESS; emulator #39895419351 FAILURE. Four focused projection groups completed (9+3+7+3 tests, zero failures); R3 strict capture failed R3_NATIVE_SCREEN_OCCLUDED with active accessibility package android and target decorFocused=false. Full suite reached 20m timeout, last ANR reason Application does not have a focused window, XML empty/unreadable. No complete suite count, valid R3 image or new tab-interaction pass can be inferred.",
     "Added FixedV11TextDock in the wide SUBTITLE_EDIT/TEXT scene below the existing timeline. Extracted EventRawTextEditor from InlineEventEditor and reuse it at both locations with the same project-session draft store and instance ID. Right inspector suppresses its Raw field only while the dock is mounted; timing and metadata remain there. movableContentOf now takes explicit docking presentation flag, retaining one inspector identity across adaptive relocation. Layout reserves a bounded dock before budgeting video/timeline; hidden video preference remains honored. Added two geometry regressions and one real ViewModel/shared-draft Compose remount test; Android tests not executed locally (no Gradle).",
     "Read exact-head 1985cd2 validation: source/JVM #39908199838 SUCCESS; Android emulator #39908199829 FAILURE. App/test APK prebuild succeeded. Log APIs for editor job 120264897973 and evidence job 120272939098 returned no usable logs/internal error; failure root cause, exact test counts and new dock-runtime outcome remain unknown. Do not classify this failure as the previous focus/timeout incident without new evidence.",
-    "Added FixedV11InspectorTabs following Figma 85:337 tab strip (Event/Style/Position, selected underline, Role.Tab) and real existing tool commands. TEXT maps visually to Event; Vector Clip maps to Position; unrelated tools do not get a false selected inspector tab. Cross-tool commands require FollowFocus plus an existing resolved Event matching current Focus. Pinned/selection/missing-target states disable the tabs and display a reason. Wide Event metadata now retains central Raw editing with the same shared primary draft; timing controls are also available alongside metadata only while docked. Compact/SPATIAL Event panel behavior is unchanged. Two JVM and two Compose regression sources added, execution pending; local diff/artifact-policy checks passed."
+    "Added FixedV11InspectorTabs following Figma 85:337 tab strip (Event/Style/Position, selected underline, Role.Tab) and real existing tool commands. TEXT maps visually to Event; Vector Clip maps to Position; unrelated tools do not get a false selected inspector tab. Cross-tool commands require FollowFocus plus an existing resolved Event matching current Focus. Pinned/selection/missing-target states disable the tabs and display a reason. Wide Event metadata now retains central Raw editing with the same shared primary draft; timing controls are also available alongside metadata only while docked. Compact/SPATIAL Event panel behavior is unchanged. Two JVM and two Compose regression sources added, execution pending; local diff/artifact-policy checks passed.",
+    "PR source head 38f0ebf: source/JVM validation #39934215521 SUCCESS. Emulator #39934215567 completed FAILURE; compact evidence job 120358851195 reports merge SHA 6b02617c7a67d7fca32a9fdbe491bcf4d0fec9b4 (38f0ebf into R3 base 822a668b). Four focused projection attempts passed 9+3+7+3 cases. Full attempt has 176 tests / 6 failures / 0 errors / 0 skipped, not the previous 172/5 or a timeout with unreadable XML.",
+    "Six full-suite failures: inspectorDraftSurvivesToolSwitchAndRotation (hideKeyboard 5s timeout); spatialWorkspaceExposesBoardAndNativeEditorWithoutMovingWorldNodes (unpin content description not displayed); spatialWorkspaceLongPressDragExtractsRotationWithoutEditingAss and spatialWorkspaceLongPressDragExtractsScaleWithoutEditingAss (tool-POSITION absent in verifySpatialParameterExtraction at old directory-selection sequence); batchActionsRemainAboveVisibleKeyboardAcrossMainAndCanvas (Preview must stay above IME); transformFieldsProjectExternalPreviewAndRestoreDrafts (geometry-shear-x-1-value node disposed during SetText). No failure is dismissed.",
+    "Consolidated only verifySpatialParameterExtraction navigation into existing openTool(\"POSITION\"), which chooses the filtered spatial result while its search IME remains open. Removed the duplicate path that closed search IME before selecting tool-POSITION. Original wait for actual POSITION host, extraction gesture, independent parameter projection, canonical document and Undo assertions remain unchanged. This is a harness correction hypothesis pending new emulator execution; no production UI or ASS write behavior changed. Local diff whitespace/artifact-policy checks passed."
   ],
   "next_units": [
-    "Check compilation/JVM and emulator for the commit containing inspector tabs; preserve disabled pinned/selection/missing-target guard and exact focused Event identity.",
-    "Retrieve completed #39908199829 failure logs when connector recovers; do not assume the old system-window failure recurred or that new dock/scene tests passed.",
-    "Validate wide TEXT to Event to Style to Position transitions, one shared uncommitted Raw draft, timing/metadata write scope, review/commit/Undo and IME/adaptive relocation.",
-    "Capture true native 1440x900/1024x768 screens and compare Figma 85:3/85:337. Remaining full inspector styling, combined review/QC affordances and bilingual source/translation data mapping are not complete.",
-    "Keep #149 stacked on Draft #148. No main merge or overall design/device acceptance claim."
+    "Read new source and emulator receipts once; verify both spatial rotation/scale extraction tests actually reach POSITION and retain all gesture/document/Undo assertions.",
+    "Investigate inspectorDraftSurvivesToolSwitchAndRotation hideKeyboard root/insets lifecycle; do not accept unknown/visible IME as hidden.",
+    "Investigate unpin display, batch Preview/Apply geometry against actual IME and Transform field disposal independently, with exact host/transition evidence.",
+    "Obtain native 1440x900/1024x768 visual receipts and compare approved Figma. Complete remaining property/provenance/QC/review layout and explicit bilingual data mapping.",
+    "Keep PR #149/#148 Draft; no overall design/device acceptance or main merge."
   ],
-  "latest_durable_commit": "1985cd2dc7a25f166ed5180c6d0c8fecace51778",
+  "latest_durable_commit": "38f0ebf086a6d1e051f29f564eded74cb4c29ae1",
   "external_validation": {
-    "android_ci": "Prior exact head 1985cd2: #39908199838 SUCCESS, covering central Raw extraction compilation and JVM tests. New inspector navigation source/tests: Pending External Validation; no local Gradle available.",
-    "android_emulator": "Prior exact head 1985cd2: #39908199829 FAILURE, APK prebuild passed, failure logs unavailable via connector (internal error). No counts or new dock-runtime pass inferred. New inspector navigation: Pending.",
+    "android_ci": "PR head 38f0ebf #39934215521 SUCCESS. New shared-driver test change and checkpoint: Pending; no local Gradle.",
+    "android_emulator": "PR merge 6b02617 for source 38f0ebf: #39934215567 full 176 tests / 6 failures / 0 errors / 0 skipped; focused projections 22/22 pass. New parameter-extraction directory driver: Pending, not a verified reduction to four failures.",
     "real_tablet": "Not started",
     "figma_visual_parity": "R3 1600x960 native screenshot verified again in emulator #38998011161 (SHA256 26ee6884...), but FIXED V1.1 1440x900 and 1024x768 target captures still NOT obtained."
   },
   "blockers": [
-    "Base R3 visual-layout PR #148 remains draft and is a dependency.",
-    "Source visuals are reference designs, not native screenshots. SPATIAL implementation and UI are outside current scope.",
-    "Layout-only draft-retention Compose test cannot substitute for real InlineEventEditor/IME lifecycle instrumentation.",
-    "IME behavior is protected in layout policy and unexecuted tests only; real keyboard/window inset behavior remains device-dependent.",
-    "Dual-pane mode now includes the actual ModernTimelinePane; performance and touch interplay need real device verification.",
-    "All emulator instrumentation, 1600×960 native R3 capture, device IME and 1440/1024 FIXED design parity remain unverified on the feature head.",
-    "Full emulator regression #38906758867 failed: 7/171 instrumentation including 2 V1.1 test semantics and five other inspector/tool catalog/spatial regression cases. No acceptance until exact-head re-test.",
-    "Existing tool-BATCH/tool-POSITION UI tag not found in three tests, spatial pinned button not displayed, and inspector draft rotation timeout; may be upstream R3 or V1.1 integration regression, attribution unverified.",
-    "Emulator #38930055528: 4/171 failures (grid text visibility, inspector IME hide/rotation, BATCH entry, SPATIAL unpin). Row-width repair submitted but untested.",
-    "Post-layout source compile and emulator tests for 18f09bf3 are pending.",
-    "Emulator #38998011161 had five failures (grid visible text, BATCH entry, inspector IME hide timeout, spatial unpin visibility and transform SetText node disposal); no green emulator evidence for this head.",
-    "Grid text min-height/direct full-width plus strict unmerged body visibility test committed once; new source/emulator result PENDING.",
-    "The prior emulator reports three missing tool-* nodes because the shared test driver used legacy dialog selectors on expanded R3; scoped driver repair is submitted but unverified on a new exact head.",
-    "Exact-head #39723880969 has a launcher/foreground focus ownership failure preceding both R3 image capture and many editor input tests. Neither valid R3 PNG nor complete suite XML exists for this head; resulting downstream test errors are not reliable per-feature pass/fail evidence.",
-    "Current verified 172-test emulator suite has 5 unclosed failures; test helper spatial IME navigation fix committed but unverified. Preserve separate field lifecycle and accessibility evidence before fixing production SPATIAL or INPUT UI."
+    "Base R3 PR #148 remains Draft; #149 is stacked and must not merge to main before acceptance.",
+    "Latest completed full emulator regression has six failures. Two share an obsolete duplicate spatial directory driver; consolidation submitted, outcome unverified. Other four failures remain unmodified.",
+    "FIXED V1.1 native 1440x900 and 1024x768 visual comparison remains incomplete. Valid PNG/source compilation are not design parity or real media evidence.",
+    "Real tablet/IME, renderer/media, adaptive relocation and final review/Undo workflow acceptance remain outstanding.",
+    "True source/translation authoring data mapping and full property/provenance/QC/review visual alignment are unfinished; Raw dock and inspector tabs are incremental implementation only."
   ],
   "updated_at": "2026-10-23",
   "handoff_rules": [
@@ -121,6 +114,6 @@
   ],
   "intake_check": {
     "status": "Complete / Existing knowledge applied",
-    "result": "Reused existing task-versus-tool projection and bound-target guard (same constraint as existing r3RawShortcutAllowed). No new cross-project finding established; no duplicate Candidate, no Canonical changes."
+    "result": "Applied existing spatial search-IME navigation knowledge from prior 5be6bc45 and task-driver projection work. The newly found duplicate driver is source-specific recurrence of that known condition, not a new cross-project principle. No duplicate Candidate or Canonical update."
   }
 }
