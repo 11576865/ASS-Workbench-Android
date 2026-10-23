@@ -1,7 +1,7 @@
 {
   "id": "ass-fixed-v11-android-implementation-20261016",
   "goal": "Implement the frozen FIXED Tablet V1.1 design as native Compose UI, progressively, preserving existing business model/drafts and leaving SPATIAL UI outside this scope.",
-  "status": "Integrated page source/JVM validated; native captures valid; full suite has 4 failures; bounded evidence/driver repair pending external validation",
+  "status": "Wide Event inspector property package implemented; Pending Kotlin/Android validation and native visual comparison",
   "design_basis": {
     "figma_file": "https://www.figma.com/design/5yNY5dMnmpmaOnYxDlEhY5",
     "fixed_page": "85:2",
@@ -14,7 +14,7 @@
   "base_branch": "feat/r3-fixed-visual-layout-20261014",
   "base_pr": 148,
   "pull_request": "https://github.com/11576865/ASS-Workbench-Android/pull/149",
-  "current_bounded_work_unit": "2026-10-23: make both complete tablet compositor captures independently retrievable despite oversized editor logs; repair demonstrated compact-directory IME selection and duplicate rotation navigation in the test driver; preserve all assertions and remaining failures.",
+  "current_bounded_work_unit": "2026-10-24: implement the approved Event inspector body as one coherent property form in docked wide TEXT/EVENT: Start/End/Layer/Style/Actor, existing shared drafts, explicit apply/reset/conflict messages, saved Raw color evidence, heading/binding hierarchy and truthful inline QC.",
   "completed_units": [
     "Created implementation branch from existing R3 visual-layout work to avoid duplicating video/timeline infrastructure.",
     "Created FixedV11EventGrid.kt as real Material3 Compose UI with index/start/end/Style/text/QC.",
@@ -88,13 +88,15 @@
     "Integrated page source: FixedV11LayoutPolicy uses Figma 1440 baseline (56 rail, 309 Event grid, 326 inspector, remaining center) and finite video/timeline/Raw budgets. FixedV11TaskRail arranges actual subtitle/text/timing/style/position/effects/resource/directory commands vertically; specialist menu, preview-density and independent SPATIAL switch stay in a compact command strip. IME/short windows retain original task bar. Four scene tabs extend to >=720dp. Central Raw dock distinguishes actual saved text from shared dirty draft. Wide Event timing fields become vertical; compact and SPATIAL fields retain prior layout. Wide and dual-pane inspectors show real saved-document QC counts and frozen-receipt Raw review; commit rechecks session, latest canonical text and exact draft text. No fake bilingual fields or mock video introduced.",
     "Added dedicated strict native capture entry at 1440x900 and 1024x768, invoked before direct-capture APK uninstall; wait for orientation/width and hidden IME, assert actual production surfaces, reject wrong foreground ownership, then require positive one-test instrumentation receipt and exact-size CRC/zlib-validated PNG. Legacy 1600x960 R3, projection regressions and full suite remain separate mandatory gates. Compact evidence extractor now includes exact-size capture receipts. Capture fixtures remain two Event debug scenes with renderer disabled, not real-media acceptance.",
     "Integrated page 020e207 source/JVM CI 39956067332 SUCCESS. Emulator 39956067357 strict native gates validated 1440x900 SHA256 2f8be9e6b8abce36284927958a2e009c6fb4a7c4f40ce3f1ca30852711e9e472 and 1024x768 SHA256 1e3460a7a2c9c49af7d8e56871f08423ce4fd61ae317fcadfe45347d591e89ad. Four projection groups 22 tests passed; full suite 179 tests/4 failures/0 errors/0 skipped. Screenshot bytes not retrieved due full job log connector errors, so visual parity remains unassessed.",
-    "Added separate per-size native screenshot evidence jobs with full PNG envelope, runner-owned run-as bytes (not lossy Android logcat), original gate receipt, hash, CRC, decoded size, bounded transport, and source run/tested/head SHA metadata. Seven Python defensive tests passed. Test driver now selects compact catalog result before hiding search IME, matching existing spatial/capture driver; rotation test reuses already-open navigation instead of requesting a second host transition. Android execution pending; no failure considered fixed yet."
+    "Added separate per-size native screenshot evidence jobs with full PNG envelope, runner-owned run-as bytes (not lossy Android logcat), original gate receipt, hash, CRC, decoded size, bounded transport, and source run/tested/head SHA metadata. Seven Python defensive tests passed. Test driver now selects compact catalog result before hiding search IME, matching existing spatial/capture driver; rotation test reuses already-open navigation instead of requesting a second host transition. Android execution pending; no failure considered fixed yet.",
+    "Read completed source 39ffe1a3 receipts: source/JVM 39971371387 SUCCESS; emulator 39971371534 FAILURE. R3+1440x900+1024x768 captures rejected external android foreground/unfocused target. Last-ANR recorded launcher input dispatch timeout before capture. Four projection groups 22 passed. Full-suite timed out with empty XML; no current full-suite count inferred. Bounded visual jobs correctly rejected missing capture envelopes.",
+    "Read high-fidelity Figma context and screenshot 85:337. Added shared-draft FixedV11EventPropertyForm for docked wide TEXT/EVENT, retained original timing/metadata commits and EVENT structural actions; Style name is explicitly an Event reference and missing references are disclosed. Added saved Raw primary-color source evidence using existing effective inspector, without inventing bilingual data. Added two instrumented cases (execution pending); improved real binding heading and QC count hierarchy. Existing 35 Python checks and artifact/diff checks passed; Android SDK/Gradle unavailable locally."
   ],
   "next_units": [
-    "Retrieve native-visual-1440x900 and native-visual-1024x768 bounded job logs; recover PNGs and compare whole pages with Figma, then implement a coherent visual correction package.",
-    "Read repair-generation full suite; investigate unresolved spatial pin and geometry field lifecycle from diagnostics without weakening assertions."
+    "Validate new inspector Kotlin/Android tests; retrieve complete accepted native tablet screenshots and compare page with Figma.",
+    "Investigate emulator readiness from observed launcher ANR without weakening foreground gates; get completed full-suite XML before attributing remaining regressions."
   ],
-  "latest_durable_commit": "020e20761b024b64502c8ea582c163db86aa2ca9",
+  "latest_durable_commit": "39ffe1a3604d9cbcd3ed12717983800f033bc7f9",
   "external_validation": {
     "android_ci": "This integrated page package: Pending External Validation. Local 15 strict PNG/instrumentation-validator tests and 7 evidence-extractor tests passed; bash syntax, git diff whitespace and artifact policy passed. No local Gradle/Android SDK execution.",
     "android_emulator": "New page, rail/review interaction and target-size capture sources Pending. Prior last confirmed full suite (source38f0ebf, merge6b02617) was 176 tests / 6 failures. Driver726c5f5 result was not re-polled while building this authorized integrated package. No reduction in failures or valid new screenshots inferred.",
@@ -102,11 +104,11 @@
     "figma_visual_parity": "New 1440x900/1024x768 strict compositor capture paths submitted but no new images yet. Column policy is source-tested only pending Kotlin execution. Material icons are reused from the app; exact Figma SVG assets could not be fetched (proxy timeout), so glyph parity remains unverified. Bilingual authoring is still absent."
   },
   "blockers": [
-    "Four full-suite failures remain open until verified: inspector draft rotation stale event row; compact EFFECTS catalog selection; spatial resident pin not displayed; transform shear field absent after lazy/IME transition.",
-    "Exact native-vs-Figma visual comparison requires recovered PNGs; valid capture gate alone does not establish parity.",
-    "Bilingual source/translation data model and exact design icon assets remain unimplemented."
+    "Current head 39ffe1a3 full-suite result is incomplete (timeout/empty XML), and both tablet captures failed foreground ownership. The historical 179/4 result is not the latest result.",
+    "New inspector package compilation and instrumented cases require remote Android validation.",
+    "Native-vs-design visual comparison, bilingual source/translation model, exact icon assets, real media/libass and true-device IME acceptance remain incomplete."
   ],
-  "updated_at": "2026-10-23T14:36:31.744826+00:00",
+  "updated_at": "2026-10-24",
   "handoff_rules": [
     "No automatic merge to main, no updates to original SPATIAL implementation.",
     "One coherent increment per branch/PR; inspect CI for exact head only once.",
@@ -118,30 +120,28 @@
     "result": "Found an existing exact Candidate for coherent product-block delivery versus micro-milestones. Append this user-feedback recurrence and integrated source response as source-only evidence after product checkpoint; no duplicate Candidate and no Canonical promotion."
   },
   "external_validation_states": {
-    "validated_source_commit": "020e20761b024b64502c8ea582c163db86aa2ca9",
+    "validated_source_commit": "39ffe1a3604d9cbcd3ed12717983800f033bc7f9",
     "compile_and_jvm": {
-      "run": 39956067332,
+      "run": 39971371387,
       "status": "success"
     },
     "emulator": {
-      "run": 39956067357,
+      "run": 39971371534,
       "status": "failure",
-      "tests": 179,
-      "failures": 4,
-      "errors": 0,
-      "skipped": 0,
-      "focused_projection_tests_passed": 22
+      "full_suite": "timeout / empty XML; no complete count",
+      "focused_projection_tests_passed": 22,
+      "capture_failure": "external android accessibility root; target unfocused; preceding Pixel Launcher ANR diagnostic"
     },
     "native_captures": {
-      "1440x900": "gate_valid; bytes not yet retrieved",
-      "1024x768": "gate_valid; bytes not yet retrieved"
+      "1440x900": "failed foreground gate; no accepted image",
+      "1024x768": "failed foreground gate; no accepted image"
     },
-    "repair_generation": "Pending External Validation; do not poll after push in same unit"
+    "inspector_package": "Pending External Validation; do not poll after push in same unit"
   },
   "uigs_intake": {
-    "status": "deduplicated",
-    "existing_candidate": "inbox/candidates/2026-10-14-product-block-delivery-over-pr-fragmentation.md",
-    "foundry_commit": "8562af90ff721c6493987612b0a42452ac85777b",
-    "current_check": "Bounded evidence recovery and test driver repair are project-specific; no additional reusable claim or duplicate candidate; no Canonical promotion."
+    "status": "deduplicated / no new cross-project promotion",
+    "existing_bug": "inbox/bugs/2026-10-14-ass-r3-compositor-capture-false-positive-non-png.md",
+    "previous_append_commit": "2bf01163621c963ec023b75f7cdf853436270f40",
+    "current_check": "Repeated launcher/foreground evidence is the existing Bug lineage; inspector property changes are project-specific. Product-side evidence recorded; no new Candidate or Canonical claim."
   }
 }

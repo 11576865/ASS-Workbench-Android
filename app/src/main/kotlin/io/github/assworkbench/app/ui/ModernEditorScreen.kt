@@ -1321,33 +1321,10 @@ private fun FixedWorkspace(
                                     WorkspaceBinding.FollowSelection -> "当前选择集"
                                     is WorkspaceBinding.PinnedEvent -> "固定 #${binding.eventId}"
                                 }
-                                Surface(
-                                    modifier = Modifier.fillMaxWidth().testTag("r3-inspector-context"),
-                                    color = MaterialTheme.colorScheme.surfaceContainerLow,
-                                ) {
-                                    Column(
-                                        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 9.dp),
-                                        verticalArrangement = Arrangement.spacedBy(6.dp),
-                                    ) {
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Text(
-                                                contextTitle,
-                                                style = MaterialTheme.typography.titleMedium,
-                                                modifier = Modifier.weight(1f),
-                                            )
-                                            Text("绑定：$bindingLabel",
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                        }
-                                        Text(
-                                            activeScope?.let { "写入：${it.where} · 影响 ${it.howMany} 条" }
-                                                ?: "只读工具 · 无 ASS 写入",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = if (activeScope?.unresolved == true) MaterialTheme.colorScheme.error
-                                                else MaterialTheme.colorScheme.primary,
-                                        )
-                                    }
-                                }
+                                FixedV11InspectorHeading(contextTitle, bindingLabel,
+                                    activeScope?.let { "写入：${it.where} · 影响 ${it.howMany} 条" }
+                                        ?: "只读工具 · 无 ASS 写入",
+                                    unresolved = activeScope?.unresolved == true)
                                 HorizontalDivider()
                                 val inspectorCanSwitch = fixedV11InspectorCanSwitch(
                                     instance.binding, resolvedEvent?.id, state.focusedEventId,
@@ -2496,40 +2473,28 @@ private fun InlineEventEditor(
     LaunchedEffect(metadataDraft, event.layer, event.name, event.comment) {
         metadataDraft.reconcile(EventMetadataValues.from(event))
     }
-    if (activeSection == WorkbenchTool.TEXT || (rawTextDocked && activeSection == WorkbenchTool.EVENT)) {
+    if (rawTextDocked && (activeSection == WorkbenchTool.TEXT || activeSection == WorkbenchTool.EVENT)) {
+        FixedV11EventPropertyForm(event, state.document, timingDraft, metadataDraft,
+            onApplyTiming = { start, end ->
+                viewModel.setEventTiming(event.id, start.millis, end.millis)
+                viewModel.state.value.document.events.firstOrNull { it.id == event.id }?.let { committed ->
+                    if (committed.start == start && committed.end == end)
+                        timingDraft.reset(EventTimingCanonical.from(committed))
+                }
+            },
+            onApplyMetadata = { layer, actor, isComment ->
+                viewModel.focusEvent(event.id, seek = false)
+                viewModel.updateFocusedMetadata(layer = layer, actor = actor, comment = isComment)
+                viewModel.state.value.document.events.firstOrNull { it.id == event.id }?.let { committed ->
+                    if (committed.layer == layer && committed.name == actor && committed.comment == isComment)
+                        metadataDraft.reset(EventMetadataValues.from(committed))
+                }
+            })
+    }
+    if (!rawTextDocked && activeSection == WorkbenchTool.TEXT) {
     val timingInput = remember(startText, endText) { EventTimingInputValidation.parse(startText, endText) }
     val timingState = timingDraft.snapshot().classify(EventTimingCanonical.from(event))
     val timingConflict = timingState == RawEventDraftState.EXTERNAL_CONFLICT
-    if (rawTextDocked) {
-    Column(verticalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro)) {
-        OutlinedTextField(startText, { timingValues = timingValues.copy(start = it) }, label = { Text("Start") }, singleLine = true,
-            isError = timingInput.startInvalid,
-            supportingText = { if (timingInput.startInvalid) Text("输入 ASS 时间或非负毫秒数") },
-            modifier = Modifier.fillMaxWidth().testTag("event-start-${event.id}"))
-        OutlinedTextField(endText, { timingValues = timingValues.copy(end = it) }, label = { Text("End") }, singleLine = true,
-            isError = timingInput.endInvalid || timingInput.reversed,
-            supportingText = {
-                if (timingInput.endInvalid) Text("输入 ASS 时间或非负毫秒数")
-                else if (timingInput.reversed) Text("End 不能早于 Start")
-            },
-            modifier = Modifier.fillMaxWidth().testTag("event-end-${event.id}"))
-        Button(
-            onClick = {
-                val start = timingInput.start
-                val end = timingInput.end
-                if (timingInput.canApply && start != null && end != null) {
-                    viewModel.setEventTiming(event.id, start.millis, end.millis)
-                    viewModel.state.value.document.events.firstOrNull { it.id == event.id }?.let { committed ->
-                        if (committed.start == start && committed.end == end)
-                            timingDraft.reset(EventTimingCanonical.from(committed))
-                    }
-                }
-            },
-            enabled = timingInput.canApply,
-            modifier = Modifier.align(Alignment.End).testTag("event-apply-time-${event.id}"),
-        ) { Text(if (timingConflict) "覆盖时间" else "应用") }
-    }
-    } else {
     Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro)) {
         OutlinedTextField(startText, { timingValues = timingValues.copy(start = it) }, label = { Text("Start") }, singleLine = true,
             isError = timingInput.startInvalid,
@@ -2557,7 +2522,6 @@ private fun InlineEventEditor(
             enabled = timingInput.canApply,
             modifier = Modifier.align(Alignment.CenterVertically).testTag("event-apply-time-${event.id}"),
         ) { Text(if (timingConflict) "覆盖时间" else "应用") }
-    }
     }
     if (timingConflict) Text("时间已在其他面板修改；草稿已保留。重新载入会丢弃草稿，覆盖时间会覆盖当前 Start/End。",
         color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall,
@@ -2590,6 +2554,7 @@ private fun InlineEventEditor(
             modifier = Modifier.fillMaxWidth(),
         ) {
             Column(Modifier.padding(WorkbenchDimens.Small), verticalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro)) {
+                if (!rawTextDocked) {
                 Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro), verticalAlignment = Alignment.CenterVertically) {
                     OutlinedTextField(layerText, { metadataValues = metadataValues.copy(layer = it) }, label = { Text("Layer") }, singleLine = true,
                         isError = !layerValid,
@@ -2624,6 +2589,7 @@ private fun InlineEventEditor(
                                 metadataDraft.reset(EventMetadataValues.from(committed))
                         }
                     }, modifier = Modifier.testTag("event-apply-metadata-${event.id}")) { Text(if (metadataConflict) "以草稿覆盖" else "应用") }
+                }
                 }
                 Divider()
                 Text("结构操作", style = MaterialTheme.typography.labelMedium)

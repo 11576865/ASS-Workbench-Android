@@ -110,6 +110,24 @@ internal fun FixedV11CommandStrip(activeTool: WorkbenchTool, preview: PreviewDen
     }
 }
 
+/** Shared visual hierarchy; binding text is supplied by the resolved live instance. */
+@Composable
+internal fun FixedV11InspectorHeading(target: String, binding: String, scope: String?, unresolved: Boolean = false) {
+    Surface(Modifier.fillMaxWidth().testTag("r3-inspector-context"),
+        color = MaterialTheme.colorScheme.surfaceContainerLow) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("检查器", style = MaterialTheme.typography.titleMedium)
+            Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh, shape = MaterialTheme.shapes.small) {
+                Text("$target · $binding", Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp),
+                    style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.secondary)
+            }
+            if (scope != null) Text(scope, style = MaterialTheme.typography.labelSmall,
+                color = if (unresolved) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
 /** Actual saved-document QC and one explicit Raw review, never a fake whole-tool commit. */
 @Composable
 internal fun FixedV11InspectorStatus(event: AssEvent?, state: EditorState, viewModel: EditorViewModel,
@@ -124,11 +142,20 @@ internal fun FixedV11InspectorStatus(event: AssEvent?, state: EditorState, viewM
     Surface(modifier.fillMaxWidth().testTag("fixed-v11-inspector-status"),
         color = MaterialTheme.colorScheme.surfaceContainerLow) {
         Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            TextButton(onClick = onOpenQc, modifier = Modifier.fillMaxWidth().testTag("fixed-v11-open-qc")) {
-                Text(if(event == null) "质量检查 · 全部 ${issues.size} 项"
-                    else "质量检查 · 当前 ${localIssues.size} 项 · 已保存文档",
-                    color = if(localIssues.any { it.severity == AssQcSeverity.ERROR })
-                        MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
+            val shownIssues = if (event == null) issues else localIssues
+            val errors = shownIssues.count { it.severity == AssQcSeverity.ERROR }
+            val warnings = shownIssues.count { it.severity == AssQcSeverity.WARNING }
+            Surface(onClick = onOpenQc, modifier = Modifier.fillMaxWidth().testTag("fixed-v11-open-qc"),
+                shape = MaterialTheme.shapes.small,
+                color = if (errors > 0) MaterialTheme.colorScheme.errorContainer
+                    else if (warnings > 0) MaterialTheme.colorScheme.tertiaryContainer
+                    else MaterialTheme.colorScheme.surfaceContainerHigh) {
+                Column(Modifier.fillMaxWidth().padding(10.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Text("质量检查 · ${shownIssues.size} 项 · $errors 错误 / $warnings 警告",
+                        style = MaterialTheme.typography.labelMedium)
+                    Text("已保存文档 · 按需展开，检查不会自动修复",
+                        style = MaterialTheme.typography.labelSmall)
+                }
             }
             if(rawReviewAvailable) {
                 Text(when(draftState) {
