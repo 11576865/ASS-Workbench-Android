@@ -9,6 +9,26 @@ import org.junit.Test
  * separate gate and cannot be replaced by these pure layout assertions.
  */
 class R3FixedLayoutPolicyTest {
+    @Test fun textDockReservesSpaceWithoutOverlappingMediaOrTimeline() {
+        for (height in listOf(560f, 740f, 854f)) {
+            val d = R3FixedLayoutPolicy.resolve(1440f, height, 16f / 9f,
+                PreviewDensity.FULL, textDockRequested = true)
+            assertTrue(d.textDockHeightDp >= 168f)
+            assertTrue(d.mediaHeightDp > 48f)
+            assertTrue(d.timelineHeightDp >= 184f)
+            assertEquals(height, d.mediaHeightDp + d.timelineHeightDp + d.textDockHeightDp, 0.5f)
+        }
+    }
+
+    @Test fun hiddenVideoDoesNotHideRequestedTextDockOrLiveTimeline() {
+        val d = R3FixedLayoutPolicy.resolve(1440f, 740f, 16f / 9f,
+            PreviewDensity.HIDDEN, textDockRequested = true)
+        assertEquals(0f, d.mediaHeightDp, 0f)
+        assertTrue(d.textDockHeightDp > 0f)
+        assertTrue(d.timelineHeightDp > 0f)
+        assertEquals(740f, d.timelineHeightDp + d.textDockHeightDp, 0.5f)
+    }
+
     @Test fun referenceCanvasKeepsStableLeftVideoTimeRightProportions() {
         // Reference screenshot 1600x960: 56 top + 50 task ≈854dp available.
         val d = R3FixedLayoutPolicy.resolve(

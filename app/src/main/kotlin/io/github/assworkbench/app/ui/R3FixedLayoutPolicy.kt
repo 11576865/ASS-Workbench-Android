@@ -15,6 +15,7 @@ internal data class R3FixedGeometry(
     val inspectorWidthDp: Float,
     val mediaHeightDp: Float,
     val timelineHeightDp: Float,
+    val textDockHeightDp: Float = 0f,
 )
 
 internal object R3FixedLayoutPolicy {
@@ -33,9 +34,14 @@ internal object R3FixedLayoutPolicy {
         mediaAspect: Float,
         preview: PreviewDensity,
         timingPriority: Boolean = false,
+        textDockRequested: Boolean = false,
     ): R3FixedGeometry {
         val width = widthDp.coerceAtLeast(0f)
-        val height = heightDp.coerceAtLeast(0f)
+        val totalHeight = heightDp.coerceAtLeast(0f)
+        val textDock = if (textDockRequested)
+            (totalHeight * 0.30f).coerceIn(200f, 280f).coerceAtMost(totalHeight * 0.40f)
+            else 0f
+        val height = (totalHeight - textDock).coerceAtLeast(0f)
         val navigation = (width * navigationRatio).coerceIn(206f, 296f)
         val inspector = (width * inspectorRatio).coerceIn(328f, 460f)
         val mediaWidth = (width - navigation - inspector - 2f).coerceAtLeast(1f)
@@ -58,6 +64,7 @@ internal object R3FixedLayoutPolicy {
             inspectorWidthDp = inspector,
             mediaHeightDp = boundedMediaHeight,
             timelineHeightDp = (height - boundedMediaHeight).coerceAtLeast(0f),
+            textDockHeightDp = textDock,
         )
     }
 }

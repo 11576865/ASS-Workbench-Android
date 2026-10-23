@@ -14,7 +14,7 @@
   "base_branch": "feat/r3-fixed-visual-layout-20261014",
   "base_pr": 148,
   "pull_request": "https://github.com/11576865/ASS-Workbench-Android/pull/149",
-  "current_bounded_work_unit": "2026-10-23: implement Figma 85:21 four-scene FIXED navigation, existing specialist routing, accessible tab selection and actual binding context. No SPATIAL or ASS-domain changes.",
+  "current_bounded_work_unit": "2026-10-23: central Raw authoring dock for wide FIXED subtitle scene, reusing the existing editor/draft and write-review path. Bilingual lanes remain deferred until source/translation data mapping exists.",
   "completed_units": [
     "Created implementation branch from existing R3 visual-layout work to avoid duplicating video/timeline infrastructure.",
     "Created FixedV11EventGrid.kt as real Material3 Compose UI with index/start/end/Style/text/QC.",
@@ -76,18 +76,21 @@
     "Five exact-head emulator failures: inspectorDraftSurvivesToolSwitchAndRotation (hideKeyboard wait stale IME window state); spatialWorkspaceExposesBoardAndNativeEditorWithoutMovingWorldNodes (取消驻留 accessibility not displayed); batchActionsRemainAboveVisibleKeyboardAcrossMainAndCanvas (batch input view focus assertion); transformFieldsProjectExternalPreviewAndRestoreDrafts (geometry-scale-x field semantics node disposed during performTextReplacement); invalidEventFieldsExplainErrorsAndCannotCommitAcrossHosts (spatial openTool helper could not find tool-EVENT after hiding search keyboard). These are distinct from the earlier fake missing BATCH/EVENT/EFFECTS on R3 FIXED search.",
     "Single bounded commit 5be6bc45: editor-regression openTool SPATIAL branch now selects a visible filtered tool result while the directory search IME is still active; does not invoke closeSoftKeyboard before clicking. This retains the actual on-screen command and strict visibility assertion. Product FIXED/SPATIAL UI, domain state and write transactions were not changed. The proposed cause (IME close dismissing dialog) is source-grounded hypothesis, not proven resolved until exact-head emulator run.",
     "Resumed exact head 5fd22c29ad2d2eb02bbddfcac18f8488a5082fa6. FIXED V1.1 Branch Validation #39892238463 completed SUCCESS. Android Emulator Regression #39892238452 was in_progress at the one permitted status audit; job 120214741253 completed exact-head APK prebuild and was running the editor regression suite. No new instrumentation pass/fail count or screenshot result was available; previous 172/5 receipt is historical only.",
-    "Implemented Figma 85:21 four tabs using theme tokens, selected surface plus 3dp underline, scrollable 48dp hit targets and Role.Tab selection. Added GEOMETRY/EFFECTS scene keys, routing through existing WorkbenchTask.toolFor and selectTool; reselect retains POSITION/VECTOR_CLIP/KARAOKE specialists. Original subtitle/timing layout-only behavior remains for non-specialist tools. External specialist commands project matching tab. Header reports real resolved/pinned/selection binding, including missing pinned target. Added four JVM routing tests and one Compose selection/reachability/context test; NOT executed locally because Gradle/Android toolchain is unavailable. git diff --check and Actions artifact policy passed. Read-only Figma design-context 85:21 used; no static image assets in this component."
+    "Implemented Figma 85:21 four tabs using theme tokens, selected surface plus 3dp underline, scrollable 48dp hit targets and Role.Tab selection. Added GEOMETRY/EFFECTS scene keys, routing through existing WorkbenchTask.toolFor and selectTool; reselect retains POSITION/VECTOR_CLIP/KARAOKE specialists. Original subtitle/timing layout-only behavior remains for non-specialist tools. External specialist commands project matching tab. Header reports real resolved/pinned/selection binding, including missing pinned target. Added four JVM routing tests and one Compose selection/reachability/context test; NOT executed locally because Gradle/Android toolchain is unavailable. git diff --check and Actions artifact policy passed. Read-only Figma design-context 85:21 used; no static image assets in this component.",
+    "Audited prior exact head 1f38dec: source/JVM #39895419325 SUCCESS; emulator #39895419351 FAILURE. Four focused projection groups completed (9+3+7+3 tests, zero failures); R3 strict capture failed R3_NATIVE_SCREEN_OCCLUDED with active accessibility package android and target decorFocused=false. Full suite reached 20m timeout, last ANR reason Application does not have a focused window, XML empty/unreadable. No complete suite count, valid R3 image or new tab-interaction pass can be inferred.",
+    "Added FixedV11TextDock in the wide SUBTITLE_EDIT/TEXT scene below the existing timeline. Extracted EventRawTextEditor from InlineEventEditor and reuse it at both locations with the same project-session draft store and instance ID. Right inspector suppresses its Raw field only while the dock is mounted; timing and metadata remain there. movableContentOf now takes explicit docking presentation flag, retaining one inspector identity across adaptive relocation. Layout reserves a bounded dock before budgeting video/timeline; hidden video preference remains honored. Added two geometry regressions and one real ViewModel/shared-draft Compose remount test; Android tests not executed locally (no Gradle)."
   ],
   "next_units": [
-    "Read source/JVM and emulator receipts for the commit containing four-scene navigation. New tests are submitted, not runtime verified. Preserve strict existing inspector/IME tests.",
-    "Obtain native 1440x900 / 1024x768 captures. Compare four task tabs and actual context against Figma 85:21; verify text size, selected background/underline and accessibility at font scaling.",
-    "Continue central text-authoring dock and contextual inspector from approved design with shared draft/write ownership; both remain actual UI implementation gaps.",
-    "Close remaining inspector/IME/Transform/BATCH/SPATIAL regressions based on completed exact-head evidence. Keep #149 stacked on Draft #148; no main merge."
+    "Check compilation and JVM results for the commit containing text dock. If a compile failure is attributable to extraction, perform one bounded repair with existing domain/write semantics unchanged.",
+    "Validate a single visible Raw field in wide TEXT scene, draft preservation when IME/adaptive policy moves it back to inspector, real review/commit/Undo and pinned/missing binding behavior.",
+    "Investigate actual foreground/system-window ownership behind #39895419351 with window/ANR evidence; retain fail-closed screenshot identity and do not infer full suite results from empty XML.",
+    "Obtain native 1440x900/1024x768 captures; complete contextual inspector/review layout. True bilingual source/translation editing still needs an explicit data mapping and cannot be inferred from Raw line splitting.",
+    "Keep PR #149 stacked on Draft #148; no merge or overall design-parity claim."
   ],
-  "latest_durable_commit": "4eacf601fce045a0e3f5e63505a09cf154886f67",
+  "latest_durable_commit": "1f38dec092be41a91d6e1c39a1321d7e0c9130c8",
   "external_validation": {
-    "android_ci": "New four-scene source: Pending. Local targeted Gradle command could not start: gradle: command not found. Prior source head 4eacf601 passed #39892826695; that receipt does not cover this increment.",
-    "android_emulator": "New four-scene interaction tests: Pending. Last inspected source head 4eacf601 emulator #39892826664 was in progress; not re-polled during implementation.",
+    "android_ci": "Previous exact head 1f38dec #39895419325 SUCCESS. New text dock extraction/source and tests PENDING external compilation/JVM execution; no local Gradle available.",
+    "android_emulator": "Previous 1f38dec #39895419351 FAILED: strict capture system-window occlusion; four focused projection groups 22/22 passed; full suite timeout with empty/unreadable XML. New dock test/device behavior PENDING. Historical 172/5 is not this run result.",
     "real_tablet": "Not started",
     "figma_visual_parity": "R3 1600x960 native screenshot verified again in emulator #38998011161 (SHA256 26ee6884...), but FIXED V1.1 1440x900 and 1024x768 target captures still NOT obtained."
   },
@@ -116,7 +119,6 @@
   ],
   "intake_check": {
     "status": "Complete / Existing knowledge applied",
-    "dedupe": "Queried 11576865/UIGS-Foundry for task category navigation; inspected search excerpts for 2026-10-13-ass-primary-fixed-vs-spatial-experiment-ui-taxonomy-and-tool-coverage observation and existing source docs/MAIN-CANVAS-RECHECK-2026-10-11.md.",
-    "result": "Applied existing distinction between task-scene presentation and stable tool identities, including matching selected state and truthful context. No new validated cross-project principle; no duplicate Candidate or Canonical change."
+    "result": "Applied existing session-owned Event Text draft and movable inspector principles already recorded in Foundry navigation/host observations and source draft-continuity cases. System-window focus/empty XML is also a known unresolved evidence boundary. No new verified cross-project rule; no duplicate Candidate and no Canonical modification."
   }
 }
