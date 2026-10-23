@@ -2,6 +2,7 @@ package io.github.assworkbench.app
 
 import android.view.View
 import androidx.test.espresso.Espresso.onView
+import androidx.test.espresso.NoMatchingRootException
 import androidx.test.espresso.UiController
 import androidx.test.espresso.ViewAction
 import androidx.test.espresso.action.ViewActions
@@ -2029,7 +2030,22 @@ class EditorRegressionInstrumentedTest {
                     ?.isVisible(android.view.WindowInsets.Type.ime()) == false
             }
         } catch (error: Exception) {
-            throw AssertionError("IME hide did not complete: $requestEvidence", error)
+            // Headless Android can leave every Espresso root unfocused even
+            // after the IME has already gone away. Closing a nonexistent
+            // keyboard is a no-op, not a failure of the editor contract.
+            // Only accept that state when the Activity explicitly reports a
+            // hidden IME. Null insets / a visible keyboard remain failures.
+            var activityImeVisible: Boolean? = null
+            composeRule.runOnUiThread {
+                activityImeVisible = composeRule.activity.window.decorView.rootWindowInsets
+                    ?.isVisible(android.view.WindowInsets.Type.ime())
+            }
+            if (error !is NoMatchingRootException || activityImeVisible != false) {
+                throw AssertionError(
+                    "IME hide did not complete: $requestEvidence; activityImeVisible=$activityImeVisible",
+                    error,
+                )
+            }
         }
         composeRule.waitForIdle()
     }
