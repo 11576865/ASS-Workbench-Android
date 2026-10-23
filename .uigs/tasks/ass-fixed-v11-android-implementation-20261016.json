@@ -14,7 +14,7 @@
   "base_branch": "feat/r3-fixed-visual-layout-20261014",
   "base_pr": 148,
   "pull_request": "https://github.com/11576865/ASS-Workbench-Android/pull/149",
-  "current_bounded_work_unit": "2026-10-23: diagnose lost window focus in exact-head emulator #39723880969; harden IME closure precondition and wait briefly for actual R3 foreground screenshot ownership without weakening evidence gate.",
+  "current_bounded_work_unit": "2026-10-23: audit exact-head emulator #39877625021 and repair SPATIAL tool-directory test navigation with live search IME (do not mute tests or change production domain).",
   "completed_units": [
     "Created implementation branch from existing R3 visual-layout work to avoid duplicating video/timeline infrastructure.",
     "Created FixedV11EventGrid.kt as real Material3 Compose UI with index/start/end/Style/text/QC.",
@@ -71,18 +71,21 @@
     "Commit e4a779bf: add Android Compose regression that BATCH (seventh group) is visible after filtering, that nonmatching Position tool is absent, and that an unmatched search displays an explicit empty state. All new tests require a new emulator run; no test skipped or muted.",
     "Read PR #149 exact-head b4abfff89ffc8e70cc3f9d7d771f3f48cde92735 workflow receipts: FIXED V1.1 Branch Validation #39723880966 SUCCESS; Android Emulator Regression #39723880969 FAILED. R3 strict capture had accessibility root <none>, target decor visible but unfocused; complete suite then timed out with NO XML RESULTS and multiple NoMatchingRootException when hideKeyboard assumed a focused Espresso window. This run cannot be counted as 171/6 or as evidence that new catalog tests passed or failed.",
     "Commit 677f504f: in EditorRegressionInstrumentedTest.hideKeyboard, retain the focused-window Espresso IME-close path, but if it raises NoMatchingRootException accept no-op only when actual Activity insets explicitly report IME not visible. Null/visible IME or other failures remain hard errors; no test is disabled.",
-    "Commit 9308195b: UigsVisualCaptureInstrumentedTest waits up to five seconds for real foreground ownership to settle after rotation/ActivityScenario, then independently rechecks the existing fail-closed target-package/decor-focus screenshot identity contract. It does not accept launcher/system-overlay pixels."
+    "Commit 9308195b: UigsVisualCaptureInstrumentedTest waits up to five seconds for real foreground ownership to settle after rotation/ActivityScenario, then independently rechecks the existing fail-closed target-package/decor-focus screenshot identity contract. It does not accept launcher/system-overlay pixels.",
+    "At exact pre-fix head bb0e2ce3602d38fbcc8ef7de328c6cad9b0cb436, FIXED V1.1 Branch Validation #39877625041 completed SUCCESS; Emulator Regression #39877625021 completed FAILURE, but strict R3 1600x960 capture was valid (PNG sha256 3a7052ced06f34a703c72b6c433afae27291a7851207299e99ca499a6ce73306, size 145274) and full suite reported 172 tests / 5 failures / 0 errors / 0 skipped. Prior missing-foreground/no-XML blocker no longer masks complete suite evidence.",
+    "Five exact-head emulator failures: inspectorDraftSurvivesToolSwitchAndRotation (hideKeyboard wait stale IME window state); spatialWorkspaceExposesBoardAndNativeEditorWithoutMovingWorldNodes (取消驻留 accessibility not displayed); batchActionsRemainAboveVisibleKeyboardAcrossMainAndCanvas (batch input view focus assertion); transformFieldsProjectExternalPreviewAndRestoreDrafts (geometry-scale-x field semantics node disposed during performTextReplacement); invalidEventFieldsExplainErrorsAndCannotCommitAcrossHosts (spatial openTool helper could not find tool-EVENT after hiding search keyboard). These are distinct from the earlier fake missing BATCH/EVENT/EFFECTS on R3 FIXED search.",
+    "Single bounded commit 5be6bc45: editor-regression openTool SPATIAL branch now selects a visible filtered tool result while the directory search IME is still active; does not invoke closeSoftKeyboard before clicking. This retains the actual on-screen command and strict visibility assertion. Product FIXED/SPATIAL UI, domain state and write transactions were not changed. The proposed cause (IME close dismissing dialog) is source-grounded hypothesis, not proven resolved until exact-head emulator run."
   ],
   "next_units": [
-    "Check exact-head source CI and emulator receipt after 9308195b; if emulator still loses foreground, inspect launcher/window ownership and isolate deterministic device foreground setup without accepting invalid screenshots.",
-    "After emulator environment becomes discriminating, rerun tool-directory BATCH/EVENT/EFFECTS routing tests and address remaining genuine inspector IME/rotation, SPATIAL unpin and shear field lifecycle errors in separate scoped units.",
-    "Capture real 1440×900 and 1024×768 FIXED V1.1 Android compositor screenshots and compare against frozen Figma 85:2, leaving media/renderer verification separate.",
-    "Retain stacked Draft PR #149 on Draft #148; do not merge or imply real-tablet acceptance."
+    "Inspect exact-head CI/emulator for spatial searchable tool choice after commit 5be6bc45; if still failing, capture actual active directory semantics and fix the real route, not test assertions by suppression.",
+    "Isolate remaining four failures independently: inspector IME after rotation; SPATIAL resident rail accessibility; BATCH input focus/IME; Transform field losing semantics node as layout/IME changes. Preserve existing strict assertions.",
+    "Obtain FIXED V1.1 1440x900 and 1024x768 true Android native screenshots and Figma parity, plus real renderer/media evidence.",
+    "Keep PR #149 stacked on unmerged Draft #148; do not merge main or claim tablet acceptance."
   ],
-  "latest_durable_commit": "9308195b44b0d6dfc503083e145b99137eeffec2",
+  "latest_durable_commit": "5be6bc45f486e604d5d578e6f9f9466e5c4ff269",
   "external_validation": {
-    "android_ci": "Prior exact head b4abfff8: FIXED V1.1 Branch Validation #39723880966 SUCCESS. New focus/IME test code head 9308195b: Pending CI.",
-    "android_emulator": "Prior exact head b4abfff8: Android Emulator Regression #39723880969 FAILED: strict capture foreground root missing/focus false; remaining suite timed out, NO XML RESULTS, multiple no-focused-Espresso-root failures. Exact 171/6 count from older 753e5f34 run must NOT be applied to b4abfff8. New head 9308195b Pending CI.",
+    "android_ci": "Exact prior head bb0e2ce3: FIXED V1.1 Branch Validation #39877625041 SUCCESS. New head 5be6bc45: Pending CI.",
+    "android_emulator": "Exact prior head bb0e2ce3: #39877625021 172 tests / 5 failures / 0 skipped; R3 compositor PNG valid sha256 3a7052ced06f34a703c72b6c433afae27291a7851207299e99ca499a6ce73306. New spatial navigation test helper 5be6bc45 Pending external emulator rerun.",
     "real_tablet": "Not started",
     "figma_visual_parity": "R3 1600x960 native screenshot verified again in emulator #38998011161 (SHA256 26ee6884...), but FIXED V1.1 1440x900 and 1024x768 target captures still NOT obtained."
   },
@@ -100,7 +103,8 @@
     "Emulator #38998011161 had five failures (grid visible text, BATCH entry, inspector IME hide timeout, spatial unpin visibility and transform SetText node disposal); no green emulator evidence for this head.",
     "Grid text min-height/direct full-width plus strict unmerged body visibility test committed once; new source/emulator result PENDING.",
     "The prior emulator reports three missing tool-* nodes because the shared test driver used legacy dialog selectors on expanded R3; scoped driver repair is submitted but unverified on a new exact head.",
-    "Exact-head #39723880969 has a launcher/foreground focus ownership failure preceding both R3 image capture and many editor input tests. Neither valid R3 PNG nor complete suite XML exists for this head; resulting downstream test errors are not reliable per-feature pass/fail evidence."
+    "Exact-head #39723880969 has a launcher/foreground focus ownership failure preceding both R3 image capture and many editor input tests. Neither valid R3 PNG nor complete suite XML exists for this head; resulting downstream test errors are not reliable per-feature pass/fail evidence.",
+    "Current verified 172-test emulator suite has 5 unclosed failures; test helper spatial IME navigation fix committed but unverified. Preserve separate field lifecycle and accessibility evidence before fixing production SPATIAL or INPUT UI."
   ],
   "updated_at": "2026-10-23",
   "handoff_rules": [
