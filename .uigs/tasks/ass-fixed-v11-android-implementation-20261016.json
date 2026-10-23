@@ -1,7 +1,7 @@
 {
   "id": "ass-fixed-v11-android-implementation-20261016",
   "goal": "Implement the frozen FIXED Tablet V1.1 design as native Compose UI, progressively, preserving existing business model/drafts and leaving SPATIAL UI outside this scope.",
-  "status": "Source Work Unit Complete / Pending External Validation",
+  "status": "Integrated page source package / Pending External Validation",
   "design_basis": {
     "figma_file": "https://www.figma.com/design/5yNY5dMnmpmaOnYxDlEhY5",
     "fixed_page": "85:2",
@@ -14,7 +14,7 @@
   "base_branch": "feat/r3-fixed-visual-layout-20261014",
   "base_pr": 148,
   "pull_request": "https://github.com/11576865/ASS-Workbench-Android/pull/149",
-  "current_bounded_work_unit": "2026-10-23: audit completed 176-test regression and consolidate the duplicate spatial parameter-extraction directory driver into maintained openTool; no product UI/domain edits.",
+  "current_bounded_work_unit": "2026-10-23: deliver one integrated FIXED tablet page package: permanent wide task rail and specialist command strip, Figma-scaled columns, central saved/draft comparison, responsive inspector/QC/frozen Raw review, and strict native capture gates at both V1.1 target sizes.",
   "completed_units": [
     "Created implementation branch from existing R3 visual-layout work to avoid duplicating video/timeline infrastructure.",
     "Created FixedV11EventGrid.kt as real Material3 Compose UI with index/start/end/Style/text/QC.",
@@ -83,21 +83,23 @@
     "Added FixedV11InspectorTabs following Figma 85:337 tab strip (Event/Style/Position, selected underline, Role.Tab) and real existing tool commands. TEXT maps visually to Event; Vector Clip maps to Position; unrelated tools do not get a false selected inspector tab. Cross-tool commands require FollowFocus plus an existing resolved Event matching current Focus. Pinned/selection/missing-target states disable the tabs and display a reason. Wide Event metadata now retains central Raw editing with the same shared primary draft; timing controls are also available alongside metadata only while docked. Compact/SPATIAL Event panel behavior is unchanged. Two JVM and two Compose regression sources added, execution pending; local diff/artifact-policy checks passed.",
     "PR source head 38f0ebf: source/JVM validation #39934215521 SUCCESS. Emulator #39934215567 completed FAILURE; compact evidence job 120358851195 reports merge SHA 6b02617c7a67d7fca32a9fdbe491bcf4d0fec9b4 (38f0ebf into R3 base 822a668b). Four focused projection attempts passed 9+3+7+3 cases. Full attempt has 176 tests / 6 failures / 0 errors / 0 skipped, not the previous 172/5 or a timeout with unreadable XML.",
     "Six full-suite failures: inspectorDraftSurvivesToolSwitchAndRotation (hideKeyboard 5s timeout); spatialWorkspaceExposesBoardAndNativeEditorWithoutMovingWorldNodes (unpin content description not displayed); spatialWorkspaceLongPressDragExtractsRotationWithoutEditingAss and spatialWorkspaceLongPressDragExtractsScaleWithoutEditingAss (tool-POSITION absent in verifySpatialParameterExtraction at old directory-selection sequence); batchActionsRemainAboveVisibleKeyboardAcrossMainAndCanvas (Preview must stay above IME); transformFieldsProjectExternalPreviewAndRestoreDrafts (geometry-shear-x-1-value node disposed during SetText). No failure is dismissed.",
-    "Consolidated only verifySpatialParameterExtraction navigation into existing openTool(\"POSITION\"), which chooses the filtered spatial result while its search IME remains open. Removed the duplicate path that closed search IME before selecting tool-POSITION. Original wait for actual POSITION host, extraction gesture, independent parameter projection, canonical document and Undo assertions remain unchanged. This is a harness correction hypothesis pending new emulator execution; no production UI or ASS write behavior changed. Local diff whitespace/artifact-policy checks passed."
+    "Consolidated only verifySpatialParameterExtraction navigation into existing openTool(\"POSITION\"), which chooses the filtered spatial result while its search IME remains open. Removed the duplicate path that closed search IME before selecting tool-POSITION. Original wait for actual POSITION host, extraction gesture, independent parameter projection, canonical document and Undo assertions remain unchanged. This is a harness correction hypothesis pending new emulator execution; no production UI or ASS write behavior changed. Local diff whitespace/artifact-policy checks passed.",
+    "User rejected fragmentary delivery (all small fixes). This work unit explicitly batches the whole FIXED page presentation and evidence pipeline rather than presenting each control as a milestone. Existing 18 tools, session draft stores, movable inspector, renderer and domain writers remain the execution owners.",
+    "Integrated page source: FixedV11LayoutPolicy uses Figma 1440 baseline (56 rail, 309 Event grid, 326 inspector, remaining center) and finite video/timeline/Raw budgets. FixedV11TaskRail arranges actual subtitle/text/timing/style/position/effects/resource/directory commands vertically; specialist menu, preview-density and independent SPATIAL switch stay in a compact command strip. IME/short windows retain original task bar. Four scene tabs extend to >=720dp. Central Raw dock distinguishes actual saved text from shared dirty draft. Wide Event timing fields become vertical; compact and SPATIAL fields retain prior layout. Wide and dual-pane inspectors show real saved-document QC counts and frozen-receipt Raw review; commit rechecks session, latest canonical text and exact draft text. No fake bilingual fields or mock video introduced.",
+    "Added dedicated strict native capture entry at 1440x900 and 1024x768, invoked before direct-capture APK uninstall; wait for orientation/width and hidden IME, assert actual production surfaces, reject wrong foreground ownership, then require positive one-test instrumentation receipt and exact-size CRC/zlib-validated PNG. Legacy 1600x960 R3, projection regressions and full suite remain separate mandatory gates. Compact evidence extractor now includes exact-size capture receipts. Capture fixtures remain two Event debug scenes with renderer disabled, not real-media acceptance."
   ],
   "next_units": [
-    "Read new source and emulator receipts once; verify both spatial rotation/scale extraction tests actually reach POSITION and retain all gesture/document/Undo assertions.",
-    "Investigate inspectorDraftSurvivesToolSwitchAndRotation hideKeyboard root/insets lifecycle; do not accept unknown/visible IME as hidden.",
-    "Investigate unpin display, batch Preview/Apply geometry against actual IME and Transform field disposal independently, with exact host/transition evidence.",
-    "Obtain native 1440x900/1024x768 visual receipts and compare approved Figma. Complete remaining property/provenance/QC/review layout and explicit bilingual data mapping.",
-    "Keep PR #149/#148 Draft; no overall design/device acceptance or main merge."
+    "Read integrated-page source/JVM and emulator receipts, then review actual 1440x900/1024x768 native fixture screenshots against Figma 85:3. A valid PNG is not pixel parity or renderer/media acceptance.",
+    "Repair attributable integrated-package failures as a coherent page unit; keep all legacy tool, draft, input, projection, Undo and full-suite gates active.",
+    "Resolve remaining historical IME/rotation, batch action geometry, spatial unpin and Transform field-lifecycle failures from actual logs; do not hide them under page-level completion.",
+    "Complete actual bilingual source/translation data mapping, final detailed property/provenance styling, asset parity and real media/tablet acceptance. Keep #149/#148 Draft until gates close."
   ],
-  "latest_durable_commit": "38f0ebf086a6d1e051f29f564eded74cb4c29ae1",
+  "latest_durable_commit": "726c5f5f522d5b9eb07af750c047d45b4c7e9f3a",
   "external_validation": {
-    "android_ci": "PR head 38f0ebf #39934215521 SUCCESS. New shared-driver test change and checkpoint: Pending; no local Gradle.",
-    "android_emulator": "PR merge 6b02617 for source 38f0ebf: #39934215567 full 176 tests / 6 failures / 0 errors / 0 skipped; focused projections 22/22 pass. New parameter-extraction directory driver: Pending, not a verified reduction to four failures.",
+    "android_ci": "This integrated page package: Pending External Validation. Local 15 strict PNG/instrumentation-validator tests and 7 evidence-extractor tests passed; bash syntax, git diff whitespace and artifact policy passed. No local Gradle/Android SDK execution.",
+    "android_emulator": "New page, rail/review interaction and target-size capture sources Pending. Prior last confirmed full suite (source38f0ebf, merge6b02617) was 176 tests / 6 failures. Driver726c5f5 result was not re-polled while building this authorized integrated package. No reduction in failures or valid new screenshots inferred.",
     "real_tablet": "Not started",
-    "figma_visual_parity": "R3 1600x960 native screenshot verified again in emulator #38998011161 (SHA256 26ee6884...), but FIXED V1.1 1440x900 and 1024x768 target captures still NOT obtained."
+    "figma_visual_parity": "New 1440x900/1024x768 strict compositor capture paths submitted but no new images yet. Column policy is source-tested only pending Kotlin execution. Material icons are reused from the app; exact Figma SVG assets could not be fetched (proxy timeout), so glyph parity remains unverified. Bilingual authoring is still absent."
   },
   "blockers": [
     "Base R3 PR #148 remains Draft; #149 is stacked and must not merge to main before acceptance.",
@@ -113,7 +115,8 @@
     "Protect SaveableStateHolder/movableContentOf and EventWorkspace/EditorViewModel as single state owner."
   ],
   "intake_check": {
-    "status": "Complete / Existing knowledge applied",
-    "result": "Applied existing spatial search-IME navigation knowledge from prior 5be6bc45 and task-driver projection work. The newly found duplicate driver is source-specific recurrence of that known condition, not a new cross-project principle. No duplicate Candidate or Canonical update."
+    "status": "Dedupe complete / Existing Candidate append queued after source checkpoint",
+    "target": "11576865/UIGS-Foundry/inbox/candidates/2026-10-14-product-block-delivery-over-pr-fragmentation.md",
+    "result": "Found an existing exact Candidate for coherent product-block delivery versus micro-milestones. Append this user-feedback recurrence and integrated source response as source-only evidence after product checkpoint; no duplicate Candidate and no Canonical promotion."
   }
 }

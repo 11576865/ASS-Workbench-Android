@@ -1126,7 +1126,17 @@ private fun FixedWorkspace(
 
     Column(modifier) {
         val v11DrawerAvailable = LocalConfiguration.current.screenWidthDp in 720..1179
-        WorkbenchTaskBar(
+        val wideChrome = LocalConfiguration.current.screenWidthDp >= 1180 &&
+            LocalConfiguration.current.screenHeightDp >= 720 &&
+            WindowInsets.ime.getBottom(LocalDensity.current) == 0
+        if (wideChrome) {
+            FixedV11CommandStrip(
+                activeTool = activeTool, preview = requestedPreview,
+                onTool = ::selectTool,
+                onPreview = { previewDensityName = requestedPreview.next().name },
+                onSpatial = onToggleSpatialHost,
+            )
+        } else WorkbenchTaskBar(
             activeTool = activeTool,
             listRequested = listRequested,
             requestedPreview = requestedPreview,
@@ -1145,7 +1155,7 @@ private fun FixedWorkspace(
 
         // Existing subtitle/timing scenes keep their layout-only behavior.
         // Specialist scenes route through the same tool command as the directory.
-        if (LocalConfiguration.current.screenWidthDp >= 1180) {
+        if (LocalConfiguration.current.screenWidthDp >= 720) {
             val tabBinding = instance.resolveUiBinding(state.toEditorUiState())
             val tabTarget = when {
                 tabBinding.unresolvedPinnedEventId != null -> "固定 #${tabBinding.unresolvedPinnedEventId} 已失效"
@@ -1233,7 +1243,7 @@ private fun FixedWorkspace(
                     val textDockEvent = instance.resolveUiBinding(state.toEditorUiState()).eventId?.let { id ->
                         state.document.events.firstOrNull { it.id == id }
                     }
-                    val geometry = R3FixedLayoutPolicy.resolve(
+                    val geometry = FixedV11LayoutPolicy.resolve(
                         widthDp = maxWidth.value,
                         heightDp = maxHeight.value,
                         mediaAspect = r3MediaAspect,
@@ -1242,6 +1252,12 @@ private fun FixedWorkspace(
                         textDockRequested = textDockVisible,
                     )
                     Row(Modifier.fillMaxSize().testTag("r3-fixed-wide")) {
+                        if (wideChrome) FixedV11TaskRail(activeTool, listRequested,
+                            onTool = { tool ->
+                                if (tool == WorkbenchTool.SUBTITLES) onListRequested(true)
+                                else selectTool(tool)
+                            }, onDirectory = { directoryOpen = true })
+                        VerticalDivider()
                         Box(Modifier.width(geometry.navigationWidthDp.dp).fillMaxHeight()
                             .testTag("r3-event-navigation")) {
                             listPane(Modifier.fillMaxSize())
@@ -1380,6 +1396,13 @@ private fun FixedWorkspace(
                                 Box(Modifier.weight(1f).fillMaxWidth()) {
                                     movableInspector(Modifier.fillMaxSize(), textDockVisible)
                                 }
+                                HorizontalDivider()
+                                FixedV11InspectorStatus(
+                                    event = resolvedEvent, state = state, viewModel = viewModel,
+                                    owner = instance.id,
+                                    rawReviewAvailable = activeTool == WorkbenchTool.TEXT || activeTool == WorkbenchTool.EVENT,
+                                    issues = issues, onOpenQc = { selectTool(WorkbenchTool.QC) },
+                                )
                             }
                         }
                     }
@@ -1425,9 +1448,24 @@ private fun FixedWorkspace(
                                 }
                             }
                             VerticalDivider()
-                            movableInspector(
-                                Modifier.weight(inspectorFraction).fillMaxHeight(), false
-                            )
+                            Column(Modifier.weight(inspectorFraction).fillMaxHeight()) {
+                                val compactBinding = instance.resolveUiBinding(state.toEditorUiState())
+                                val compactEvent = compactBinding.eventId?.let { id ->
+                                    state.document.events.firstOrNull { it.id == id }
+                                }
+                                Text(compactEvent?.let { "检查器 · Event #${it.id}" } ?: "检查器 · 无可编辑对象",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    modifier = Modifier.fillMaxWidth().padding(12.dp))
+                                FixedV11InspectorTabs(activeTool,
+                                    fixedV11InspectorCanSwitch(instance.binding, compactEvent?.id, state.focusedEventId),
+                                    onSelect = ::selectTool)
+                                Box(Modifier.weight(1f).fillMaxWidth()) {
+                                    movableInspector(Modifier.fillMaxSize(), false)
+                                }
+                                FixedV11InspectorStatus(compactEvent, state, viewModel, instance.id,
+                                    activeTool == WorkbenchTool.TEXT || activeTool == WorkbenchTool.EVENT,
+                                    issues, onOpenQc = { selectTool(WorkbenchTool.QC) })
+                            }
                         }
                     }
                 }
@@ -2462,6 +2500,36 @@ private fun InlineEventEditor(
     val timingInput = remember(startText, endText) { EventTimingInputValidation.parse(startText, endText) }
     val timingState = timingDraft.snapshot().classify(EventTimingCanonical.from(event))
     val timingConflict = timingState == RawEventDraftState.EXTERNAL_CONFLICT
+    if (rawTextDocked) {
+    Column(verticalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro)) {
+        OutlinedTextField(startText, { timingValues = timingValues.copy(start = it) }, label = { Text("Start") }, singleLine = true,
+            isError = timingInput.startInvalid,
+            supportingText = { if (timingInput.startInvalid) Text("输入 ASS 时间或非负毫秒数") },
+            modifier = Modifier.fillMaxWidth().testTag("event-start-${event.id}"))
+        OutlinedTextField(endText, { timingValues = timingValues.copy(end = it) }, label = { Text("End") }, singleLine = true,
+            isError = timingInput.endInvalid || timingInput.reversed,
+            supportingText = {
+                if (timingInput.endInvalid) Text("输入 ASS 时间或非负毫秒数")
+                else if (timingInput.reversed) Text("End 不能早于 Start")
+            },
+            modifier = Modifier.fillMaxWidth().testTag("event-end-${event.id}"))
+        Button(
+            onClick = {
+                val start = timingInput.start
+                val end = timingInput.end
+                if (timingInput.canApply && start != null && end != null) {
+                    viewModel.setEventTiming(event.id, start.millis, end.millis)
+                    viewModel.state.value.document.events.firstOrNull { it.id == event.id }?.let { committed ->
+                        if (committed.start == start && committed.end == end)
+                            timingDraft.reset(EventTimingCanonical.from(committed))
+                    }
+                }
+            },
+            enabled = timingInput.canApply,
+            modifier = Modifier.align(Alignment.End).testTag("event-apply-time-${event.id}"),
+        ) { Text(if (timingConflict) "覆盖时间" else "应用") }
+    }
+    } else {
     Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro)) {
         OutlinedTextField(startText, { timingValues = timingValues.copy(start = it) }, label = { Text("Start") }, singleLine = true,
             isError = timingInput.startInvalid,
@@ -2489,6 +2557,7 @@ private fun InlineEventEditor(
             enabled = timingInput.canApply,
             modifier = Modifier.align(Alignment.CenterVertically).testTag("event-apply-time-${event.id}"),
         ) { Text(if (timingConflict) "覆盖时间" else "应用") }
+    }
     }
     if (timingConflict) Text("时间已在其他面板修改；草稿已保留。重新载入会丢弃草稿，覆盖时间会覆盖当前 Start/End。",
         color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall,

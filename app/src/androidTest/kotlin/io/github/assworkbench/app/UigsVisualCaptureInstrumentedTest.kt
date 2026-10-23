@@ -5,6 +5,7 @@ import android.util.Base64
 import android.util.Log
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
@@ -183,17 +184,49 @@ class UigsVisualCaptureInstrumentedTest {
         captureDisplay("ASS.R3.FIXED.PRODUCTION_REFERENCE.png")
     }
 
+    /** Dedicated direct-instrumentation gate; not a claim about ordinary phone suite coverage. */
+    @Test
+    fun captureFixedV11TabletReference() {
+        val args = InstrumentationRegistry.getArguments()
+        if (args.getString("v11StrictCapture") != "true") return
+        val width = checkNotNull(args.getString("v11Width")).toInt()
+        val height = checkNotNull(args.getString("v11Height")).toInt()
+        check((width == 1440 && height == 900) || (width == 1024 && height == 768))
+        composeRule.activityRule.scenario.onActivity {
+            it.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+        }
+        composeRule.waitUntil(15_000) {
+            val c = composeRule.activity.resources.configuration
+            c.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE &&
+                kotlin.math.abs(c.screenWidthDp - width) <= 32
+        }
+        composeRule.runOnUiThread { composeRule.activity.restoreDeterministicFixture() }
+        composeRule.waitUntil(10_000) { viewModel.state.value.document.events.size == 2 }
+        viewModel.focusEvent(1L, seek = false)
+        openFixedTool(WorkbenchTool.TEXT)
+        composeRule.waitUntil(10_000) {
+            composeRule.activity.window.decorView.rootWindowInsets
+                ?.isVisible(android.view.WindowInsets.Type.ime()) == false
+        }
+        composeRule.onNodeWithTag("fixed-v11-workspace-tabs").assertIsDisplayed()
+        if(width == 1440) {
+            composeRule.onNodeWithTag("fixed-v11-task-rail").assertIsDisplayed()
+            composeRule.onNodeWithTag("fixed-v11-text-dock").assertIsDisplayed()
+        } else composeRule.onNodeWithTag("fixed-v11-compact-two-pane").assertIsDisplayed()
+        composeRule.onNodeWithTag("event-raw-1").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithTag("fixed-v11-inspector-status").assertIsDisplayed()
+        captureDisplay("ASS.V11.FIXED.${width}x${height}.png")
+    }
+
     private fun openFixedTool(tool: WorkbenchTool) {
         composeRule.onNodeWithTag("fixed-tool-CAPABILITIES").performClick()
         composeRule.waitForIdle()
         if (tool != WorkbenchTool.CAPABILITIES) {
-            composeRule.onNodeWithTag("tool-search").performTextReplacement(tool.name)
-            composeRule.activityRule.scenario.onActivity { activity ->
-                activity.getSystemService(android.view.inputmethod.InputMethodManager::class.java)
-                    .hideSoftInputFromWindow(activity.window.decorView.windowToken, 0)
-            }
-            composeRule.waitForIdle()
-            composeRule.onNodeWithTag("tool-${tool.name}").performScrollTo().performClick()
+            val expandedCatalog = composeRule.onAllNodesWithTag("r3-tool-catalog", useUnmergedTree = true)
+                .fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()
+            val prefix = if (expandedCatalog) "r3-tool" else "tool"
+            composeRule.onNodeWithTag("$prefix-search").performTextReplacement(tool.name)
+            composeRule.onNodeWithTag("$prefix-${tool.name}").performScrollTo().assertIsDisplayed().performClick()
         }
         composeRule.waitForIdle()
         composeRule.onNodeWithTag(if (tool == WorkbenchTool.CAPABILITIES) "fixed-tool-directory"
@@ -203,7 +236,7 @@ class UigsVisualCaptureInstrumentedTest {
     private fun captureDisplay(fileName: String) {
         composeRule.waitForIdle()
         val instrumentation = InstrumentationRegistry.getInstrumentation()
-        if (fileName.startsWith("ASS.R3.")) {
+        if (fileName.startsWith("ASS.R3.") || fileName.startsWith("ASS.V11.")) {
             // A compositor image with a system ANR/permission dialog is genuine
             // PNG but not a valid screenshot of the target product. An observed
             // Pixel Launcher ANR obscured the earlier R3 evidence thumbnail.
@@ -275,7 +308,7 @@ class UigsVisualCaptureInstrumentedTest {
         // App-specific external storage is a separate adb-readable extraction path.
         // The Base64 thumbnail is supplemental review evidence from the very same
         // compositor bitmap; it is never a substitute for the full PNG gate.
-        if (fileName.startsWith("ASS.R3.")) {
+        if (fileName.startsWith("ASS.R3.") || fileName.startsWith("ASS.V11.")) {
             val mirrorFolder = checkNotNull(instrumentation.targetContext.getExternalFilesDir("uigs-capture")) {
                 "R3 external capture directory is unavailable"
             }
