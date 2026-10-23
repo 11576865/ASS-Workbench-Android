@@ -207,6 +207,31 @@ class UigsVisualCaptureInstrumentedTest {
             // A compositor image with a system ANR/permission dialog is genuine
             // PNG but not a valid screenshot of the target product. An observed
             // Pixel Launcher ANR obscured the earlier R3 evidence thumbnail.
+            // Rotation and ActivityScenario can make focus settle a few
+            // frames after Compose becomes idle. Wait briefly for *actual*
+            // compositor ownership; never turn an external dialog/launcher
+            // screenshot into accepted product evidence.
+            runCatching {
+                composeRule.waitUntil(timeoutMillis = 5_000) {
+                    val packageNow = instrumentation.uiAutomation.rootInActiveWindow
+                        ?.packageName?.toString()
+                    var focusedNow = false
+                    var shownNow = false
+                    composeRule.activityRule.scenario.onActivity { activity ->
+                        val decor = activity.window.decorView
+                        focusedNow = decor.hasWindowFocus()
+                        shownNow = decor.isShown && !activity.isFinishing && !activity.isDestroyed
+                    }
+                    r3ScreenshotForegroundIsTrusted(
+                        accessibilityPackage = packageNow,
+                        targetPackage = instrumentation.targetContext.packageName,
+                        decorFocused = focusedNow,
+                        decorShown = shownNow,
+                    )
+                }
+            }
+            // Independently re-read ownership and enforce the original strict
+            // gate; a timeout above cannot be converted into a screenshot pass.
             val activeRoot = instrumentation.uiAutomation.rootInActiveWindow
             val activePackage = activeRoot?.packageName?.toString()
             // A headless Android Emulator may return no accessibility root
