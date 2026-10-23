@@ -1,7 +1,7 @@
 {
   "id": "ass-fixed-v11-android-implementation-20261016",
   "goal": "Implement the frozen FIXED Tablet V1.1 design as native Compose UI, progressively, preserving existing business model/drafts and leaving SPATIAL UI outside this scope.",
-  "status": "Work Unit Complete / Durable Checkpoint / Pending External Validation",
+  "status": "Durable Checkpoint / Pending External Validation",
   "design_basis": {
     "figma_file": "https://www.figma.com/design/5yNY5dMnmpmaOnYxDlEhY5",
     "fixed_page": "85:2",
@@ -14,7 +14,7 @@
   "base_branch": "feat/r3-fixed-visual-layout-20261014",
   "base_pr": 148,
   "pull_request": "https://github.com/11576865/ASS-Workbench-Android/pull/149",
-  "current_bounded_work_unit": "2026-10-23: audit exact-head emulator #39877625021 and repair SPATIAL tool-directory test navigation with live search IME (do not mute tests or change production domain).",
+  "current_bounded_work_unit": "2026-10-23: resume PR #149, audit existing exact-head validation once, preserve running emulator boundary per AGENTS.md; no speculative product/test repair.",
   "completed_units": [
     "Created implementation branch from existing R3 visual-layout work to avoid duplicating video/timeline infrastructure.",
     "Created FixedV11EventGrid.kt as real Material3 Compose UI with index/start/end/Style/text/QC.",
@@ -74,18 +74,19 @@
     "Commit 9308195b: UigsVisualCaptureInstrumentedTest waits up to five seconds for real foreground ownership to settle after rotation/ActivityScenario, then independently rechecks the existing fail-closed target-package/decor-focus screenshot identity contract. It does not accept launcher/system-overlay pixels.",
     "At exact pre-fix head bb0e2ce3602d38fbcc8ef7de328c6cad9b0cb436, FIXED V1.1 Branch Validation #39877625041 completed SUCCESS; Emulator Regression #39877625021 completed FAILURE, but strict R3 1600x960 capture was valid (PNG sha256 3a7052ced06f34a703c72b6c433afae27291a7851207299e99ca499a6ce73306, size 145274) and full suite reported 172 tests / 5 failures / 0 errors / 0 skipped. Prior missing-foreground/no-XML blocker no longer masks complete suite evidence.",
     "Five exact-head emulator failures: inspectorDraftSurvivesToolSwitchAndRotation (hideKeyboard wait stale IME window state); spatialWorkspaceExposesBoardAndNativeEditorWithoutMovingWorldNodes (取消驻留 accessibility not displayed); batchActionsRemainAboveVisibleKeyboardAcrossMainAndCanvas (batch input view focus assertion); transformFieldsProjectExternalPreviewAndRestoreDrafts (geometry-scale-x field semantics node disposed during performTextReplacement); invalidEventFieldsExplainErrorsAndCannotCommitAcrossHosts (spatial openTool helper could not find tool-EVENT after hiding search keyboard). These are distinct from the earlier fake missing BATCH/EVENT/EFFECTS on R3 FIXED search.",
-    "Single bounded commit 5be6bc45: editor-regression openTool SPATIAL branch now selects a visible filtered tool result while the directory search IME is still active; does not invoke closeSoftKeyboard before clicking. This retains the actual on-screen command and strict visibility assertion. Product FIXED/SPATIAL UI, domain state and write transactions were not changed. The proposed cause (IME close dismissing dialog) is source-grounded hypothesis, not proven resolved until exact-head emulator run."
+    "Single bounded commit 5be6bc45: editor-regression openTool SPATIAL branch now selects a visible filtered tool result while the directory search IME is still active; does not invoke closeSoftKeyboard before clicking. This retains the actual on-screen command and strict visibility assertion. Product FIXED/SPATIAL UI, domain state and write transactions were not changed. The proposed cause (IME close dismissing dialog) is source-grounded hypothesis, not proven resolved until exact-head emulator run.",
+    "Resumed exact head 5fd22c29ad2d2eb02bbddfcac18f8488a5082fa6. FIXED V1.1 Branch Validation #39892238463 completed SUCCESS. Android Emulator Regression #39892238452 was in_progress at the one permitted status audit; job 120214741253 completed exact-head APK prebuild and was running the editor regression suite. No new instrumentation pass/fail count or screenshot result was available; previous 172/5 receipt is historical only."
   ],
   "next_units": [
-    "Inspect exact-head CI/emulator for spatial searchable tool choice after commit 5be6bc45; if still failing, capture actual active directory semantics and fix the real route, not test assertions by suppression.",
+    "Read the completed exact-source-head emulator #39892238452 receipt when resuming; identify final test counts and actual failure stacks before further repair. Source/JVM for 5fd22c29 already passed #39892238463. Do not reuse historical 172/5 as this run's result.",
     "Isolate remaining four failures independently: inspector IME after rotation; SPATIAL resident rail accessibility; BATCH input focus/IME; Transform field losing semantics node as layout/IME changes. Preserve existing strict assertions.",
     "Obtain FIXED V1.1 1440x900 and 1024x768 true Android native screenshots and Figma parity, plus real renderer/media evidence.",
     "Keep PR #149 stacked on unmerged Draft #148; do not merge main or claim tablet acceptance."
   ],
-  "latest_durable_commit": "5be6bc45f486e604d5d578e6f9f9466e5c4ff269",
+  "latest_durable_commit": "5fd22c29ad2d2eb02bbddfcac18f8488a5082fa6",
   "external_validation": {
-    "android_ci": "Exact prior head bb0e2ce3: FIXED V1.1 Branch Validation #39877625041 SUCCESS. New head 5be6bc45: Pending CI.",
-    "android_emulator": "Exact prior head bb0e2ce3: #39877625021 172 tests / 5 failures / 0 skipped; R3 compositor PNG valid sha256 3a7052ced06f34a703c72b6c433afae27291a7851207299e99ca499a6ce73306. New spatial navigation test helper 5be6bc45 Pending external emulator rerun.",
+    "android_ci": "Audited source head 5fd22c29: FIXED V1.1 Branch Validation #39892238463 SUCCESS. This checkpoint-only commit is not covered by that receipt.",
+    "android_emulator": "Audited source head 5fd22c29: Android Emulator Regression #39892238452 in_progress, job 120214741253 prebuild SUCCESS, editor regression running. Pending External Validation; no inferred resolution of prior five failures.",
     "real_tablet": "Not started",
     "figma_visual_parity": "R3 1600x960 native screenshot verified again in emulator #38998011161 (SHA256 26ee6884...), but FIXED V1.1 1440x900 and 1024x768 target captures still NOT obtained."
   },
@@ -111,5 +112,9 @@
     "No automatic merge to main, no updates to original SPATIAL implementation.",
     "One coherent increment per branch/PR; inspect CI for exact head only once.",
     "Protect SaveableStateHolder/movableContentOf and EventWorkspace/EditorViewModel as single state owner."
-  ]
+  ],
+  "intake_check": {
+    "status": "Complete / No new reusable knowledge",
+    "result": "State-only recovery and existing workflow receipt audit. Existing AGENTS.md external-job boundary and existing test hypotheses unchanged; no new Candidate/Observation/Bug/Case/Test or Canonical update warranted."
+  }
 }
