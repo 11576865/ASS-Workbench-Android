@@ -1228,7 +1228,7 @@ private fun FixedWorkspace(
                     // R3 design reference: EVENT navigator | VIDEO + REAL TIMELINE | inspector.
                     // Retain the existing production editor and player instead of drawing
                     // placeholder imagery or duplicating state between two mock surfaces.
-                    val textDockVisible = activeTool == WorkbenchTool.TEXT &&
+                    val textDockVisible = (activeTool == WorkbenchTool.TEXT || activeTool == WorkbenchTool.EVENT) &&
                         fixedV11Mode == FixedV11WorkspaceMode.SUBTITLE_EDIT
                     val textDockEvent = instance.resolveUiBinding(state.toEditorUiState()).eventId?.let { id ->
                         state.document.events.firstOrNull { it.id == id }
@@ -1333,6 +1333,22 @@ private fun FixedWorkspace(
                                     }
                                 }
                                 HorizontalDivider()
+                                val inspectorCanSwitch = fixedV11InspectorCanSwitch(
+                                    instance.binding, resolvedEvent?.id, state.focusedEventId,
+                                )
+                                FixedV11InspectorTabs(
+                                    activeTool = activeTool,
+                                    canSwitch = inspectorCanSwitch,
+                                    onSelect = ::selectTool,
+                                )
+                                if (!inspectorCanSwitch) Text(
+                                    if (instance.binding == WorkspaceBinding.FollowFocus) "先选择字幕"
+                                    else "当前绑定已锁定；标签切换仅支持跟随焦点",
+                                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp)
+                                        .testTag("fixed-v11-inspector-binding-guard"),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
                                 if (fixedV11Mode == FixedV11WorkspaceMode.PRECISE_TIMING) {
                                     val mediaPositionMs by viewModel.playbackPositionMs.collectAsState()
                                     FixedV11TimingContext(
@@ -2442,7 +2458,7 @@ private fun InlineEventEditor(
     LaunchedEffect(metadataDraft, event.layer, event.name, event.comment) {
         metadataDraft.reconcile(EventMetadataValues.from(event))
     }
-    if (activeSection == WorkbenchTool.TEXT) {
+    if (activeSection == WorkbenchTool.TEXT || (rawTextDocked && activeSection == WorkbenchTool.EVENT)) {
     val timingInput = remember(startText, endText) { EventTimingInputValidation.parse(startText, endText) }
     val timingState = timingDraft.snapshot().classify(EventTimingCanonical.from(event))
     val timingConflict = timingState == RawEventDraftState.EXTERNAL_CONFLICT
@@ -2484,7 +2500,7 @@ private fun InlineEventEditor(
         }
     }
 
-    if (!rawTextDocked) EventRawTextEditor(
+    if (activeSection == WorkbenchTool.TEXT && !rawTextDocked) EventRawTextEditor(
         event = event, state = state, viewModel = viewModel, draftOwnerId = draftOwnerId,
     )
 
