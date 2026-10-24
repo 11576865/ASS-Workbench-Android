@@ -2146,6 +2146,9 @@ private fun EventWorkspace(
             state = listState,
             modifier = Modifier
                 .then(if (r3Chrome) Modifier.weight(1f) else Modifier.fillMaxSize())
+                // Stable scroll owner across row virtualization and responsive-host
+                // recreation. A detached Event row is not a scroll authority.
+                .testTag("event-results-list")
                 .pointerInput(state.filteredEvents) {
                     var lastPreviewId: Long? = null
                     var lastAutoScrollAt = 0L
