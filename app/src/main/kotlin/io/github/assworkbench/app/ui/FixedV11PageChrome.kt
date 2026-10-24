@@ -77,36 +77,34 @@ internal fun FixedV11TaskRail(activeTool: WorkbenchTool, listRequested: Boolean,
     }
 }
 
+/** Commands share the scene-tab row so tablet chrome does not consume another row. */
 @Composable
-internal fun FixedV11CommandStrip(activeTool: WorkbenchTool, preview: PreviewDensity,
-    onTool: (WorkbenchTool) -> Unit, onPreview: () -> Unit, onSpatial: () -> Unit) {
+internal fun FixedV11TabCommands(activeTool: WorkbenchTool, preview: PreviewDensity,
+    onTool: (WorkbenchTool) -> Unit, onPreview: () -> Unit, onSpatial: () -> Unit,
+    onDrawer: (() -> Unit)? = null, eventCount: Int = 0) {
     var menu by remember { mutableStateOf(false) }
-    Surface(color = MaterialTheme.colorScheme.surfaceContainerLow) {
-        Row(Modifier.fillMaxWidth().height(48.dp).padding(horizontal = 12.dp),
-            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("主 UI", modifier = Modifier.testTag("fixed-r3-main-host"),
-                color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge)
-            Box {
-                TextButton(onClick = { menu = true }, modifier = Modifier.testTag("fixed-context-tools")) {
-                    Text(activeTool.title); Icon(Icons.Filled.ExpandMore, "当前任务工具")
-                }
-                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                    contextualToolsFor(activeTool).forEach { tool ->
-                        DropdownMenuItem(text = { Text(tool.title) }, onClick = { menu = false; onTool(tool) },
-                            modifier = Modifier.testTag("fixed-context-${tool.name}"))
-                    }
-                    if(contextualToolsFor(activeTool).isEmpty()) DropdownMenuItem(
-                        text = { Text("正文编辑") }, onClick = { menu = false; onTool(WorkbenchTool.TEXT) })
-                }
+    Row(Modifier.testTag("fixed-r3-main-host"), verticalAlignment = Alignment.CenterVertically) {
+        Box {
+            TextButton(onClick = { menu = true }, modifier = Modifier.testTag("fixed-context-tools")) {
+                Text(activeTool.title); Icon(Icons.Filled.ExpandMore, "当前任务工具")
             }
-            Spacer(Modifier.weight(1f))
-            TextButton(onClick = onPreview, modifier = Modifier.testTag("fixed-preview-density")) {
-                Icon(Icons.Filled.Visibility, null); Text("预览：${preview.label}")
-            }
-            TextButton(onClick = onSpatial, modifier = Modifier.testTag("fixed-r3-spatial-switch")) {
-                Text("∞ 无限画布")
+            DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                contextualToolsFor(activeTool).forEach { tool ->
+                    DropdownMenuItem(text = { Text(tool.title) }, onClick = { menu = false; onTool(tool) },
+                        modifier = Modifier.testTag("fixed-context-${tool.name}"))
+                }
+                if (contextualToolsFor(activeTool).isEmpty()) DropdownMenuItem(
+                    text = { Text("正文编辑") }, onClick = { menu = false; onTool(WorkbenchTool.TEXT) })
             }
         }
+        IconButton(onClick = onPreview, modifier = Modifier.testTag("fixed-preview-density")) {
+            Icon(Icons.Filled.Visibility, "预览：${preview.label}")
+        }
+        IconButton(onClick = onSpatial, modifier = Modifier.testTag("fixed-r3-spatial-switch")) {
+            Icon(Icons.Filled.OpenInFull, "无限画布")
+        }
+        if (onDrawer != null) TextButton(onClick = onDrawer,
+            modifier = Modifier.testTag("fixed-v11-drawer-open")) { Text("字幕列表 · $eventCount") }
     }
 }
 

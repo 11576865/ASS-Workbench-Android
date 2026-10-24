@@ -209,17 +209,24 @@ class UigsVisualCaptureInstrumentedTest {
                 ?.isVisible(android.view.WindowInsets.Type.ime()) == false
         }
         composeRule.onNodeWithTag("fixed-v11-workspace-tabs").assertIsDisplayed()
-        if(width == 1440) {
-            composeRule.onNodeWithTag("fixed-v11-task-rail").assertIsDisplayed()
-            composeRule.onNodeWithTag("fixed-v11-text-dock").assertIsDisplayed()
-        } else composeRule.onNodeWithTag("fixed-v11-compact-two-pane").assertIsDisplayed()
+        composeRule.onNodeWithTag("fixed-v11-task-rail").assertIsDisplayed()
+        composeRule.onNodeWithTag("fixed-v11-text-dock").assertIsDisplayed()
+        composeRule.onNodeWithTag("fixed-v11-event-properties").assertExists()
+        composeRule.onNodeWithTag("event-collapse-1").assertDoesNotExist()
+        if(width == 1024) {
+            composeRule.onNodeWithTag("fixed-v11-compact-two-pane").assertIsDisplayed()
+            val inspectorBounds = composeRule.onNodeWithTag("fixed-v11-compact-inspector").fetchSemanticsNode().boundsInRoot
+            val dockBounds = composeRule.onNodeWithTag("fixed-v11-text-dock").fetchSemanticsNode().boundsInRoot
+            assertTrue("Compact inspector keeps the design width", inspectorBounds.width in 300f..326f)
+            assertTrue("Central Raw remains beside the inspector", dockBounds.right <= inspectorBounds.left)
+        }
         composeRule.onNodeWithTag("event-raw-1").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithTag("fixed-v11-inspector-status").assertIsDisplayed()
         captureDisplay("ASS.V11.FIXED.${width}x${height}.png")
     }
 
     private fun openFixedTool(tool: WorkbenchTool) {
-        composeRule.onNodeWithTag("fixed-tool-CAPABILITIES").performClick()
+        composeRule.onNodeWithTag("fixed-tool-CAPABILITIES").performScrollTo().performClick()
         composeRule.waitForIdle()
         if (tool != WorkbenchTool.CAPABILITIES) {
             val expandedCatalog = composeRule.onAllNodesWithTag("r3-tool-catalog", useUnmergedTree = true)

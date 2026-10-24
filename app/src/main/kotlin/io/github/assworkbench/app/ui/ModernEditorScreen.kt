@@ -1126,17 +1126,10 @@ private fun FixedWorkspace(
 
     Column(modifier) {
         val v11DrawerAvailable = LocalConfiguration.current.screenWidthDp in 720..1179
-        val wideChrome = LocalConfiguration.current.screenWidthDp >= 1180 &&
+        val wideChrome = LocalConfiguration.current.screenWidthDp >= 960 &&
             LocalConfiguration.current.screenHeightDp >= 720 &&
             WindowInsets.ime.getBottom(LocalDensity.current) == 0
-        if (wideChrome) {
-            FixedV11CommandStrip(
-                activeTool = activeTool, preview = requestedPreview,
-                onTool = ::selectTool,
-                onPreview = { previewDensityName = requestedPreview.next().name },
-                onSpatial = onToggleSpatialHost,
-            )
-        } else WorkbenchTaskBar(
+        if (!wideChrome) WorkbenchTaskBar(
             activeTool = activeTool,
             listRequested = listRequested,
             requestedPreview = requestedPreview,
@@ -1175,7 +1168,15 @@ private fun FixedWorkspace(
                     val nextTool = mode.toolFor(activeTool)
                     if (nextTool != activeTool) selectTool(nextTool)
                 },
-                contextDescription = "${activeTool.name} · $tabTarget · $tabBindingLabel",
+                contextDescription = if (wideChrome && v11DrawerAvailable) ""
+                    else "${activeTool.name} · $tabTarget · $tabBindingLabel",
+                actions = if (wideChrome) ({
+                    FixedV11TabCommands(activeTool, requestedPreview, ::selectTool,
+                        onPreview = { previewDensityName = requestedPreview.next().name },
+                        onSpatial = onToggleSpatialHost,
+                        onDrawer = if (v11DrawerAvailable) ({ v11DrawerScope.launch { v11EventDrawerState.open() }; Unit }) else null,
+                        eventCount = state.document.events.size)
+                }) else null,
             )
         }
 
@@ -1183,6 +1184,7 @@ private fun FixedWorkspace(
             // Capture the parent constraints in this scope; nested Row/Column/Box
             // receivers must not implicitly resolve the outer maxHeight.
             val availableHeightDp = maxHeight.value
+            val availableWidthDp = maxWidth.value
             val density = LocalDensity.current
             val imeVisible = WindowInsets.ime.getBottom(density) > 0
             val policy = AdaptiveWorkspacePolicy.resolve(
@@ -1386,10 +1388,14 @@ private fun FixedWorkspace(
                 }
 
                 WorkbenchLayoutProfile.DUAL_PANE -> {
-                    // FIXED V1.1 compact-tablet layout: same EventWorkspace in an
-                    // on-demand drawer, same live video/timeline and inspector.
-                    // Unlike the old DUAL_PANE layout, the grid no longer displaces
-                    // the audio timing tools for the whole editing session.
+                    val compactBinding = instance.resolveUiBinding(state.toEditorUiState())
+                    val compactEvent = compactBinding.eventId?.let { id -> state.document.events.firstOrNull { it.id == id } }
+                    val dockVisible = wideChrome && fixedV11Mode == FixedV11WorkspaceMode.SUBTITLE_EDIT &&
+                        (activeTool == WorkbenchTool.TEXT || activeTool == WorkbenchTool.EVENT)
+                    val geometry = FixedV11LayoutPolicy.resolve(maxWidth.value, availableHeightDp,
+                        r3MediaAspect, policy.effectivePreview,
+                        timingPriority = fixedV11Mode == FixedV11WorkspaceMode.PRECISE_TIMING,
+                        textDockRequested = dockVisible, compact = true)
                     FixedV11CompactEventDrawer(
                         drawerState = v11EventDrawerState,
                         total = state.document.events.size,
@@ -1397,47 +1403,59 @@ private fun FixedWorkspace(
                         onOpen = { v11DrawerScope.launch { v11EventDrawerState.open() } },
                         onClose = { v11DrawerScope.launch { v11EventDrawerState.close() } },
                         eventList = { listModifier -> listPane(listModifier) },
+                        showHeader = !wideChrome,
                     ) {
                         Row(Modifier.fillMaxSize().testTag("fixed-v11-compact-two-pane")) {
-                            Column(
-                                Modifier.weight(1f - inspectorFraction).fillMaxHeight(),
-                            ) {
+                            if (wideChrome) {
+                                FixedV11TaskRail(activeTool, listRequested,
+                                    onTool = { tool ->
+                                        if (tool == WorkbenchTool.SUBTITLES) {
+                                            onListRequested(true)
+                                            v11DrawerScope.launch { v11EventDrawerState.open() }
+                                        } else selectTool(tool)
+                                    }, onDirectory = { directoryOpen = true })
+                                VerticalDivider()
+                            }
+                            Column(Modifier.weight(1f).fillMaxHeight()) {
                                 if (previewVisible) {
-                                    val visualHeight = policy.previewHeightDp.coerceAtMost(
-                                        availableHeightDp * 0.43f
-                                    )
+                                    val visualHeight = if (wideChrome) geometry.mediaHeightDp
+                                        else policy.previewHeightDp.coerceAtMost(availableHeightDp * 0.43f)
                                     Box(Modifier.fillMaxWidth().height(visualHeight.dp)
-                                        .testTag("fixed-v11-compact-video")) {
-                                        preview(Modifier.fillMaxSize())
-                                    }
+                                        .testTag("fixed-v11-compact-video")) { preview(Modifier.fillMaxSize()) }
                                     HorizontalDivider()
                                 }
-                                // This is the real media-clock-bound timeline, not
-                                // a screenshot, waveform clone, or second ViewModel.
                                 Box(Modifier.weight(1f).fillMaxWidth()
                                     .testTag("fixed-v11-compact-timeline")) {
-                                    ModernTimelinePane(
-                                        state = state,
-                                        viewModel = viewModel,
+                                    ModernTimelinePane(state = state, viewModel = viewModel,
                                         compact = availableHeightDp < 620f || imeVisible,
-                                        modifier = Modifier.fillMaxSize(),
-                                    )
+                                        modifier = Modifier.fillMaxSize())
+                                }
+                                if (dockVisible) {
+                                    HorizontalDivider()
+                                    FixedV11TextDock(compactEvent, state, viewModel, instance.id,
+                                        Modifier.fillMaxWidth().height(geometry.textDockHeightDp.dp))
                                 }
                             }
                             VerticalDivider()
-                            Column(Modifier.weight(inspectorFraction).fillMaxHeight()) {
-                                val compactBinding = instance.resolveUiBinding(state.toEditorUiState())
-                                val compactEvent = compactBinding.eventId?.let { id ->
-                                    state.document.events.firstOrNull { it.id == id }
+                            val inspectorWidth = if (wideChrome) geometry.inspectorWidthDp
+                                else availableWidthDp * inspectorFraction
+                            Column(Modifier.width(inspectorWidth.dp).fillMaxHeight()
+                                .testTag("fixed-v11-compact-inspector")) {
+                                val bindingLabel = when (val binding = instance.binding) {
+                                    WorkspaceBinding.FollowFocus -> "跟随焦点"
+                                    WorkspaceBinding.FollowSelection -> "当前选择集"
+                                    is WorkspaceBinding.PinnedEvent -> "固定 #${binding.eventId}"
                                 }
-                                Text(compactEvent?.let { "检查器 · Event #${it.id}" } ?: "检查器 · 无可编辑对象",
+                                if (wideChrome) FixedV11InspectorHeading(
+                                    compactEvent?.let { "Event #${it.id}" } ?: "无可编辑对象", bindingLabel, null)
+                                else Text(compactEvent?.let { "检查器 · Event #${it.id}" } ?: "检查器 · 无可编辑对象",
                                     style = MaterialTheme.typography.titleSmall,
                                     modifier = Modifier.fillMaxWidth().padding(12.dp))
                                 FixedV11InspectorTabs(activeTool,
                                     fixedV11InspectorCanSwitch(instance.binding, compactEvent?.id, state.focusedEventId),
                                     onSelect = ::selectTool)
                                 Box(Modifier.weight(1f).fillMaxWidth()) {
-                                    movableInspector(Modifier.fillMaxSize(), false)
+                                    movableInspector(Modifier.fillMaxSize(), dockVisible)
                                 }
                                 FixedV11InspectorStatus(compactEvent, state, viewModel, instance.id,
                                     activeTool == WorkbenchTool.TEXT || activeTool == WorkbenchTool.EVENT,
@@ -1676,9 +1694,9 @@ private fun FloatingToolContent(
                     Modifier.fillMaxSize().testTag("event-inspector").verticalScroll(rememberScrollState()).padding(12.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    editScope?.let { WorkspaceEditScopeBar(it) }
-                    Text("#${event.id} · ${tool.title}", style = MaterialTheme.typography.titleSmall)
-                    if (tool == WorkbenchTool.TEXT) IconButton(onClick = onCloseText,
+                    if (!rawTextDocked) editScope?.let { WorkspaceEditScopeBar(it) }
+                    if (!rawTextDocked) Text("#${event.id} · ${tool.title}", style = MaterialTheme.typography.titleSmall)
+                    if (tool == WorkbenchTool.TEXT && !rawTextDocked) IconButton(onClick = onCloseText,
                         modifier = Modifier.testTag("event-collapse-${event.id}")) { Icon(Icons.Filled.Close, "收起正文工具") }
                     eventEditorStateHolder.SaveableStateProvider(
                         "${draftSaveableScope ?: instance.id}-${event.id}"

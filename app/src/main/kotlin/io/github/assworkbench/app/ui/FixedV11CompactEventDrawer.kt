@@ -39,6 +39,7 @@ internal fun FixedV11CompactEventDrawer(
     onOpen: () -> Unit,
     onClose: () -> Unit,
     eventList: @Composable (Modifier) -> Unit,
+    showHeader: Boolean = true,
     content: @Composable () -> Unit,
 ) {
     ModalNavigationDrawer(
@@ -82,7 +83,7 @@ internal fun FixedV11CompactEventDrawer(
         },
     ) {
         Column(Modifier.fillMaxSize().testTag("fixed-v11-compact-editor")) {
-            Row(
+            if (showHeader) Row(
                 Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(horizontal = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {

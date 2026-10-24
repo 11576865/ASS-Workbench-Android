@@ -41,6 +41,7 @@ internal fun FixedV11WorkspaceTabs(
     onSelect: (FixedV11WorkspaceMode) -> Unit,
     modifier: Modifier = Modifier,
     contextDescription: String = "",
+    actions: (@Composable () -> Unit)? = null,
 ) {
     Surface(modifier = modifier.fillMaxWidth().testTag("fixed-v11-workspace-tabs"),
         color = MaterialTheme.colorScheme.surfaceContainerLow) {
@@ -82,6 +83,7 @@ internal fun FixedV11WorkspaceTabs(
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1, overflow = TextOverflow.Ellipsis)
+                actions?.invoke()
             }
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         }

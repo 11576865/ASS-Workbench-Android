@@ -38,4 +38,23 @@ class FixedV11PageChromeInstrumentedTest {
             assertEquals(1, directories)
         }
     }
+    @Test fun tabCommandsRetainPreviewHostAndDrawerActionsInOneRow() {
+        var previews = 0
+        var spatial = 0
+        var drawer = 0
+        composeRule.setContent {
+            MaterialTheme {
+                FixedV11TabCommands(WorkbenchTool.TEXT, PreviewDensity.FULL, {},
+                    { previews++ }, { spatial++ }, onDrawer = { drawer++ }, eventCount = 2)
+            }
+        }
+        composeRule.onNodeWithTag("fixed-preview-density").performClick()
+        composeRule.onNodeWithTag("fixed-r3-spatial-switch").performClick()
+        composeRule.onNodeWithTag("fixed-v11-drawer-open").performClick()
+        composeRule.runOnIdle {
+            assertEquals(1, previews)
+            assertEquals(1, spatial)
+            assertEquals(1, drawer)
+        }
+    }
 }

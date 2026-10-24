@@ -33,4 +33,14 @@ class FixedV11LayoutPolicyTest {
             assertTrue(g.mediaHeightDp + g.timelineHeightDp + g.textDockHeightDp <= height + 0.1f)
         }
     }
+    @Test fun compactTabletReservesDesignInspectorAndKeepsCentralRawBesideIt() {
+        val g = FixedV11LayoutPolicy.resolve(1024f, 629f, 16f/9f, PreviewDensity.FULL,
+            textDockRequested = true, compact = true)
+        assertEquals(0f, g.navigationWidthDp, 0f)
+        assertEquals(310f, g.inspectorWidthDp, 0.1f)
+        assertTrue(g.textDockHeightDp >= 184f)
+        assertTrue(g.timelineHeightDp >= 184f)
+        assertTrue(g.mediaHeightDp > 180f)
+        assertEquals(629f, g.mediaHeightDp + g.timelineHeightDp + g.textDockHeightDp + 2f, 0.1f)
+    }
 }
