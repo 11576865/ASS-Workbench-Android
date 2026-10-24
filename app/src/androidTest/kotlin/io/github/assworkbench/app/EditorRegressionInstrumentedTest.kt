@@ -2053,9 +2053,14 @@ class EditorRegressionInstrumentedTest {
                 // host recreation. Ignore the detached popup root after close.
                 activityImeVisible() == false
             }
-        } catch (error: Exception) {
+        } catch (error: Throwable) {
+            // ComposeTimeoutException is an AssertionError, not an Exception.
+            // Only these two expected transitional failures may be accepted,
+            // and only after the live Activity confirms the IME is hidden.
             val liveImeVisible = activityImeVisible()
-            if (liveImeVisible != false || error !is NoMatchingRootException && error !is androidx.compose.ui.test.ComposeTimeoutException) {
+            val transitionalFailure = error is NoMatchingRootException ||
+                error is androidx.compose.ui.test.ComposeTimeoutException
+            if (liveImeVisible != false || !transitionalFailure) {
                 throw AssertionError(
                     "IME hide did not complete: $requestEvidence; activityImeVisible=$liveImeVisible",
                     error,
