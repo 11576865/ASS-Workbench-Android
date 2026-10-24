@@ -71,4 +71,28 @@ class FixedV11EventPropertyFormInstrumentedTest {
         composeRule.onNodeWithTag("event-metadata-conflict-7").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithTag("event-actor-7").performScrollTo().assertTextContains("kept")
     }
+    @Test fun choosingStyleOnlyStagesReferenceUntilUnifiedReview() {
+        val event = AssEvent(id = 7L, start = SubTime(1000), end = SubTime(3000), text = "{\\fs40}Raw")
+        val style = EventTextDraftStore(42L).obtain("TEXT:primary", event.id, event.style)
+        val timing = EventTimingDraftStore(42L).obtain("TEXT:primary", event)
+        val metadata = EventMetadataDraftStore(42L).obtain("TEXT:primary", event)
+        composeRule.setContent {
+            MaterialTheme {
+                Column(Modifier.width(326.dp).height(560.dp).verticalScroll(rememberScrollState())) {
+                    FixedV11EventPropertyForm(event,
+                        AssDocument(styles = listOf(AssStyle(), AssStyle(name = "Opening")), events = listOf(event)),
+                        timing, metadata, { _, _ -> }, { _, _, _ -> }, styleDraft = style)
+                }
+            }
+        }
+        composeRule.onNodeWithTag("event-style-7").performScrollTo().performClick()
+        composeRule.onNodeWithTag("event-style-option-7-Opening").assertIsDisplayed().performClick()
+        composeRule.runOnIdle {
+            assertEquals("Opening", style.value.text)
+            assertEquals("Default", event.style)
+            assertEquals("{\\fs40}Raw", event.text)
+        }
+        composeRule.onNodeWithTag("event-reset-style-7").performScrollTo().performClick()
+        composeRule.runOnIdle { assertEquals("Default", style.value.text) }
+    }
 }

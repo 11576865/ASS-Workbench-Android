@@ -13,10 +13,10 @@ import io.github.assworkbench.domain.*
 
 @Composable
 internal fun EventEditReviewDialog(receipt: EventEditReviewReceipt, current: AssEvent?,
-    draftsUnchanged: Boolean, onDismiss: () -> Unit, onConfirm: () -> Unit) {
-    val problems = receipt.validationErrors(current) +
+    draftsUnchanged: Boolean, onDismiss: () -> Unit, onConfirm: () -> Unit, styleNames: Set<String> = emptySet()) {
+    val problems = receipt.validationErrors(current, styleNames) +
         if (draftsUnchanged) emptyList() else listOf("审核打开后草稿已改变，请返回后重新审核")
-    val next = receipt.applyTo(current)
+    val next = receipt.applyTo(current, styleNames)
     AlertDialog(onDismissRequest = onDismiss,
         modifier = Modifier.testTag("r3-write-review"),
         title = { Text("审核当前字幕 · #${receipt.eventId}") },
@@ -40,6 +40,11 @@ internal fun EventEditReviewDialog(receipt: EventEditReviewReceipt, current: Ass
                     Text("元数据", style = MaterialTheme.typography.titleSmall)
                     ReviewValue("修改前", describe(receipt.metadata.baseline), "event-review-meta-before")
                     ReviewValue("修改后", describe(receipt.metadata.values), "event-review-meta-after")
+                }
+                if (receipt.styleChanged) {
+                    Text("Style 引用", style = MaterialTheme.typography.titleSmall)
+                    ReviewValue("修改前", receipt.style?.baseText.orEmpty(), "event-review-style-before")
+                    ReviewValue("修改后", receipt.style?.text.orEmpty(), "event-review-style-after")
                 }
                 Text("Style 定义、其他字幕和其他专业工具草稿不在本次应用范围。",
                     style = MaterialTheme.typography.labelSmall)

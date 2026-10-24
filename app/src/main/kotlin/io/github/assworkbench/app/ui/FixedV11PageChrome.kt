@@ -126,7 +126,7 @@ internal fun FixedV11InspectorHeading(target: String, binding: String, scope: St
     }
 }
 
-/** Actual saved-document QC plus one atomic review of current Event text/time/metadata drafts. */
+/** Actual saved-document QC plus one atomic review of current Event text/time/metadata/Style-reference drafts. */
 @Composable
 internal fun FixedV11InspectorStatus(event: AssEvent?, state: EditorState, viewModel: EditorViewModel,
     owner: String, rawReviewAvailable: Boolean, issues: List<AssQcIssue>, onOpenQc: () -> Unit,
@@ -135,8 +135,9 @@ internal fun FixedV11InspectorStatus(event: AssEvent?, state: EditorState, viewM
     val draft = event?.let { store.obtain(owner, it.id, it.text) }
     val timing = event?.let { LocalEventTimingDraftStore.current.obtain(owner, it) }
     val metadata = event?.let { LocalEventMetadataDraftStore.current.obtain(owner, it) }
+    val style = event?.let { LocalEventStyleDraftStore.current.obtain(owner, it.id, it.style) }
     val pending = if (event != null && draft != null && timing != null && metadata != null)
-        EventEditReviewReceipt(event.id, draft.snapshot(), timing.snapshot(), metadata.snapshot()) else null
+        EventEditReviewReceipt(event.id, draft.snapshot(), timing.snapshot(), metadata.snapshot(), style?.snapshot()) else null
     var review by remember(state.workspaceSessionId, event?.id, owner) { mutableStateOf<EventEditReviewReceipt?>(null) }
     val session = state.workspaceSessionId
     val localIssues = issues.filter { it.eventId == event?.id }
@@ -172,16 +173,20 @@ internal fun FixedV11InspectorStatus(event: AssEvent?, state: EditorState, viewM
     review?.let { receipt ->
         val draftsUnchanged = (!receipt.textChanged || draft?.value?.text == receipt.text.text) &&
             (!receipt.timingChanged || timing?.values == receipt.timing.values) &&
-            (!receipt.metadataChanged || metadata?.values == receipt.metadata.values)
+            (!receipt.metadataChanged || metadata?.values == receipt.metadata.values) &&
+            (!receipt.styleChanged || style?.value?.text == receipt.style?.text)
         EventEditReviewDialog(receipt, event, draftsUnchanged,
+            styleNames = state.document.styles.mapTo(hashSetOf()) { it.name },
             onDismiss = { review = null }, onConfirm = {
                 val latest = viewModel.state.value
                 val stillSameDrafts = (!receipt.textChanged || draft?.value?.text == receipt.text.text) &&
                     (!receipt.timingChanged || timing?.values == receipt.timing.values) &&
-                    (!receipt.metadataChanged || metadata?.values == receipt.metadata.values)
+                    (!receipt.metadataChanged || metadata?.values == receipt.metadata.values) &&
+                    (!receipt.styleChanged || style?.value?.text == receipt.style?.text)
                 if (stillSameDrafts && latest.workspaceSessionId == session &&
                     viewModel.applyEventEditReview(receipt, session)) {
                     viewModel.state.value.document.events.firstOrNull { it.id == receipt.eventId }?.let { committed ->
+                        style?.reconcile(committed.style)
                         draft?.reconcile(committed.text)
                         timing?.reconcile(EventTimingCanonical.from(committed))
                         metadata?.reconcile(EventMetadataValues.from(committed))

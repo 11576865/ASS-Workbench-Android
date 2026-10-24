@@ -37,6 +37,12 @@ internal class EventTextDraftStore(val sessionId: Long, snapshot: RawEventDraftS
             EventTextDraftEntry(RawEventDraftBuffer(canonicalText, canonicalText))
         }
 
+    /** Shared string-draft mechanics; each field uses a distinct session-owned store. */
+    fun reconcileValues(canonical: Map<Long, String>) {
+        retainEvents(canonical.keys)
+        entries.forEach { (key, entry) -> canonical[key.eventId]?.let(entry::reconcile) }
+    }
+
     fun retainEvents(existingEventIds: Set<Long>) {
         entries.keys.retainAll { it.eventId in existingEventIds }
     }
@@ -52,6 +58,11 @@ internal class EventTextDraftStore(val sessionId: Long, snapshot: RawEventDraftS
 
 internal val LocalEventTextDraftStore = staticCompositionLocalOf<EventTextDraftStore> {
     error("Event Text requires the project-session draft owner")
+}
+
+/** Independent store: Style reference proposals must never share Raw ASS buffers. */
+internal val LocalEventStyleDraftStore = staticCompositionLocalOf<EventTextDraftStore> {
+    error("Event Style references require the project-session draft owner")
 }
 
 @Composable

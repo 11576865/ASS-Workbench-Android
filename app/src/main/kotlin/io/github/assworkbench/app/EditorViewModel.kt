@@ -2662,12 +2662,12 @@ class EditorViewModel(application: Application, private val savedStateHandle: Sa
         val snapshot = _state.value
         if (snapshot.workspaceSessionId != expectedSessionId || !receipt.hasChanges) return false
         val current = snapshot.document.events.firstOrNull { it.id == receipt.eventId } ?: return false
-        val next = receipt.applyTo(current) ?: return false
+        val next = receipt.applyTo(current, snapshot.document.styles.mapTo(hashSetOf()) { it.name }) ?: return false
         if (next == current) return false
         editDocument("已应用字幕 #${receipt.eventId} 的审核修改。") { document ->
             if (_state.value.workspaceSessionId != expectedSessionId) return@editDocument document
             val latest = document.events.firstOrNull { it.id == receipt.eventId }
-            val reviewed = receipt.applyTo(latest) ?: return@editDocument document
+            val reviewed = receipt.applyTo(latest, document.styles.mapTo(hashSetOf()) { it.name }) ?: return@editDocument document
             document.copy(events = document.events.map { if (it.id == receipt.eventId) reviewed else it })
         }
         val after = _state.value

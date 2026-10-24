@@ -51,4 +51,23 @@ class EventEditReviewReceiptTest {
         assertFalse(receipt(end = "3000").hasChanges)
         assertEquals(event, receipt().applyTo(event))
     }
+    @Test fun styleReferenceSharesTransactionWithoutStrippingRawOverrides() {
+        val review = receipt(raw = "{\\fs40}new").copy(style = RawEventDraftBuffer("Default", "Opening"))
+        val next = review.applyTo(event, setOf("Default", "Opening"))!!
+        assertEquals("Opening", next.style)
+        assertEquals("{\\fs40}new", next.text)
+        assertEquals(2, review.changedGroupCount)
+    }
+
+    @Test fun missingStyleOrConcurrentReferenceRejectsWholeTransaction() {
+        val review = receipt(raw = "new").copy(style = RawEventDraftBuffer("Default", "Opening"))
+        assertNull(review.applyTo(event, setOf("Default")))
+        assertNull(review.applyTo(event.copy(style = "Other"), setOf("Default", "Opening", "Other")))
+        assertNotNull(review.applyTo(event, setOf("Default", "Opening")))
+    }
+
+    @Test fun cleanStyleDoesNotBlockUnrelatedReferenceChange() {
+        val review = receipt(raw = "new").copy(style = RawEventDraftBuffer("Default", "Default"))
+        assertEquals("Other", review.applyTo(event.copy(style = "Other"))!!.style)
+    }
 }

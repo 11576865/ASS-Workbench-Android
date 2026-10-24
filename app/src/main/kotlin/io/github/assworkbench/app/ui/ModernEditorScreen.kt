@@ -178,6 +178,10 @@ fun ModernEditorScreen(
     val eventTextDraftStore = rememberEventTextDraftStore(state.workspaceSessionId)
     val transformDraftStore = rememberTransformDraftStore(state.workspaceSessionId)
     val eventFxDraftStore = rememberEventFxDraftStore(state.workspaceSessionId)
+    val eventStyleDraftStore = rememberEventTextDraftStore(state.workspaceSessionId)
+    LaunchedEffect(eventStyleDraftStore, state.document.events) {
+        eventStyleDraftStore.reconcileValues(state.document.events.associate { it.id to it.style })
+    }
     val eventMetadataDraftStore = rememberEventMetadataDraftStore(state.workspaceSessionId)
     val eventTimingDraftStore = rememberEventTimingDraftStore(state.workspaceSessionId)
     LaunchedEffect(eventTimingDraftStore, state.document.events) {
@@ -324,6 +328,7 @@ fun ModernEditorScreen(
     CompositionLocalProvider(LocalEventTextDraftStore provides eventTextDraftStore,
         LocalEventTimingDraftStore provides eventTimingDraftStore,
         LocalEventMetadataDraftStore provides eventMetadataDraftStore,
+        LocalEventStyleDraftStore provides eventStyleDraftStore,
         LocalTransformDraftStore provides transformDraftStore,
         LocalEventFxDraftStore provides eventFxDraftStore,
         LocalBatchAuthoringDraftStore provides batchAuthoringDraftStore) {
@@ -573,6 +578,7 @@ fun ModernEditorScreen(
                         val remaining = next.tools.mapTo(hashSetOf()) { it.id }
                         workspaceState.tools.filterNot { it.id in remaining }.forEach {
                             eventTextDraftStore.removeInstance(it.id)
+                            eventStyleDraftStore.removeInstance(it.id)
                             eventMetadataDraftStore.removeInstance(it.id)
                             eventTimingDraftStore.removeInstance(it.id)
                             batchAuthoringDraftStore.removeInstance(it.id)
@@ -2492,7 +2498,9 @@ private fun InlineEventEditor(
         metadataDraft.reconcile(EventMetadataValues.from(event))
     }
     if (rawTextDocked && (activeSection == WorkbenchTool.TEXT || activeSection == WorkbenchTool.EVENT)) {
+        val styleDraft = LocalEventStyleDraftStore.current.obtain(draftOwnerId, event.id, event.style)
         FixedV11EventPropertyForm(event, state.document, timingDraft, metadataDraft,
+            styleDraft = styleDraft,
             onApplyTiming = { start, end ->
                 viewModel.setEventTiming(event.id, start.millis, end.millis)
                 viewModel.state.value.document.events.firstOrNull { it.id == event.id }?.let { committed ->

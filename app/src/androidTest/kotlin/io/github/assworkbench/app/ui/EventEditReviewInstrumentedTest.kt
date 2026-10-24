@@ -25,7 +25,7 @@ class EventEditReviewInstrumentedTest {
 
     private fun load(): EditorViewModel {
         RecoveryStore(application).write(SubtitleProject(title = "Atomic review.ass"),
-            AssDocument(events = listOf(
+            AssDocument(styles = listOf(AssStyle(), AssStyle(name = "Opening")), events = listOf(
                 AssEvent(id = 1L, start = SubTime(1000), end = SubTime(3000), text = "Original"),
                 AssEvent(id = 2L, start = SubTime(5000), end = SubTime(6000), text = "Other"))), AssTextEncoding.UTF8)
         return EditorViewModel(application).also { vm ->
@@ -34,15 +34,17 @@ class EventEditReviewInstrumentedTest {
         }
     }
 
-    @Test fun reviewIsReadOnlyThenCommitsAllGroupsWithOneUndoWithoutChangingFocus() {
+    @Test fun reviewIsReadOnlyThenCommitsFourGroupsWithOneUndoWithoutChangingFocus() {
         val vm = load()
         val before = vm.state.value.document
         val session = vm.state.value.workspaceSessionId
         val text = EventTextDraftStore(session)
+        val style = EventTextDraftStore(session)
         val time = EventTimingDraftStore(session)
         val meta = EventMetadataDraftStore(session)
         val event = before.events.first()
         text.obtain("TEXT:primary", event.id, event.text).value = TextFieldValue("Reviewed")
+        style.obtain("TEXT:primary", event.id, event.style).value = TextFieldValue("Opening")
         time.obtain("TEXT:primary", event).values = EventTimingValues("1500", "4500")
         meta.obtain("TEXT:primary", event).values = EventMetadataValues("3", "Actor", true)
         composeRule.runOnIdle { vm.focusEvent(2L, seek = false) }
@@ -50,6 +52,7 @@ class EventEditReviewInstrumentedTest {
             val state by vm.state.collectAsState()
             MaterialTheme {
                 CompositionLocalProvider(LocalEventTextDraftStore provides text,
+                    LocalEventStyleDraftStore provides style,
                     LocalEventTimingDraftStore provides time, LocalEventMetadataDraftStore provides meta) {
                     FixedV11InspectorStatus(state.document.events.first(), state, vm, "TEXT:primary", true,
                         emptyList(), onOpenQc = {})
@@ -58,11 +61,13 @@ class EventEditReviewInstrumentedTest {
         }
         composeRule.onNodeWithTag("fixed-v11-review-current").performClick()
         composeRule.onNodeWithTag("r3-write-after").assertTextContains("Reviewed")
+        composeRule.onNodeWithTag("event-review-style-after").performScrollTo().assertTextContains("Opening")
         composeRule.runOnIdle { assertEquals(before, vm.state.value.document) }
         composeRule.onNodeWithTag("r3-write-confirm").performClick()
         composeRule.runOnIdle {
             val after = vm.state.value.document
             assertEquals("Reviewed", after.events.first().text)
+            assertEquals("Opening", after.events.first().style)
             assertEquals(1500L, after.events.first().start.millis)
             assertEquals(4500L, after.events.first().end.millis)
             assertEquals(3, after.events.first().layer)
@@ -94,6 +99,7 @@ class EventEditReviewInstrumentedTest {
             val state by vm.state.collectAsState()
             MaterialTheme {
                 CompositionLocalProvider(LocalEventTextDraftStore provides text,
+                    LocalEventStyleDraftStore provides rememberEventTextDraftStore(state.workspaceSessionId),
                     LocalEventTimingDraftStore provides time, LocalEventMetadataDraftStore provides meta) {
                     FixedV11InspectorStatus(state.document.events.first(), state, vm, "TEXT:primary", true,
                         emptyList(), onOpenQc = {})
@@ -110,6 +116,40 @@ class EventEditReviewInstrumentedTest {
             assertFalse(vm.applyEventEditReview(receipt, session))
             assertEquals(external, vm.state.value.document)
             assertEquals("Changed after review", entry.value.text)
+        }
+    }
+    @Test fun deletedProposedStyleBlocksWholeWriteAndSeparateStyleDraftSurvivesRestore() {
+        val vm = load()
+        val session = vm.state.value.workspaceSessionId
+        val event = vm.state.value.document.events.first()
+        val text = EventTextDraftStore(session)
+        val styles = EventTextDraftStore(session)
+        val timing = EventTimingDraftStore(session)
+        val metadata = EventMetadataDraftStore(session)
+        text.obtain("TEXT:primary", event.id, event.text).value = TextFieldValue("Raw draft")
+        val style = styles.obtain("TEXT:primary", event.id, event.style)
+        style.value = TextFieldValue("Opening")
+        val restored = EventTextDraftStore(session, RawEventDraftSnapshot.restore(styles.save(), session))
+        assertEquals("Opening", restored.obtain("EVENT:primary", event.id, event.style).value.text)
+        assertEquals("Raw draft", text.obtain("EVENT:primary", event.id, event.text).value.text)
+        composeRule.setContent {
+            val state by vm.state.collectAsState()
+            MaterialTheme {
+                CompositionLocalProvider(LocalEventTextDraftStore provides text,
+                    LocalEventStyleDraftStore provides styles, LocalEventTimingDraftStore provides timing,
+                    LocalEventMetadataDraftStore provides metadata) {
+                    FixedV11InspectorStatus(state.document.events.first(), state, vm, "TEXT:primary", true,
+                        emptyList(), onOpenQc = {})
+                }
+            }
+        }
+        composeRule.onNodeWithTag("fixed-v11-review-current").performClick()
+        composeRule.runOnIdle { vm.deleteStyle("Opening", "Default") }
+        composeRule.onNodeWithTag("r3-write-confirm").assertIsNotEnabled()
+        composeRule.runOnIdle {
+            assertEquals(event, vm.state.value.document.events.first())
+            assertEquals("Opening", style.value.text)
+            assertEquals("Raw draft", text.obtain("TEXT:primary", event.id, event.text).value.text)
         }
     }
 }

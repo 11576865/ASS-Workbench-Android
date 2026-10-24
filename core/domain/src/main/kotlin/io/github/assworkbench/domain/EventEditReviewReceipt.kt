@@ -1,22 +1,29 @@
 package io.github.assworkbench.domain
 
-/** Frozen proposals for one Event, applied together or not at all. No global tool/Style drafts. */
+/** Frozen proposals for one Event, applied together or not at all. No global tool or Style-definition drafts. */
 data class EventEditReviewReceipt(
     val eventId: Long,
     val text: RawEventDraftBuffer,
     val timing: EventTimingDraftBuffer,
     val metadata: EventMetadataDraftBuffer,
+    val style: RawEventDraftBuffer? = null,
 ) {
     val textChanged: Boolean get() = text.text != text.baseText
     val timingChanged: Boolean get() = timing.classify(timing.baseline) != RawEventDraftState.CLEAN
     val metadataChanged: Boolean get() = metadata.values != metadata.baseline
-    val hasChanges: Boolean get() = textChanged || timingChanged || metadataChanged
-    val changedGroupCount: Int get() = listOf(textChanged, timingChanged, metadataChanged).count { it }
+    val styleChanged: Boolean get() = style?.let { it.text != it.baseText } == true
+    val hasChanges: Boolean get() = textChanged || timingChanged || metadataChanged || styleChanged
+    val changedGroupCount: Int get() = listOf(textChanged, timingChanged, metadataChanged, styleChanged).count { it }
 
-    fun validationErrors(current: AssEvent?): List<String> = buildList {
+    fun validationErrors(current: AssEvent?, styleNames: Set<String> = emptySet()): List<String> = buildList {
         if (current == null || current.id != eventId) {
             add("审核目标不存在或已经改变")
             return@buildList
+        }
+        if (styleChanged && style != null) {
+            if (style.text !in styleNames) add("目标 Style 已不存在，请重新选择")
+            if (style.classify(current.style) == RawEventDraftState.EXTERNAL_CONFLICT)
+                add("Style 引用已被其他操作修改，请重新核对草稿")
         }
         if (textChanged && text.classify(current.text) == RawEventDraftState.EXTERNAL_CONFLICT)
             add("正文已被其他操作修改，请重新核对草稿")
@@ -35,10 +42,11 @@ data class EventEditReviewReceipt(
     }
 
     /** Copy only edited groups onto the latest Event, preserving unrelated external changes. */
-    fun applyTo(current: AssEvent?): AssEvent? {
-        if (validationErrors(current).isNotEmpty() || current == null) return null
+    fun applyTo(current: AssEvent?, styleNames: Set<String> = emptySet()): AssEvent? {
+        if (validationErrors(current, styleNames).isNotEmpty() || current == null) return null
         val parsed = if (timingChanged) EventTimingInputValidation.parse(timing.values.start, timing.values.end) else null
         return current.copy(
+            style = if (styleChanged) checkNotNull(style).text else current.style,
             text = if (textChanged) text.text else current.text,
             start = parsed?.start ?: current.start,
             end = parsed?.end ?: current.end,

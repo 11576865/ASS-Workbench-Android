@@ -23,6 +23,7 @@ internal fun FixedV11EventPropertyForm(
     metadata: EventMetadataDraftEntry,
     onApplyTiming: (SubTime, SubTime) -> Unit,
     onApplyMetadata: (Int, String, Boolean) -> Unit,
+    styleDraft: EventTextDraftEntry? = null,
 ) {
     val times = timing.values
     val values = metadata.values
@@ -65,11 +66,47 @@ internal fun FixedV11EventPropertyForm(
             "event-layer-${event.id}", errorText = if (validLayer) null else "输入 -999～999 范围内的整数")
         // The Style NAME is an Event field; it is not a Style-inherited value.
         // Show the actual reference and never silently create/fallback a Style.
-        FixedV11PropertyField("Style", event.style, {}, "event-style-${event.id}", readOnly = true,
-            source = "Event · Style 引用")
-        Text(if (document.styles.any { it.name == event.style }) "引用的 Style 已找到" else "引用的 Style 未找到",
+        val proposedStyle = styleDraft?.value?.text ?: event.style
+        if (styleDraft == null) FixedV11PropertyField("Style", event.style, {}, "event-style-${event.id}",
+            readOnly = true, source = "Event · Style 引用")
+        else {
+            var styleMenu by remember(event.id) { mutableStateOf(false) }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Style", Modifier.width(72.dp).padding(top = 12.dp), style = MaterialTheme.typography.labelMedium)
+                Box(Modifier.weight(1f)) {
+                    OutlinedButton(onClick = { styleMenu = true }, modifier = Modifier.fillMaxWidth()
+                        .testTag("event-style-${event.id}")) { Text(proposedStyle) }
+                    DropdownMenu(expanded = styleMenu, onDismissRequest = { styleMenu = false }) {
+                        document.styles.forEach { candidate ->
+                            DropdownMenuItem(text = { Text(candidate.name) },
+                                modifier = Modifier.testTag("event-style-option-${event.id}-${candidate.name}"),
+                                onClick = {
+                                    styleDraft.value = androidx.compose.ui.text.input.TextFieldValue(candidate.name)
+                                    styleMenu = false
+                                })
+                        }
+                        if (document.styles.isEmpty()) DropdownMenuItem(text = { Text("工程中没有 Style") },
+                            enabled = false, onClick = {})
+                    }
+                }
+            }
+            Text("Event · Style 引用；不会清除 Raw 内联覆盖", style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (styleDraft.snapshot().classify(event.style) == RawEventDraftState.EXTERNAL_CONFLICT)
+                Text("Style 引用存在并发修改；草稿保留，审核将阻止覆盖。",
+                    color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall,
+                    modifier = Modifier.testTag("event-style-conflict-${event.id}"))
+            if (proposedStyle != event.style) {
+                Text("已保存：${event.style} · 新引用待统一审核", style = MaterialTheme.typography.labelSmall)
+                TextButton(onClick = {
+                    styleDraft.baseText = event.style
+                    styleDraft.value = androidx.compose.ui.text.input.TextFieldValue(event.style)
+                }, modifier = Modifier.testTag("event-reset-style-${event.id}")) { Text("还原 Style 引用") }
+            }
+        }
+        Text(if (document.styles.any { it.name == proposedStyle }) "引用的 Style 已找到" else "引用的 Style 未找到",
             style = MaterialTheme.typography.labelSmall,
-            color = if (document.styles.any { it.name == event.style }) MaterialTheme.colorScheme.onSurfaceVariant
+            color = if (document.styles.any { it.name == proposedStyle }) MaterialTheme.colorScheme.onSurfaceVariant
                 else MaterialTheme.colorScheme.error,
             modifier = Modifier.fillMaxWidth().testTag("fixed-v11-style-source-${event.id}"))
         FixedV11PropertyField("Actor", values.actor, { metadata.values = metadata.values.copy(actor = it) },
