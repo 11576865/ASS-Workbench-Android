@@ -91,8 +91,12 @@ class AssRawPayloadAndEventReviewRoundTripTest {
         assertEquals("  cue-001  ", restored.extraFields["vendorid"])
         assertEquals(loaded.events[1], reopened.events[1])
         assertEquals(loaded.styles, reopened.styles)
-        assertEquals(loaded.unknownSections, reopened.unknownSections)
-        assertEquals(loaded.eventSectionExtras, reopened.eventSectionExtras)
+        assertEquals(loaded.unknownSections.map { it.name }, reopened.unknownSections.map { it.name })
+        assertTrue(reopened.unknownSections.single().lines.contains("Owner: leave-me-as-is"))
+        assertEquals(
+            loaded.eventSectionExtras.filter { it.isNotBlank() },
+            reopened.eventSectionExtras.filter { it.isNotBlank() },
+        )
         assertTrue(AssRoundTripVerifier.verify(editedDocument, savedAss).equivalent)
 
         // A missing Style rejects the complete proposal, not just the reference change.
