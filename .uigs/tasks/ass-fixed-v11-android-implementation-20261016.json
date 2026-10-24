@@ -1,7 +1,7 @@
 {
   "id": "ass-fixed-v11-android-implementation-20261016",
   "goal": "Implement the frozen FIXED Tablet V1.1 design as native Compose UI, progressively, preserving existing business model/drafts and leaving SPATIAL UI outside this scope.",
-  "status": "Latest source/JVM passed at 184403cb; emulator limited 28/2; event-row host-recreation scroll-owner repair source committed, exact-head device validation pending",
+  "status": "Source/JVM 8d1d7710 validated; emulator 63/4; pinned full tool catalog rail and direct-task navigation committed, current compile/emulator pending",
   "design_basis": {
     "figma_file": "https://www.figma.com/design/5yNY5dMnmpmaOnYxDlEhY5",
     "fixed_page": "85:2",
@@ -14,7 +14,7 @@
   "base_branch": "feat/r3-fixed-visual-layout-20261014",
   "base_pr": 148,
   "pull_request": "https://github.com/11576865/ASS-Workbench-Android/pull/149",
-  "current_bounded_work_unit": "2026-10-25: fix disappearing Event row during responsive-host rotation/reentry navigation: use persistent owning LazyColumn scroll semantics rather than an ephemeral row's performScrollTo; preserve actual click/draft/document assertions.",
+  "current_bounded_work_unit": "2026-10-25: maintain actionable global professional tool directory on short tablet rail while preserving scrolling task shortcuts; exercise direct TEXT/EFFECTS task navigation in inspector draft roundtrip, retain directory-specific tests and all strict device assertions.",
   "completed_units": [
     "Created implementation branch from existing R3 visual-layout work to avoid duplicating video/timeline infrastructure.",
     "Created FixedV11EventGrid.kt as real Material3 Compose UI with index/start/end/Style/text/QC.",
@@ -118,14 +118,21 @@
     "Read emulator evidence job 120909171303 and native job 120906320594: rotation inspectorDraftSurvivesToolSwitchAndRotation failed at EditorRegressionInstrumentedTest.kt:926: event-row-1 was present in earlier semantics but detached during performScrollTo() after tablet size/density reset. Second batchKaraokeRevealControlsStayPreviewOnlyUntilCommit appeared in failed list without explanatory exception body; do not infer cause.",
     "Product patch 5037c4dddb924dda9d53df84ced96341bace24a6 assigns event-results-list semantics to owning real EventWorkspace LazyColumn, retaining list state, real event callbacks and tool data.",
     "Test patch db4bd189a8d641ad1762c678f31ee7583bff5882 invokes performScrollToNode(hasTestTag(event-row-1)) on stable owning Event list and still verifies actual Event row displayed/clickable, Raw Event panel present and draft survives host rotation. No test disabled, no session/ASS mutation.",
-    "UIGS Foundry dedup found existing 2026-10-24 native Compose virtualized list/IME observation, appended this separate exact-head Event row case and candidate repair to it at 9765edafd9f2b49c013e1d0e18e33c23b864e6e4; Canonical unchanged."
+    "UIGS Foundry dedup found existing 2026-10-24 native Compose virtualized list/IME observation, appended this separate exact-head Event row case and candidate repair to it at 9765edafd9f2b49c013e1d0e18e33c23b864e6e4; Canonical unchanged.",
+    "Exact-head 8d1d77102ef04bd2409617c99ae6c7f1977907dd FIXED branch source/JVM 40115404478 SUCCESS; Android emulator 40115404368 FAILURE, projection suites 22/22 passed, main connected XML 63 tests/4 failures/0 errors/0 skipped; both strict tablet native PNG evidence jobs succeeded. Full project 188+ test pass not established.",
+    "Current four emulator failures: rotation draft inspector could not display fixed-tool-CAPABILITIES when openTool(EFFECTS) used the directory; SPATIAL pin action contentDescription 取消驻留 not displayed; Transform geometry-scale-x-1-value disposed during text replacement; independentDirectoryDismissalPreservesDirtyTextAndTaskContext reported failure without useful cause in compact evidence. Do not mark any resolved.",
+    "Read real FixedV11TaskRail source: 8 regular+global directory buttons were in same vertical scrolling Column; 64dp row height and 16dp gaps could push the full catalog outside shortened viewport. This is a source-grounded UX risk, not proven sole cause of rotation failure (compact top bar is another supported host).",
+    "Production change 8274fa3d0f55699b19b8e6a88a7765b7123bd734: separate scrollable seven regular shortcut controls from always-mounted bottom global directory control in tablet rail. Preserve original tool identity, active-selection semantics and callbacks.",
+    "Added FixedV11TaskRailInstrumentedTest at 29bda707555f7b5576928b1add140f0999bc1b73, import fix 6f7bb4f7fe73838f11f4a5a4f7d66554bf21dc46: constrained 56x340dp rail must expose clickable global directory and subtitle shortcut callbacks. Android execution pending.",
+    "Updated regression helper at ce46b8a23dc7d898c184feb0617377dce0028647 to exercise actual direct TEXT/EFFECTS task shortcuts for inspector draft switch scenarios, not an incidental full-catalog modal; other tool commands still traverse the true catalog and assert visibility. Existing rotation/draft and independent directory tests remain enabled.",
+    "UIGS Foundry dedup found relevant 2026-10-22 adaptive directory Candidate; appended short-rail pinned global discovery and exact validation boundary at be4972e6627bd65a7e1b35e737ef5deafb294a3f. No duplicate record, no Canonical promotion."
   ],
   "next_units": [
-    "Read current exact-head source/JVM and Android emulator once. Determine whether rotation Event navigation is fixed; full suite must execute and pass, not only the limited 28-case receipt.",
-    "Diagnose remaining batchKaraokeRevealControlsStayPreviewOnlyUntilCommit from full XML/log and repair root cause without skipping assertions; continue remaining SPATIAL resident pin / Transform geometry lifecycle failures as device evidence warrants.",
-    "Validate real-device ASS import/edit/save/reopen and libass rendering; retain independent 1440x900 and 1024x768 compositor-vs-Figma acceptance."
+    "Read current exact-head source/JVM and emulator one status result. Fix any direct compiler error by one bounded repair; otherwise leave asynchronous CI Pending External Validation.",
+    "Use actual current Android result to diagnose whether TEXT/EFFECTS switch/rotation is now functional. Resolve SPATIAL pin and Transform input lifecycle from exact device evidence, not assertion removal.",
+    "Finish real ASS libass playback, file save/reopen, native tablet size and Figma visual parity acceptance on representative media before merging Draft PR #149."
   ],
-  "latest_durable_commit": "db4bd189a8d641ad1762c678f31ee7583bff5882 (responsive Event navigator source/test patch; task checkpoint follows)",
+  "latest_durable_commit": "6f7bb4f7fe73838f11f4a5a4f7d66554bf21dc46 (pinned-directory code and test checkpoints; task record will add commit)",
   "external_validation": {
     "android_ci": "Previous exact-head c00c27e2 FAILED at :app:compileDebugAndroidTestKotlin. Source repair 54489d43 and new Android safe-save test a457cb9f committed; current exact-head external compilation/JVM/emulator Pending External Validation.",
     "android_emulator": "Previous 40080008481 FAILED prebuild before running instrumented suite, not a new emulator regression count. New exact-head emulator validation pending.",
@@ -134,9 +141,9 @@
     "ass_raw_roundtrip": "Source and tests committed. No exact-head Kotlin, JVM, Android instrumentation, real-file or device evidence yet; Pending External Validation."
   },
   "blockers": [
-    "Event navigator owner-scroll repair submitted but no exact-head Android instrumentation result; current evidence is failure at old SHA 184403cb.",
-    "Latest emulator attempt 28/2 is incomplete whole-suite evidence and includes batchKaraokeRevealControlsStayPreviewOnlyUntilCommit with insufficient failure detail.",
-    "Real ASS/media/libass and true tablet integration and visual parity remain unverified."
+    "Exact-head Kotlin/Android verification of pinned catalog & regression direct task routing remains Pending.",
+    "Current four failing emulator cases (source 8d1d7710, run 40115404368) have not been certified fixed by new source changes.",
+    "Real ASS file/media/libass and hardware interaction/parity have not been field-validated."
   ],
   "updated_at": "2026-10-25",
   "handoff_rules": [
@@ -210,12 +217,32 @@
       "production_patch": "5037c4dddb924dda9d53df84ced96341bace24a6",
       "test_patch": "db4bd189a8d641ad1762c678f31ee7583bff5882",
       "status": "Pending External Validation"
+    },
+    "pinned_tool_directory": {
+      "baseline_head": "8d1d77102ef04bd2409617c99ae6c7f1977907dd",
+      "baseline_source": {
+        "run": 40115404478,
+        "status": "success"
+      },
+      "baseline_emulator": {
+        "run": 40115404368,
+        "status": "failure",
+        "tests": 63,
+        "failures": 4,
+        "errors": 0,
+        "skipped": 0
+      },
+      "product_commit": "8274fa3d0f55699b19b8e6a88a7765b7123bd734",
+      "instrumentation_test": "29bda707555f7b5576928b1add140f0999bc1b73",
+      "test_import_fix": "6f7bb4f7fe73838f11f4a5a4f7d66554bf21dc46",
+      "test_navigation": "ce46b8a23dc7d898c184feb0617377dce0028647",
+      "status": "Pending External Validation"
     }
   },
   "uigs_intake": {
-    "status": "complete / deduplicated observation updated",
-    "record": "11576865/UIGS-Foundry/inbox/observations/2026-10-24-ass-compose-virtual-list-ime-root-rotation-regression.md",
-    "foundry_commit": "9765edafd9f2b49c013e1d0e18e33c23b864e6e4",
+    "status": "complete / deduplicated existing Candidate extended",
+    "record": "11576865/UIGS-Foundry/inbox/candidates/2026-10-22-adaptive-tool-directory-search-and-test-routing.md",
+    "foundry_commit": "be4972e6627bd65a7e1b35e737ef5deafb294a3f",
     "canonical_promotion": false
   }
 }
