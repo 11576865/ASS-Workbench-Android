@@ -1,7 +1,7 @@
 {
   "id": "ass-fixed-v11-android-implementation-20261016",
   "goal": "Implement the frozen FIXED Tablet V1.1 design as native Compose UI, progressively, preserving existing business model/drafts and leaving SPATIAL UI outside this scope.",
-  "status": "Five-group Event review source/JVM validated; native regression 187/4; tool directory/IME repair pending external validation",
+  "status": "Five-group Event review source/JVM validated; ASS Text/opaque import preservation + save/reopen regression committed; latest repair validation pending (prior emulator 187/4)",
   "design_basis": {
     "figma_file": "https://www.figma.com/design/5yNY5dMnmpmaOnYxDlEhY5",
     "fixed_page": "85:2",
@@ -14,7 +14,7 @@
   "base_branch": "feat/r3-fixed-visual-layout-20261014",
   "base_pr": 148,
   "pull_request": "https://github.com/11576865/ASS-Workbench-Android/pull/149",
-  "current_bounded_work_unit": "2026-10-24: make virtualized directory search results reachable in compact/spatial editor regression, and prevent stale Espresso root insets from hanging keyboard-close after responsive-host recreation; preserve all failing test assertions.",
+  "current_bounded_work_unit": "2026-10-24: protect whitespace-sensitive ASS Text and opaque vendor Style/Event fields at the real parser; add five-group Event atomic-review -> ASS write -> reopen regression and strict semantic preservation checks. Distinct from UI polishing and the previously pending directory/IME repair.",
   "completed_units": [
     "Created implementation branch from existing R3 visual-layout work to avoid duplicating video/timeline infrastructure.",
     "Created FixedV11EventGrid.kt as real Material3 Compose UI with index/start/end/Style/text/QC.",
@@ -99,24 +99,30 @@
     "Implemented staged existing-Style picker in docked Event inspector, separate session-saveable Style draft store using existing string-buffer mechanics, same owner normalization and all-owner canonical reconciliation/instance cleanup. Fourth immutable review group checks Style existence and canonical reference before/inside VM write, preserves Raw overrides and Style definitions. Dirty Style survives restore; explicit reset only discards Style proposal. Added3domaincases, expanded4-groupVM Undo/Redo, missing-Style rejection/store restore and dropdown/reset cases; legacy providers updated. Static review no blocking issue,35Pythonchecks/policy/diff passed; new Kotlin/Android execution Pending.",
     "Source 63377555 confirmed FIXED source/JVM CI #40074615505 SUCCESS; Android Emulator #40074615531 full 187 tests / 4 failures / 0 errors / 0 skipped; strict 1440x900 and 1024x768 evidence jobs success.",
     "Repair source prepared: tag native WorkspaceToolDirectory LazyColumn and reset its LazyListState on filtered query; shared regression helpers scroll actual virtualized list before selecting tool-BATCH or other tool while search IME is active.",
-    "IME regression helper prepared to read current Activity insets after responsive host recreation, cross-check focused popup root on early hidden state and keep strict failure if IME remains visible/unknown."
+    "IME regression helper prepared to read current Activity insets after responsive host recreation, cross-check focused popup root on early hidden state and keep strict failure if IME remains visible/unknown.",
+    "Source audit identified AssCodec.parseStyles/parseEvents blindly trimming all field values, including literal subtitle Text and unknown vendor fields, causing irreversible import-time loss of leading/trailing payload spaces.",
+    "Commit 6e698c53 updates the field-map policy: recognized typed fields retain prior normalization, while Text and opaque Event/Style extension columns retain raw contents.",
+    "Commits 30cc5770 + dd1ffe1d add domain regressions for whitespace-only Text, inline tags, commas and custom columns, and a real parse -> five-group Event review -> write -> parse integrity test covering untouched Events/Styles/unknown sections. Semantic comparison intentionally ignores only incidental section-edge blank lines.",
+    "UIGS Foundry deduplicated and recorded source-confirmed defect (validation pending) at inbox/bugs/2026-10-24-ass-codec-text-and-opaque-field-trimming.md; no Canonical promotion."
   ],
   "next_units": [
-    "Run exact-head Android emulator regression on navigation/IME repair; verify BATCH shared draft across FIXED/SPATIAL and rotation draft restoration without reducing assertions.",
-    "Resolve resident-pin semantic visibility and geometry transform editable-field lifecycle failures from new exact-head device evidence.",
-    "Test 5-group Event review against real ASS load/save/reopen and libass renderer; keep strict tablet captures and full-suite checks."
+    "Run exact-head core/domain and Android CI on the raw payload + five-group file round-trip change, ensure regression suite compiles and passes before any claim of fixed output.",
+    "Continue device regression against combined directory/IME repair and parser commits; establish whether BATCH and rotation workflows now pass; do not suppress spatial-pin or transform-field failures.",
+    "Verify real user-sourced ASS load/edit/save/reopen and libass playback/rendering, including whitespace-sensitive Text and custom-format files."
   ],
-  "latest_durable_commit": "feat/fixed-v11-event-grid-20261016 (branch HEAD, see PR #149; last tested 63377555d867567d675241b00c9476c8f4a93ea9)",
+  "latest_durable_commit": "dd1ffe1d22f23f29485428e4e48c9203f881f996 (parser+regression code checkpoint; task-record commit follows)",
   "external_validation": {
     "android_ci": "This integrated page package: Pending External Validation. Local 15 strict PNG/instrumentation-validator tests and 7 evidence-extractor tests passed; bash syntax, git diff whitespace and artifact policy passed. No local Gradle/Android SDK execution.",
     "android_emulator": "New page, rail/review interaction and target-size capture sources Pending. Prior last confirmed full suite (source38f0ebf, merge6b02617) was 176 tests / 6 failures. Driver726c5f5 result was not re-polled while building this authorized integrated package. No reduction in failures or valid new screenshots inferred.",
     "real_tablet": "Not started",
-    "figma_visual_parity": "New 1440x900/1024x768 strict compositor capture paths submitted but no new images yet. Column policy is source-tested only pending Kotlin execution. Material icons are reused from the app; exact Figma SVG assets could not be fetched (proxy timeout), so glyph parity remains unverified. Bilingual authoring is still absent."
+    "figma_visual_parity": "New 1440x900/1024x768 strict compositor capture paths submitted but no new images yet. Column policy is source-tested only pending Kotlin execution. Material icons are reused from the app; exact Figma SVG assets could not be fetched (proxy timeout), so glyph parity remains unverified. Bilingual authoring is still absent.",
+    "ass_raw_roundtrip": "Source and tests committed. No exact-head Kotlin, JVM, Android instrumentation, real-file or device evidence yet; Pending External Validation."
   },
   "blockers": [
     "Two navigation/IME candidate repairs require exact-head device verification; not yet proved fixed.",
     "Emulator baseline 187/4 includes still-open spatial resident pin and Transform field lifecycle.",
-    "Real media/libass, bilingual mapping, specialized authoring flows, actual ASS reopen/roundtrip and true-device IME remain unverified."
+    "Real media/libass, bilingual mapping, specialized authoring flows, actual ASS reopen/roundtrip and true-device IME remain unverified.",
+    "ASS parser lossless Text/opaque-column patch and five-group save/reopen regression require exact-head Kotlin/JVM execution; field acceptance not yet established."
   ],
   "updated_at": "2026-10-24",
   "handoff_rules": [
@@ -147,10 +153,18 @@
       "1440x900": "strict gate success",
       "1024x768": "strict gate success"
     },
-    "tool_directory_ime_repair": "Pending External Validation; new source commit not polled after push"
+    "tool_directory_ime_repair": "Pending External Validation; new source commit not polled after push",
+    "ass_raw_payload": {
+      "code_checkpoint": "dd1ffe1d22f23f29485428e4e48c9203f881f996",
+      "source_patch": "6e698c53be6f0982c6409d8f01fe8abea6a2a8dc",
+      "state": "Pending External Validation",
+      "tests": "AssRawPayloadAndEventReviewRoundTripTest: three new cases; run pending"
+    }
   },
   "uigs_intake": {
-    "status": "complete / deduplicated continuation",
-    "boundary": "Continuation of same Event draft/Undo contract and project implementation; no newly validated cross-project rule, duplicate Candidate or Canonical promotion. Keep distinct offline-prototype records unchanged."
+    "status": "complete / foundry bug recorded",
+    "record": "11576865/UIGS-Foundry/inbox/bugs/2026-10-24-ass-codec-text-and-opaque-field-trimming.md",
+    "foundry_commit": "ca378a83791d2859c7c2243fc259c7e4da653a6c",
+    "canonical_promotion": false
   }
 }
