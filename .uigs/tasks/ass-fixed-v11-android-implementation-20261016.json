@@ -1,7 +1,7 @@
 {
   "id": "ass-fixed-v11-android-implementation-20261016",
   "goal": "Implement the frozen FIXED Tablet V1.1 design as native Compose UI, progressively, preserving existing business model/drafts and leaving SPATIAL UI outside this scope.",
-  "status": "ASS five-group save/reopen validated on prior source/JVM (188/4 device baseline); save-finish revision safety patch + interleaving regressions committed; latest external CI pending",
+  "status": "Latest source/JVM passed at 184403cb; emulator limited 28/2; event-row host-recreation scroll-owner repair source committed, exact-head device validation pending",
   "design_basis": {
     "figma_file": "https://www.figma.com/design/5yNY5dMnmpmaOnYxDlEhY5",
     "fixed_page": "85:2",
@@ -14,7 +14,7 @@
   "base_branch": "feat/r3-fixed-visual-layout-20261014",
   "base_pr": 148,
   "pull_request": "https://github.com/11576865/ASS-Workbench-Android/pull/149",
-  "current_bounded_work_unit": "2026-10-24: production ASS SafeSubtitleSave completion must not clear newer edits or overwrite a replacement workspace. Guard by workspaceSessionId, documentRevision, document and encoding; add deterministic second-provider-read interleaving tests for concurrent edits and project switch.",
+  "current_bounded_work_unit": "2026-10-25: fix disappearing Event row during responsive-host rotation/reentry navigation: use persistent owning LazyColumn scroll semantics rather than an ephemeral row's performScrollTo; preserve actual click/draft/document assertions.",
   "completed_units": [
     "Created implementation branch from existing R3 visual-layout work to avoid duplicating video/timeline infrastructure.",
     "Created FixedV11EventGrid.kt as real Material3 Compose UI with index/start/end/Style/text/QC.",
@@ -113,14 +113,19 @@
     "Product patch f914c466: save completion checks snapshot session, revision, document and encoding. If still current, retain verified-save success; if newer same-session edits exist, keep dirty/recovery with explicit earlier-version status. Different project is not retargeted. Re-journal if a race appears between initial recovery clear and final state publication.",
     "Debug-only SafeSaveTestProvider deterministic before-second-read hook 364b63c3, reset after each test; no production provider behavior changed.",
     "Two Android integration tests: d3eaf141 simulates new edit after captured byte write and asserts older disk bytes/newer dirty editor; a66c8bcf switches workspaces at readback and asserts old completion leaves new project destination/state unchanged. Existing safe save/rollback tests retained; current exact-head Android compilation/execution pending.",
-    "UIGS-Foundry dedup checked experimental REL.GENERATION_SAFE_ASYNC_PUBLICATION and HSR stale-MKV writer. New source-specific ASS stale-save Bug saved at inbox/bugs/2026-10-24-ass-safe-save-stale-completion-dirty-state.md commit 61397d2b; no Canonical promotion."
+    "UIGS-Foundry dedup checked experimental REL.GENERATION_SAFE_ASYNC_PUBLICATION and HSR stale-MKV writer. New source-specific ASS stale-save Bug saved at inbox/bugs/2026-10-24-ass-safe-save-stale-completion-dirty-state.md commit 61397d2b; no Canonical promotion.",
+    "Read exact prior branch SHA 184403cbc649c19926348d623477bd121fc0969a: FIXED V1.1 source/JVM run 40105502131 SUCCESS; Android emulator run 40105502278 FAILURE. Focused four projection groups each passed (9+3+7+3); instrumented main attempt 28 tests / 2 failures / 0 errors / 0 skipped, not a complete 188-test pass.",
+    "Read emulator evidence job 120909171303 and native job 120906320594: rotation inspectorDraftSurvivesToolSwitchAndRotation failed at EditorRegressionInstrumentedTest.kt:926: event-row-1 was present in earlier semantics but detached during performScrollTo() after tablet size/density reset. Second batchKaraokeRevealControlsStayPreviewOnlyUntilCommit appeared in failed list without explanatory exception body; do not infer cause.",
+    "Product patch 5037c4dddb924dda9d53df84ced96341bace24a6 assigns event-results-list semantics to owning real EventWorkspace LazyColumn, retaining list state, real event callbacks and tool data.",
+    "Test patch db4bd189a8d641ad1762c678f31ee7583bff5882 invokes performScrollToNode(hasTestTag(event-row-1)) on stable owning Event list and still verifies actual Event row displayed/clickable, Raw Event panel present and draft survives host rotation. No test disabled, no session/ASS mutation.",
+    "UIGS Foundry dedup found existing 2026-10-24 native Compose virtualized list/IME observation, appended this separate exact-head Event row case and candidate repair to it at 9765edafd9f2b49c013e1d0e18e33c23b864e6e4; Canonical unchanged."
   ],
   "next_units": [
-    "Read one exact-head source/JVM + Android Emulator CI status; if queued/running mark Pending External Validation; if one immediate blocking compile failure occurs, perform one bounded repair without lowering assertions.",
-    "Close failing rotate Event navigation, SPATIAL pin visibility, BATCH IME focus and Transform lazy field lifecycle using actual on-device evidence and robust state/UI handling rather than clearing tests.",
-    "Execute real media/libass ASS load-edit-save-reopen on tablet, and compare latest 1440x900/1024x768 native results against frozen FIXED V1.1 Figma target."
+    "Read current exact-head source/JVM and Android emulator once. Determine whether rotation Event navigation is fixed; full suite must execute and pass, not only the limited 28-case receipt.",
+    "Diagnose remaining batchKaraokeRevealControlsStayPreviewOnlyUntilCommit from full XML/log and repair root cause without skipping assertions; continue remaining SPATIAL resident pin / Transform geometry lifecycle failures as device evidence warrants.",
+    "Validate real-device ASS import/edit/save/reopen and libass rendering; retain independent 1440x900 and 1024x768 compositor-vs-Figma acceptance."
   ],
-  "latest_durable_commit": "a66c8bcf4e699c02259e847ade5d18f68a756193 (stale-save save/reopen tests; task checkpoint follows)",
+  "latest_durable_commit": "db4bd189a8d641ad1762c678f31ee7583bff5882 (responsive Event navigator source/test patch; task checkpoint follows)",
   "external_validation": {
     "android_ci": "Previous exact-head c00c27e2 FAILED at :app:compileDebugAndroidTestKotlin. Source repair 54489d43 and new Android safe-save test a457cb9f committed; current exact-head external compilation/JVM/emulator Pending External Validation.",
     "android_emulator": "Previous 40080008481 FAILED prebuild before running instrumented suite, not a new emulator regression count. New exact-head emulator validation pending.",
@@ -129,11 +134,11 @@
     "ass_raw_roundtrip": "Source and tests committed. No exact-head Kotlin, JVM, Android instrumentation, real-file or device evidence yet; Pending External Validation."
   },
   "blockers": [
-    "Current save completion revision-guard implementation and new Android provider interleaving tests have no new exact-head Gradle, emulator or device results yet.",
-    "Four remaining native regressions: vanished rotated Event row, SPATIAL pin, BATCH IME focus, Transform shear field; previous exact-head 188/4.",
-    "Real tablet/libass/media/font and product screenshot pixel-parity remain external pending."
+    "Event navigator owner-scroll repair submitted but no exact-head Android instrumentation result; current evidence is failure at old SHA 184403cb.",
+    "Latest emulator attempt 28/2 is incomplete whole-suite evidence and includes batchKaraokeRevealControlsStayPreviewOnlyUntilCommit with insufficient failure detail.",
+    "Real ASS/media/libass and true tablet integration and visual parity remain unverified."
   ],
-  "updated_at": "2026-10-24",
+  "updated_at": "2026-10-25",
   "handoff_rules": [
     "No automatic merge to main, no updates to original SPATIAL implementation.",
     "One coherent increment per branch/PR; inspect CI for exact head only once.",
@@ -189,12 +194,28 @@
         "failures": 4
       },
       "foundry": "inbox/bugs/2026-10-24-ass-safe-save-stale-completion-dirty-state.md"
+    },
+    "event_navigation_responsive_host": {
+      "previous_commit": "184403cbc649c19926348d623477bd121fc0969a",
+      "source_ci": {
+        "run": 40105502131,
+        "state": "success"
+      },
+      "emulator": {
+        "run": 40105502278,
+        "state": "failure",
+        "main_attempt_tests": 28,
+        "main_attempt_failures": 2
+      },
+      "production_patch": "5037c4dddb924dda9d53df84ced96341bace24a6",
+      "test_patch": "db4bd189a8d641ad1762c678f31ee7583bff5882",
+      "status": "Pending External Validation"
     }
   },
   "uigs_intake": {
-    "status": "complete / source-specific Bug recorded; deduplicated experimental generation publication pattern",
-    "record": "11576865/UIGS-Foundry/inbox/bugs/2026-10-24-ass-safe-save-stale-completion-dirty-state.md",
-    "foundry_commit": "61397d2b550252f2aea81648d0ef8176d6c44c98",
+    "status": "complete / deduplicated observation updated",
+    "record": "11576865/UIGS-Foundry/inbox/observations/2026-10-24-ass-compose-virtual-list-ime-root-rotation-regression.md",
+    "foundry_commit": "9765edafd9f2b49c013e1d0e18e33c23b864e6e4",
     "canonical_promotion": false
   }
 }
