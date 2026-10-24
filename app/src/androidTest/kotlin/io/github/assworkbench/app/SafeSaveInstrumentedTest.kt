@@ -199,6 +199,38 @@ class SafeSaveInstrumentedTest {
         assertTrue(AssRoundTripVerifier.verify(committed, decoded.text).equivalent)
     }
 
+
+    @Test
+    fun verifiedOlderSaveDoesNotClearNewerEditsOrClaimCurrentDocumentSaved() {
+        viewModel.updateEventText(1L, "Snapshot being saved")
+        val savedRevision = viewModel.state.value.documentRevision
+        val uri = providerUri("stale-save.ass")
+        seedTarget(uri, ByteArray(0))
+
+        // The production save writes the captured snapshot and then reopens
+        // ContentResolver for verification. Publish another edit in that gap:
+        // saved bytes are valid, but the current editor document is newer.
+        var injected = false
+        SafeSaveTestProvider.beforeSecondRead = {
+            injected = true
+            viewModel.updateEventText(1L, "Newer unsaved editor revision")
+        }
+        assertTrue(viewModel.saveTo(uri))
+        assertTrue("The provider must exercise the mid-save edit", injected)
+        assertTrue(viewModel.state.value.documentRevision > savedRevision)
+        assertEquals("Newer unsaved editor revision", viewModel.state.value.document.events.single().text)
+        assertTrue("A verified older file cannot clear newer edits", viewModel.state.value.dirty)
+        assertTrue(viewModel.state.value.status.contains("当前修改仍未保存"))
+        assertEquals(uri.toString(), viewModel.state.value.project.subtitleUri)
+
+        val saved = application.contentResolver.openInputStream(uri)!!.use { bytes ->
+            AssCodec.parse(AssTextDecoder.decode(bytes.readBytes()).text)
+        }
+        assertEquals("Snapshot being saved", saved.events.single().text)
+        assertFalse("Saved bytes must not accidentally contain an uncommitted later edit",
+            saved.events.single().text == viewModel.state.value.document.events.single().text)
+    }
+
     private fun providerUri(name: String, corruptSecondRead: Boolean = false): Uri =
         Uri.Builder()
             .scheme("content")
