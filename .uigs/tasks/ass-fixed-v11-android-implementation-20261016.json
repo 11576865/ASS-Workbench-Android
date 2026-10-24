@@ -1,7 +1,7 @@
 {
   "id": "ass-fixed-v11-android-implementation-20261016",
   "goal": "Implement the frozen FIXED Tablet V1.1 design as native Compose UI, progressively, preserving existing business model/drafts and leaving SPATIAL UI outside this scope.",
-  "status": "Unified text/time/metadata review validated; Style reference selection and fourth-group review extension pending external validation",
+  "status": "Five-group Event review source/JVM validated; native regression 187/4; tool directory/IME repair pending external validation",
   "design_basis": {
     "figma_file": "https://www.figma.com/design/5yNY5dMnmpmaOnYxDlEhY5",
     "fixed_page": "85:2",
@@ -14,7 +14,7 @@
   "base_branch": "feat/r3-fixed-visual-layout-20261014",
   "base_pr": 148,
   "pull_request": "https://github.com/11576865/ASS-Workbench-Android/pull/149",
-  "current_bounded_work_unit": "2026-10-24 function-first: turn current-Event Style reference from read-only into a staged existing-Style picker, separately save session/owner proposals, include reference in unified review/one Undo, reject missing or externally changed reference, preserve Raw overrides and shared Style definitions.",
+  "current_bounded_work_unit": "2026-10-24: make virtualized directory search results reachable in compact/spatial editor regression, and prevent stale Espresso root insets from hanging keyboard-close after responsive-host recreation; preserve all failing test assertions.",
   "completed_units": [
     "Created implementation branch from existing R3 visual-layout work to avoid duplicating video/timeline infrastructure.",
     "Created FixedV11EventGrid.kt as real Material3 Compose UI with index/start/end/Style/text/QC.",
@@ -96,13 +96,17 @@
     "Read source994dd94a receipts: source/JVM40058804721 SUCCESS; emulator40058804716 full182/4fail/0errors/0skips, projection22 pass. Both exact-size PNG gates/visual evidence jobs succeeded. Remaining failure names: rotation stale Event row, spatial resident pin, transform field disposal, capture-driver scroll on taskbar. Not a full regression pass.",
     "Implemented EventEditReviewReceipt frozen3-group proposal and ViewModel single-history write with explicit Event/session checks and no focus retargeting; current inspector review now displays before/after and guards changed proposals, keeps shared draft stores, acknowledges committed values. Added6domain and2realVM/Compose tests and adapted priorRawconflictfixture. Test-first source authored; no localGradle/Kotlin/Android available, so execution/red-green unverified. Static review no blocking business issue; domain imports aligned to existingkotlin.test. Existing35Python checks/policy/diff passed. Repaired capture helper to scroll only actual rail and still assert display/click.",
     "Validated sourcee29bc603: source/JVM40061239628 SUCCESS; emulator40061239623 full184/3fail/0errors/0skips, projections22 pass, both tablet PNG/evidence jobs success. Unified review tests not in failed list; previous non-scrollable capture-driver failure absent. Remaining failures rotation IME, spatial pin, transform field lifecycle; not a full regression pass.",
-    "Implemented staged existing-Style picker in docked Event inspector, separate session-saveable Style draft store using existing string-buffer mechanics, same owner normalization and all-owner canonical reconciliation/instance cleanup. Fourth immutable review group checks Style existence and canonical reference before/inside VM write, preserves Raw overrides and Style definitions. Dirty Style survives restore; explicit reset only discards Style proposal. Added3domaincases, expanded4-groupVM Undo/Redo, missing-Style rejection/store restore and dropdown/reset cases; legacy providers updated. Static review no blocking issue,35Pythonchecks/policy/diff passed; new Kotlin/Android execution Pending."
+    "Implemented staged existing-Style picker in docked Event inspector, separate session-saveable Style draft store using existing string-buffer mechanics, same owner normalization and all-owner canonical reconciliation/instance cleanup. Fourth immutable review group checks Style existence and canonical reference before/inside VM write, preserves Raw overrides and Style definitions. Dirty Style survives restore; explicit reset only discards Style proposal. Added3domaincases, expanded4-groupVM Undo/Redo, missing-Style rejection/store restore and dropdown/reset cases; legacy providers updated. Static review no blocking issue,35Pythonchecks/policy/diff passed; new Kotlin/Android execution Pending.",
+    "Source 63377555 confirmed FIXED source/JVM CI #40074615505 SUCCESS; Android Emulator #40074615531 full 187 tests / 4 failures / 0 errors / 0 skipped; strict 1440x900 and 1024x768 evidence jobs success.",
+    "Repair source prepared: tag native WorkspaceToolDirectory LazyColumn and reset its LazyListState on filtered query; shared regression helpers scroll actual virtualized list before selecting tool-BATCH or other tool while search IME is active.",
+    "IME regression helper prepared to read current Activity insets after responsive host recreation, cross-check focused popup root on early hidden state and keep strict failure if IME remains visible/unknown."
   ],
   "next_units": [
-    "Read Style-extension exact-source Kotlin/JVM/Android results; verify4-group commit/Undo/Redo, deleted-reference rejection and picker/restore behavior.",
-    "Resolve remaining rotation/spatial/transform failures from device evidence; continue functional completion while retaining current visual direction."
+    "Run exact-head Android emulator regression on navigation/IME repair; verify BATCH shared draft across FIXED/SPATIAL and rotation draft restoration without reducing assertions.",
+    "Resolve resident-pin semantic visibility and geometry transform editable-field lifecycle failures from new exact-head device evidence.",
+    "Test 5-group Event review against real ASS load/save/reopen and libass renderer; keep strict tablet captures and full-suite checks."
   ],
-  "latest_durable_commit": "e29bc60306bbeb7c934ee1e151b13996ec95dc6b",
+  "latest_durable_commit": "feat/fixed-v11-event-grid-20261016 (branch HEAD, see PR #149; last tested 63377555d867567d675241b00c9476c8f4a93ea9)",
   "external_validation": {
     "android_ci": "This integrated page package: Pending External Validation. Local 15 strict PNG/instrumentation-validator tests and 7 evidence-extractor tests passed; bash syntax, git diff whitespace and artifact policy passed. No local Gradle/Android SDK execution.",
     "android_emulator": "New page, rail/review interaction and target-size capture sources Pending. Prior last confirmed full suite (source38f0ebf, merge6b02617) was 176 tests / 6 failures. Driver726c5f5 result was not re-polled while building this authorized integrated package. No reduction in failures or valid new screenshots inferred.",
@@ -110,9 +114,9 @@
     "figma_visual_parity": "New 1440x900/1024x768 strict compositor capture paths submitted but no new images yet. Column policy is source-tested only pending Kotlin execution. Material icons are reused from the app; exact Figma SVG assets could not be fetched (proxy timeout), so glyph parity remains unverified. Bilingual authoring is still absent."
   },
   "blockers": [
-    "New Style-reference extension not yet compiled/executed on Android.",
-    "Latest full-suite baseline184tests/3failures; no full project completion.",
-    "Real media/libass, bilingual mapping, broader specialized authoring workflows and true-device IME remain open."
+    "Two navigation/IME candidate repairs require exact-head device verification; not yet proved fixed.",
+    "Emulator baseline 187/4 includes still-open spatial resident pin and Transform field lifecycle.",
+    "Real media/libass, bilingual mapping, specialized authoring flows, actual ASS reopen/roundtrip and true-device IME remain unverified."
   ],
   "updated_at": "2026-10-24",
   "handoff_rules": [
@@ -126,25 +130,24 @@
     "result": "Found an existing exact Candidate for coherent product-block delivery versus micro-milestones. Append this user-feedback recurrence and integrated source response as source-only evidence after product checkpoint; no duplicate Candidate and no Canonical promotion."
   },
   "external_validation_states": {
-    "validated_source_commit": "e29bc60306bbeb7c934ee1e151b13996ec95dc6b",
+    "validated_source_commit": "63377555d867567d675241b00c9476c8f4a93ea9",
     "compile_and_jvm": {
-      "run": 40061239628,
+      "run": 40074615505,
       "status": "success"
     },
     "emulator": {
-      "run": 40061239623,
+      "run": 40074615531,
       "status": "failure",
-      "tests": 184,
-      "failures": 3,
+      "tests": 187,
+      "failures": 4,
       "errors": 0,
-      "skipped": 0,
-      "focused_projection_tests_passed": 22
+      "skipped": 0
     },
     "native_captures": {
-      "1440x900": "strict gate/evidence job success",
-      "1024x768": "strict gate/evidence job success"
+      "1440x900": "strict gate success",
+      "1024x768": "strict gate success"
     },
-    "style_reference_extension": "Pending External Validation; no same-unit polling after push"
+    "tool_directory_ime_repair": "Pending External Validation; new source commit not polled after push"
   },
   "uigs_intake": {
     "status": "complete / deduplicated continuation",

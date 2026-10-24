@@ -1828,10 +1828,15 @@ private fun WorkspaceEditScopeBar(summary: WorkspaceEditScopeSummary) {
 @Composable
 private fun WorkspaceToolDirectory(onOpenTool: (WorkbenchTool) -> Unit, modifier: Modifier = Modifier) {
     var query by rememberSaveable { mutableStateOf("") }
+    val resultScroll = rememberLazyListState()
+    // A re-filtered LazyColumn can retain an index from a longer previous list.
+    // Always expose the first current result, even after the directory was reopened.
+    LaunchedEffect(query) { resultScroll.scrollToItem(0) }
     Column(modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         OutlinedTextField(query, { query = it }, label = { Text("搜索工具") }, singleLine = true,
             leadingIcon = { Icon(Icons.Filled.Search, null) }, modifier = Modifier.fillMaxWidth().testTag("tool-search"))
-        LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        LazyColumn(Modifier.weight(1f).testTag("tool-results-list"),
+            state = resultScroll, verticalArrangement = Arrangement.spacedBy(6.dp)) {
             WorkbenchToolGroup.entries.forEach { group ->
                 val entries = WorkbenchTool.entries.filter { it.group == group && it != WorkbenchTool.CAPABILITIES &&
                     (query.isBlank() || it.title.contains(query, ignoreCase = true) || it.name.contains(query, ignoreCase = true) ||

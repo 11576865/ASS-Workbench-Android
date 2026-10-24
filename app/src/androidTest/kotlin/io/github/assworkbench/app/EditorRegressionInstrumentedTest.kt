@@ -2008,6 +2008,36 @@ class EditorRegressionInstrumentedTest {
     }
 
     private fun hideKeyboard() {
+        fun activityImeVisible(): Boolean? {
+            var result: Boolean? = null
+            composeRule.runOnUiThread {
+                result = composeRule.activity.window.decorView.rootWindowInsets
+                    ?.isVisible(android.view.WindowInsets.Type.ime())
+            }
+            return result
+        }
+
+        // A panel move, rotation or keyboard dismissal can detach the previous
+        // focused Espresso root. Its old WindowInsets are not the live IME state.
+        if (activityImeVisible() == false) {
+            // A popup can own the keyboard even when the Activity root reports
+            // no IME. Inspect its focused root before treating this as a no-op.
+            var focusedIme: Boolean? = null
+            try {
+                performInFocusedWindow("Inspect current IME visibility") { _, root ->
+                    focusedIme = root.rootWindowInsets
+                        ?.isVisible(android.view.WindowInsets.Type.ime())
+                }
+            } catch (error: NoMatchingRootException) {
+                // No focused window and a hidden Activity IME: nothing to close.
+                composeRule.waitForIdle()
+                return
+            }
+            if (focusedIme == false) {
+                composeRule.waitForIdle()
+                return
+            }
+        }
         var imeRoot: View? = null
         var requestEvidence = "No focused root selected"
         try {
@@ -2019,23 +2049,15 @@ class EditorRegressionInstrumentedTest {
                 ViewActions.closeSoftKeyboard().perform(controller, root)
             }
             composeRule.waitUntil(5_000) {
-                imeRoot?.rootWindowInsets
-                    ?.isVisible(android.view.WindowInsets.Type.ime()) == false
+                // The Activity's insets are the stable owner across responsive
+                // host recreation. Ignore the detached popup root after close.
+                activityImeVisible() == false
             }
         } catch (error: Exception) {
-            // Headless Android can leave every Espresso root unfocused even
-            // after the IME has already gone away. Closing a nonexistent
-            // keyboard is a no-op, not a failure of the editor contract.
-            // Only accept that state when the Activity explicitly reports a
-            // hidden IME. Null insets / a visible keyboard remain failures.
-            var activityImeVisible: Boolean? = null
-            composeRule.runOnUiThread {
-                activityImeVisible = composeRule.activity.window.decorView.rootWindowInsets
-                    ?.isVisible(android.view.WindowInsets.Type.ime())
-            }
-            if (error !is NoMatchingRootException || activityImeVisible != false) {
+            val liveImeVisible = activityImeVisible()
+            if (liveImeVisible != false || error !is NoMatchingRootException && error !is androidx.compose.ui.test.ComposeTimeoutException) {
                 throw AssertionError(
-                    "IME hide did not complete: $requestEvidence; activityImeVisible=$activityImeVisible",
+                    "IME hide did not complete: $requestEvidence; activityImeVisible=$liveImeVisible",
                     error,
                 )
             }
@@ -2077,10 +2099,13 @@ class EditorRegressionInstrumentedTest {
                     .performScrollTo().assertIsDisplayed().performClick()
             } else {
                 composeRule.onNodeWithTag("tool-search").performTextReplacement(name)
-                // Select while the directory still owns the search IME. Closing
-                // it through Espresso can dismiss this compact dialog itself.
+                // The directory virtualizes items; querying an uncomposed row
+                // cannot scroll it into existence. Scroll the actual LazyColumn.
+                composeRule.onNodeWithTag("tool-results-list")
+                    .performScrollToNode(hasTestTag("tool-$name"))
+                // Select while search IME still owns the dialog.
                 composeRule.onNodeWithTag("tool-$name")
-                    .performScrollTo().assertIsDisplayed().performClick()
+                    .assertIsDisplayed().performClick()
             }
             composeRule.waitForIdle()
             // Inner performScrollTo only reaches the nearest scroll ancestor.
@@ -2098,12 +2123,13 @@ class EditorRegressionInstrumentedTest {
                 .fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()
         }
         composeRule.onNodeWithTag("tool-search").performTextReplacement(name)
-        // Selecting a result must work with the search IME still open.
-        // Calling Espresso closeSoftKeyboard before the click can dismiss the
-        // enclosing spatial add-tool dialog on some device/IME combinations;
-        // the selection is then missing even though the query matched.
+        // The spatial directory is a LazyColumn. Search can match an item that
+        // is not currently composed; navigate the real list before selecting it.
+        composeRule.onNodeWithTag("tool-results-list")
+            .performScrollToNode(hasTestTag("tool-$name"))
+        // Keep the active search IME; dismissing it can close the dialog.
         composeRule.onNodeWithTag("tool-$name")
-            .performScrollTo().assertIsDisplayed().performClick()
+            .assertIsDisplayed().performClick()
         composeRule.waitForIdle()
     }
 
