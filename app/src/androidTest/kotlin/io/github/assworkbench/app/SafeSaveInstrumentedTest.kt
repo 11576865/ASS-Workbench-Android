@@ -231,6 +231,34 @@ class SafeSaveInstrumentedTest {
             saved.events.single().text == viewModel.state.value.document.events.single().text)
     }
 
+
+    @Test
+    fun saveCompletionFromPreviousWorkspaceCannotReplaceNewProjectDestination() {
+        viewModel.updateEventText(1L, "Old project's save snapshot")
+        val oldSession = viewModel.state.value.workspaceSessionId
+        val uri = providerUri("old-project-completed-late.ass")
+        seedTarget(uri, ByteArray(0))
+        var injected = false
+        SafeSaveTestProvider.beforeSecondRead = {
+            injected = true
+            viewModel.newSubtitleProject()
+        }
+
+        assertTrue(viewModel.saveTo(uri))
+        assertTrue(injected)
+        val current = viewModel.state.value
+        assertTrue(current.workspaceSessionId != oldSession)
+        assertEquals("Untitled.ass", current.project.title)
+        assertEquals(null, current.project.subtitleUri)
+        assertTrue(current.document.events.isEmpty())
+        assertFalse(current.dirty)
+        assertTrue(current.status.contains("已新建空白 ASS"))
+
+        val bytes = application.contentResolver.openInputStream(uri)!!.use { it.readBytes() }
+        assertEquals("Old project's save snapshot",
+            AssCodec.parse(AssTextDecoder.decode(bytes).text).events.single().text)
+    }
+
     private fun providerUri(name: String, corruptSecondRead: Boolean = false): Uri =
         Uri.Builder()
             .scheme("content")
