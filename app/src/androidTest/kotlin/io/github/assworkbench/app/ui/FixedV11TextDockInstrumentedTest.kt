@@ -43,7 +43,9 @@ class FixedV11TextDockInstrumentedTest {
         composeRule.setContent {
             val state by vm.state.collectAsState()
             MaterialTheme {
-                CompositionLocalProvider(LocalEventTextDraftStore provides drafts) {
+                CompositionLocalProvider(LocalEventTextDraftStore provides drafts,
+                    LocalEventTimingDraftStore provides rememberEventTimingDraftStore(state.workspaceSessionId),
+                    LocalEventMetadataDraftStore provides rememberEventMetadataDraftStore(state.workspaceSessionId)) {
                     FixedV11InspectorStatus(state.document.events.first(), state, vm,
                         "TEXT:primary", true, emptyList(), onOpenQc = {})
                 }

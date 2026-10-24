@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import io.github.assworkbench.container.MatroskaReader
 import io.github.assworkbench.container.MatroskaScanResult
 import io.github.assworkbench.container.MatroskaTrackKind
+import io.github.assworkbench.domain.EventEditReviewReceipt
 import io.github.assworkbench.domain.AssCodec
 import io.github.assworkbench.domain.AssDocument
 import io.github.assworkbench.domain.SubtitleFilterState
@@ -2654,6 +2655,24 @@ class EditorViewModel(application: Application, private val savedStateHandle: Sa
         val earliest = selected.minOfOrNull { it.start.millis } ?: return
         val delta = _playbackPositionMs.value - earliest
         shiftSelected(delta)
+    }
+
+    /** One explicitly reviewed Event write, with one history entry and no focus retargeting. */
+    fun applyEventEditReview(receipt: EventEditReviewReceipt, expectedSessionId: Long): Boolean {
+        val snapshot = _state.value
+        if (snapshot.workspaceSessionId != expectedSessionId || !receipt.hasChanges) return false
+        val current = snapshot.document.events.firstOrNull { it.id == receipt.eventId } ?: return false
+        val next = receipt.applyTo(current) ?: return false
+        if (next == current) return false
+        editDocument("已应用字幕 #${receipt.eventId} 的审核修改。") { document ->
+            if (_state.value.workspaceSessionId != expectedSessionId) return@editDocument document
+            val latest = document.events.firstOrNull { it.id == receipt.eventId }
+            val reviewed = receipt.applyTo(latest) ?: return@editDocument document
+            document.copy(events = document.events.map { if (it.id == receipt.eventId) reviewed else it })
+        }
+        val after = _state.value
+        return after.workspaceSessionId == expectedSessionId &&
+            after.document.events.firstOrNull { it.id == receipt.eventId } == next
     }
 
     fun updateFocusedMetadata(layer: Int, actor: String, comment: Boolean) {

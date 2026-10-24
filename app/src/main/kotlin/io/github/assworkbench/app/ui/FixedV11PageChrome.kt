@@ -126,15 +126,18 @@ internal fun FixedV11InspectorHeading(target: String, binding: String, scope: St
     }
 }
 
-/** Actual saved-document QC and one explicit Raw review, never a fake whole-tool commit. */
+/** Actual saved-document QC plus one atomic review of current Event text/time/metadata drafts. */
 @Composable
 internal fun FixedV11InspectorStatus(event: AssEvent?, state: EditorState, viewModel: EditorViewModel,
     owner: String, rawReviewAvailable: Boolean, issues: List<AssQcIssue>, onOpenQc: () -> Unit,
     modifier: Modifier = Modifier) {
     val store = LocalEventTextDraftStore.current
     val draft = event?.let { store.obtain(owner, it.id, it.text) }
-    val draftState = if(event != null && draft != null) draft.snapshot().classify(event.text) else RawEventDraftState.CLEAN
-    var review by remember(state.workspaceSessionId, event?.id) { mutableStateOf<R3TextWriteReceipt?>(null) }
+    val timing = event?.let { LocalEventTimingDraftStore.current.obtain(owner, it) }
+    val metadata = event?.let { LocalEventMetadataDraftStore.current.obtain(owner, it) }
+    val pending = if (event != null && draft != null && timing != null && metadata != null)
+        EventEditReviewReceipt(event.id, draft.snapshot(), timing.snapshot(), metadata.snapshot()) else null
+    var review by remember(state.workspaceSessionId, event?.id, owner) { mutableStateOf<EventEditReviewReceipt?>(null) }
     val session = state.workspaceSessionId
     val localIssues = issues.filter { it.eventId == event?.id }
     Surface(modifier.fillMaxWidth().testTag("fixed-v11-inspector-status"),
@@ -156,29 +159,35 @@ internal fun FixedV11InspectorStatus(event: AssEvent?, state: EditorState, viewM
                 }
             }
             if(rawReviewAvailable) {
-                Text(when(draftState) {
-                    RawEventDraftState.CLEAN -> "正文与已保存值一致"
-                    RawEventDraftState.EXTERNAL_CONFLICT -> "正文存在并发修改，审核中将阻止覆盖"
-                    else -> "正文草稿未应用"
-                }, style = MaterialTheme.typography.labelSmall)
-                Button(enabled = event != null && draft != null && draftState != RawEventDraftState.CLEAN,
-                    onClick = {
-                        if(event != null && draft != null) review = R3TextWriteReceipt(event.id, event.style,
-                            draft.baseText, event.text, draft.value.text)
-                    }, modifier = Modifier.fillMaxWidth().testTag("fixed-v11-review-current")) {
-                    Text("审核当前正文修改")
+                Text(if (pending?.hasChanges == true) "当前字幕有 ${pending.changedGroupCount} 组草稿修改"
+                    else "当前字幕草稿与已保存值一致", style = MaterialTheme.typography.labelSmall)
+                Button(enabled = pending?.hasChanges == true,
+                    onClick = { review = pending },
+                    modifier = Modifier.fillMaxWidth().testTag("fixed-v11-review-current")) {
+                    Text("审核当前字幕修改")
                 }
             }
         }
     }
     review?.let { receipt ->
-        R3TextWriteReviewDialog(receipt, event?.text, onDismiss = { review = null }, onConfirm = {
-            val latest = viewModel.state.value
-            if(latest.workspaceSessionId == session && draft?.value?.text == receipt.draftText &&
-                receipt.mayCommit(latest.document.events.firstOrNull { it.id == receipt.eventId }?.text)) {
-                viewModel.updateEventText(receipt.eventId, receipt.draftText)
-                review = null
-            }
-        }, document = state.document, event = event)
+        val draftsUnchanged = (!receipt.textChanged || draft?.value?.text == receipt.text.text) &&
+            (!receipt.timingChanged || timing?.values == receipt.timing.values) &&
+            (!receipt.metadataChanged || metadata?.values == receipt.metadata.values)
+        EventEditReviewDialog(receipt, event, draftsUnchanged,
+            onDismiss = { review = null }, onConfirm = {
+                val latest = viewModel.state.value
+                val stillSameDrafts = (!receipt.textChanged || draft?.value?.text == receipt.text.text) &&
+                    (!receipt.timingChanged || timing?.values == receipt.timing.values) &&
+                    (!receipt.metadataChanged || metadata?.values == receipt.metadata.values)
+                if (stillSameDrafts && latest.workspaceSessionId == session &&
+                    viewModel.applyEventEditReview(receipt, session)) {
+                    viewModel.state.value.document.events.firstOrNull { it.id == receipt.eventId }?.let { committed ->
+                        draft?.reconcile(committed.text)
+                        timing?.reconcile(EventTimingCanonical.from(committed))
+                        metadata?.reconcile(EventMetadataValues.from(committed))
+                    }
+                    review = null
+                }
+            })
     }
 }

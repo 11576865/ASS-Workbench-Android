@@ -226,7 +226,10 @@ class UigsVisualCaptureInstrumentedTest {
     }
 
     private fun openFixedTool(tool: WorkbenchTool) {
-        composeRule.onNodeWithTag("fixed-tool-CAPABILITIES").performScrollTo().performClick()
+        val directory = composeRule.onNodeWithTag("fixed-tool-CAPABILITIES")
+        if (composeRule.onAllNodesWithTag("fixed-v11-task-rail", useUnmergedTree = true)
+                .fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()) directory.performScrollTo()
+        directory.assertIsDisplayed().performClick()
         composeRule.waitForIdle()
         if (tool != WorkbenchTool.CAPABILITIES) {
             val expandedCatalog = composeRule.onAllNodesWithTag("r3-tool-catalog", useUnmergedTree = true)
