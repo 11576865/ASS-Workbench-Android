@@ -2146,18 +2146,48 @@ class EditorViewModel(application: Application, private val savedStateHandle: Sa
             )
         }.fold(
             onSuccess = { result ->
-                clearPendingRecovery()
-                updateState {
-                    it.copy(
-                        project = it.project.copy(subtitleUri = uri.toString()),
-                        sourceFormat = SubtitleSourceFormat.ASS,
-                        dirty = false,
-                        recoveryAvailable = false,
-                        recoveryLabel = "",
-                        status = "ASS 已安全保存并回读验证 · " +
-                            (result.bytesWritten / 1024L).coerceAtLeast(1L) + " KiB · " +
-                            result.verifiedEncoding.displayName + "。",
-                    )
+                // SafeSubtitleSave verified the bytes of *snapshot*, not an arbitrary
+                // later document. A new edit or workspace replacement may have
+                // published while ContentResolver was writing and reading back.
+                fun isSavedSnapshot(state: EditorState): Boolean =
+                    state.workspaceSessionId == snapshot.workspaceSessionId &&
+                        state.documentRevision == snapshot.documentRevision &&
+                        state.document == snapshot.document &&
+                        state.subtitleTextEncoding == snapshot.subtitleTextEncoding
+                val initiallyCurrent = isSavedSnapshot(_state.value)
+                if (initiallyCurrent) clearPendingRecovery()
+                updateState { current ->
+                    if (current.workspaceSessionId != snapshot.workspaceSessionId) {
+                        // A different project now owns the editor. Do not change
+                        // its destination, dirty flag or recovery state.
+                        current
+                    } else if (isSavedSnapshot(current)) {
+                        current.copy(
+                            project = current.project.copy(subtitleUri = uri.toString()),
+                            sourceFormat = SubtitleSourceFormat.ASS,
+                            dirty = false,
+                            recoveryAvailable = false,
+                            recoveryLabel = "",
+                            status = "ASS 已安全保存并回读验证 · " +
+                                (result.bytesWritten / 1024L).coerceAtLeast(1L) + " KiB · " +
+                                result.verifiedEncoding.displayName + "。",
+                        )
+                    } else {
+                        current.copy(
+                            // The on-disk version is valid, but it is not the
+                            // current document: keep the newer edits recoverable.
+                            project = current.project.copy(subtitleUri = uri.toString()),
+                            sourceFormat = SubtitleSourceFormat.ASS,
+                            dirty = true,
+                            status = "ASS 已写出较早版本并完成回读验证；保存期间文档或编码发生变化，当前修改仍未保存。",
+                        )
+                    }
+                }
+                // A concurrent edit between the initial check and clearing
+                // recovery must also be re-journaled; it cannot be forgotten.
+                if (initiallyCurrent && !isSavedSnapshot(_state.value) &&
+                    _state.value.workspaceSessionId == snapshot.workspaceSessionId) {
+                    scheduleRecovery(_state.value.document)
                 }
                 true
             },
