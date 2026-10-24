@@ -1,0 +1,77 @@
+{
+  "packet_version": 1,
+  "packet_id": "ci-11576865-ASS-Workbench-Android-40080008481-1",
+  "status": "pending",
+  "record_type": "ci_failure",
+  "title": "Android Emulator Regression: failure",
+  "summary": "Tracked CI workflow did not complete successfully. Source adapter captured failed job/step evidence when available.",
+  "source_repository": "11576865/ASS-Workbench-Android",
+  "source_event": "workflow_run",
+  "source_ref": "feat/fixed-v11-event-grid-20261016",
+  "source_sha": "c00c27e2a93d5210c459622558904debfdcaf086",
+  "source_url": "https://github.com/11576865/ASS-Workbench-Android/actions/runs/40080008481",
+  "created_at": "2026-10-24T09:00:58+00:00",
+  "dedupe_key": "workflow_run:11576865/ASS-Workbench-Android:40080008481:1",
+  "routing_hints": [
+    "interface-grammar",
+    "operations",
+    "red-reason",
+    "reliability"
+  ],
+  "evidence": {
+    "workflow": "Android Emulator Regression",
+    "run_id": "40080008481",
+    "run_attempt": "1",
+    "conclusion": "failure",
+    "trigger_event": "pull_request",
+    "failed_jobs": [
+      {
+        "id": 120831491104,
+        "name": "editor-regression",
+        "conclusion": "failure"
+      },
+      {
+        "id": 120832132948,
+        "name": "emulator-evidence",
+        "conclusion": "failure"
+      },
+      {
+        "id": 120832132950,
+        "name": "native-visual-1024x768",
+        "conclusion": "failure"
+      },
+      {
+        "id": 120832133088,
+        "name": "native-visual-1440x900",
+        "conclusion": "failure"
+      }
+    ],
+    "failed_steps": [
+      {
+        "job": "editor-regression",
+        "number": 11,
+        "name": "Prebuild exact-head app and instrumentation APKs",
+        "conclusion": "failure"
+      },
+      {
+        "job": "emulator-evidence",
+        "number": 3,
+        "name": "Read compact evidence from this run attempt",
+        "conclusion": "failure"
+      },
+      {
+        "job": "native-visual-1024x768",
+        "number": 3,
+        "name": "Recover and validate full native screenshot",
+        "conclusion": "failure"
+      },
+      {
+        "job": "native-visual-1440x900",
+        "number": 3,
+        "name": "Recover and validate full native screenshot",
+        "conclusion": "failure"
+      }
+    ],
+    "capture_error": ""
+  }
+}
