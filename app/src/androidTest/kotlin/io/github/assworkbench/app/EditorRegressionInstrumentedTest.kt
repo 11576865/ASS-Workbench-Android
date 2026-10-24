@@ -2095,7 +2095,19 @@ class EditorRegressionInstrumentedTest {
                 showFixedSubtitleList()
                 return
             }
-            composeRule.onNodeWithTag("fixed-tool-CAPABILITIES").assertIsDisplayed().performClick()
+            // TEXT and EFFECTS have first-class task commands. Use the product's
+            // actual one-tap workflow when checking draft survival across tools,
+            // rather than requiring a redundant catalog popup (which can be
+            // temporarily outside the IME/rotation viewport). Other tools still
+            // exercise the full directory below.
+            if (name == "TEXT" || name == "EFFECTS") {
+                composeRule.onNodeWithTag("fixed-tool-$name")
+                    .performScrollTo().assertIsDisplayed().performClick()
+                composeRule.waitForIdle()
+                return
+            }
+            composeRule.onNodeWithTag("fixed-tool-CAPABILITIES")
+                .performScrollTo().assertIsDisplayed().performClick()
             // FIXED uses a full R3 catalog on expanded tablets, but keeps the
             // shared directory in compact windows. Both must select the real
             // WorkbenchTool; legacy `tool-*` tags do not exist in the R3 dialog.
