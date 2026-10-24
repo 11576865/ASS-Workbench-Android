@@ -1,7 +1,7 @@
 {
   "id": "ass-fixed-v11-android-implementation-20261016",
   "goal": "Implement the frozen FIXED Tablet V1.1 design as native Compose UI, progressively, preserving existing business model/drafts and leaving SPATIAL UI outside this scope.",
-  "status": "Five-group Event write + actual Android SafeSubtitleSave round-trip coverage committed; repair for AndroidTest Kotlin compilation committed; exact-head CI pending",
+  "status": "ASS five-group save/reopen validated on prior source/JVM (188/4 device baseline); save-finish revision safety patch + interleaving regressions committed; latest external CI pending",
   "design_basis": {
     "figma_file": "https://www.figma.com/design/5yNY5dMnmpmaOnYxDlEhY5",
     "fixed_page": "85:2",
@@ -14,7 +14,7 @@
   "base_branch": "feat/r3-fixed-visual-layout-20261014",
   "base_pr": 148,
   "pull_request": "https://github.com/11576865/ASS-Workbench-Android/pull/149",
-  "current_bounded_work_unit": "2026-10-24 continuation: resolve observed AndroidTest Kotlin compile blocker in IME helper (ComposeTimeoutException extends Error); exercise five-group Event write/Undo/Redo through production SafeSubtitleSave ContentResolver and independent reopen of real saved bytes, with opaque ASS field integrity.",
+  "current_bounded_work_unit": "2026-10-24: production ASS SafeSubtitleSave completion must not clear newer edits or overwrite a replacement workspace. Guard by workspaceSessionId, documentRevision, document and encoding; add deterministic second-provider-read interleaving tests for concurrent edits and project switch.",
   "completed_units": [
     "Created implementation branch from existing R3 visual-layout work to avoid duplicating video/timeline infrastructure.",
     "Created FixedV11EventGrid.kt as real Material3 Compose UI with index/start/end/Style/text/QC.",
@@ -107,14 +107,20 @@
     "Queried exact-head c00c27e2 GitHub Actions: FIXED V1.1 Branch Validation 40080008476 FAILURE and Android Emulator Regression 40080008481 FAILURE, both blocked at app:compileDebugAndroidTestKotlin before full suite execution; no ASS round-trip pass/fail evidence.",
     "Read job 120831406804: EditorRegressionInstrumentedTest.kt:2058 Kotlin compilation error 'Check for instance is always true' at error !is ComposeTimeoutException inside catch(Exception). Fixed at 54489d43 by catch(Throwable) plus restrictive allowed-transition predicate; unknown/visible IME and unrelated errors still fail.",
     "Added real Android save-path acceptance test in a457cb9f: load ASS with custom-format vendor columns/unknown section and sibling subtitle; five-group Event receipt through ViewModel apply and Undo/Redo; save to existing SafeSaveTestProvider via production saveTo/SafeSubtitleSave with content provider readback; reopen bytes and verify text whitespace, inline tags, timing, style, margins, metadata and untouched raw extension data. Test source submitted; execution pending.",
-    "Updated and deduplicated existing UIGS Foundry ASS codec data integrity Bug at fd9aa985: documented exact failing compile log and new Android integration evidence plan, without creating another Candidate or changing Canonical."
+    "Updated and deduplicated existing UIGS Foundry ASS codec data integrity Bug at fd9aa985: documented exact failing compile log and new Android integration evidence plan, without creating another Candidate or changing Canonical.",
+    "Read prior checkpoint 23ab5a1d exact-head GitHub Actions: FIXED source/JVM runs 40081217144 and 40081211397 SUCCESS; Emulator 40081217091 completed FAILURE with full suite 188 tests / 4 failures / 0 errors / 0 skipped. New five-group save-back/readback test not listed in failures. Native screenshot evidence jobs for 1440x900 and 1024x768 successful. Exact failure list rotation event-row vanished, SPATIAL resident pin not displayed, BATCH root IME focus lost, Transform geometry-shear-x node absent; do not claim suite green.",
+    "Source audit of EditorViewModel.saveTo found unguarded success callback: captured snapshot was saved, but clearPendingRecovery()+dirty=false could overwrite later edits or a newly opened project. Existing documentRevision and workspaceSessionId authority reused, no second revision store introduced.",
+    "Product patch f914c466: save completion checks snapshot session, revision, document and encoding. If still current, retain verified-save success; if newer same-session edits exist, keep dirty/recovery with explicit earlier-version status. Different project is not retargeted. Re-journal if a race appears between initial recovery clear and final state publication.",
+    "Debug-only SafeSaveTestProvider deterministic before-second-read hook 364b63c3, reset after each test; no production provider behavior changed.",
+    "Two Android integration tests: d3eaf141 simulates new edit after captured byte write and asserts older disk bytes/newer dirty editor; a66c8bcf switches workspaces at readback and asserts old completion leaves new project destination/state unchanged. Existing safe save/rollback tests retained; current exact-head Android compilation/execution pending.",
+    "UIGS-Foundry dedup checked experimental REL.GENERATION_SAFE_ASYNC_PUBLICATION and HSR stale-MKV writer. New source-specific ASS stale-save Bug saved at inbox/bugs/2026-10-24-ass-safe-save-stale-completion-dirty-state.md commit 61397d2b; no Canonical promotion."
   ],
   "next_units": [
-    "Validate new exact-head AndroidTest Kotlin compilation and full domain/JVM suite; verify exact app and domain round-trip regressions rather than counting emulator prebuild as tested behavior.",
-    "Run actual emulator full suite (prior 187/4 is historical); check remaining SPATIAL pin and Transform geometry-field lifecycle issues, and verify prior directory/IME repair against specific tests.",
-    "Advance real ASS file load/save/reopen and libass rendering acceptance on actual user media; reconcile real device and Figma visual parity independently."
+    "Read one exact-head source/JVM + Android Emulator CI status; if queued/running mark Pending External Validation; if one immediate blocking compile failure occurs, perform one bounded repair without lowering assertions.",
+    "Close failing rotate Event navigation, SPATIAL pin visibility, BATCH IME focus and Transform lazy field lifecycle using actual on-device evidence and robust state/UI handling rather than clearing tests.",
+    "Execute real media/libass ASS load-edit-save-reopen on tablet, and compare latest 1440x900/1024x768 native results against frozen FIXED V1.1 Figma target."
   ],
-  "latest_durable_commit": "a457cb9f133b73575a106d817aa8532829173a3b (Android integration test; task checkpoint follows)",
+  "latest_durable_commit": "a66c8bcf4e699c02259e847ade5d18f68a756193 (stale-save save/reopen tests; task checkpoint follows)",
   "external_validation": {
     "android_ci": "Previous exact-head c00c27e2 FAILED at :app:compileDebugAndroidTestKotlin. Source repair 54489d43 and new Android safe-save test a457cb9f committed; current exact-head external compilation/JVM/emulator Pending External Validation.",
     "android_emulator": "Previous 40080008481 FAILED prebuild before running instrumented suite, not a new emulator regression count. New exact-head emulator validation pending.",
@@ -123,9 +129,9 @@
     "ass_raw_roundtrip": "Source and tests committed. No exact-head Kotlin, JVM, Android instrumentation, real-file or device evidence yet; Pending External Validation."
   },
   "blockers": [
-    "Current branch source and Android integration test execution require exact-head GitHub Actions; last completed run failed before tests on now-repaired compile guard.",
-    "Previous 187/4 emulator baseline included SPATIAL unpin and Transform input lifecycle failures; no current new suite result yet.",
-    "Real tablet/libass/media/font and large ASS task acceptance remain field pending."
+    "Current save completion revision-guard implementation and new Android provider interleaving tests have no new exact-head Gradle, emulator or device results yet.",
+    "Four remaining native regressions: vanished rotated Event row, SPATIAL pin, BATCH IME focus, Transform shear field; previous exact-head 188/4.",
+    "Real tablet/libass/media/font and product screenshot pixel-parity remain external pending."
   ],
   "updated_at": "2026-10-24",
   "handoff_rules": [
@@ -168,12 +174,27 @@
       },
       "state": "Pending External Validation",
       "test_path": "app/src/androidTest/kotlin/io/github/assworkbench/app/SafeSaveInstrumentedTest.kt (new five-group readback test); core/domain/src/test/.../AssRawPayloadAndEventReviewRoundTripTest.kt"
+    },
+    "save_completion_revision": {
+      "source_patch": "f914c466c86381a95d2d2332a2cd839afa11b975",
+      "test_commits": [
+        "364b63c346e2edb19b8a04d240c21e342fc8d6ba",
+        "d3eaf1416dc09f06a0a0dd2754bfa02fd31c39dc",
+        "a66c8bcf4e699c02259e847ade5d18f68a756193"
+      ],
+      "state": "Pending External Validation",
+      "prior_emulator": {
+        "run": 40081217091,
+        "tests": 188,
+        "failures": 4
+      },
+      "foundry": "inbox/bugs/2026-10-24-ass-safe-save-stale-completion-dirty-state.md"
     }
   },
   "uigs_intake": {
-    "status": "complete / existing Bug updated",
-    "record": "11576865/UIGS-Foundry/inbox/bugs/2026-10-24-ass-codec-text-and-opaque-field-trimming.md",
-    "foundry_commit": "fd9aa985826e13c81a0070cba07042249394819d",
+    "status": "complete / source-specific Bug recorded; deduplicated experimental generation publication pattern",
+    "record": "11576865/UIGS-Foundry/inbox/bugs/2026-10-24-ass-safe-save-stale-completion-dirty-state.md",
+    "foundry_commit": "61397d2b550252f2aea81648d0ef8176d6c44c98",
     "canonical_promotion": false
   }
 }
