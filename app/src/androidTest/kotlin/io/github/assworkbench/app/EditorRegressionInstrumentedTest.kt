@@ -920,10 +920,13 @@ class EditorRegressionInstrumentedTest {
                 .isNotEmpty()
         }
         Log.i("AsswbRegression", "rotation:select-event")
-        // Navigation was already requested above. eventRow() requests it a
-        // second time and can replace the responsive host after node lookup.
+        // A responsive host may replace the Event row after it first appears.
+        // Scroll the persistent LazyColumn owner instead of a row which can
+        // detach between performScrollTo()'s semantics lookup and scroll action.
+        // The selected row must still be composed, visible and clickable.
+        composeRule.onNodeWithTag("event-results-list")
+            .performScrollToNode(hasTestTag("event-row-1"))
         composeRule.onNodeWithTag("event-row-1")
-            .performScrollTo()
             .assertIsDisplayed()
             .performClick()
         composeRule.waitUntil(10_000) {
