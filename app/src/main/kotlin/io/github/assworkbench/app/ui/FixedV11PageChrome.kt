@@ -22,56 +22,79 @@ import io.github.assworkbench.domain.*
 @Composable
 internal fun FixedV11TaskRail(activeTool: WorkbenchTool, listRequested: Boolean,
     onTool: (WorkbenchTool) -> Unit, onDirectory: () -> Unit, modifier: Modifier = Modifier) {
+    val tools = listOf(WorkbenchTool.SUBTITLES, WorkbenchTool.TEXT, WorkbenchTool.TIMELINE,
+        WorkbenchTool.STYLE, WorkbenchTool.POSITION, WorkbenchTool.EFFECTS, WorkbenchTool.FONTS)
     Surface(modifier.width(FixedV11LayoutPolicy.railWidthDp.dp)
         .testTag("fixed-v11-task-rail"), color = MaterialTheme.colorScheme.surfaceContainerLow) {
-        Column(Modifier.fillMaxHeight().verticalScroll(rememberScrollState()).padding(vertical = 12.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            val tools = listOf(WorkbenchTool.SUBTITLES, WorkbenchTool.TEXT, WorkbenchTool.TIMELINE,
-                WorkbenchTool.STYLE, WorkbenchTool.POSITION, WorkbenchTool.EFFECTS, WorkbenchTool.FONTS, WorkbenchTool.CAPABILITIES)
-            tools.forEach { tool ->
-                val label = when(tool) {
-                    WorkbenchTool.SUBTITLES -> "字幕"
-                    WorkbenchTool.TEXT -> "正文"
-                    WorkbenchTool.TIMELINE -> "校时"
-                    WorkbenchTool.POSITION -> "位置"
-                    WorkbenchTool.STYLE -> "样式"
-                    WorkbenchTool.EFFECTS -> "效果"
-                    WorkbenchTool.FONTS -> "资源"
-                    else -> "工具"
+        Column(Modifier.fillMaxHeight().padding(vertical = 12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally) {
+            // Keep the complete directory reachable even when the available height
+            // is smaller than the 7 regular tools. Only the regular tools scroll.
+            Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState())
+                    .testTag("fixed-v11-rail-scroll"),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                tools.forEach { tool ->
+                    FixedV11RailToolButton(
+                        tool = tool,
+                        activeTool = activeTool,
+                        listRequested = listRequested,
+                        onClick = { onTool(tool) },
+                    )
                 }
-                val icon = when(tool) {
-                    WorkbenchTool.SUBTITLES -> Icons.Filled.Subtitles
-                    WorkbenchTool.TEXT -> Icons.Filled.Article
-                    WorkbenchTool.TIMELINE -> Icons.Filled.AccessTime
-                    WorkbenchTool.POSITION -> Icons.Filled.MyLocation
-                    WorkbenchTool.STYLE -> Icons.Filled.Palette
-                    WorkbenchTool.EFFECTS -> Icons.Filled.AutoFixHigh
-                    WorkbenchTool.FONTS -> Icons.Filled.Folder
-                    else -> Icons.Filled.Apps
-                }
-                val selected = if(listRequested) tool == WorkbenchTool.SUBTITLES
-                    else if(tool == WorkbenchTool.SUBTITLES) false
-                    else if(tool == WorkbenchTool.FONTS) activeTool.group == WorkbenchToolGroup.RESOURCES
-                    else if(tool == WorkbenchTool.STYLE) activeTool == WorkbenchTool.STYLE
-                    else if(tool == WorkbenchTool.POSITION) activeTool == WorkbenchTool.POSITION || activeTool == WorkbenchTool.VECTOR_CLIP
-                    else if(tool == WorkbenchTool.CAPABILITIES) activeTool.task == WorkbenchTask.OTHER &&
-                        activeTool.group != WorkbenchToolGroup.RESOURCES
-                    else tool.task == activeTool.task
-                Surface(color = if(selected) MaterialTheme.colorScheme.surfaceContainerHigh
-                    else MaterialTheme.colorScheme.surfaceContainerLow, shape = MaterialTheme.shapes.small) {
-                    TextButton(onClick = { if(tool == WorkbenchTool.CAPABILITIES) onDirectory() else onTool(tool) },
-                        contentPadding = PaddingValues(0.dp),
-                        modifier = Modifier.width(52.dp).height(64.dp).semantics { this.selected = selected }
-                            .testTag("fixed-tool-${tool.name}")) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(icon, label, modifier = Modifier.size(22.dp))
-                            Text(label, style = MaterialTheme.typography.labelSmall)
-                            if(selected) Box(Modifier.width(24.dp).height(2.dp)
-                                .background(MaterialTheme.colorScheme.primary))
-                        }
-                    }
-                }
+            }
+            HorizontalDivider(Modifier.padding(vertical = 6.dp))
+            FixedV11RailToolButton(
+                tool = WorkbenchTool.CAPABILITIES,
+                activeTool = activeTool,
+                listRequested = listRequested,
+                onClick = onDirectory,
+            )
+        }
+    }
+}
+
+@Composable
+private fun FixedV11RailToolButton(tool: WorkbenchTool, activeTool: WorkbenchTool,
+    listRequested: Boolean, onClick: () -> Unit) {
+    val label = when (tool) {
+        WorkbenchTool.SUBTITLES -> "字幕"
+        WorkbenchTool.TEXT -> "正文"
+        WorkbenchTool.TIMELINE -> "校时"
+        WorkbenchTool.POSITION -> "位置"
+        WorkbenchTool.STYLE -> "样式"
+        WorkbenchTool.EFFECTS -> "效果"
+        WorkbenchTool.FONTS -> "资源"
+        else -> "工具"
+    }
+    val icon = when (tool) {
+        WorkbenchTool.SUBTITLES -> Icons.Filled.Subtitles
+        WorkbenchTool.TEXT -> Icons.Filled.Article
+        WorkbenchTool.TIMELINE -> Icons.Filled.AccessTime
+        WorkbenchTool.POSITION -> Icons.Filled.MyLocation
+        WorkbenchTool.STYLE -> Icons.Filled.Palette
+        WorkbenchTool.EFFECTS -> Icons.Filled.AutoFixHigh
+        WorkbenchTool.FONTS -> Icons.Filled.Folder
+        else -> Icons.Filled.Apps
+    }
+    val selected = if (listRequested) tool == WorkbenchTool.SUBTITLES
+        else if (tool == WorkbenchTool.SUBTITLES) false
+        else if (tool == WorkbenchTool.FONTS) activeTool.group == WorkbenchToolGroup.RESOURCES
+        else if (tool == WorkbenchTool.STYLE) activeTool == WorkbenchTool.STYLE
+        else if (tool == WorkbenchTool.POSITION) activeTool == WorkbenchTool.POSITION || activeTool == WorkbenchTool.VECTOR_CLIP
+        else if (tool == WorkbenchTool.CAPABILITIES) activeTool.task == WorkbenchTask.OTHER &&
+            activeTool.group != WorkbenchToolGroup.RESOURCES
+        else tool.task == activeTool.task
+    Surface(color = if (selected) MaterialTheme.colorScheme.surfaceContainerHigh
+        else MaterialTheme.colorScheme.surfaceContainerLow, shape = MaterialTheme.shapes.small) {
+        TextButton(onClick = onClick, contentPadding = PaddingValues(0.dp),
+            modifier = Modifier.width(52.dp).height(64.dp).semantics { this.selected = selected }
+                .testTag("fixed-tool-${tool.name}")) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Icon(icon, label, modifier = Modifier.size(22.dp))
+                Text(label, style = MaterialTheme.typography.labelSmall)
+                if (selected) Box(Modifier.width(24.dp).height(2.dp)
+                    .background(MaterialTheme.colorScheme.primary))
             }
         }
     }
