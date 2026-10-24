@@ -46,6 +46,13 @@ internal fun EventEditReviewDialog(receipt: EventEditReviewReceipt, current: Ass
                     ReviewValue("修改前", receipt.style?.baseText.orEmpty(), "event-review-style-before")
                     ReviewValue("修改后", receipt.style?.text.orEmpty(), "event-review-style-after")
                 }
+                if (receipt.marginsChanged) {
+                    Text("Event 边距 · Margin L/R/V", style = MaterialTheme.typography.titleSmall)
+                    fun describe(v: EventMarginValues) = "${v.left} / ${v.right} / ${v.vertical}"
+                    ReviewValue("修改前", describe(checkNotNull(receipt.margins).baseline), "event-review-margins-before")
+                    ReviewValue("修改后", describe(checkNotNull(receipt.margins).values), "event-review-margins-after")
+                    Text("0 表示继承 Style 边距；不修改 Style 定义", style = MaterialTheme.typography.labelSmall)
+                }
                 Text("Style 定义、其他字幕和其他专业工具草稿不在本次应用范围。",
                     style = MaterialTheme.typography.labelSmall)
                 problems.forEach { Text(it, color = MaterialTheme.colorScheme.error,

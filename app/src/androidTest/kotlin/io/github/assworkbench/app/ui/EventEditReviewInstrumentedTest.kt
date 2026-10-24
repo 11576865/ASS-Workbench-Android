@@ -34,7 +34,7 @@ class EventEditReviewInstrumentedTest {
         }
     }
 
-    @Test fun reviewIsReadOnlyThenCommitsFourGroupsWithOneUndoWithoutChangingFocus() {
+    @Test fun reviewIsReadOnlyThenCommitsFiveGroupsWithOneUndoWithoutChangingFocus() {
         val vm = load()
         val before = vm.state.value.document
         val session = vm.state.value.workspaceSessionId
@@ -42,18 +42,21 @@ class EventEditReviewInstrumentedTest {
         val style = EventTextDraftStore(session)
         val time = EventTimingDraftStore(session)
         val meta = EventMetadataDraftStore(session)
+        val margins = EventMarginDraftStore(session)
         val event = before.events.first()
         text.obtain("TEXT:primary", event.id, event.text).value = TextFieldValue("Reviewed")
         style.obtain("TEXT:primary", event.id, event.style).value = TextFieldValue("Opening")
         time.obtain("TEXT:primary", event).values = EventTimingValues("1500", "4500")
         meta.obtain("TEXT:primary", event).values = EventMetadataValues("3", "Actor", true)
+        margins.obtain("TEXT:primary", event).values = EventMarginValues("15", "0", "28")
         composeRule.runOnIdle { vm.focusEvent(2L, seek = false) }
         composeRule.setContent {
             val state by vm.state.collectAsState()
             MaterialTheme {
                 CompositionLocalProvider(LocalEventTextDraftStore provides text,
                     LocalEventStyleDraftStore provides style,
-                    LocalEventTimingDraftStore provides time, LocalEventMetadataDraftStore provides meta) {
+                    LocalEventTimingDraftStore provides time, LocalEventMetadataDraftStore provides meta,
+                    LocalEventMarginDraftStore provides margins) {
                     FixedV11InspectorStatus(state.document.events.first(), state, vm, "TEXT:primary", true,
                         emptyList(), onOpenQc = {})
                 }
@@ -62,6 +65,7 @@ class EventEditReviewInstrumentedTest {
         composeRule.onNodeWithTag("fixed-v11-review-current").performClick()
         composeRule.onNodeWithTag("r3-write-after").assertTextContains("Reviewed")
         composeRule.onNodeWithTag("event-review-style-after").performScrollTo().assertTextContains("Opening")
+        composeRule.onNodeWithTag("event-review-margins-after").performScrollTo().assertTextContains("15 / 0 / 28")
         composeRule.runOnIdle { assertEquals(before, vm.state.value.document) }
         composeRule.onNodeWithTag("r3-write-confirm").performClick()
         composeRule.runOnIdle {
@@ -73,6 +77,9 @@ class EventEditReviewInstrumentedTest {
             assertEquals(3, after.events.first().layer)
             assertEquals("Actor", after.events.first().name)
             assertTrue(after.events.first().comment)
+            assertEquals(15, after.events.first().marginL)
+            assertEquals(0, after.events.first().marginR)
+            assertEquals(28, after.events.first().marginV)
             assertEquals(before.events[1], after.events[1])
             assertEquals(2L, vm.state.value.focusedEventId)
             vm.undo()
@@ -90,6 +97,7 @@ class EventEditReviewInstrumentedTest {
         val text = EventTextDraftStore(session)
         val time = EventTimingDraftStore(session)
         val meta = EventMetadataDraftStore(session)
+        val margins = EventMarginDraftStore(session)
         val event = before.events.first()
         val entry = text.obtain("TEXT:primary", event.id, event.text)
         entry.value = TextFieldValue("First draft")
@@ -100,7 +108,8 @@ class EventEditReviewInstrumentedTest {
             MaterialTheme {
                 CompositionLocalProvider(LocalEventTextDraftStore provides text,
                     LocalEventStyleDraftStore provides rememberEventTextDraftStore(state.workspaceSessionId),
-                    LocalEventTimingDraftStore provides time, LocalEventMetadataDraftStore provides meta) {
+                    LocalEventTimingDraftStore provides time, LocalEventMetadataDraftStore provides meta,
+                    LocalEventMarginDraftStore provides margins) {
                     FixedV11InspectorStatus(state.document.events.first(), state, vm, "TEXT:primary", true,
                         emptyList(), onOpenQc = {})
                 }
@@ -126,6 +135,7 @@ class EventEditReviewInstrumentedTest {
         val styles = EventTextDraftStore(session)
         val timing = EventTimingDraftStore(session)
         val metadata = EventMetadataDraftStore(session)
+        val margins = EventMarginDraftStore(session)
         text.obtain("TEXT:primary", event.id, event.text).value = TextFieldValue("Raw draft")
         val style = styles.obtain("TEXT:primary", event.id, event.style)
         style.value = TextFieldValue("Opening")
@@ -137,7 +147,8 @@ class EventEditReviewInstrumentedTest {
             MaterialTheme {
                 CompositionLocalProvider(LocalEventTextDraftStore provides text,
                     LocalEventStyleDraftStore provides styles, LocalEventTimingDraftStore provides timing,
-                    LocalEventMetadataDraftStore provides metadata) {
+                    LocalEventMetadataDraftStore provides metadata,
+                    LocalEventMarginDraftStore provides margins) {
                     FixedV11InspectorStatus(state.document.events.first(), state, vm, "TEXT:primary", true,
                         emptyList(), onOpenQc = {})
                 }

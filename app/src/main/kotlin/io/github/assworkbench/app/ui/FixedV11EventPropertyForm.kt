@@ -24,6 +24,7 @@ internal fun FixedV11EventPropertyForm(
     onApplyTiming: (SubTime, SubTime) -> Unit,
     onApplyMetadata: (Int, String, Boolean) -> Unit,
     styleDraft: EventTextDraftEntry? = null,
+    marginDraft: EventMarginDraftEntry? = null,
 ) {
     val times = timing.values
     val values = metadata.values
@@ -109,6 +110,32 @@ internal fun FixedV11EventPropertyForm(
             color = if (document.styles.any { it.name == proposedStyle }) MaterialTheme.colorScheme.onSurfaceVariant
                 else MaterialTheme.colorScheme.error,
             modifier = Modifier.fillMaxWidth().testTag("fixed-v11-style-source-${event.id}"))
+        if (marginDraft != null) {
+            val marginValues = marginDraft.values
+            val marginConflict = marginDraft.snapshot().classify(EventMarginValues.from(event)) ==
+                RawEventDraftState.EXTERNAL_CONFLICT
+            fun validMargin(value: String) = value.toIntOrNull()?.let { it in 0..9999 } == true
+            HorizontalDivider()
+            Text("Event Margins · 0 继承 Style", style = MaterialTheme.typography.titleSmall)
+            FixedV11PropertyField("Margin L", marginValues.left,
+                { marginDraft.values = marginDraft.values.copy(left = it) }, "event-margin-l-${event.id}",
+                errorText = if (validMargin(marginValues.left)) null else "需为 0～9999")
+            FixedV11PropertyField("Margin R", marginValues.right,
+                { marginDraft.values = marginDraft.values.copy(right = it) }, "event-margin-r-${event.id}",
+                errorText = if (validMargin(marginValues.right)) null else "需为 0～9999")
+            FixedV11PropertyField("Margin V", marginValues.vertical,
+                { marginDraft.values = marginDraft.values.copy(vertical = it) }, "event-margin-v-${event.id}",
+                errorText = if (validMargin(marginValues.vertical)) null else "需为 0～9999")
+            if (marginConflict) Text("Event Margin 已在其他面板修改；草稿保留，统一审核会拒绝覆盖。",
+                color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall,
+                modifier = Modifier.testTag("event-margin-conflict-${event.id}"))
+            if (marginDraft.snapshot().values != marginDraft.snapshot().baseline) {
+                Text("边距修改待统一审核；不会修改 Style 定义或 Raw override",
+                    style = MaterialTheme.typography.labelSmall)
+                TextButton(onClick = { marginDraft.reset(EventMarginValues.from(event)) },
+                    modifier = Modifier.testTag("event-margin-reset-${event.id}")) { Text("还原 Event 边距") }
+            }
+        }
         FixedV11PropertyField("Actor", values.actor, { metadata.values = metadata.values.copy(actor = it) },
             "event-actor-${event.id}")
         FilterChip(selected = values.comment,

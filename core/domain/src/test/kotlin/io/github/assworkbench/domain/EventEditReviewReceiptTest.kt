@@ -66,6 +66,30 @@ class EventEditReviewReceiptTest {
         assertNotNull(review.applyTo(event, setOf("Default", "Opening")))
     }
 
+    @Test fun marginReviewIsAtomicWithOtherGroupsAndPreservesStyleInheritance() {
+        val margins = EventMarginDraftBuffer(EventMarginValues.from(event),
+            EventMarginValues("18", "0", "35"))
+        val review = receipt(raw = "new", layer = "4").copy(margins = margins)
+        val updated = review.applyTo(event)!!
+        assertEquals(18, updated.marginL)
+        assertEquals(0, updated.marginR)
+        assertEquals(35, updated.marginV)
+        assertEquals(4, updated.layer)
+        assertEquals("new", updated.text)
+        assertEquals(3, review.changedGroupCount)
+        assertNull(review.applyTo(event.copy(marginR = 3)))
+        assertNull(review.copy(margins = margins.copy(values = margins.values.copy(left = "-1"))).applyTo(event))
+        assertNull(review.copy(margins = margins.copy(values = margins.values.copy(vertical = "10000"))).applyTo(event))
+    }
+
+    @Test fun untouchedMarginGroupDoesNotOverwriteConcurrentChanges() {
+        val review = receipt(raw = "new").copy(margins =
+            EventMarginDraftBuffer(EventMarginValues.from(event)))
+        val updated = review.applyTo(event.copy(marginL = 70))!!
+        assertEquals(70, updated.marginL)
+        assertEquals("new", updated.text)
+    }
+
     @Test fun cleanStyleDoesNotBlockUnrelatedReferenceChange() {
         val review = receipt(raw = "new").copy(style = RawEventDraftBuffer("Default", "Default"))
         assertEquals("Other", review.applyTo(event.copy(style = "Other"))!!.style)

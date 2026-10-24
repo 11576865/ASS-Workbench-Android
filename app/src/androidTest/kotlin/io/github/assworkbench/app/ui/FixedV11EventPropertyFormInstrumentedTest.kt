@@ -71,6 +71,37 @@ class FixedV11EventPropertyFormInstrumentedTest {
         composeRule.onNodeWithTag("event-metadata-conflict-7").performScrollTo().assertIsDisplayed()
         composeRule.onNodeWithTag("event-actor-7").performScrollTo().assertTextContains("kept")
     }
+    @Test fun marginFieldsStageAndSurviveRemountWithoutWritingStyleOrRaw() {
+        val event = AssEvent(id = 7L, marginL = 0, marginR = 12, marginV = 0,
+            start = SubTime(1000), end = SubTime(3000), text = "{\\\\fs40}Raw")
+        val marginStore = EventMarginDraftStore(42L)
+        val marginDraft = marginStore.obtain("TEXT:primary", event)
+        val timing = EventTimingDraftStore(42L).obtain("TEXT:primary", event)
+        val metadata = EventMetadataDraftStore(42L).obtain("TEXT:primary", event)
+        var mounted by mutableStateOf(true)
+        composeRule.setContent {
+            MaterialTheme {
+                Column(Modifier.width(326.dp).height(600.dp).verticalScroll(rememberScrollState())) {
+                    if (mounted) FixedV11EventPropertyForm(event,
+                        AssDocument(styles = listOf(AssStyle()), events = listOf(event)),
+                        timing, metadata, { _, _ -> }, { _, _, _ -> }, marginDraft = marginDraft)
+                }
+            }
+        }
+        composeRule.onNodeWithTag("event-margin-l-7").performScrollTo().performTextReplacement("38")
+        composeRule.onNodeWithTag("event-margin-v-7").performScrollTo().performTextReplacement("15")
+        composeRule.runOnIdle { mounted = false }
+        composeRule.runOnIdle { mounted = true }
+        composeRule.onNodeWithTag("event-margin-l-7").performScrollTo().assertTextContains("38")
+        composeRule.runOnIdle {
+            assertEquals("38", marginDraft.values.left)
+            assertEquals(0, event.marginL)
+            assertEquals("{\\\\fs40}Raw", event.text)
+        }
+        composeRule.onNodeWithTag("event-margin-reset-7").performScrollTo().performClick()
+        composeRule.runOnIdle { assertEquals(EventMarginValues.from(event), marginDraft.values) }
+    }
+
     @Test fun choosingStyleOnlyStagesReferenceUntilUnifiedReview() {
         val event = AssEvent(id = 7L, start = SubTime(1000), end = SubTime(3000), text = "{\\fs40}Raw")
         val style = EventTextDraftStore(42L).obtain("TEXT:primary", event.id, event.style)

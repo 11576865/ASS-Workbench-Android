@@ -46,7 +46,8 @@ class FixedV11TextDockInstrumentedTest {
                 CompositionLocalProvider(LocalEventTextDraftStore provides drafts,
                     LocalEventStyleDraftStore provides rememberEventTextDraftStore(state.workspaceSessionId),
                     LocalEventTimingDraftStore provides rememberEventTimingDraftStore(state.workspaceSessionId),
-                    LocalEventMetadataDraftStore provides rememberEventMetadataDraftStore(state.workspaceSessionId)) {
+                    LocalEventMetadataDraftStore provides rememberEventMetadataDraftStore(state.workspaceSessionId),
+                    LocalEventMarginDraftStore provides rememberEventMarginDraftStore(state.workspaceSessionId)) {
                     FixedV11InspectorStatus(state.document.events.first(), state, vm,
                         "TEXT:primary", true, emptyList(), onOpenQc = {})
                 }

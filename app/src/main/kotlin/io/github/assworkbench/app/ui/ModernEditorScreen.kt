@@ -183,12 +183,16 @@ fun ModernEditorScreen(
         eventStyleDraftStore.reconcileValues(state.document.events.associate { it.id to it.style })
     }
     val eventMetadataDraftStore = rememberEventMetadataDraftStore(state.workspaceSessionId)
+    val eventMarginDraftStore = rememberEventMarginDraftStore(state.workspaceSessionId)
     val eventTimingDraftStore = rememberEventTimingDraftStore(state.workspaceSessionId)
     LaunchedEffect(eventTimingDraftStore, state.document.events) {
         eventTimingDraftStore.reconcile(state.document.events)
     }
     LaunchedEffect(eventMetadataDraftStore, state.document.events) {
         eventMetadataDraftStore.reconcile(state.document.events)
+    }
+    LaunchedEffect(eventMarginDraftStore, state.document.events) {
+        eventMarginDraftStore.reconcile(state.document.events)
     }
     val batchAuthoringDraftStore = rememberBatchAuthoringDraftStore(state.workspaceSessionId)
     LaunchedEffect(batchAuthoringDraftStore, state.documentRevision, state.document, state.selectedEventIds, state.subtitleFilter) {
@@ -328,6 +332,7 @@ fun ModernEditorScreen(
     CompositionLocalProvider(LocalEventTextDraftStore provides eventTextDraftStore,
         LocalEventTimingDraftStore provides eventTimingDraftStore,
         LocalEventMetadataDraftStore provides eventMetadataDraftStore,
+        LocalEventMarginDraftStore provides eventMarginDraftStore,
         LocalEventStyleDraftStore provides eventStyleDraftStore,
         LocalTransformDraftStore provides transformDraftStore,
         LocalEventFxDraftStore provides eventFxDraftStore,
@@ -580,6 +585,7 @@ fun ModernEditorScreen(
                             eventTextDraftStore.removeInstance(it.id)
                             eventStyleDraftStore.removeInstance(it.id)
                             eventMetadataDraftStore.removeInstance(it.id)
+                            eventMarginDraftStore.removeInstance(it.id)
                             eventTimingDraftStore.removeInstance(it.id)
                             batchAuthoringDraftStore.removeInstance(it.id)
                         }
@@ -2489,6 +2495,8 @@ private fun InlineEventEditor(
     }
     val metadataStore = LocalEventMetadataDraftStore.current
     val metadataDraft = remember(metadataStore, draftOwnerId, event.id) { metadataStore.obtain(draftOwnerId, event) }
+    val marginStore = LocalEventMarginDraftStore.current
+    val marginDraft = remember(marginStore, draftOwnerId, event.id) { marginStore.obtain(draftOwnerId, event) }
     var metadataValues by metadataDraft::values
     val layerText = metadataValues.layer
     val actorText = metadataValues.actor
@@ -2497,10 +2505,14 @@ private fun InlineEventEditor(
     LaunchedEffect(metadataDraft, event.layer, event.name, event.comment) {
         metadataDraft.reconcile(EventMetadataValues.from(event))
     }
+    LaunchedEffect(marginDraft, event.marginL, event.marginR, event.marginV) {
+        marginDraft.reconcile(EventMarginValues.from(event))
+    }
     if (rawTextDocked && (activeSection == WorkbenchTool.TEXT || activeSection == WorkbenchTool.EVENT)) {
         val styleDraft = LocalEventStyleDraftStore.current.obtain(draftOwnerId, event.id, event.style)
         FixedV11EventPropertyForm(event, state.document, timingDraft, metadataDraft,
             styleDraft = styleDraft,
+            marginDraft = marginDraft,
             onApplyTiming = { start, end ->
                 viewModel.setEventTiming(event.id, start.millis, end.millis)
                 viewModel.state.value.document.events.firstOrNull { it.id == event.id }?.let { committed ->
