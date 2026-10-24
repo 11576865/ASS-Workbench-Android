@@ -2,6 +2,7 @@ package io.github.assworkbench.app
 
 import android.view.View
 import androidx.test.espresso.Espresso.onView
+import androidx.test.espresso.NoMatchingRootException
 import androidx.test.espresso.UiController
 import androidx.test.espresso.ViewAction
 import androidx.test.espresso.action.ViewActions
@@ -569,19 +570,10 @@ class EditorRegressionInstrumentedTest {
         composeRule.onNodeWithTag("workspace-mode-toggle").performClick()
         selectUiVariant("ui-variant-use-SPATIAL_EXPERIMENTAL")
 
-        composeRule.onNodeWithTag("spatial-add-tool").performClick()
-        composeRule.waitUntil(5_000) {
-            composeRule.onAllNodesWithTag(
-                "spatial-native-content-CAPABILITIES-primary",
-                useUnmergedTree = true,
-            ).fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()
-        }
-        composeRule.onNodeWithTag("tool-search")
-            .performTextReplacement("POSITION")
-        hideKeyboard()
-        composeRule.onNodeWithTag("tool-POSITION")
-            .performScrollTo()
-            .performClick()
+        // Use the same searchable directory driver as the other spatial tests.
+        // Do not close the search IME between filtering and choosing its result:
+        // that old duplicate path can dismiss the directory before selection.
+        openTool("POSITION")
         composeRule.waitUntil(5_000) {
             composeRule.onAllNodesWithTag(
                 "spatial-native-content-POSITION-primary",
@@ -928,8 +920,13 @@ class EditorRegressionInstrumentedTest {
                 .isNotEmpty()
         }
         Log.i("AsswbRegression", "rotation:select-event")
-        eventRow(1L)
-            .performScrollTo()
+        // A responsive host may replace the Event row after it first appears.
+        // Scroll the persistent LazyColumn owner instead of a row which can
+        // detach between performScrollTo()'s semantics lookup and scroll action.
+        // The selected row must still be composed, visible and clickable.
+        composeRule.onNodeWithTag("event-results-list")
+            .performScrollToNode(hasTestTag("event-row-1"))
+        composeRule.onNodeWithTag("event-row-1")
             .assertIsDisplayed()
             .performClick()
         composeRule.waitUntil(10_000) {
@@ -2014,6 +2011,36 @@ class EditorRegressionInstrumentedTest {
     }
 
     private fun hideKeyboard() {
+        fun activityImeVisible(): Boolean? {
+            var result: Boolean? = null
+            composeRule.runOnUiThread {
+                result = composeRule.activity.window.decorView.rootWindowInsets
+                    ?.isVisible(android.view.WindowInsets.Type.ime())
+            }
+            return result
+        }
+
+        // A panel move, rotation or keyboard dismissal can detach the previous
+        // focused Espresso root. Its old WindowInsets are not the live IME state.
+        if (activityImeVisible() == false) {
+            // A popup can own the keyboard even when the Activity root reports
+            // no IME. Inspect its focused root before treating this as a no-op.
+            var focusedIme: Boolean? = null
+            try {
+                performInFocusedWindow("Inspect current IME visibility") { _, root ->
+                    focusedIme = root.rootWindowInsets
+                        ?.isVisible(android.view.WindowInsets.Type.ime())
+                }
+            } catch (error: NoMatchingRootException) {
+                // No focused window and a hidden Activity IME: nothing to close.
+                composeRule.waitForIdle()
+                return
+            }
+            if (focusedIme == false) {
+                composeRule.waitForIdle()
+                return
+            }
+        }
         var imeRoot: View? = null
         var requestEvidence = "No focused root selected"
         try {
@@ -2025,11 +2052,23 @@ class EditorRegressionInstrumentedTest {
                 ViewActions.closeSoftKeyboard().perform(controller, root)
             }
             composeRule.waitUntil(5_000) {
-                imeRoot?.rootWindowInsets
-                    ?.isVisible(android.view.WindowInsets.Type.ime()) == false
+                // The Activity's insets are the stable owner across responsive
+                // host recreation. Ignore the detached popup root after close.
+                activityImeVisible() == false
             }
-        } catch (error: Exception) {
-            throw AssertionError("IME hide did not complete: $requestEvidence", error)
+        } catch (error: Throwable) {
+            // ComposeTimeoutException is an AssertionError, not an Exception.
+            // Only these two expected transitional failures may be accepted,
+            // and only after the live Activity confirms the IME is hidden.
+            val liveImeVisible = activityImeVisible()
+            val transitionalFailure = error is NoMatchingRootException ||
+                error is androidx.compose.ui.test.ComposeTimeoutException
+            if (liveImeVisible != false || !transitionalFailure) {
+                throw AssertionError(
+                    "IME hide did not complete: $requestEvidence; activityImeVisible=$liveImeVisible",
+                    error,
+                )
+            }
         }
         composeRule.waitForIdle()
     }
@@ -2056,10 +2095,38 @@ class EditorRegressionInstrumentedTest {
                 showFixedSubtitleList()
                 return
             }
-            composeRule.onNodeWithTag("fixed-tool-CAPABILITIES").performClick()
-            composeRule.onNodeWithTag("tool-search").performTextReplacement(name)
-            hideKeyboard()
-            composeRule.onNodeWithTag("tool-$name").performScrollTo().assertIsDisplayed().performClick()
+            // TEXT and EFFECTS have first-class task commands. Use the product's
+            // actual one-tap workflow when checking draft survival across tools,
+            // rather than requiring a redundant catalog popup (which can be
+            // temporarily outside the IME/rotation viewport). Other tools still
+            // exercise the full directory below.
+            if (name == "TEXT" || name == "EFFECTS") {
+                composeRule.onNodeWithTag("fixed-tool-$name")
+                    .performScrollTo().assertIsDisplayed().performClick()
+                composeRule.waitForIdle()
+                return
+            }
+            composeRule.onNodeWithTag("fixed-tool-CAPABILITIES")
+                .performScrollTo().assertIsDisplayed().performClick()
+            // FIXED uses a full R3 catalog on expanded tablets, but keeps the
+            // shared directory in compact windows. Both must select the real
+            // WorkbenchTool; legacy `tool-*` tags do not exist in the R3 dialog.
+            val r3Catalog = composeRule.onAllNodesWithTag("r3-tool-catalog", useUnmergedTree = true)
+                .fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()
+            if (r3Catalog) {
+                composeRule.onNodeWithTag("r3-tool-search").performTextReplacement(name)
+                composeRule.onNodeWithTag("r3-tool-$name")
+                    .performScrollTo().assertIsDisplayed().performClick()
+            } else {
+                composeRule.onNodeWithTag("tool-search").performTextReplacement(name)
+                // The directory virtualizes items; querying an uncomposed row
+                // cannot scroll it into existence. Scroll the actual LazyColumn.
+                composeRule.onNodeWithTag("tool-results-list")
+                    .performScrollToNode(hasTestTag("tool-$name"))
+                // Select while search IME still owns the dialog.
+                composeRule.onNodeWithTag("tool-$name")
+                    .assertIsDisplayed().performClick()
+            }
             composeRule.waitForIdle()
             // Inner performScrollTo only reaches the nearest scroll ancestor.
             // Expose the finite inspector in the compact outer flow first;
@@ -2076,8 +2143,13 @@ class EditorRegressionInstrumentedTest {
                 .fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()
         }
         composeRule.onNodeWithTag("tool-search").performTextReplacement(name)
-        hideKeyboard()
-        composeRule.onNodeWithTag("tool-$name").performScrollTo().performClick()
+        // The spatial directory is a LazyColumn. Search can match an item that
+        // is not currently composed; navigate the real list before selecting it.
+        composeRule.onNodeWithTag("tool-results-list")
+            .performScrollToNode(hasTestTag("tool-$name"))
+        // Keep the active search IME; dismissing it can close the dialog.
+        composeRule.onNodeWithTag("tool-$name")
+            .assertIsDisplayed().performClick()
         composeRule.waitForIdle()
     }
 

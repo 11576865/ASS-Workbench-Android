@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import io.github.assworkbench.container.MatroskaReader
 import io.github.assworkbench.container.MatroskaScanResult
 import io.github.assworkbench.container.MatroskaTrackKind
+import io.github.assworkbench.domain.EventEditReviewReceipt
 import io.github.assworkbench.domain.AssCodec
 import io.github.assworkbench.domain.AssDocument
 import io.github.assworkbench.domain.SubtitleFilterState
@@ -2145,18 +2146,48 @@ class EditorViewModel(application: Application, private val savedStateHandle: Sa
             )
         }.fold(
             onSuccess = { result ->
-                clearPendingRecovery()
-                updateState {
-                    it.copy(
-                        project = it.project.copy(subtitleUri = uri.toString()),
-                        sourceFormat = SubtitleSourceFormat.ASS,
-                        dirty = false,
-                        recoveryAvailable = false,
-                        recoveryLabel = "",
-                        status = "ASS 已安全保存并回读验证 · " +
-                            (result.bytesWritten / 1024L).coerceAtLeast(1L) + " KiB · " +
-                            result.verifiedEncoding.displayName + "。",
-                    )
+                // SafeSubtitleSave verified the bytes of *snapshot*, not an arbitrary
+                // later document. A new edit or workspace replacement may have
+                // published while ContentResolver was writing and reading back.
+                fun isSavedSnapshot(state: EditorState): Boolean =
+                    state.workspaceSessionId == snapshot.workspaceSessionId &&
+                        state.documentRevision == snapshot.documentRevision &&
+                        state.document == snapshot.document &&
+                        state.subtitleTextEncoding == snapshot.subtitleTextEncoding
+                val initiallyCurrent = isSavedSnapshot(_state.value)
+                if (initiallyCurrent) clearPendingRecovery()
+                updateState { current ->
+                    if (current.workspaceSessionId != snapshot.workspaceSessionId) {
+                        // A different project now owns the editor. Do not change
+                        // its destination, dirty flag or recovery state.
+                        current
+                    } else if (isSavedSnapshot(current)) {
+                        current.copy(
+                            project = current.project.copy(subtitleUri = uri.toString()),
+                            sourceFormat = SubtitleSourceFormat.ASS,
+                            dirty = false,
+                            recoveryAvailable = false,
+                            recoveryLabel = "",
+                            status = "ASS 已安全保存并回读验证 · " +
+                                (result.bytesWritten / 1024L).coerceAtLeast(1L) + " KiB · " +
+                                result.verifiedEncoding.displayName + "。",
+                        )
+                    } else {
+                        current.copy(
+                            // The on-disk version is valid, but it is not the
+                            // current document: keep the newer edits recoverable.
+                            project = current.project.copy(subtitleUri = uri.toString()),
+                            sourceFormat = SubtitleSourceFormat.ASS,
+                            dirty = true,
+                            status = "ASS 已写出较早版本并完成回读验证；保存期间文档或编码发生变化，当前修改仍未保存。",
+                        )
+                    }
+                }
+                // A concurrent edit between the initial check and clearing
+                // recovery must also be re-journaled; it cannot be forgotten.
+                if (initiallyCurrent && !isSavedSnapshot(_state.value) &&
+                    _state.value.workspaceSessionId == snapshot.workspaceSessionId) {
+                    scheduleRecovery(_state.value.document)
                 }
                 true
             },
@@ -2654,6 +2685,24 @@ class EditorViewModel(application: Application, private val savedStateHandle: Sa
         val earliest = selected.minOfOrNull { it.start.millis } ?: return
         val delta = _playbackPositionMs.value - earliest
         shiftSelected(delta)
+    }
+
+    /** One explicitly reviewed Event write, with one history entry and no focus retargeting. */
+    fun applyEventEditReview(receipt: EventEditReviewReceipt, expectedSessionId: Long): Boolean {
+        val snapshot = _state.value
+        if (snapshot.workspaceSessionId != expectedSessionId || !receipt.hasChanges) return false
+        val current = snapshot.document.events.firstOrNull { it.id == receipt.eventId } ?: return false
+        val next = receipt.applyTo(current, snapshot.document.styles.mapTo(hashSetOf()) { it.name }) ?: return false
+        if (next == current) return false
+        editDocument("已应用字幕 #${receipt.eventId} 的审核修改。") { document ->
+            if (_state.value.workspaceSessionId != expectedSessionId) return@editDocument document
+            val latest = document.events.firstOrNull { it.id == receipt.eventId }
+            val reviewed = receipt.applyTo(latest, document.styles.mapTo(hashSetOf()) { it.name }) ?: return@editDocument document
+            document.copy(events = document.events.map { if (it.id == receipt.eventId) reviewed else it })
+        }
+        val after = _state.value
+        return after.workspaceSessionId == expectedSessionId &&
+            after.document.events.firstOrNull { it.id == receipt.eventId } == next
     }
 
     fun updateFocusedMetadata(layer: Int, actor: String, comment: Boolean) {

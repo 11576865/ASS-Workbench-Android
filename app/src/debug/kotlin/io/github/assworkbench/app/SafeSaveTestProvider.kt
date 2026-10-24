@@ -22,8 +22,15 @@ class SafeSaveTestProvider : ContentProvider() {
     companion object {
         private val readCounts = ConcurrentHashMap<String, AtomicInteger>()
 
+        /** Test-only one-shot hook: a new editor revision arrives after write,
+         * before the provider exposes the final read-back. Never used in release.
+         */
+        @Volatile
+        var beforeSecondRead: (() -> Unit)? = null
+
         fun reset() {
             readCounts.clear()
+            beforeSecondRead = null
         }
     }
 
@@ -45,6 +52,11 @@ class SafeSaveTestProvider : ContentProvider() {
         if (readOnly) {
             val key = uri.buildUpon().clearQuery().build().toString()
             val count = readCounts.computeIfAbsent(key) { AtomicInteger() }.incrementAndGet()
+            if (count == 2) {
+                val callback = beforeSecondRead
+                beforeSecondRead = null
+                callback?.invoke()
+            }
             if (uri.getQueryParameter("corruptSecondRead") == "1" && count == 2) {
                 val corrupt = File(root, "corrupt-shadow.ass")
                 corrupt.writeText(

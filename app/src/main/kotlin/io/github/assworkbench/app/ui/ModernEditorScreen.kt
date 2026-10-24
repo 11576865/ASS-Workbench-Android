@@ -178,13 +178,21 @@ fun ModernEditorScreen(
     val eventTextDraftStore = rememberEventTextDraftStore(state.workspaceSessionId)
     val transformDraftStore = rememberTransformDraftStore(state.workspaceSessionId)
     val eventFxDraftStore = rememberEventFxDraftStore(state.workspaceSessionId)
+    val eventStyleDraftStore = rememberEventTextDraftStore(state.workspaceSessionId)
+    LaunchedEffect(eventStyleDraftStore, state.document.events) {
+        eventStyleDraftStore.reconcileValues(state.document.events.associate { it.id to it.style })
+    }
     val eventMetadataDraftStore = rememberEventMetadataDraftStore(state.workspaceSessionId)
+    val eventMarginDraftStore = rememberEventMarginDraftStore(state.workspaceSessionId)
     val eventTimingDraftStore = rememberEventTimingDraftStore(state.workspaceSessionId)
     LaunchedEffect(eventTimingDraftStore, state.document.events) {
         eventTimingDraftStore.reconcile(state.document.events)
     }
     LaunchedEffect(eventMetadataDraftStore, state.document.events) {
         eventMetadataDraftStore.reconcile(state.document.events)
+    }
+    LaunchedEffect(eventMarginDraftStore, state.document.events) {
+        eventMarginDraftStore.reconcile(state.document.events)
     }
     val batchAuthoringDraftStore = rememberBatchAuthoringDraftStore(state.workspaceSessionId)
     LaunchedEffect(batchAuthoringDraftStore, state.documentRevision, state.document, state.selectedEventIds, state.subtitleFilter) {
@@ -324,6 +332,8 @@ fun ModernEditorScreen(
     CompositionLocalProvider(LocalEventTextDraftStore provides eventTextDraftStore,
         LocalEventTimingDraftStore provides eventTimingDraftStore,
         LocalEventMetadataDraftStore provides eventMetadataDraftStore,
+        LocalEventMarginDraftStore provides eventMarginDraftStore,
+        LocalEventStyleDraftStore provides eventStyleDraftStore,
         LocalTransformDraftStore provides transformDraftStore,
         LocalEventFxDraftStore provides eventFxDraftStore,
         LocalBatchAuthoringDraftStore provides batchAuthoringDraftStore) {
@@ -573,7 +583,9 @@ fun ModernEditorScreen(
                         val remaining = next.tools.mapTo(hashSetOf()) { it.id }
                         workspaceState.tools.filterNot { it.id in remaining }.forEach {
                             eventTextDraftStore.removeInstance(it.id)
+                            eventStyleDraftStore.removeInstance(it.id)
                             eventMetadataDraftStore.removeInstance(it.id)
+                            eventMarginDraftStore.removeInstance(it.id)
                             eventTimingDraftStore.removeInstance(it.id)
                             batchAuthoringDraftStore.removeInstance(it.id)
                         }
@@ -1010,6 +1022,18 @@ private fun FixedWorkspace(
     // Navigation is session-root state; reopening this host preserves the chosen task.
     var directoryOpen by rememberSaveable { mutableStateOf(false) }
     var previewScale by rememberSaveable { mutableFloatStateOf(1f) }
+    // The drawer and its coroutine scope belong to FIXED, above adaptive
+    // profile changes. No Event/ToolInstance state is stored in the drawer.
+    val v11EventDrawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+    val v11DrawerScope = rememberCoroutineScope()
+    // Layout mode belongs to the FIXED session, never to a new ToolInstance.
+    // Switching must leave Focus/Selection, unsaved drafts and Undo untouched.
+    var fixedV11ModeName by rememberSaveable(state.workspaceSessionId) {
+        mutableStateOf(FixedV11WorkspaceMode.SUBTITLE_EDIT.name)
+    }
+    val fixedV11Mode = fixedV11SceneForTool(activeTool,
+        runCatching { FixedV11WorkspaceMode.valueOf(fixedV11ModeName) }
+            .getOrDefault(FixedV11WorkspaceMode.SUBTITLE_EDIT))
     // Media dimensions are observational. They never become ASS or project layout state.
     var r3MediaAspect by remember(state.project.videoUri) { mutableFloatStateOf(16f / 9f) }
 
@@ -1046,18 +1070,26 @@ private fun FixedWorkspace(
                 onExpandedChange = { next ->
                     val target = next ?: expandedEventId
                     onExpandedChange(target)
-                    if (target != null) selectTool(WorkbenchTool.TEXT)
+                    if (target != null) {
+                        selectTool(WorkbenchTool.TEXT)
+                        // A focused Event exits the overlay. Long-press selection
+                        // remains in the drawer for multi-select operations.
+                        if (v11EventDrawerState.isOpen) {
+                            v11DrawerScope.launch { v11EventDrawerState.close() }
+                        }
+                    }
                 },
                 onTool = ::selectTool,
                 eventEditorStateHolder = eventEditorStateHolder,
                 tool = WorkbenchTool.TEXT,
                 modifier = Modifier.weight(1f),
                 r3Chrome = LocalConfiguration.current.screenWidthDp >= 1180,
+                v11CompactGrid = LocalConfiguration.current.screenWidthDp in 720..1179,
             ) { }
             }
         }
     }
-    val inspector: @Composable (Modifier) -> Unit = { paneModifier ->
+    val inspector: @Composable (Modifier, Boolean) -> Unit = { paneModifier, rawTextDocked ->
         Surface(
             modifier = paneModifier.testTag("fixed-inspector"),
             color = MaterialTheme.colorScheme.surfaceContainer,
@@ -1078,6 +1110,7 @@ private fun FixedWorkspace(
                 // editing the same Event. Its uncommitted draft belongs to
                 // this stable inspector slot, not the active ToolInstance ID.
                 draftSaveableScope = "fixed-inspector",
+                rawTextDocked = rawTextDocked,
                 onOpenTool = ::selectTool,
                 onCloseText = {
                     onExpandedChange(null)
@@ -1098,17 +1131,26 @@ private fun FixedWorkspace(
     // stable movable identity without capturing stale inspector parameters.
     val latestInspector by rememberUpdatedState(inspector)
     val movableInspector = remember {
-        movableContentOf<Modifier> { paneModifier -> latestInspector(paneModifier) }
+        movableContentOf<Modifier, Boolean> { paneModifier, rawTextDocked ->
+            latestInspector(paneModifier, rawTextDocked)
+        }
     }
 
     Column(modifier) {
-        WorkbenchTaskBar(
+        val v11DrawerAvailable = LocalConfiguration.current.screenWidthDp in 720..1179
+        val wideChrome = LocalConfiguration.current.screenWidthDp >= 960 &&
+            LocalConfiguration.current.screenHeightDp >= 720 &&
+            WindowInsets.ime.getBottom(LocalDensity.current) == 0
+        if (!wideChrome) WorkbenchTaskBar(
             activeTool = activeTool,
             listRequested = listRequested,
             requestedPreview = requestedPreview,
             onTool = { tool ->
                 if (tool == WorkbenchTool.SUBTITLES) {
                     onListRequested(true)
+                    if (v11DrawerAvailable) {
+                        v11DrawerScope.launch { v11EventDrawerState.open() }
+                    }
                 } else selectTool(tool)
             },
             onPreview = { previewDensityName = requestedPreview.next().name },
@@ -1116,7 +1158,45 @@ private fun FixedWorkspace(
             onToggleSpatialHost = onToggleSpatialHost,
         )
 
+        // Existing subtitle/timing scenes keep their layout-only behavior.
+        // Specialist scenes route through the same tool command as the directory.
+        if (LocalConfiguration.current.screenWidthDp >= 720) {
+            val tabBinding = instance.resolveUiBinding(state.toEditorUiState())
+            val tabTarget = when {
+                tabBinding.unresolvedPinnedEventId != null -> "固定 #${tabBinding.unresolvedPinnedEventId} 已失效"
+                instance.binding == WorkspaceBinding.FollowSelection -> "选中 ${state.selectedEventIds.size} 条"
+                tabBinding.eventId != null -> "Event #${tabBinding.eventId}"
+                else -> "未选择字幕"
+            }
+            val tabBindingLabel = when (instance.binding) {
+                WorkspaceBinding.FollowFocus -> "跟随焦点"
+                WorkspaceBinding.FollowSelection -> "当前选择集"
+                is WorkspaceBinding.PinnedEvent -> "固定绑定"
+            }
+            FixedV11WorkspaceTabs(
+                selected = fixedV11Mode,
+                onSelect = { mode ->
+                    fixedV11ModeName = mode.name
+                    val nextTool = mode.toolFor(activeTool)
+                    if (nextTool != activeTool) selectTool(nextTool)
+                },
+                contextDescription = if (wideChrome && v11DrawerAvailable) ""
+                    else "${activeTool.name} · $tabTarget · $tabBindingLabel",
+                actions = if (wideChrome) ({
+                    FixedV11TabCommands(activeTool, requestedPreview, ::selectTool,
+                        onPreview = { previewDensityName = requestedPreview.next().name },
+                        onSpatial = onToggleSpatialHost,
+                        onDrawer = if (v11DrawerAvailable) ({ v11DrawerScope.launch { v11EventDrawerState.open() }; Unit }) else null,
+                        eventCount = state.document.events.size)
+                }) else null,
+            )
+        }
+
         BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
+            // Capture the parent constraints in this scope; nested Row/Column/Box
+            // receivers must not implicitly resolve the outer maxHeight.
+            val availableHeightDp = maxHeight.value
+            val availableWidthDp = maxWidth.value
             val density = LocalDensity.current
             val imeVisible = WindowInsets.ime.getBottom(density) > 0
             val policy = AdaptiveWorkspacePolicy.resolve(
@@ -1125,10 +1205,19 @@ private fun FixedWorkspace(
                 imeVisible = imeVisible,
                 requestedPreview = requestedPreview,
             )
+            // Keep an OPEN Event drawer alive while the IME changes the
+            // adaptive height profile. The underlying inspector remains movable.
+            val displayProfile = FixedV11CompactDrawerPolicy.effectiveProfile(
+                adaptive = policy.profile,
+                widthDp = maxWidth.value,
+                drawerOpen = v11EventDrawerState.isOpen,
+            )
             val briefInspector = activeTool == WorkbenchTool.PROJECT || activeTool == WorkbenchTool.EVENT
-            val inspectorFraction = when (policy.profile) {
+            val inspectorFraction = when (displayProfile) {
                 WorkbenchLayoutProfile.THREE_PANE -> if (briefInspector) 0.30f else policy.inspectorFraction
-                WorkbenchLayoutProfile.DUAL_PANE -> if (briefInspector) 0.38f else policy.inspectorFraction
+                WorkbenchLayoutProfile.DUAL_PANE ->
+                    if (briefInspector) 0.38f else if (policy.profile == WorkbenchLayoutProfile.COMPACT) 0.46f
+                    else policy.inspectorFraction
                 WorkbenchLayoutProfile.COMPACT -> 1f
             }
             val previewVisible = policy.effectivePreview != PreviewDensity.HIDDEN
@@ -1158,18 +1247,31 @@ private fun FixedWorkspace(
                 )
             }
 
-            when (policy.profile) {
+            when (displayProfile) {
                 WorkbenchLayoutProfile.THREE_PANE -> {
                     // R3 design reference: EVENT navigator | VIDEO + REAL TIMELINE | inspector.
                     // Retain the existing production editor and player instead of drawing
                     // placeholder imagery or duplicating state between two mock surfaces.
-                    val geometry = R3FixedLayoutPolicy.resolve(
+                    val textDockVisible = (activeTool == WorkbenchTool.TEXT || activeTool == WorkbenchTool.EVENT) &&
+                        fixedV11Mode == FixedV11WorkspaceMode.SUBTITLE_EDIT
+                    val textDockEvent = instance.resolveUiBinding(state.toEditorUiState()).eventId?.let { id ->
+                        state.document.events.firstOrNull { it.id == id }
+                    }
+                    val geometry = FixedV11LayoutPolicy.resolve(
                         widthDp = maxWidth.value,
                         heightDp = maxHeight.value,
                         mediaAspect = r3MediaAspect,
                         preview = policy.effectivePreview,
+                        timingPriority = fixedV11Mode == FixedV11WorkspaceMode.PRECISE_TIMING,
+                        textDockRequested = textDockVisible,
                     )
                     Row(Modifier.fillMaxSize().testTag("r3-fixed-wide")) {
+                        if (wideChrome) FixedV11TaskRail(activeTool, listRequested,
+                            onTool = { tool ->
+                                if (tool == WorkbenchTool.SUBTITLES) onListRequested(true)
+                                else selectTool(tool)
+                            }, onDirectory = { directoryOpen = true })
+                        VerticalDivider()
                         Box(Modifier.width(geometry.navigationWidthDp.dp).fillMaxHeight()
                             .testTag("r3-event-navigation")) {
                             listPane(Modifier.fillMaxSize())
@@ -1193,6 +1295,16 @@ private fun FixedWorkspace(
                                     viewModel = viewModel,
                                     compact = geometry.timelineHeightDp < 260f,
                                     modifier = Modifier.fillMaxSize(),
+                                )
+                            }
+                            if (textDockVisible) {
+                                HorizontalDivider()
+                                FixedV11TextDock(
+                                    event = textDockEvent,
+                                    state = state,
+                                    viewModel = viewModel,
+                                    draftOwnerId = instance.id,
+                                    modifier = Modifier.fillMaxWidth().height(geometry.textDockHeightDp.dp),
                                 )
                             }
                         }
@@ -1223,34 +1335,36 @@ private fun FixedWorkspace(
                                     WorkspaceBinding.FollowSelection -> "当前选择集"
                                     is WorkspaceBinding.PinnedEvent -> "固定 #${binding.eventId}"
                                 }
-                                Surface(
-                                    modifier = Modifier.fillMaxWidth().testTag("r3-inspector-context"),
-                                    color = MaterialTheme.colorScheme.surfaceContainerLow,
-                                ) {
-                                    Column(
-                                        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 9.dp),
-                                        verticalArrangement = Arrangement.spacedBy(6.dp),
-                                    ) {
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Text(
-                                                contextTitle,
-                                                style = MaterialTheme.typography.titleMedium,
-                                                modifier = Modifier.weight(1f),
-                                            )
-                                            Text("绑定：$bindingLabel",
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                        }
-                                        Text(
-                                            activeScope?.let { "写入：${it.where} · 影响 ${it.howMany} 条" }
-                                                ?: "只读工具 · 无 ASS 写入",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = if (activeScope?.unresolved == true) MaterialTheme.colorScheme.error
-                                                else MaterialTheme.colorScheme.primary,
-                                        )
-                                    }
-                                }
+                                FixedV11InspectorHeading(contextTitle, bindingLabel,
+                                    activeScope?.let { "写入：${it.where} · 影响 ${it.howMany} 条" }
+                                        ?: "只读工具 · 无 ASS 写入",
+                                    unresolved = activeScope?.unresolved == true)
                                 HorizontalDivider()
+                                val inspectorCanSwitch = fixedV11InspectorCanSwitch(
+                                    instance.binding, resolvedEvent?.id, state.focusedEventId,
+                                )
+                                FixedV11InspectorTabs(
+                                    activeTool = activeTool,
+                                    canSwitch = inspectorCanSwitch,
+                                    onSelect = ::selectTool,
+                                )
+                                if (!inspectorCanSwitch) Text(
+                                    if (instance.binding == WorkspaceBinding.FollowFocus) "先选择字幕"
+                                    else "当前绑定已锁定；标签切换仅支持跟随焦点",
+                                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp)
+                                        .testTag("fixed-v11-inspector-binding-guard"),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                if (fixedV11Mode == FixedV11WorkspaceMode.PRECISE_TIMING) {
+                                    val mediaPositionMs by viewModel.playbackPositionMs.collectAsState()
+                                    FixedV11TimingContext(
+                                        event = resolvedEvent,
+                                        bindingDescription = bindingLabel,
+                                        mediaPositionMs = mediaPositionMs,
+                                    )
+                                    HorizontalDivider()
+                                }
                                 // Effective values are read-only evidence. They must never
                                 // change the binding or write scope of the live editor.
                                 if ((activeTool == WorkbenchTool.POSITION ||
@@ -1271,26 +1385,96 @@ private fun FixedWorkspace(
                                     HorizontalDivider()
                                 }
                                 Box(Modifier.weight(1f).fillMaxWidth()) {
-                                    movableInspector(Modifier.fillMaxSize())
+                                    movableInspector(Modifier.fillMaxSize(), textDockVisible)
                                 }
+                                HorizontalDivider()
+                                FixedV11InspectorStatus(
+                                    event = resolvedEvent, state = state, viewModel = viewModel,
+                                    owner = instance.id,
+                                    rawReviewAvailable = activeTool == WorkbenchTool.TEXT || activeTool == WorkbenchTool.EVENT,
+                                    issues = issues, onOpenQc = { selectTool(WorkbenchTool.QC) },
+                                )
                             }
                         }
                     }
                 }
 
-                WorkbenchLayoutProfile.DUAL_PANE -> Row(Modifier.fillMaxSize()) {
-                    Column(Modifier.weight(1f - inspectorFraction).fillMaxHeight()) {
-                        if (previewVisible) {
-                            preview(
-                                Modifier.fillMaxWidth()
-                                    .height(policy.previewHeightDp.dp)
-                            )
-                            HorizontalDivider()
+                WorkbenchLayoutProfile.DUAL_PANE -> {
+                    val compactBinding = instance.resolveUiBinding(state.toEditorUiState())
+                    val compactEvent = compactBinding.eventId?.let { id -> state.document.events.firstOrNull { it.id == id } }
+                    val dockVisible = wideChrome && fixedV11Mode == FixedV11WorkspaceMode.SUBTITLE_EDIT &&
+                        (activeTool == WorkbenchTool.TEXT || activeTool == WorkbenchTool.EVENT)
+                    val geometry = FixedV11LayoutPolicy.resolve(maxWidth.value, availableHeightDp,
+                        r3MediaAspect, policy.effectivePreview,
+                        timingPriority = fixedV11Mode == FixedV11WorkspaceMode.PRECISE_TIMING,
+                        textDockRequested = dockVisible, compact = true)
+                    FixedV11CompactEventDrawer(
+                        drawerState = v11EventDrawerState,
+                        total = state.document.events.size,
+                        selected = state.selectedEventIds.size,
+                        onOpen = { v11DrawerScope.launch { v11EventDrawerState.open() } },
+                        onClose = { v11DrawerScope.launch { v11EventDrawerState.close() } },
+                        eventList = { listModifier -> listPane(listModifier) },
+                        showHeader = !wideChrome,
+                    ) {
+                        Row(Modifier.fillMaxSize().testTag("fixed-v11-compact-two-pane")) {
+                            if (wideChrome) {
+                                FixedV11TaskRail(activeTool, listRequested,
+                                    onTool = { tool ->
+                                        if (tool == WorkbenchTool.SUBTITLES) {
+                                            onListRequested(true)
+                                            v11DrawerScope.launch { v11EventDrawerState.open() }
+                                        } else selectTool(tool)
+                                    }, onDirectory = { directoryOpen = true })
+                                VerticalDivider()
+                            }
+                            Column(Modifier.weight(1f).fillMaxHeight()) {
+                                if (previewVisible) {
+                                    val visualHeight = if (wideChrome) geometry.mediaHeightDp
+                                        else policy.previewHeightDp.coerceAtMost(availableHeightDp * 0.43f)
+                                    Box(Modifier.fillMaxWidth().height(visualHeight.dp)
+                                        .testTag("fixed-v11-compact-video")) { preview(Modifier.fillMaxSize()) }
+                                    HorizontalDivider()
+                                }
+                                Box(Modifier.weight(1f).fillMaxWidth()
+                                    .testTag("fixed-v11-compact-timeline")) {
+                                    ModernTimelinePane(state = state, viewModel = viewModel,
+                                        compact = availableHeightDp < 620f || imeVisible,
+                                        modifier = Modifier.fillMaxSize())
+                                }
+                                if (dockVisible) {
+                                    HorizontalDivider()
+                                    FixedV11TextDock(compactEvent, state, viewModel, instance.id,
+                                        Modifier.fillMaxWidth().height(geometry.textDockHeightDp.dp))
+                                }
+                            }
+                            VerticalDivider()
+                            val inspectorWidth = if (wideChrome) geometry.inspectorWidthDp
+                                else availableWidthDp * inspectorFraction
+                            Column(Modifier.width(inspectorWidth.dp).fillMaxHeight()
+                                .testTag("fixed-v11-compact-inspector")) {
+                                val bindingLabel = when (val binding = instance.binding) {
+                                    WorkspaceBinding.FollowFocus -> "跟随焦点"
+                                    WorkspaceBinding.FollowSelection -> "当前选择集"
+                                    is WorkspaceBinding.PinnedEvent -> "固定 #${binding.eventId}"
+                                }
+                                if (wideChrome) FixedV11InspectorHeading(
+                                    compactEvent?.let { "Event #${it.id}" } ?: "无可编辑对象", bindingLabel, null)
+                                else Text(compactEvent?.let { "检查器 · Event #${it.id}" } ?: "检查器 · 无可编辑对象",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    modifier = Modifier.fillMaxWidth().padding(12.dp))
+                                FixedV11InspectorTabs(activeTool,
+                                    fixedV11InspectorCanSwitch(instance.binding, compactEvent?.id, state.focusedEventId),
+                                    onSelect = ::selectTool)
+                                Box(Modifier.weight(1f).fillMaxWidth()) {
+                                    movableInspector(Modifier.fillMaxSize(), dockVisible)
+                                }
+                                FixedV11InspectorStatus(compactEvent, state, viewModel, instance.id,
+                                    activeTool == WorkbenchTool.TEXT || activeTool == WorkbenchTool.EVENT,
+                                    issues, onOpenQc = { selectTool(WorkbenchTool.QC) })
+                            }
                         }
-                        listPane(Modifier.weight(1f).fillMaxWidth())
                     }
-                    VerticalDivider()
-                    movableInspector(Modifier.weight(inspectorFraction).fillMaxHeight())
                 }
 
                 WorkbenchLayoutProfile.COMPACT -> {
@@ -1312,7 +1496,7 @@ private fun FixedWorkspace(
                             HorizontalDivider()
                         }
                         val paneModifier = Modifier.fillMaxWidth().height(body.editorHeightDp.dp)
-                        if (listRequested) listPane(paneModifier) else movableInspector(paneModifier)
+                        if (listRequested) listPane(paneModifier) else movableInspector(paneModifier, false)
                     }
                 }
             }
@@ -1477,6 +1661,7 @@ private fun FloatingToolContent(
     // Spatial instances keep separate scope keys so concurrent editors
     // targeting one Event do not register duplicate saveable providers.
     draftSaveableScope: String? = null,
+    rawTextDocked: Boolean = false,
     onExtractParameter: ((
         WorkspaceParameterDescriptor,
         WorkspaceParameterPresentation,
@@ -1521,9 +1706,9 @@ private fun FloatingToolContent(
                     Modifier.fillMaxSize().testTag("event-inspector").verticalScroll(rememberScrollState()).padding(12.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    editScope?.let { WorkspaceEditScopeBar(it) }
-                    Text("#${event.id} · ${tool.title}", style = MaterialTheme.typography.titleSmall)
-                    if (tool == WorkbenchTool.TEXT) IconButton(onClick = onCloseText,
+                    if (!rawTextDocked) editScope?.let { WorkspaceEditScopeBar(it) }
+                    if (!rawTextDocked) Text("#${event.id} · ${tool.title}", style = MaterialTheme.typography.titleSmall)
+                    if (tool == WorkbenchTool.TEXT && !rawTextDocked) IconButton(onClick = onCloseText,
                         modifier = Modifier.testTag("event-collapse-${event.id}")) { Icon(Icons.Filled.Close, "收起正文工具") }
                     eventEditorStateHolder.SaveableStateProvider(
                         "${draftSaveableScope ?: instance.id}-${event.id}"
@@ -1536,6 +1721,7 @@ private fun FloatingToolContent(
                             onTool = onOpenTool,
                             activeSection = tool,
                             draftOwnerId = instance.id,
+                            rawTextDocked = rawTextDocked,
                         )
                     }
                 }
@@ -1642,10 +1828,15 @@ private fun WorkspaceEditScopeBar(summary: WorkspaceEditScopeSummary) {
 @Composable
 private fun WorkspaceToolDirectory(onOpenTool: (WorkbenchTool) -> Unit, modifier: Modifier = Modifier) {
     var query by rememberSaveable { mutableStateOf("") }
+    val resultScroll = rememberLazyListState()
+    // A re-filtered LazyColumn can retain an index from a longer previous list.
+    // Always expose the first current result, even after the directory was reopened.
+    LaunchedEffect(query) { resultScroll.scrollToItem(0) }
     Column(modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         OutlinedTextField(query, { query = it }, label = { Text("搜索工具") }, singleLine = true,
             leadingIcon = { Icon(Icons.Filled.Search, null) }, modifier = Modifier.fillMaxWidth().testTag("tool-search"))
-        LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        LazyColumn(Modifier.weight(1f).testTag("tool-results-list"),
+            state = resultScroll, verticalArrangement = Arrangement.spacedBy(6.dp)) {
             WorkbenchToolGroup.entries.forEach { group ->
                 val entries = WorkbenchTool.entries.filter { it.group == group && it != WorkbenchTool.CAPABILITIES &&
                     (query.isBlank() || it.title.contains(query, ignoreCase = true) || it.name.contains(query, ignoreCase = true) ||
@@ -1889,6 +2080,7 @@ private fun EventWorkspace(
     tool: WorkbenchTool,
     modifier: Modifier = Modifier,
     r3Chrome: Boolean = false,
+    v11CompactGrid: Boolean = false,
     supportingPane: @Composable () -> Unit,
 ) {
     val uiState = state.toEditorUiState()
@@ -1949,10 +2141,14 @@ private fun EventWorkspace(
             Divider()
         }
         Divider()
+        if (r3Chrome || v11CompactGrid) FixedV11EventGridHeader()
         LazyColumn(
             state = listState,
             modifier = Modifier
                 .then(if (r3Chrome) Modifier.weight(1f) else Modifier.fillMaxSize())
+                // Stable scroll owner across row virtualization and responsive-host
+                // recreation. A detached Event row is not a scroll authority.
+                .testTag("event-results-list")
                 .pointerInput(state.filteredEvents) {
                     var lastPreviewId: Long? = null
                     var lastAutoScrollAt = 0L
@@ -2005,25 +2201,46 @@ private fun EventWorkspace(
                 },
         ) {
             items(state.filteredEvents, key = { it.id }) { event ->
-                ModernEventRow(
-                    event, event.id == uiState.focus.eventId, false,
-                    event.id in uiState.selection.eventIds, selectionMode, issuesByEvent[event.id].orEmpty(),
-                    state, viewModel, eventEditorStateHolder,
-                    {
-                        if (selectionMode) uiActions.toggleSelection(event.id)
-                        else {
-                            uiActions.focusEvent(event.id, seek = true)
-                            onExpandedChange(if (expandedEventId == event.id) null else event.id)
-                        }
-                    },
-                    {
-                        if (event.id !in uiState.selection.eventIds) {
-                            uiActions.toggleSelection(event.id)
-                        }
-                    },
-                    { onExpandedChange(null) },
-                    onTool,
-                )
+                val openEvent: () -> Unit = {
+                    if (selectionMode) uiActions.toggleSelection(event.id)
+                    else {
+                        uiActions.focusEvent(event.id, seek = true)
+                        onExpandedChange(if (expandedEventId == event.id) null else event.id)
+                    }
+                }
+                val selectEvent: () -> Unit = {
+                    if (event.id !in uiState.selection.eventIds) {
+                        uiActions.toggleSelection(event.id)
+                    }
+                }
+                if (r3Chrome || v11CompactGrid) {
+                    // V1.1 changes only the event navigator's presentation.
+                    // Keep the same stable IDs, filter order and ViewModel actions.
+                    FixedV11EventGridRow(
+                        eventId = event.id,
+                        start = event.start.toAss().removePrefix("0:"),
+                        end = event.end.toAss().removePrefix("0:"),
+                        styleName = event.style,
+                        visibleText = AssInlineSyntax.visibleText(event.text),
+                        focused = event.id == uiState.focus.eventId,
+                        selected = event.id in uiState.selection.eventIds,
+                        selectionMode = selectionMode,
+                        issues = issuesByEvent[event.id].orEmpty(),
+                        onClick = openEvent,
+                        onLongClick = selectEvent,
+                    )
+                } else {
+                    ModernEventRow(
+                        event, event.id == uiState.focus.eventId, false,
+                        event.id in uiState.selection.eventIds, selectionMode,
+                        issuesByEvent[event.id].orEmpty(),
+                        state, viewModel, eventEditorStateHolder,
+                        openEvent,
+                        selectEvent,
+                        { onExpandedChange(null) },
+                        onTool,
+                    )
+                }
                 Divider()
             }
         }
@@ -2143,42 +2360,20 @@ private fun ModernEventRow(
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun InlineEventEditor(
+internal fun EventRawTextEditor(
     event: AssEvent,
-    styleName: String,
     state: EditorState,
     viewModel: EditorViewModel,
-    onTool: (WorkbenchTool) -> Unit,
-    activeSection: WorkbenchTool = WorkbenchTool.TEXT,
     draftOwnerId: String? = null,
+    compact: Boolean = false,
 ) {
-    // Inline edit buffers are saveable so a configuration change does not
-    // silently discard text that has not yet been committed to the canonical Event.
-    val timingStore = LocalEventTimingDraftStore.current
-    val timingDraft = remember(timingStore, draftOwnerId, event.id) { timingStore.obtain(draftOwnerId, event) }
-    var timingValues by timingDraft::values
-    val startText = timingValues.start
-    val endText = timingValues.end
-    LaunchedEffect(timingDraft, event.start.millis, event.end.millis) {
-        timingDraft.reconcile(EventTimingCanonical.from(event))
-    }
     val draftStore = LocalEventTextDraftStore.current
     val rawDraft = remember(draftStore, draftOwnerId, event.id) {
         draftStore.obtain(draftOwnerId, event.id, event.text)
     }
     var rawField by rawDraft::value
     var rawBaseText by rawDraft::baseText
-    val metadataStore = LocalEventMetadataDraftStore.current
-    val metadataDraft = remember(metadataStore, draftOwnerId, event.id) { metadataStore.obtain(draftOwnerId, event) }
-    var metadataValues by metadataDraft::values
-    val layerText = metadataValues.layer
-    val actorText = metadataValues.actor
-    val comment = metadataValues.comment
-    LaunchedEffect(metadataDraft, event.layer, event.name, event.comment) {
-        metadataDraft.reconcile(EventMetadataValues.from(event))
-    }
     val playbackPositionMs by viewModel.playbackPositionMs.collectAsState()
     val r3UseWriteReview = LocalConfiguration.current.screenWidthDp >= 1180
     var r3ReviewOpen by rememberSaveable(state.workspaceSessionId, event.id) {
@@ -2187,48 +2382,6 @@ private fun InlineEventEditor(
 
     LaunchedEffect(rawDraft, event.text) {
         rawDraft.reconcile(event.text)
-    }
-
-    if (activeSection == WorkbenchTool.TEXT) {
-    val timingInput = remember(startText, endText) { EventTimingInputValidation.parse(startText, endText) }
-    val timingState = timingDraft.snapshot().classify(EventTimingCanonical.from(event))
-    val timingConflict = timingState == RawEventDraftState.EXTERNAL_CONFLICT
-    Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro)) {
-        OutlinedTextField(startText, { timingValues = timingValues.copy(start = it) }, label = { Text("Start") }, singleLine = true,
-            isError = timingInput.startInvalid,
-            supportingText = { if (timingInput.startInvalid) Text("输入 ASS 时间或非负毫秒数") },
-            modifier = Modifier.weight(1f).testTag("event-start-${event.id}"))
-        OutlinedTextField(endText, { timingValues = timingValues.copy(end = it) }, label = { Text("End") }, singleLine = true,
-            isError = timingInput.endInvalid || timingInput.reversed,
-            supportingText = {
-                if (timingInput.endInvalid) Text("输入 ASS 时间或非负毫秒数")
-                else if (timingInput.reversed) Text("End 不能早于 Start")
-            },
-            modifier = Modifier.weight(1f).testTag("event-end-${event.id}"))
-        Button(
-            onClick = {
-                val start = timingInput.start
-                val end = timingInput.end
-                if (timingInput.canApply && start != null && end != null) {
-                    viewModel.setEventTiming(event.id, start.millis, end.millis)
-                    viewModel.state.value.document.events.firstOrNull { it.id == event.id }?.let { committed ->
-                        if (committed.start == start && committed.end == end)
-                            timingDraft.reset(EventTimingCanonical.from(committed))
-                    }
-                }
-            },
-            enabled = timingInput.canApply,
-            modifier = Modifier.align(Alignment.CenterVertically).testTag("event-apply-time-${event.id}"),
-        ) { Text(if (timingConflict) "覆盖时间" else "应用") }
-    }
-    if (timingConflict) Text("时间已在其他面板修改；草稿已保留。重新载入会丢弃草稿，覆盖时间会覆盖当前 Start/End。",
-        color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall,
-        modifier = Modifier.testTag("event-timing-conflict-${event.id}"))
-    if (timingState != RawEventDraftState.CLEAN) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-        TextButton(onClick = { timingDraft.reset(EventTimingCanonical.from(event)) },
-            modifier = Modifier.testTag("event-reset-time-${event.id}")) {
-            Text(if (timingConflict) "重新载入时间" else "还原时间")
-        }
     }
 
     OutlinedTextField(
@@ -2240,7 +2393,7 @@ private fun InlineEventEditor(
         modifier = Modifier
             .testTag("event-raw-${event.id}")
             .fillMaxWidth()
-            .heightIn(min = 104.dp, max = 220.dp),
+            .heightIn(min = if (compact) 72.dp else 104.dp, max = if (compact) 128.dp else 220.dp),
     )
     val rawDraftState = RawEventDraftPolicy.classify(
         baseText = rawBaseText,
@@ -2316,13 +2469,119 @@ private fun InlineEventEditor(
             color = MaterialTheme.colorScheme.error,
         )
     }
-    if (!rawDirty && !splitReady) {
+    if (!compact && !rawDirty && !splitReady) {
         Text(
             "拆分需要：正文光标位于文本中间、没有选区，并且播放头位于当前 Event 的 Start 与 End 之间。override block 内部仍由语义层拒绝拆分。",
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
+
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun InlineEventEditor(
+    event: AssEvent,
+    styleName: String,
+    state: EditorState,
+    viewModel: EditorViewModel,
+    onTool: (WorkbenchTool) -> Unit,
+    activeSection: WorkbenchTool = WorkbenchTool.TEXT,
+    draftOwnerId: String? = null,
+    rawTextDocked: Boolean = false,
+) {
+    // Inline edit buffers are saveable so a configuration change does not
+    // silently discard text that has not yet been committed to the canonical Event.
+    val timingStore = LocalEventTimingDraftStore.current
+    val timingDraft = remember(timingStore, draftOwnerId, event.id) { timingStore.obtain(draftOwnerId, event) }
+    var timingValues by timingDraft::values
+    val startText = timingValues.start
+    val endText = timingValues.end
+    LaunchedEffect(timingDraft, event.start.millis, event.end.millis) {
+        timingDraft.reconcile(EventTimingCanonical.from(event))
+    }
+    val metadataStore = LocalEventMetadataDraftStore.current
+    val metadataDraft = remember(metadataStore, draftOwnerId, event.id) { metadataStore.obtain(draftOwnerId, event) }
+    val marginStore = LocalEventMarginDraftStore.current
+    val marginDraft = remember(marginStore, draftOwnerId, event.id) { marginStore.obtain(draftOwnerId, event) }
+    var metadataValues by metadataDraft::values
+    val layerText = metadataValues.layer
+    val actorText = metadataValues.actor
+    val comment = metadataValues.comment
+    val playbackPositionMs by viewModel.playbackPositionMs.collectAsState()
+    LaunchedEffect(metadataDraft, event.layer, event.name, event.comment) {
+        metadataDraft.reconcile(EventMetadataValues.from(event))
+    }
+    LaunchedEffect(marginDraft, event.marginL, event.marginR, event.marginV) {
+        marginDraft.reconcile(EventMarginValues.from(event))
+    }
+    if (rawTextDocked && (activeSection == WorkbenchTool.TEXT || activeSection == WorkbenchTool.EVENT)) {
+        val styleDraft = LocalEventStyleDraftStore.current.obtain(draftOwnerId, event.id, event.style)
+        FixedV11EventPropertyForm(event, state.document, timingDraft, metadataDraft,
+            styleDraft = styleDraft,
+            marginDraft = marginDraft,
+            onApplyTiming = { start, end ->
+                viewModel.setEventTiming(event.id, start.millis, end.millis)
+                viewModel.state.value.document.events.firstOrNull { it.id == event.id }?.let { committed ->
+                    if (committed.start == start && committed.end == end)
+                        timingDraft.reset(EventTimingCanonical.from(committed))
+                }
+            },
+            onApplyMetadata = { layer, actor, isComment ->
+                viewModel.focusEvent(event.id, seek = false)
+                viewModel.updateFocusedMetadata(layer = layer, actor = actor, comment = isComment)
+                viewModel.state.value.document.events.firstOrNull { it.id == event.id }?.let { committed ->
+                    if (committed.layer == layer && committed.name == actor && committed.comment == isComment)
+                        metadataDraft.reset(EventMetadataValues.from(committed))
+                }
+            })
+    }
+    if (!rawTextDocked && activeSection == WorkbenchTool.TEXT) {
+    val timingInput = remember(startText, endText) { EventTimingInputValidation.parse(startText, endText) }
+    val timingState = timingDraft.snapshot().classify(EventTimingCanonical.from(event))
+    val timingConflict = timingState == RawEventDraftState.EXTERNAL_CONFLICT
+    Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro)) {
+        OutlinedTextField(startText, { timingValues = timingValues.copy(start = it) }, label = { Text("Start") }, singleLine = true,
+            isError = timingInput.startInvalid,
+            supportingText = { if (timingInput.startInvalid) Text("输入 ASS 时间或非负毫秒数") },
+            modifier = Modifier.weight(1f).testTag("event-start-${event.id}"))
+        OutlinedTextField(endText, { timingValues = timingValues.copy(end = it) }, label = { Text("End") }, singleLine = true,
+            isError = timingInput.endInvalid || timingInput.reversed,
+            supportingText = {
+                if (timingInput.endInvalid) Text("输入 ASS 时间或非负毫秒数")
+                else if (timingInput.reversed) Text("End 不能早于 Start")
+            },
+            modifier = Modifier.weight(1f).testTag("event-end-${event.id}"))
+        Button(
+            onClick = {
+                val start = timingInput.start
+                val end = timingInput.end
+                if (timingInput.canApply && start != null && end != null) {
+                    viewModel.setEventTiming(event.id, start.millis, end.millis)
+                    viewModel.state.value.document.events.firstOrNull { it.id == event.id }?.let { committed ->
+                        if (committed.start == start && committed.end == end)
+                            timingDraft.reset(EventTimingCanonical.from(committed))
+                    }
+                }
+            },
+            enabled = timingInput.canApply,
+            modifier = Modifier.align(Alignment.CenterVertically).testTag("event-apply-time-${event.id}"),
+        ) { Text(if (timingConflict) "覆盖时间" else "应用") }
+    }
+    if (timingConflict) Text("时间已在其他面板修改；草稿已保留。重新载入会丢弃草稿，覆盖时间会覆盖当前 Start/End。",
+        color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelSmall,
+        modifier = Modifier.testTag("event-timing-conflict-${event.id}"))
+    if (timingState != RawEventDraftState.CLEAN) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+        TextButton(onClick = { timingDraft.reset(EventTimingCanonical.from(event)) },
+            modifier = Modifier.testTag("event-reset-time-${event.id}")) {
+            Text(if (timingConflict) "重新载入时间" else "还原时间")
+        }
+    }
+
+    if (activeSection == WorkbenchTool.TEXT && !rawTextDocked) EventRawTextEditor(
+        event = event, state = state, viewModel = viewModel, draftOwnerId = draftOwnerId,
+    )
 
     }
 
@@ -2341,6 +2600,7 @@ private fun InlineEventEditor(
             modifier = Modifier.fillMaxWidth(),
         ) {
             Column(Modifier.padding(WorkbenchDimens.Small), verticalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro)) {
+                if (!rawTextDocked) {
                 Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro), verticalAlignment = Alignment.CenterVertically) {
                     OutlinedTextField(layerText, { metadataValues = metadataValues.copy(layer = it) }, label = { Text("Layer") }, singleLine = true,
                         isError = !layerValid,
@@ -2375,6 +2635,7 @@ private fun InlineEventEditor(
                                 metadataDraft.reset(EventMetadataValues.from(committed))
                         }
                     }, modifier = Modifier.testTag("event-apply-metadata-${event.id}")) { Text(if (metadataConflict) "以草稿覆盖" else "应用") }
+                }
                 }
                 Divider()
                 Text("结构操作", style = MaterialTheme.typography.labelMedium)
