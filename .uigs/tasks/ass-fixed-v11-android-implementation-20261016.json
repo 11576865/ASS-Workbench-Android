@@ -1,7 +1,7 @@
 {
   "id": "ass-fixed-v11-android-implementation-20261016",
   "goal": "Implement the frozen FIXED Tablet V1.1 design as native Compose UI, progressively, preserving existing business model/drafts and leaving SPATIAL UI outside this scope.",
-  "status": "Resolved 23/26 source-confirmed Android test driver failures from invalid scroll on pinned catalog; code pushed, exact-head validation pending; 3 independent device failures remain",
+  "status": "Repaired exact-head AndroidTest Kotlin missing import; source candidate to correct zero-height Event navigator in compact/rotation by finite weighted LazyColumn. Latest branch compilation and emulator pending",
   "design_basis": {
     "figma_file": "https://www.figma.com/design/5yNY5dMnmpmaOnYxDlEhY5",
     "fixed_page": "85:2",
@@ -14,7 +14,7 @@
   "base_branch": "feat/r3-fixed-visual-layout-20261014",
   "base_pr": 148,
   "pull_request": "https://github.com/11576865/ASS-Workbench-Android/pull/149",
-  "current_bounded_work_unit": "2026-10-25: restore full Android regression gate after pinned global catalog refactor. Root-cause and remove performScrollTo() on permanently visible non-scroll parent control in generic openTool and rail-specific native regression; preserve visible+click and downstream assertions.",
+  "current_bounded_work_unit": "2026-10-25: unblock d5285374 AndroidTest Kotlin compilation and repair source-grounded compact Event navigation zero-height LazyColumn viewport after responsive/IME/window changes; assert visible nonzero viewport before demanding actual event row and draft preservation.",
   "completed_units": [
     "Created implementation branch from existing R3 visual-layout work to avoid duplicating video/timeline infrastructure.",
     "Created FixedV11EventGrid.kt as real Material3 Compose UI with index/start/end/Style/text/QC.",
@@ -129,14 +129,20 @@
     "At head e7010ee93459a155a6dd6b5830635ae11b032e1d, FIXED V1.1 source/JVM workflow 40135667313 SUCCESS; emulator 40135667260 FAILURE, connected main attempt 191 tests / 26 failures / 0 errors / 0 skipped. Both 1440x900 and 1024x768 screenshot evidence jobs failed (expected complete R3 PNG found 0), not acceptable compositor evidence.",
     "Parsed exact emulator evidence: 23 of 26 failed assertions state 'Semantic Node has no parent layout with a Scroll SemanticsAction', mostly from EditorRegressionInstrumentedTest.openTool at line 2110 after unconditional scroll on fixed-tool-CAPABILITIES, and one FixedV11PageChromeInstrumentedTest line 35. Remaining three: rotation returning to zero-height event-results-list, SPATIAL 取消驻留 invisible, transformTimingHandles effect-transform-range-0 not displayed. Do not claim them fixed.",
     "Commits 544484d31a527b160961b9e0e35dbea68511cccb and cad07cb912245f4b9cfe65953257875481ff1230 correct the invalid scroll operation for globally pinned catalog; retain actual displayed/click and all tool selection, Event draft, and document checks. Searchable LazyColumn tool results and regular scrollable shortcuts keep appropriate scroll semantics.",
-    "Deduplicated UIGS Foundry existing adaptive directory Candidate, appended exact 191/26 root and correction at c73299840c9c81af33b30d576cf0d048ebf1e928, with precise 23/26 failure count; Canonical unchanged."
+    "Deduplicated UIGS Foundry existing adaptive directory Candidate, appended exact 191/26 root and correction at c73299840c9c81af33b30d576cf0d048ebf1e928, with precise 23/26 failure count; Canonical unchanged.",
+    "At exact head d5285374617bcc68e4c5c0bd08f80195731603ef, FIXED validation 40176279488 and 40176276209 FAILED at :app:compileDebugAndroidTestKotlin; emulator 40176279531 FAILED prebuild; this generation did NOT execute device tests or prove 23 previous invalid-scroll failures were resolved.",
+    "Read compile job 121117540901: FixedV11PageChromeInstrumentedTest.kt:36 unresolved reference assertIsDisplayed after prior test refactor. Added exact Compose test import at 6c04069ae01be0ee86a6bc9b8d7c732cce368b5b without removing assertion.",
+    "Analyzed prior run e7010ee9 / 40135667260 further: rotation return to Event list yielded owning event-results-list semantics bounds l=128,t=911,r=861,b=911 (zero height), despite two Event rows. Distinct from 23 global catalog invalid scroll action failures in same 191/26 receipt; prior parent LazyColumn tag did not alone make content actionable.",
+    "Production EventWorkspace source 578da44f4285af675ed9f6e423298c5664620b99: make LazyColumn within finite subtitle navigator Column explicitly Modifier.weight(1f) for all hosts (previously only R3; COMPACT used fillMaxSize), preserving exact row key/scroll state/edit routing. Device hypothesis, not declared resolved.",
+    "Regression f33ee69568580f9bf31cbb1a2601237cf5598565: rotation host recovery now asserts real event-results-list displayed and positive bounds height before existing performScrollToNode, row click, inspector draft/apply and session continuity assertions.",
+    "UIGS intake deduplicated existing 2026-10-24 Compose virtual list/IME responsive observation and appended run semantics plus candidate layout correction at 2de81edc8add256cd3fb4fce3858ffaa7082d4c5; no Canonical promotion."
   ],
   "next_units": [
-    "Read exact-head CI statuses once after current commits. Distinguish source/JVM pass, full-suite emulator result and generated screenshot evidence. Retain PR as Draft while failures remain.",
-    "Fix independently remaining 3 confirmed emulator failures from evidence: zero-height Event results viewport during rotation reentry, SPATIAL pinned rail visibility, Transform timing range controls. Avoid masking with test suppression or arbitrary timeout increases.",
-    "Complete user sourced ASS/media load-edit-safe save-reopen and libass renderer acceptance, plus native tablet visual/Figma parity, before considering merge."
+    "Read latest exact-head FIXED compile and Android CI once; confirm test import fix actually restores 23/26 gate, differentiate source pass from device suite and native PNG evidence.",
+    "Resolve any remaining zero-height Event navigator issue on simulator from semantics + composition bounds, not only test helper. Then diagnose SPATIAL resident pin availability and Transform timing/geometry field lifetime as independent functional failures.",
+    "Verify actual user-sourced ASS open/edit/SafeSave/reopen and libass renderer, and native tablet screenshot/Figma parity before draft PR merge."
   ],
-  "latest_durable_commit": "cad07cb912245f4b9cfe65953257875481ff1230 (pinned catalog regression helper correction; task record follows)",
+  "latest_durable_commit": "f33ee69568580f9bf31cbb1a2601237cf5598565 (weighted Event list and nonzero navigation test, task record follows)",
   "external_validation": {
     "android_ci": "Previous exact-head c00c27e2 FAILED at :app:compileDebugAndroidTestKotlin. Source repair 54489d43 and new Android safe-save test a457cb9f committed; current exact-head external compilation/JVM/emulator Pending External Validation.",
     "android_emulator": "Previous 40080008481 FAILED prebuild before running instrumented suite, not a new emulator regression count. New exact-head emulator validation pending.",
@@ -145,9 +151,9 @@
     "ass_raw_roundtrip": "Source and tests committed. No exact-head Kotlin, JVM, Android instrumentation, real-file or device evidence yet; Pending External Validation."
   },
   "blockers": [
-    "Source test harness correction for 23 scroll-ownership failures is committed but not device-validated yet.",
-    "Three independent emulator failures remain open: zero-height Event list, SPATIAL unpin visibility, transform timing range control visibility.",
-    "New exact-head native visual PNG and genuine ASS/libass/device parity remain unverified."
+    "Zero-height Event navigator after display reset was observed in emulator; weighted layout change still Pending External Validation.",
+    "Prior branch d5285374 CI failed compilation due to missing test import; new exact-head compile/emulator must confirm repair.",
+    "SPATIAL resident pin and Transform timing/geometry field controls unresolved; true tablet libass and media acceptance unavailable."
   ],
   "updated_at": "2026-10-25",
   "handoff_rules": [
@@ -220,7 +226,13 @@
       },
       "production_patch": "5037c4dddb924dda9d53df84ced96341bace24a6",
       "test_patch": "db4bd189a8d641ad1762c678f31ee7583bff5882",
-      "status": "Pending External Validation"
+      "status": "Pending External Validation",
+      "evidence_at_e7010ee9": {
+        "emulator": 40135667260,
+        "result": "191/26; Event list bounds left128 top911 right861 bottom911 (zero height)"
+      },
+      "production_weight_patch": "578da44f4285af675ed9f6e423298c5664620b99",
+      "nonzero_viewport_assertion": "f33ee69568580f9bf31cbb1a2601237cf5598565"
     },
     "pinned_tool_directory": {
       "baseline_head": "8d1d77102ef04bd2409617c99ae6c7f1977907dd",
@@ -262,12 +274,19 @@
         "cad07cb912245f4b9cfe65953257875481ff1230"
       ],
       "state": "Pending External Validation"
+    },
+    "android_test_compile_import": {
+      "blocked_head": "d5285374617bcc68e4c5c0bd08f80195731603ef",
+      "source_run": 40176279488,
+      "emulator_run": 40176279531,
+      "repair": "6c04069ae01be0ee86a6bc9b8d7c732cce368b5b",
+      "status": "Pending External Validation"
     }
   },
   "uigs_intake": {
-    "status": "complete / existing Candidate amended",
-    "record": "11576865/UIGS-Foundry/inbox/candidates/2026-10-22-adaptive-tool-directory-search-and-test-routing.md",
-    "foundry_commit": "c73299840c9c81af33b30d576cf0d048ebf1e928",
+    "status": "complete / deduplicated Observation updated",
+    "record": "11576865/UIGS-Foundry/inbox/observations/2026-10-24-ass-compose-virtual-list-ime-root-rotation-regression.md",
+    "foundry_commit": "2de81edc8add256cd3fb4fce3858ffaa7082d4c5",
     "canonical_promotion": false
   }
 }
