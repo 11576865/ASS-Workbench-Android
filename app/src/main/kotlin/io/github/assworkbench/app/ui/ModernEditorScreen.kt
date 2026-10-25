@@ -2145,7 +2145,11 @@ private fun EventWorkspace(
         LazyColumn(
             state = listState,
             modifier = Modifier
-                .then(if (r3Chrome) Modifier.weight(1f) else Modifier.fillMaxSize())
+                // The navigator header and results bar are measured first.
+                // Allocate the remaining finite height explicitly in every host;
+                // fillMaxSize() in COMPACT can overclaim the column constraints
+                // while resize/IME transitions leave the LazyColumn at zero height.
+                .weight(1f)
                 // Stable scroll owner across row virtualization and responsive-host
                 // recreation. A detached Event row is not a scroll authority.
                 .testTag("event-results-list")
