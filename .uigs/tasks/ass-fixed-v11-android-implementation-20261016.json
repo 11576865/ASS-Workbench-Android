@@ -1,7 +1,7 @@
 {
   "id": "ass-fixed-v11-android-implementation-20261016",
   "goal": "Implement the frozen FIXED Tablet V1.1 design as native Compose UI, progressively, preserving existing business model/drafts and leaving SPATIAL UI outside this scope.",
-  "status": "Source/JVM 8d1d7710 validated; emulator 63/4; pinned full tool catalog rail and direct-task navigation committed, current compile/emulator pending",
+  "status": "Resolved 23/26 source-confirmed Android test driver failures from invalid scroll on pinned catalog; code pushed, exact-head validation pending; 3 independent device failures remain",
   "design_basis": {
     "figma_file": "https://www.figma.com/design/5yNY5dMnmpmaOnYxDlEhY5",
     "fixed_page": "85:2",
@@ -14,7 +14,7 @@
   "base_branch": "feat/r3-fixed-visual-layout-20261014",
   "base_pr": 148,
   "pull_request": "https://github.com/11576865/ASS-Workbench-Android/pull/149",
-  "current_bounded_work_unit": "2026-10-25: maintain actionable global professional tool directory on short tablet rail while preserving scrolling task shortcuts; exercise direct TEXT/EFFECTS task navigation in inspector draft roundtrip, retain directory-specific tests and all strict device assertions.",
+  "current_bounded_work_unit": "2026-10-25: restore full Android regression gate after pinned global catalog refactor. Root-cause and remove performScrollTo() on permanently visible non-scroll parent control in generic openTool and rail-specific native regression; preserve visible+click and downstream assertions.",
   "completed_units": [
     "Created implementation branch from existing R3 visual-layout work to avoid duplicating video/timeline infrastructure.",
     "Created FixedV11EventGrid.kt as real Material3 Compose UI with index/start/end/Style/text/QC.",
@@ -125,14 +125,18 @@
     "Production change 8274fa3d0f55699b19b8e6a88a7765b7123bd734: separate scrollable seven regular shortcut controls from always-mounted bottom global directory control in tablet rail. Preserve original tool identity, active-selection semantics and callbacks.",
     "Added FixedV11TaskRailInstrumentedTest at 29bda707555f7b5576928b1add140f0999bc1b73, import fix 6f7bb4f7fe73838f11f4a5a4f7d66554bf21dc46: constrained 56x340dp rail must expose clickable global directory and subtitle shortcut callbacks. Android execution pending.",
     "Updated regression helper at ce46b8a23dc7d898c184feb0617377dce0028647 to exercise actual direct TEXT/EFFECTS task shortcuts for inspector draft switch scenarios, not an incidental full-catalog modal; other tool commands still traverse the true catalog and assert visibility. Existing rotation/draft and independent directory tests remain enabled.",
-    "UIGS Foundry dedup found relevant 2026-10-22 adaptive directory Candidate; appended short-rail pinned global discovery and exact validation boundary at be4972e6627bd65a7e1b35e737ef5deafb294a3f. No duplicate record, no Canonical promotion."
+    "UIGS Foundry dedup found relevant 2026-10-22 adaptive directory Candidate; appended short-rail pinned global discovery and exact validation boundary at be4972e6627bd65a7e1b35e737ef5deafb294a3f. No duplicate record, no Canonical promotion.",
+    "At head e7010ee93459a155a6dd6b5830635ae11b032e1d, FIXED V1.1 source/JVM workflow 40135667313 SUCCESS; emulator 40135667260 FAILURE, connected main attempt 191 tests / 26 failures / 0 errors / 0 skipped. Both 1440x900 and 1024x768 screenshot evidence jobs failed (expected complete R3 PNG found 0), not acceptable compositor evidence.",
+    "Parsed exact emulator evidence: 23 of 26 failed assertions state 'Semantic Node has no parent layout with a Scroll SemanticsAction', mostly from EditorRegressionInstrumentedTest.openTool at line 2110 after unconditional scroll on fixed-tool-CAPABILITIES, and one FixedV11PageChromeInstrumentedTest line 35. Remaining three: rotation returning to zero-height event-results-list, SPATIAL 取消驻留 invisible, transformTimingHandles effect-transform-range-0 not displayed. Do not claim them fixed.",
+    "Commits 544484d31a527b160961b9e0e35dbea68511cccb and cad07cb912245f4b9cfe65953257875481ff1230 correct the invalid scroll operation for globally pinned catalog; retain actual displayed/click and all tool selection, Event draft, and document checks. Searchable LazyColumn tool results and regular scrollable shortcuts keep appropriate scroll semantics.",
+    "Deduplicated UIGS Foundry existing adaptive directory Candidate, appended exact 191/26 root and correction at c73299840c9c81af33b30d576cf0d048ebf1e928, with precise 23/26 failure count; Canonical unchanged."
   ],
   "next_units": [
-    "Read current exact-head source/JVM and emulator one status result. Fix any direct compiler error by one bounded repair; otherwise leave asynchronous CI Pending External Validation.",
-    "Use actual current Android result to diagnose whether TEXT/EFFECTS switch/rotation is now functional. Resolve SPATIAL pin and Transform input lifecycle from exact device evidence, not assertion removal.",
-    "Finish real ASS libass playback, file save/reopen, native tablet size and Figma visual parity acceptance on representative media before merging Draft PR #149."
+    "Read exact-head CI statuses once after current commits. Distinguish source/JVM pass, full-suite emulator result and generated screenshot evidence. Retain PR as Draft while failures remain.",
+    "Fix independently remaining 3 confirmed emulator failures from evidence: zero-height Event results viewport during rotation reentry, SPATIAL pinned rail visibility, Transform timing range controls. Avoid masking with test suppression or arbitrary timeout increases.",
+    "Complete user sourced ASS/media load-edit-safe save-reopen and libass renderer acceptance, plus native tablet visual/Figma parity, before considering merge."
   ],
-  "latest_durable_commit": "6f7bb4f7fe73838f11f4a5a4f7d66554bf21dc46 (pinned-directory code and test checkpoints; task record will add commit)",
+  "latest_durable_commit": "cad07cb912245f4b9cfe65953257875481ff1230 (pinned catalog regression helper correction; task record follows)",
   "external_validation": {
     "android_ci": "Previous exact-head c00c27e2 FAILED at :app:compileDebugAndroidTestKotlin. Source repair 54489d43 and new Android safe-save test a457cb9f committed; current exact-head external compilation/JVM/emulator Pending External Validation.",
     "android_emulator": "Previous 40080008481 FAILED prebuild before running instrumented suite, not a new emulator regression count. New exact-head emulator validation pending.",
@@ -141,9 +145,9 @@
     "ass_raw_roundtrip": "Source and tests committed. No exact-head Kotlin, JVM, Android instrumentation, real-file or device evidence yet; Pending External Validation."
   },
   "blockers": [
-    "Exact-head Kotlin/Android verification of pinned catalog & regression direct task routing remains Pending.",
-    "Current four failing emulator cases (source 8d1d7710, run 40115404368) have not been certified fixed by new source changes.",
-    "Real ASS file/media/libass and hardware interaction/parity have not been field-validated."
+    "Source test harness correction for 23 scroll-ownership failures is committed but not device-validated yet.",
+    "Three independent emulator failures remain open: zero-height Event list, SPATIAL unpin visibility, transform timing range control visibility.",
+    "New exact-head native visual PNG and genuine ASS/libass/device parity remain unverified."
   ],
   "updated_at": "2026-10-25",
   "handoff_rules": [
@@ -236,13 +240,34 @@
       "instrumentation_test": "29bda707555f7b5576928b1add140f0999bc1b73",
       "test_import_fix": "6f7bb4f7fe73838f11f4a5a4f7d66554bf21dc46",
       "test_navigation": "ce46b8a23dc7d898c184feb0617377dce0028647",
-      "status": "Pending External Validation"
+      "status": "Pending External Validation",
+      "baseline_at_2026_10_25": {
+        "head": "e7010ee93459a155a6dd6b5830635ae11b032e1d",
+        "source": {
+          "run": 40135667313,
+          "status": "success"
+        },
+        "emulator": {
+          "run": 40135667260,
+          "status": "failure",
+          "tests": 191,
+          "failures": 26,
+          "scroll_owner_failures": 23,
+          "independent_failures": 3
+        },
+        "nativeCaptures": "Both failed: complete R3 PNG missing (found 0)"
+      },
+      "action_fixes": [
+        "544484d31a527b160961b9e0e35dbea68511cccb",
+        "cad07cb912245f4b9cfe65953257875481ff1230"
+      ],
+      "state": "Pending External Validation"
     }
   },
   "uigs_intake": {
-    "status": "complete / deduplicated existing Candidate extended",
+    "status": "complete / existing Candidate amended",
     "record": "11576865/UIGS-Foundry/inbox/candidates/2026-10-22-adaptive-tool-directory-search-and-test-routing.md",
-    "foundry_commit": "be4972e6627bd65a7e1b35e737ef5deafb294a3f",
+    "foundry_commit": "c73299840c9c81af33b30d576cf0d048ebf1e928",
     "canonical_promotion": false
   }
 }
