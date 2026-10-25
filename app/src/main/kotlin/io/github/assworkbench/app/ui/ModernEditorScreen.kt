@@ -5009,8 +5009,8 @@ private fun PositionPane(
 
     var sectionName by rememberSaveable(state.workspaceSessionId) { mutableStateOf(PositionSection.PLACEMENT.name) }
     val section = PositionSection.valueOf(sectionName)
-    val sectionScroll = rememberLazyListState()
-    LaunchedEffect(section) { sectionScroll.scrollToItem(0) }
+    val sectionScroll = rememberScrollState()
+    LaunchedEffect(section) { sectionScroll.scrollTo(0) }
     Column(modifier) {
     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 6.dp),
         horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -5019,12 +5019,16 @@ private fun PositionPane(
                 modifier = Modifier.testTag("position-section-" + entry.name))
         }
     }
-    LazyColumn(
-        Modifier.weight(1f).padding(WorkbenchDimens.Small).testTag("position-parameter-list"),
-        state = sectionScroll,
+    // Geometry fields own active text/IME focus. A lazy item may be disposed
+    // between a Compose semantics lookup and SetText when the keyboard resizes
+    // the pane. Each section contains only a small, bounded set of controls:
+    // keep its fields composed and scroll their real layout into view.
+    Column(
+        Modifier.weight(1f).verticalScroll(sectionScroll)
+            .padding(WorkbenchDimens.Small).testTag("position-parameter-list"),
         verticalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small),
     ) {
-        item {
+        key(section, "control-0") {
             Text("字幕 #${event.id}" + if (externalPreview) " · 临时预览" else " · 已提交",
                 modifier = Modifier.testTag("position-target-${event.id}"),
                 style = MaterialTheme.typography.titleSmall)
@@ -5035,7 +5039,7 @@ private fun PositionPane(
             )
         }
         if (section == PositionSection.PLACEMENT) {
-        item {
+        key(section, "control-1") {
             Text("Event 对齐覆盖")
             Column(verticalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro)) {
                 listOf(listOf(7, 8, 9), listOf(4, 5, 6), listOf(1, 2, 3)).forEach { row ->
@@ -5053,7 +5057,7 @@ private fun PositionPane(
         val placementGeometry = if (externalParameterPreview) displayGeometry else geometry
         val moveGeometry = placementGeometry.move
         if (placementGeometry.positionMode == AssPositionMode.MOVE && moveGeometry != null) {
-            item {
+            key(section, "control-2") {
                 Text("运动路径 · \\move", style = MaterialTheme.typography.titleSmall)
                 Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small)) {
                     OutlinedTextField(
@@ -5117,8 +5121,8 @@ private fun PositionPane(
 
         }
         if (section == PositionSection.TRANSFORM) {
-        item { Divider() }
-        item {
+        key(section, "control-3") { Divider() }
+        key(section, "control-4") {
             Text("变换原点 · \\org", style = MaterialTheme.typography.titleSmall)
             if ((if (externalParameterPreview) displayGeometry else geometry).origin != null) {
                 Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small)) {
@@ -5163,8 +5167,8 @@ private fun PositionPane(
                 }, enabled = !externalParameterPreview) { Text("在画布中心添加 \\org") }
             }
         }
-        item { Divider() }
-        item {
+        key(section, "control-5") { Divider() }
+        key(section, "control-6") {
             Text("正交旋转 · \\frx / \\fry / \\frz", style = MaterialTheme.typography.titleSmall)
             Text(
                 "X / Y 用于正交轴旋转，Z 为平面旋转；三轴与 \\org 共用同一 renderer 预览。触屏操控杆的轴必须显式选择，不根据手势猜测。",
@@ -5306,8 +5310,8 @@ private fun PositionPane(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        item { Divider() }
-        item {
+        key(section, "control-7") { Divider() }
+        key(section, "control-8") {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text("缩放 · \\fscx / \\fscy", style = MaterialTheme.typography.titleSmall)
@@ -5418,8 +5422,8 @@ private fun PositionPane(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        item { Divider() }
-        item {
+        key(section, "control-9") { Divider() }
+        key(section, "control-10") {
             Text("错切 · \\fax / \\fay", style = MaterialTheme.typography.titleSmall)
             Text(
                 "\\fax / \\fay 是几何错切因子，不是斜体。0 表示无错切；X 改变水平倾斜，Y 改变垂直倾斜。",
@@ -5513,8 +5517,8 @@ private fun PositionPane(
         }
         }
         if (section == PositionSection.CLIP) {
-        item { Divider() }
-        item {
+        key(section, "control-11") { Divider() }
+        key(section, "control-12") {
             Text("矩形裁剪 · \\clip / \\iclip", style = MaterialTheme.typography.titleSmall)
             Text(
                 "\\clip 只显示矩形内部；\\iclip 相反，会隐藏矩形内部。矩形坐标使用 ASS Script Resolution，不跟随字幕的旋转或移动坐标系。",
@@ -5642,7 +5646,7 @@ private fun PositionPane(
         }
         }
         if (section == PositionSection.PLACEMENT) {
-        item {
+        key(section, "control-13") {
             Text("任意位置")
             if (onExtractParameter != null) {
                 WorkspaceParameterExtractionControl(
@@ -5706,8 +5710,8 @@ private fun PositionPane(
 
         }
         if (style != null && section == PositionSection.STYLE_LAYOUT) {
-            item { Divider() }
-            item {
+            key(section, "control-14") { Divider() }
+            key(section, "control-15") {
                 Text("Style 基础位置 · ${style.name}", style = MaterialTheme.typography.titleSmall)
                 Text(
                     "这里编辑 Style 的 an / Margin；Event override 仍会覆盖这些值。",
@@ -5715,7 +5719,7 @@ private fun PositionPane(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            item {
+            key(section, "control-16") {
                 Text("Style 对齐")
                 Column(verticalArrangement = Arrangement.spacedBy(WorkbenchDimens.Micro)) {
                     listOf(listOf(7, 8, 9), listOf(4, 5, 6), listOf(1, 2, 3)).forEach { row ->
@@ -5731,7 +5735,7 @@ private fun PositionPane(
                     }
                 }
             }
-            item {
+            key(section, "control-17") {
                 Row(horizontalArrangement = Arrangement.spacedBy(WorkbenchDimens.Small)) {
                     OutlinedTextField(styleMarginL, { styleMarginL = it }, label = { Text("Margin L") }, singleLine = true, modifier = Modifier.weight(1f))
                     OutlinedTextField(styleMarginR, { styleMarginR = it }, label = { Text("Margin R") }, singleLine = true, modifier = Modifier.weight(1f))
