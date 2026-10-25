@@ -687,8 +687,12 @@ class EditorRegressionInstrumentedTest {
         switchToUnifiedCanvas()
         composeRule.onNodeWithTag("spatial-add-tool").performClick()
         composeRule.onNodeWithTag("tool-search").performTextReplacement("POSITION")
-        hideKeyboard()
-        composeRule.onNodeWithTag("tool-POSITION").performScrollTo().performClick()
+        // The SPATIAL command catalog is a filtered LazyColumn. Do not close
+        // the search IME while its dialog owns focus: doing so may dismiss the
+        // catalog before selecting the actual POSITION result.
+        composeRule.onNodeWithTag("tool-results-list")
+            .performScrollToNode(hasTestTag("tool-POSITION"))
+        composeRule.onNodeWithTag("tool-POSITION").assertIsDisplayed().performClick()
         composeRule.waitUntil(10_000) {
             composeRule.onAllNodesWithTag("spatial-native-content-POSITION-primary")
                 .fetchSemanticsNodes(atLeastOneRootRequired = false).isNotEmpty()
