@@ -920,6 +920,12 @@ class EditorRegressionInstrumentedTest {
                 .isNotEmpty()
         }
         Log.i("AsswbRegression", "rotation:select-event")
+        val listViewport = composeRule.onNodeWithTag("event-results-list")
+            .assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+        assertTrue(
+            "Responsive Event navigator must retain a nonzero list viewport after size/density reset; bounds=$listViewport",
+            listViewport.height > 0f,
+        )
         // A responsive host may replace the Event row after it first appears.
         // Scroll the persistent LazyColumn owner instead of a row which can
         // detach between performScrollTo()'s semantics lookup and scroll action.
