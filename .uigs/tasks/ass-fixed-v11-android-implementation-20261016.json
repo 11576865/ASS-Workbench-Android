@@ -1,7 +1,7 @@
 {
   "id": "ass-fixed-v11-android-implementation-20261016",
   "goal": "Implement the frozen FIXED Tablet V1.1 design as native Compose UI, progressively, preserving existing business model/drafts and leaving SPATIAL UI outside this scope.",
-  "status": "Repaired exact-head AndroidTest Kotlin missing import; source candidate to correct zero-height Event navigator in compact/rotation by finite weighted LazyColumn. Latest branch compilation and emulator pending",
+  "status": "Source/JVM at ddcf1ac5 success; Android full 191/5 failure; compact scroll reentry production patch and SPATIAL POSITION IME-native regression repair committed, exact-head validation pending.",
   "design_basis": {
     "figma_file": "https://www.figma.com/design/5yNY5dMnmpmaOnYxDlEhY5",
     "fixed_page": "85:2",
@@ -14,7 +14,7 @@
   "base_branch": "feat/r3-fixed-visual-layout-20261014",
   "base_pr": 148,
   "pull_request": "https://github.com/11576865/ASS-Workbench-Android/pull/149",
-  "current_bounded_work_unit": "2026-10-25: unblock d5285374 AndroidTest Kotlin compilation and repair source-grounded compact Event navigation zero-height LazyColumn viewport after responsive/IME/window changes; assert visible nonzero viewport before demanding actual event row and draft preservation.",
+  "current_bounded_work_unit": "2026-10-26: restore real compact subtitle list navigation across responsive host return by scrolling its owning fixed-content-flow to the bounded Event editor after measurement, and restore native SPATIAL POSITION tool catalog regression by selecting virtualized result while IME remains open.",
   "completed_units": [
     "Created implementation branch from existing R3 visual-layout work to avoid duplicating video/timeline infrastructure.",
     "Created FixedV11EventGrid.kt as real Material3 Compose UI with index/start/end/Style/text/QC.",
@@ -135,14 +135,19 @@
     "Analyzed prior run e7010ee9 / 40135667260 further: rotation return to Event list yielded owning event-results-list semantics bounds l=128,t=911,r=861,b=911 (zero height), despite two Event rows. Distinct from 23 global catalog invalid scroll action failures in same 191/26 receipt; prior parent LazyColumn tag did not alone make content actionable.",
     "Production EventWorkspace source 578da44f4285af675ed9f6e423298c5664620b99: make LazyColumn within finite subtitle navigator Column explicitly Modifier.weight(1f) for all hosts (previously only R3; COMPACT used fillMaxSize), preserving exact row key/scroll state/edit routing. Device hypothesis, not declared resolved.",
     "Regression f33ee69568580f9bf31cbb1a2601237cf5598565: rotation host recovery now asserts real event-results-list displayed and positive bounds height before existing performScrollToNode, row click, inspector draft/apply and session continuity assertions.",
-    "UIGS intake deduplicated existing 2026-10-24 Compose virtual list/IME responsive observation and appended run semantics plus candidate layout correction at 2de81edc8add256cd3fb4fce3858ffaa7082d4c5; no Canonical promotion."
+    "UIGS intake deduplicated existing 2026-10-24 Compose virtual list/IME responsive observation and appended run semantics plus candidate layout correction at 2de81edc8add256cd3fb4fce3858ffaa7082d4c5; no Canonical promotion.",
+    "At previous head ddcf1ac593fbd7e31402a47201b66b3d9bcacdaa, FIXED branch source/JVM 40190966030 SUCCESS; Android emulator 40190966056 FAILURE, full 191 tests / 5 failures / 0 errors / 0 skipped; former 23 invalid fixed catalog scroll assertions absent. Both 1024x768 and 1440x900 native screenshot evidence jobs FAILED (no complete R3 PNG), no visual signoff.",
+    "Five unresolved cases at ddcf1ac5: SPATIAL POSITION picker failed after a keyboard dismissal before result scroll, rotation inspector draft reentry event-results-list not displayed, resident pin 取消驻留 not displayed, transform exact range effect-transform-range-0 not displayed, geometry-scale-x-1-value detached during text input. These are independently tracked; no closure inferred.",
+    "SPATIAL POSITION instrumented regression c4cab9474b3d64f57dbf45b1e6dc9e727ff73159 keeps modal search IME alive and asks actual filtered tool-results-list LazyColumn to scroll to tool-POSITION before visibility+click; retains production editor/precision state assertions.",
+    "Production compact host repair c47d12f78bf87018e1db7e24dec6cbcfc5177519 gives fixed-content-flow a stable ScrollState and requests navigation toward the real bounded subtitle pane after layout's scroll maximum becomes positive when SUBTITLES mode is activated/reentered. The prior Event view positive-height/display/click/inspector draft test remains fully active. No changes to ASS session/document focus, drafts, or undo.",
+    "UIGS-Foundry intake deduplicated against existing native Compose virtualized list/IME rotation Observation. Recorded exact prior 191/5 and both failed PNG gates, production compact scroll candidate and SPATIAL POSITION test-driver correction at 97c5336bb17c80ed4d1ac8cf191c018f0e36d5d3; Canonical unchanged."
   ],
   "next_units": [
-    "Read latest exact-head FIXED compile and Android CI once; confirm test import fix actually restores 23/26 gate, differentiate source pass from device suite and native PNG evidence.",
-    "Resolve any remaining zero-height Event navigator issue on simulator from semantics + composition bounds, not only test helper. Then diagnose SPATIAL resident pin availability and Transform timing/geometry field lifetime as independent functional failures.",
-    "Verify actual user-sourced ASS open/edit/SafeSave/reopen and libass renderer, and native tablet screenshot/Figma parity before draft PR merge."
+    "Read one exact-head compile/JVM and Android emulator CI result after push. If compiler red, fix specific error; if emulator red, retain truthful actual test count and evidence. Full screenshot extraction may fail while the instrumentation run fails.",
+    "Diagnose and repair SPATIAL resident pin state/rendering and Transform effect range/geometry edit lifecycle from exact full-suite device evidence; avoid accessibility/test weakening.",
+    "Obtain representative real ASS file + media/libass renderer import/edit/save/reopen and hardware tablet native capture/Figma parity before PR #149 merge."
   ],
-  "latest_durable_commit": "f33ee69568580f9bf31cbb1a2601237cf5598565 (weighted Event list and nonzero navigation test, task record follows)",
+  "latest_durable_commit": "c47d12f78bf87018e1db7e24dec6cbcfc5177519 (compact navigator scroll fix and SPATIAL POSITION test-driver repair; task checkpoint follows)",
   "external_validation": {
     "android_ci": "Previous exact-head c00c27e2 FAILED at :app:compileDebugAndroidTestKotlin. Source repair 54489d43 and new Android safe-save test a457cb9f committed; current exact-head external compilation/JVM/emulator Pending External Validation.",
     "android_emulator": "Previous 40080008481 FAILED prebuild before running instrumented suite, not a new emulator regression count. New exact-head emulator validation pending.",
@@ -151,11 +156,11 @@
     "ass_raw_roundtrip": "Source and tests committed. No exact-head Kotlin, JVM, Android instrumentation, real-file or device evidence yet; Pending External Validation."
   },
   "blockers": [
-    "Zero-height Event navigator after display reset was observed in emulator; weighted layout change still Pending External Validation.",
-    "Prior branch d5285374 CI failed compilation due to missing test import; new exact-head compile/emulator must confirm repair.",
-    "SPATIAL resident pin and Transform timing/geometry field controls unresolved; true tablet libass and media acceptance unavailable."
+    "Compact outer scroll-to-editor fix and SPATIAL POSITION picker test have not yet been verified by current device workflow.",
+    "Remaining prior emulator failures include SPATIAL resident pin, Transform timing and geometry editing, rotation navigation; do not claim current exact-head passed.",
+    "Real media, font/libass, proper Figma native visual acceptance and true device input remain pending."
   ],
-  "updated_at": "2026-10-25",
+  "updated_at": "2026-10-26",
   "handoff_rules": [
     "No automatic merge to main, no updates to original SPATIAL implementation.",
     "One coherent increment per branch/PR; inspect CI for exact head only once.",
@@ -281,12 +286,32 @@
       "emulator_run": 40176279531,
       "repair": "6c04069ae01be0ee86a6bc9b8d7c732cce368b5b",
       "status": "Pending External Validation"
+    },
+    "compact_subtitle_reentry": {
+      "baseline_head": "ddcf1ac593fbd7e31402a47201b66b3d9bcacdaa",
+      "source": {
+        "run": 40190966030,
+        "result": "success"
+      },
+      "emulator": {
+        "run": 40190966056,
+        "result": "failure",
+        "tests": 191,
+        "failures": 5
+      },
+      "native_capture": {
+        "r1440x900": "failure/no complete PNG",
+        "r1024x768": "failure/no complete PNG"
+      },
+      "production_scroll_fix": "c47d12f78bf87018e1db7e24dec6cbcfc5177519",
+      "spatial_picker_regression": "c4cab9474b3d64f57dbf45b1e6dc9e727ff73159",
+      "status": "Pending External Validation"
     }
   },
   "uigs_intake": {
-    "status": "complete / deduplicated Observation updated",
+    "status": "complete / deduplicated observation extended",
     "record": "11576865/UIGS-Foundry/inbox/observations/2026-10-24-ass-compose-virtual-list-ime-root-rotation-regression.md",
-    "foundry_commit": "2de81edc8add256cd3fb4fce3858ffaa7082d4c5",
+    "foundry_commit": "97c5336bb17c80ed4d1ac8cf191c018f0e36d5d3",
     "canonical_promotion": false
   }
 }
