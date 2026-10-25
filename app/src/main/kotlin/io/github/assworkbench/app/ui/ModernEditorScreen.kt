@@ -105,6 +105,7 @@ import io.github.assworkbench.domain.*
 import io.github.assworkbench.fonts.FontDiagnostics
 import io.github.assworkbench.fonts.FontOrigin
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.abs
@@ -1480,9 +1481,23 @@ private fun FixedWorkspace(
                 WorkbenchLayoutProfile.COMPACT -> {
                     val body = CompactWorkspaceBody.resolve(maxHeight.value, policy.previewHeightDp,
                         imeVisible, previewScale)
+                    val compactScrollState = rememberScrollState()
+                    // A direct SUBTITLES request must expose the actual navigator.
+                    // After rotation the preview can occupy the compact viewport,
+                    // leaving the lazily composed Event list clipped to zero visible
+                    // height even though its semantics and stable IDs still exist.
+                    // Wait for the measured scroll range before positioning the
+                    // outer content; do not mutate the document or Event focus.
+                    LaunchedEffect(listRequested, body.editorHeightDp, body.previewHeightDp) {
+                        if (listRequested) {
+                            val availableScroll = snapshotFlow { compactScrollState.maxValue }
+                                .first { it > 0 }
+                            compactScrollState.scrollTo(availableScroll)
+                        }
+                    }
                     // Preview can leave the viewport instead of permanently compressing the editor.
                     // Each nested scrolling tool receives finite constraints.
-                    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())
+                    Column(Modifier.fillMaxSize().verticalScroll(compactScrollState)
                         .testTag("fixed-content-flow")) {
                         if (previewVisible) {
                             preview(Modifier.fillMaxWidth().height(body.previewHeightDp.dp))
