@@ -32,7 +32,8 @@ class FixedV11PageChromeInstrumentedTest {
         for(tool in listOf(WorkbenchTool.TEXT, WorkbenchTool.TIMELINE, WorkbenchTool.POSITION, WorkbenchTool.FONTS)) {
             composeRule.onNodeWithTag("fixed-tool-${tool.name}").performScrollTo().performClick()
         }
-        composeRule.onNodeWithTag("fixed-tool-CAPABILITIES").performScrollTo().performClick()
+        // Complete catalog is pinned, not a member of the scrollable shortcut list.
+        composeRule.onNodeWithTag("fixed-tool-CAPABILITIES").assertIsDisplayed().performClick()
         composeRule.runOnIdle {
             assertEquals(listOf(WorkbenchTool.TEXT, WorkbenchTool.TIMELINE, WorkbenchTool.POSITION, WorkbenchTool.FONTS), commands)
             assertEquals(1, directories)
