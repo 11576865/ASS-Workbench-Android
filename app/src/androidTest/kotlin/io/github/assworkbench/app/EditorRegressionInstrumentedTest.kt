@@ -588,10 +588,8 @@ class EditorRegressionInstrumentedTest {
         val before = viewModel.state.value.document
         assertFalse(viewModel.state.value.canUndo)
 
-        composeRule.onNodeWithTag("position-parameter-list")
-            .performScrollToNode(hasTestTag("extract-$extractionTag-1"))
         composeRule.onNodeWithTag("extract-$extractionTag-1")
-            .assertIsDisplayed()
+            .performScrollTo().assertIsDisplayed()
             .performTouchInput {
                 down(center)
                 advanceEventTime(800)
@@ -1068,9 +1066,10 @@ class EditorRegressionInstrumentedTest {
         )
         for ((parameter, value, preview) in cases) {
             val fieldTag = "geometry-$parameter-1-value"
-            composeRule.onNodeWithTag("position-parameter-list")
-                .performScrollToNode(hasTestTag(fieldTag))
+            // All fields in the active bounded section remain composed while
+            // the IME changes viewport height; bring the actual text field in.
             val field = composeRule.onNodeWithTag(fieldTag)
+            field.performScrollTo().assertIsDisplayed()
             field.performTextReplacement("unfinished")
             composeRule.runOnIdle(preview)
             field.assertTextContains(value)
