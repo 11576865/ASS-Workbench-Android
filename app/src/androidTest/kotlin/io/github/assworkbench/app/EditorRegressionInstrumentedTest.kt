@@ -2106,8 +2106,11 @@ class EditorRegressionInstrumentedTest {
                 composeRule.waitForIdle()
                 return
             }
+            // The global catalog is deliberately pinned outside the scrolling
+            // shortcut list (and outside the compact top bar's horizontal list).
+            // Requiring a scroll ancestor here breaks all catalog-navigation tests.
             composeRule.onNodeWithTag("fixed-tool-CAPABILITIES")
-                .performScrollTo().assertIsDisplayed().performClick()
+                .assertIsDisplayed().performClick()
             // FIXED uses a full R3 catalog on expanded tablets, but keeps the
             // shared directory in compact windows. Both must select the real
             // WorkbenchTool; legacy `tool-*` tags do not exist in the R3 dialog.
