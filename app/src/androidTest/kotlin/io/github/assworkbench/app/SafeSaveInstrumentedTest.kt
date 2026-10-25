@@ -7,6 +7,15 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import io.github.assworkbench.domain.AssCodec
 import io.github.assworkbench.domain.AssDocument
 import io.github.assworkbench.domain.AssEvent
+import io.github.assworkbench.domain.EventEditReviewReceipt
+import io.github.assworkbench.domain.EventMarginDraftBuffer
+import io.github.assworkbench.domain.EventMarginValues
+import io.github.assworkbench.domain.EventMetadataDraftBuffer
+import io.github.assworkbench.domain.EventMetadataValues
+import io.github.assworkbench.domain.EventTimingCanonical
+import io.github.assworkbench.domain.EventTimingDraftBuffer
+import io.github.assworkbench.domain.EventTimingValues
+import io.github.assworkbench.domain.RawEventDraftBuffer
 import io.github.assworkbench.domain.AssRoundTripVerifier
 import io.github.assworkbench.domain.AssTextDecoder
 import io.github.assworkbench.domain.AssTextEncoding
@@ -100,6 +109,154 @@ class SafeSaveInstrumentedTest {
 
         val restored = application.contentResolver.openInputStream(uri)!!.use { it.readBytes() }
         assertTrue(previous.contentEquals(restored))
+    }
+
+
+    @Test
+    fun fiveGroupReviewedEventPersistsThroughVerifiedContentProviderSaveAndReopen() {
+        // This exercises the product ViewModel transaction and the real ContentResolver
+        // save/read-back boundary, not merely AssCodec.write() in memory.
+        val originalAss = """
+            [Script Info]
+            ScriptType: v4.00+
+            PlayResX: 1920
+            PlayResY: 1080
+
+            [V4+ Styles]
+            Format: Name, Fontname, Fontsize, VendorMeta
+            Style: Default,Arial,48,  first-style-opaque  
+            Style: Opening,Arial,54,  second-style-opaque  
+
+            [Events]
+            Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text, VendorID
+            Dialogue: 0,0:00:01.00,0:00:03.00,Default,Actor,0,0,0,,  {\pos(120,240)}Original, line  ,  custom-001  
+            Dialogue: 2,0:00:06.00,0:00:07.00,Default,Other,0,0,0,,  Untouched sibling  ,  custom-002  
+            ; preserve this opaque event line
+
+            [Vendor Extension]
+            Exact: must-survive
+        """.trimIndent()
+        val baseline = AssCodec.parse(originalAss)
+        store.clear()
+        store.write(SubtitleProject(title = "reviewed-five-groups.ass"), baseline, AssTextEncoding.UTF8)
+        val reviewedVm = EditorViewModel(application)
+        reviewedVm.restoreRecovery()
+        val before = reviewedVm.state.value.document
+        val target = before.events.first()
+        val sessionId = reviewedVm.state.value.workspaceSessionId
+        val receipt = EventEditReviewReceipt(
+            eventId = target.id,
+            text = RawEventDraftBuffer(target.text, "  {\\pos(280,160)}Edited, visible  "),
+            timing = EventTimingDraftBuffer(
+                EventTimingCanonical.from(target),
+                EventTimingValues("1500", "5500"),
+            ),
+            metadata = EventMetadataDraftBuffer(
+                EventMetadataValues.from(target),
+                EventMetadataValues("4", "Reviewed Actor", true),
+            ),
+            style = RawEventDraftBuffer(target.style, "Opening"),
+            margins = EventMarginDraftBuffer(
+                EventMarginValues.from(target),
+                EventMarginValues("15", "0", "28"),
+            ),
+        )
+        assertEquals(5, receipt.changedGroupCount)
+        assertTrue(reviewedVm.applyEventEditReview(receipt, sessionId))
+        val committed = reviewedVm.state.value.document
+        assertTrue(reviewedVm.state.value.dirty)
+        assertEquals(before.events[1], committed.events[1])
+        reviewedVm.undo()
+        assertEquals(before, reviewedVm.state.value.document)
+        reviewedVm.redo()
+        assertEquals(committed, reviewedVm.state.value.document)
+
+        val targetUri = providerUri("reviewed-five-groups.ass")
+        seedTarget(targetUri, ByteArray(0))
+        assertTrue(reviewedVm.saveTo(targetUri))
+        assertFalse(reviewedVm.state.value.dirty)
+        assertTrue(reviewedVm.state.value.status.contains("回读验证"))
+        val savedBytes = application.contentResolver.openInputStream(targetUri)!!.use { it.readBytes() }
+        val decoded = AssTextDecoder.decode(savedBytes)
+        val reopened = AssCodec.parse(decoded.text)
+        val changed = reopened.events.first()
+        assertEquals("  {\\pos(280,160)}Edited, visible  ", changed.text)
+        assertEquals(1500L, changed.start.millis)
+        assertEquals(5500L, changed.end.millis)
+        assertEquals("Opening", changed.style)
+        assertEquals("Reviewed Actor", changed.name)
+        assertEquals(4, changed.layer)
+        assertTrue(changed.comment)
+        assertEquals(15, changed.marginL)
+        assertEquals(0, changed.marginR)
+        assertEquals(28, changed.marginV)
+        assertEquals("  custom-001  ", changed.extraFields["vendorid"])
+        assertEquals(before.events[1], reopened.events[1])
+        assertEquals(before.styles, reopened.styles)
+        assertEquals(before.unknownSections.map { it.name }, reopened.unknownSections.map { it.name })
+        assertTrue(decoded.text.contains("Exact: must-survive"))
+        assertTrue(decoded.text.contains("; preserve this opaque event line"))
+        assertTrue(AssRoundTripVerifier.verify(committed, decoded.text).equivalent)
+    }
+
+
+    @Test
+    fun verifiedOlderSaveDoesNotClearNewerEditsOrClaimCurrentDocumentSaved() {
+        viewModel.updateEventText(1L, "Snapshot being saved")
+        val savedRevision = viewModel.state.value.documentRevision
+        val uri = providerUri("stale-save.ass")
+        seedTarget(uri, ByteArray(0))
+
+        // The production save writes the captured snapshot and then reopens
+        // ContentResolver for verification. Publish another edit in that gap:
+        // saved bytes are valid, but the current editor document is newer.
+        var injected = false
+        SafeSaveTestProvider.beforeSecondRead = {
+            injected = true
+            viewModel.updateEventText(1L, "Newer unsaved editor revision")
+        }
+        assertTrue(viewModel.saveTo(uri))
+        assertTrue("The provider must exercise the mid-save edit", injected)
+        assertTrue(viewModel.state.value.documentRevision > savedRevision)
+        assertEquals("Newer unsaved editor revision", viewModel.state.value.document.events.single().text)
+        assertTrue("A verified older file cannot clear newer edits", viewModel.state.value.dirty)
+        assertTrue(viewModel.state.value.status.contains("当前修改仍未保存"))
+        assertEquals(uri.toString(), viewModel.state.value.project.subtitleUri)
+
+        val saved = application.contentResolver.openInputStream(uri)!!.use { bytes ->
+            AssCodec.parse(AssTextDecoder.decode(bytes.readBytes()).text)
+        }
+        assertEquals("Snapshot being saved", saved.events.single().text)
+        assertFalse("Saved bytes must not accidentally contain an uncommitted later edit",
+            saved.events.single().text == viewModel.state.value.document.events.single().text)
+    }
+
+
+    @Test
+    fun saveCompletionFromPreviousWorkspaceCannotReplaceNewProjectDestination() {
+        viewModel.updateEventText(1L, "Old project's save snapshot")
+        val oldSession = viewModel.state.value.workspaceSessionId
+        val uri = providerUri("old-project-completed-late.ass")
+        seedTarget(uri, ByteArray(0))
+        var injected = false
+        SafeSaveTestProvider.beforeSecondRead = {
+            injected = true
+            viewModel.newSubtitleProject()
+        }
+
+        assertTrue(viewModel.saveTo(uri))
+        assertTrue(injected)
+        val current = viewModel.state.value
+        assertTrue(current.workspaceSessionId != oldSession)
+        assertEquals("Untitled.ass", current.project.title)
+        assertEquals(null, current.project.subtitleUri)
+        assertTrue(current.document.events.isEmpty())
+        assertFalse(current.dirty)
+        assertTrue(current.status.contains("已新建空白 ASS"))
+
+        val bytes = application.contentResolver.openInputStream(uri)!!.use { it.readBytes() }
+        assertEquals("Old project's save snapshot",
+            AssCodec.parse(AssTextDecoder.decode(bytes).text).events.single().text)
     }
 
     private fun providerUri(name: String, corruptSecondRead: Boolean = false): Uri =

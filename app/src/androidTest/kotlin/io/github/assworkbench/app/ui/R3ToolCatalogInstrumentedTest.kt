@@ -3,6 +3,7 @@ package io.github.assworkbench.app.ui
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
@@ -35,6 +36,27 @@ class R3ToolCatalogInstrumentedTest {
         composeRule.runOnIdle {
             assertEquals(listOf(WorkbenchTool.POSITION), selected)
         }
+    }
+
+    @Test fun filteredCatalogExposesLateGroupHitAndRealEmptyState() {
+        composeRule.setContent {
+            MaterialTheme {
+                R3ToolCatalogDialog(onDismiss = {}, onOpenTool = {})
+            }
+        }
+        // BATCH is in the seventh group. Empty groups must not take the
+        // first four columns or push a unique match below the viewport.
+        composeRule.onNodeWithTag("r3-tool-search").performTextReplacement("BATCH")
+        composeRule.onNodeWithTag("r3-tool-BATCH")
+            .performScrollTo().assertIsDisplayed()
+        assertEquals(0, composeRule.onAllNodesWithTag("r3-tool-POSITION")
+            .fetchSemanticsNodes(atLeastOneRootRequired = false).size)
+
+        composeRule.onNodeWithTag("r3-tool-search")
+            .performTextReplacement("no-such-tool-in-the-directory")
+        composeRule.onNodeWithTag("r3-tool-empty").assertIsDisplayed()
+        assertEquals(0, composeRule.onAllNodesWithTag("r3-tool-BATCH")
+            .fetchSemanticsNodes(atLeastOneRootRequired = false).size)
     }
 
     @Test fun directoryIsCurrentWorkspaceNotRecursiveNewEditor() {

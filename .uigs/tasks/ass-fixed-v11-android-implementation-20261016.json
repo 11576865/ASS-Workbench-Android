@@ -1,0 +1,341 @@
+{
+  "id": "ass-fixed-v11-android-implementation-20261016",
+  "goal": "Implement the frozen FIXED Tablet V1.1 design as native Compose UI, progressively, preserving existing business model/drafts and leaving SPATIAL UI outside this scope.",
+  "status": "Previous exact head 05819729 source/JVM SUCCESS, Android connected 191/6 FAILED and both FIXED native PNG gates failed; productive geometry PositionPane bounded eager form repair committed, exact-head compile/device validation pending.",
+  "design_basis": {
+    "figma_file": "https://www.figma.com/design/5yNY5dMnmpmaOnYxDlEhY5",
+    "fixed_page": "85:2",
+    "main_screen": "85:3",
+    "timing_screen": "85:390",
+    "compact_screen": "85:942",
+    "drawer_screen": "85:1237"
+  },
+  "branch": "feat/fixed-v11-event-grid-20261016",
+  "base_branch": "feat/r3-fixed-visual-layout-20261014",
+  "base_pr": 148,
+  "pull_request": "https://github.com/11576865/ASS-Workbench-Android/pull/149",
+  "current_bounded_work_unit": "2026-10-26: remove PositionPane's per-item LazyColumn disposal hazard for actively edited geometry numeric controls under IME viewport changes. Use bounded eager verticalScroll for the active section with stable compositional keys and preserve all preview/commit semantics.",
+  "completed_units": [
+    "Created implementation branch from existing R3 visual-layout work to avoid duplicating video/timeline infrastructure.",
+    "Created FixedV11EventGrid.kt as real Material3 Compose UI with index/start/end/Style/text/QC.",
+    "Wired grid only for the existing wide r3Chrome route within EventWorkspace, preserving event identity, onClick, long-click, filter ordering and ListState.",
+    "Added Compose instrumented tests for grid fields and delegated tap/long press.",
+    "Created draft stacked pull request #149 against existing R3 branch, keeping main and SPATIAL code unchanged.",
+    "Added FixedV11WorkspaceTabs.kt: presentation-only tabs for subtitle authoring vs professional timing without switching WorkbenchTool, Focus, Selection or Binding.",
+    "Extended R3FixedLayoutPolicy with timingPriority (default false): preserve video and user preview preference, allocate >=66% of remaining wide pane to existing ModernTimelinePane when precise timing selected.",
+    "Wired tab state per workspace session into FixedWorkspace and read-only timing context above the unchanged movableInspector; no duplicate media clock or event write target.",
+    "Added JVM geometry tests and Compose instrumented tab/sibling-draft and missing-binding tests (committed, execution pending).",
+    "Added FixedV11CompactEventDrawer.kt with accessible open/close controls, a finite-height table container, summary counts, and no additional Event selection or draft store.",
+    "Converted DUAL_PANE to FIXED V1.1 drawer + real WorkbenchPreview + ModernTimelinePane + existing movableInspector; the wide THREE_PANE and narrow COMPACT fallbacks are preserved.",
+    "Enabled the same FixedV11EventGridHeader/Row for tablet drawer while preserving EventWorkspace's listState, event-id keys, focus and range-selection callbacks.",
+    "Closing the drawer on a focused Event and keeping it open for multi-selection are expressed through existing EventWorkspace callback paths.",
+    "Added FixedV11CompactDrawerPolicy to keep an open tablet drawer mounted when IME pressure switches the default adaptive profile to COMPACT, and added JVM tests for keyboard, closure, phone and wide-host behavior.",
+    "Added Compose instrumented tests for event-table presentation, open/close, long-press selection, callback focus and sibling draft continuity; runtime tests remain pending.",
+    "Analyzed repository .github/workflows/android.yml and emulator.yml: both are auto-triggered only for main pushes/PRs targeting main, so stacked PR #149 receives no automatic runs from those workflows.",
+    "Added .github/workflows/fixed-v11-validation.yml scoped to pushes on feat/fixed-v11-event-grid-20261016 and workflow_dispatch; Java 21, SDK 36, Gradle 9.7.1, Kotlin/debugAndroidTest compilation plus JVM unit tests; no uploaded APK artifacts.",
+    "Read one exact-head status result for 0c4b62980b3f305defefe967295587ed77936a09: zero PR-triggered runs and no combined statuses. Connector does not prove whether branch-push workflow actually ran.",
+    "Updated .github/workflows/fixed-v11-validation.yml to add pull_request.branches: [feat/r3-fixed-visual-layout-20261014] while retaining scoped push trigger. This makes the checks eligible to appear directly on stacked PR #149.",
+    "Performed one immediate PR-triggered workflow/combined-status read at 1f6486c32df2c64b15df73ba0e0301545928eac1; both returned no runs/status entries yet; execution cannot be inferred.",
+    "Obtained actual pull_request-triggered FIXED V1.1 validation run 38885202379 (conclusion failure) on prior head b61de8748872043c9700698df93c127d09ef0f0d.",
+    "Read job 116921246085 logs: only two Kotlin errors at ModernEditorScreen.kt:1351:41 and :1366:51, outer BoxWithConstraints.maxHeight inaccessible via implicit receiver in nested layout lambdas; JVM tests skipped.",
+    "Applied bounded repair in commit 324b50d7e2d34448be065e1aabd2f80aa379d420: capture val availableHeightDp = maxHeight.value before nesting and use it for media cap and compact timeline mode; no behavior/state ownership change.",
+    "Per AGENTS.md, did not poll the repair generation's CI in this work unit.",
+    "Read authoritative post-repair exact-head PR CI #38888581101, completed failure. Compile Android/debugAndroidTest source step SUCCESS, confirming previous maxHeight receiver issue is repaired.",
+    "Read job 116932661298 logs: app:testDebugUnitTest ran 261 tests with one failure, R3WriteSourceDetailsTest.styleResetRetainsTruthfulEventStyleBaseline at line 65 assertNotNull; unit test suite incomplete. Core module tests ran in same job but full-suite success cannot be claimed.",
+    "Root cause: two physical Kotlin backslash escapes were doubled in the test's ASS style-reset fixture: {\\\\\\\\rAlternate} and {\\\\\\\\rAlternate\\\\\\\\fs52} yielded double literal ASS slashes at runtime, invalid source attribution. Scoped test-only fix ca71cbb007ed0af60d7d6b212d4d2da3cc4bb447 replaces three over-escaped tag spellings with normal Kotlin \\\\r / \\\\fs; production parser and assertion unchanged.",
+    "Validated repair checkpoint b192b61a7499183d84c80e5111bd00cbb944768f via FIXED V1.1 Branch Validation run #38892406947: completed SUCCESS, Android Kotlin + AndroidTest source compilation and core/app JVM suites all passed.",
+    "Read job 116945207872 step conclusions: compilation and JVM tests both successful. This proves source+JVM for that exact tested head, not Android emulator behavior or 1440/1024 screenshot acceptance.",
+    "Reviewed existing .github/workflows/emulator.yml and tools/run_emulator_regression.sh; existing emulator runs full Android connected test suite, dedicated R3 visual capture at 1600×960, and evidence extraction; 1440×900 and 1024×768 parity are NOT provided by that existing capture.",
+    "Updated only feature-branch .github/workflows/emulator.yml to add pull_request target feat/r3-fixed-visual-layout-20261014, preserving main trigger and existing native emulator test steps. Change committed fa757ce455fc3dfbf14f9de83c571c814276de24.",
+    "Exact-head branch CI #38906758860 PASS at checkpoint a79e8c20ea112cf8c2f3ed9f9c9f1b192be31ab0.",
+    "Android Emulator Regression #38906758867 completed FAILURE at same exact head. App/test APK prebuild, x86_64 MKV fixture, emulator boot and native R3 reference capture succeeded. Capture validated SHA-256 26ee6884ae28449e661121bcf9cf3fad711a06a4198e348a4bdf2c62be5f7d7c at 1600x960 (not exact V1.1 acceptance size). Four projection test families passed; full connected suite 171 tests, 7 failed, 0 errors, 0 skipped.",
+    "Two failures in newly authored V1.1 tests: FixedV11EventGridInstrumentedTest had assertIsDisplayed() on a structural group Row; FixedV11WorkspaceTabsInstrumentedTest used assertTextContains with an expected partial PTS while rendered full PTS string was present. Captured semantics showed text: '媒体 PTS 80800 ms · 时间轴与视频共享时钟'.",
+    "Commit 14c7f4ca6d8f79891f546624d0b1e4755e5765eb: assert structural group exists and preserve/strengthen individually rendered Event number, time, Style, text visibility assertions (no production UI changes).",
+    "Commit a29a42ce1bc779837d835881688eb2c7e3f81ce9: assert exactly the full visible media PTS read-only label (no production code changes).",
+    "Other five regression failures remain live, NOT suppressed or described as resolved: EditorRegression inspector draft survive tool switch/rotation 5s timeout; spatial unpin '取消驻留' not displayed; BATCH task entry 'tool-BATCH' absent in two workflows; POSITION task entry 'tool-POSITION' absent in tool-instance visual capture. Their ownership/cause still requires comparison against parent R3 before targeted repair. No SPATIAL production edits in this unit.",
+    "Read CI at c46d721e018c46d076444972fb068b4ad21abb98: FIXED source/JVM run #38928965389 FAILURE; emulator run #38928965421 FAILURE before emulator startup, both due to :app:compileDebugAndroidTestKotlin (Unresolved reference 'assertExists' at FixedV11EventGridInstrumentedTest.kt:6:33). This is a shared prebuild failure, not a new runtime regression.",
+    "One bounded test-only source correction committed 139afdfadd3c81d2bff6566f074d2fcd999bf9f4: removed incorrect top-level import androidx.compose.ui.test.assertExists, preserving tagged unmerged group.assertExists() and visible Event-field assertions. No production UI or SPATIAL changes.",
+    "Source CI #38930055526 SUCCESS at checkpoint 90633f8a; Android Kotlin, AndroidTest Kotlin and JVM steps passed.",
+    "Emulator #38930055528 FAILURE on same head: native R3 1600x960 capture and four projection test families passed, full instrumented suite 171 tests/4 failures.",
+    "Four current failures: FIXED grid visible-text tag not displayed; inspector draft-rotation test times out in hideKeyboard() before re-opening navigation; batchDraftAndReviewedPreviewFollowSameInstanceAcrossMainAndCanvas cannot locate tool-BATCH; spatialWorkspaceExposesBoardAndNativeEditorWithoutMovingWorldNodes cannot display 取消驻留.",
+    "Production FIXED V1.1 row's text/QC child Row had no fillMaxWidth, allowing weighted Text to measure zero width. Added Modifier.fillMaxWidth() in fix commit 18f09bf3dbbf285028248dd6061a17eb847bfcce, without altering any strict assertions or state owners. New exact-head compile and emulator effects unverified.",
+    "Recovered actual PR #149 head 8d91fc36840ec5dadc35594ec6fc06cf729baebc and its R3 base 822a668bb0a0312ac16a4ae73339c489f157557e using get_pr_info; parent #148 still draft.",
+    "Read exact-head FIXED V1.1 Branch Validation #38998011682: success. Android Emulator Regression #38998011161: failure; emulator editor-regression job 117294784756 failed, evidence job succeeded, R3 native PNG capture remained valid SHA256 26ee6884ae28449e661121bcf9cf3fad711a06a4198e348a4bdf2c62be5f7d7c.",
+    "Emulator #38998011161 full 171 instrumented tests: 5 failures: batchDraftAndReviewedPreviewFollowSameInstanceAcrossMainAndCanvas (tool-BATCH missing); inspectorDraftSurvivesToolSwitchAndRotation (hideKeyboard wait timeout at EditorRegressionInstrumentedTest.kt:2027); spatialWorkspaceExposesBoardAndNativeEditorWithoutMovingWorldNodes (取消驻留 not visible); transformFieldsProjectExternalPreviewAndRestoreDrafts (SetText target geometry-shear-x-1-value left semantics tree); FixedV11EventGridInstrumentedTest.wideGridExposesEventTimesStyleAndTextWithoutAddingEditorState (body node not displayed). All five remain real failures until externally re-run.",
+    "Repaired only the FIXED subtitle grid text layout: commit b6c727affef36b3b9116eada9ad506c580062f31 reserves min height; for no-QC event rows uses direct fillMaxWidth instead of weighted Text while still reserving weight when a QC button exists.",
+    "Modified FIXED V1.1 instrumented fixture in d58dd0c63d66a3ba30ac06ca331992165d33b749 to set finite fillMaxWidth Column and verify actual body Text via unmerged semantics, retaining assertIsDisplayed on tagged body and visible Chinese subtitle content. No tests disabled or success claimed.",
+    "No production changes outside FixedV11EventGrid.kt and no SPATIAL host edits. Post-patch CI deliberately not polled in this same bounded repair generation per AGENTS.md.",
+    "Read exact-head 753e5f34 Android Emulator Regression #39020954103: 171 instrumentation tests, 6 failures, 0 skipped; sibling FIXED V1.1 Branch Validation #39020954114 SUCCESS. Three old openTool() failures used obsolete tool-* selectors while expanded R3 catalog publishes r3-tool-* tags; other failures concern inspector IME, spatial unpin and geometry shear field lifecycle.",
+    "Commit fd73fa2c: filter out nonmatching R3 catalog groups before four-column chunking, so late-group matching tools are first-row composed/reachable; report explicit r3-tool-empty state when nothing matches. Keeps original 18 Tool identities and callbacks.",
+    "Commit 048005e7: update shared Android editor-regression openTool helper to detect the actual expanded R3 catalog, search using r3-tool-search and select r3-tool-<ID>; retain original shared-directory routing for compact FIXED and spatial-add-tool routing for SPATIAL.",
+    "Commit e4a779bf: add Android Compose regression that BATCH (seventh group) is visible after filtering, that nonmatching Position tool is absent, and that an unmatched search displays an explicit empty state. All new tests require a new emulator run; no test skipped or muted.",
+    "Read PR #149 exact-head b4abfff89ffc8e70cc3f9d7d771f3f48cde92735 workflow receipts: FIXED V1.1 Branch Validation #39723880966 SUCCESS; Android Emulator Regression #39723880969 FAILED. R3 strict capture had accessibility root <none>, target decor visible but unfocused; complete suite then timed out with NO XML RESULTS and multiple NoMatchingRootException when hideKeyboard assumed a focused Espresso window. This run cannot be counted as 171/6 or as evidence that new catalog tests passed or failed.",
+    "Commit 677f504f: in EditorRegressionInstrumentedTest.hideKeyboard, retain the focused-window Espresso IME-close path, but if it raises NoMatchingRootException accept no-op only when actual Activity insets explicitly report IME not visible. Null/visible IME or other failures remain hard errors; no test is disabled.",
+    "Commit 9308195b: UigsVisualCaptureInstrumentedTest waits up to five seconds for real foreground ownership to settle after rotation/ActivityScenario, then independently rechecks the existing fail-closed target-package/decor-focus screenshot identity contract. It does not accept launcher/system-overlay pixels.",
+    "At exact pre-fix head bb0e2ce3602d38fbcc8ef7de328c6cad9b0cb436, FIXED V1.1 Branch Validation #39877625041 completed SUCCESS; Emulator Regression #39877625021 completed FAILURE, but strict R3 1600x960 capture was valid (PNG sha256 3a7052ced06f34a703c72b6c433afae27291a7851207299e99ca499a6ce73306, size 145274) and full suite reported 172 tests / 5 failures / 0 errors / 0 skipped. Prior missing-foreground/no-XML blocker no longer masks complete suite evidence.",
+    "Five exact-head emulator failures: inspectorDraftSurvivesToolSwitchAndRotation (hideKeyboard wait stale IME window state); spatialWorkspaceExposesBoardAndNativeEditorWithoutMovingWorldNodes (取消驻留 accessibility not displayed); batchActionsRemainAboveVisibleKeyboardAcrossMainAndCanvas (batch input view focus assertion); transformFieldsProjectExternalPreviewAndRestoreDrafts (geometry-scale-x field semantics node disposed during performTextReplacement); invalidEventFieldsExplainErrorsAndCannotCommitAcrossHosts (spatial openTool helper could not find tool-EVENT after hiding search keyboard). These are distinct from the earlier fake missing BATCH/EVENT/EFFECTS on R3 FIXED search.",
+    "Single bounded commit 5be6bc45: editor-regression openTool SPATIAL branch now selects a visible filtered tool result while the directory search IME is still active; does not invoke closeSoftKeyboard before clicking. This retains the actual on-screen command and strict visibility assertion. Product FIXED/SPATIAL UI, domain state and write transactions were not changed. The proposed cause (IME close dismissing dialog) is source-grounded hypothesis, not proven resolved until exact-head emulator run.",
+    "Resumed exact head 5fd22c29ad2d2eb02bbddfcac18f8488a5082fa6. FIXED V1.1 Branch Validation #39892238463 completed SUCCESS. Android Emulator Regression #39892238452 was in_progress at the one permitted status audit; job 120214741253 completed exact-head APK prebuild and was running the editor regression suite. No new instrumentation pass/fail count or screenshot result was available; previous 172/5 receipt is historical only.",
+    "Implemented Figma 85:21 four tabs using theme tokens, selected surface plus 3dp underline, scrollable 48dp hit targets and Role.Tab selection. Added GEOMETRY/EFFECTS scene keys, routing through existing WorkbenchTask.toolFor and selectTool; reselect retains POSITION/VECTOR_CLIP/KARAOKE specialists. Original subtitle/timing layout-only behavior remains for non-specialist tools. External specialist commands project matching tab. Header reports real resolved/pinned/selection binding, including missing pinned target. Added four JVM routing tests and one Compose selection/reachability/context test; NOT executed locally because Gradle/Android toolchain is unavailable. git diff --check and Actions artifact policy passed. Read-only Figma design-context 85:21 used; no static image assets in this component.",
+    "Audited prior exact head 1f38dec: source/JVM #39895419325 SUCCESS; emulator #39895419351 FAILURE. Four focused projection groups completed (9+3+7+3 tests, zero failures); R3 strict capture failed R3_NATIVE_SCREEN_OCCLUDED with active accessibility package android and target decorFocused=false. Full suite reached 20m timeout, last ANR reason Application does not have a focused window, XML empty/unreadable. No complete suite count, valid R3 image or new tab-interaction pass can be inferred.",
+    "Added FixedV11TextDock in the wide SUBTITLE_EDIT/TEXT scene below the existing timeline. Extracted EventRawTextEditor from InlineEventEditor and reuse it at both locations with the same project-session draft store and instance ID. Right inspector suppresses its Raw field only while the dock is mounted; timing and metadata remain there. movableContentOf now takes explicit docking presentation flag, retaining one inspector identity across adaptive relocation. Layout reserves a bounded dock before budgeting video/timeline; hidden video preference remains honored. Added two geometry regressions and one real ViewModel/shared-draft Compose remount test; Android tests not executed locally (no Gradle).",
+    "Read exact-head 1985cd2 validation: source/JVM #39908199838 SUCCESS; Android emulator #39908199829 FAILURE. App/test APK prebuild succeeded. Log APIs for editor job 120264897973 and evidence job 120272939098 returned no usable logs/internal error; failure root cause, exact test counts and new dock-runtime outcome remain unknown. Do not classify this failure as the previous focus/timeout incident without new evidence.",
+    "Added FixedV11InspectorTabs following Figma 85:337 tab strip (Event/Style/Position, selected underline, Role.Tab) and real existing tool commands. TEXT maps visually to Event; Vector Clip maps to Position; unrelated tools do not get a false selected inspector tab. Cross-tool commands require FollowFocus plus an existing resolved Event matching current Focus. Pinned/selection/missing-target states disable the tabs and display a reason. Wide Event metadata now retains central Raw editing with the same shared primary draft; timing controls are also available alongside metadata only while docked. Compact/SPATIAL Event panel behavior is unchanged. Two JVM and two Compose regression sources added, execution pending; local diff/artifact-policy checks passed.",
+    "PR source head 38f0ebf: source/JVM validation #39934215521 SUCCESS. Emulator #39934215567 completed FAILURE; compact evidence job 120358851195 reports merge SHA 6b02617c7a67d7fca32a9fdbe491bcf4d0fec9b4 (38f0ebf into R3 base 822a668b). Four focused projection attempts passed 9+3+7+3 cases. Full attempt has 176 tests / 6 failures / 0 errors / 0 skipped, not the previous 172/5 or a timeout with unreadable XML.",
+    "Six full-suite failures: inspectorDraftSurvivesToolSwitchAndRotation (hideKeyboard 5s timeout); spatialWorkspaceExposesBoardAndNativeEditorWithoutMovingWorldNodes (unpin content description not displayed); spatialWorkspaceLongPressDragExtractsRotationWithoutEditingAss and spatialWorkspaceLongPressDragExtractsScaleWithoutEditingAss (tool-POSITION absent in verifySpatialParameterExtraction at old directory-selection sequence); batchActionsRemainAboveVisibleKeyboardAcrossMainAndCanvas (Preview must stay above IME); transformFieldsProjectExternalPreviewAndRestoreDrafts (geometry-shear-x-1-value node disposed during SetText). No failure is dismissed.",
+    "Consolidated only verifySpatialParameterExtraction navigation into existing openTool(\"POSITION\"), which chooses the filtered spatial result while its search IME remains open. Removed the duplicate path that closed search IME before selecting tool-POSITION. Original wait for actual POSITION host, extraction gesture, independent parameter projection, canonical document and Undo assertions remain unchanged. This is a harness correction hypothesis pending new emulator execution; no production UI or ASS write behavior changed. Local diff whitespace/artifact-policy checks passed.",
+    "User rejected fragmentary delivery (all small fixes). This work unit explicitly batches the whole FIXED page presentation and evidence pipeline rather than presenting each control as a milestone. Existing 18 tools, session draft stores, movable inspector, renderer and domain writers remain the execution owners.",
+    "Integrated page source: FixedV11LayoutPolicy uses Figma 1440 baseline (56 rail, 309 Event grid, 326 inspector, remaining center) and finite video/timeline/Raw budgets. FixedV11TaskRail arranges actual subtitle/text/timing/style/position/effects/resource/directory commands vertically; specialist menu, preview-density and independent SPATIAL switch stay in a compact command strip. IME/short windows retain original task bar. Four scene tabs extend to >=720dp. Central Raw dock distinguishes actual saved text from shared dirty draft. Wide Event timing fields become vertical; compact and SPATIAL fields retain prior layout. Wide and dual-pane inspectors show real saved-document QC counts and frozen-receipt Raw review; commit rechecks session, latest canonical text and exact draft text. No fake bilingual fields or mock video introduced.",
+    "Added dedicated strict native capture entry at 1440x900 and 1024x768, invoked before direct-capture APK uninstall; wait for orientation/width and hidden IME, assert actual production surfaces, reject wrong foreground ownership, then require positive one-test instrumentation receipt and exact-size CRC/zlib-validated PNG. Legacy 1600x960 R3, projection regressions and full suite remain separate mandatory gates. Compact evidence extractor now includes exact-size capture receipts. Capture fixtures remain two Event debug scenes with renderer disabled, not real-media acceptance.",
+    "Integrated page 020e207 source/JVM CI 39956067332 SUCCESS. Emulator 39956067357 strict native gates validated 1440x900 SHA256 2f8be9e6b8abce36284927958a2e009c6fb4a7c4f40ce3f1ca30852711e9e472 and 1024x768 SHA256 1e3460a7a2c9c49af7d8e56871f08423ce4fd61ae317fcadfe45347d591e89ad. Four projection groups 22 tests passed; full suite 179 tests/4 failures/0 errors/0 skipped. Screenshot bytes not retrieved due full job log connector errors, so visual parity remains unassessed.",
+    "Added separate per-size native screenshot evidence jobs with full PNG envelope, runner-owned run-as bytes (not lossy Android logcat), original gate receipt, hash, CRC, decoded size, bounded transport, and source run/tested/head SHA metadata. Seven Python defensive tests passed. Test driver now selects compact catalog result before hiding search IME, matching existing spatial/capture driver; rotation test reuses already-open navigation instead of requesting a second host transition. Android execution pending; no failure considered fixed yet.",
+    "Read completed source 39ffe1a3 receipts: source/JVM 39971371387 SUCCESS; emulator 39971371534 FAILURE. R3+1440x900+1024x768 captures rejected external android foreground/unfocused target. Last-ANR recorded launcher input dispatch timeout before capture. Four projection groups 22 passed. Full-suite timed out with empty XML; no current full-suite count inferred. Bounded visual jobs correctly rejected missing capture envelopes.",
+    "Read high-fidelity Figma context and screenshot 85:337. Added shared-draft FixedV11EventPropertyForm for docked wide TEXT/EVENT, retained original timing/metadata commits and EVENT structural actions; Style name is explicitly an Event reference and missing references are disclosed. Added saved Raw primary-color source evidence using existing effective inspector, without inventing bilingual data. Added two instrumented cases (execution pending); improved real binding heading and QC count hierarchy. Existing 35 Python checks and artifact/diff checks passed; Android SDK/Gradle unavailable locally.",
+    "Source 89f69e97 source/JVM 40016179211 SUCCESS. Emulator 40016179217: focused projections22 passed; full181/6/0errors/0skips. Native visual jobs120638956190/120638956101 succeeded. Recovered exact complete1440x900(143771bytes,sha7f244ee4e7176b6af5d74eb1d3d69299f7e012374b87907908f4581388e07f6c) and1024x768(92442bytes,shafff425c5ce4efffb1901eca6b0486a5daf2a65eddd220e2ac4ef31c2b77a6a49), independently verified full PNG and visually inspected against Figma85:3/85:942. First actual dual-size native visual audit; no pixel-parity or real-media pass claimed.",
+    "Implemented one structural layout correction package from actual images: commands share four-tab row; compact drawer command moves to tabs; 1024 gets existing56dp rail, finite~310dp inspector and same central Raw dock/target/store; duplicated inner inspector scope/title/close removed only for docked mode. Existing compact/IME fallback, tool identities, movable inspector and write commands retained. Added JVMgeometry and Androidcallback case, strengthened capture geometry assertions. Static reviewer host-marker finding repaired. New Android execution pending; 35Pythonchecks passed.",
+    "Read source994dd94a receipts: source/JVM40058804721 SUCCESS; emulator40058804716 full182/4fail/0errors/0skips, projection22 pass. Both exact-size PNG gates/visual evidence jobs succeeded. Remaining failure names: rotation stale Event row, spatial resident pin, transform field disposal, capture-driver scroll on taskbar. Not a full regression pass.",
+    "Implemented EventEditReviewReceipt frozen3-group proposal and ViewModel single-history write with explicit Event/session checks and no focus retargeting; current inspector review now displays before/after and guards changed proposals, keeps shared draft stores, acknowledges committed values. Added6domain and2realVM/Compose tests and adapted priorRawconflictfixture. Test-first source authored; no localGradle/Kotlin/Android available, so execution/red-green unverified. Static review no blocking business issue; domain imports aligned to existingkotlin.test. Existing35Python checks/policy/diff passed. Repaired capture helper to scroll only actual rail and still assert display/click.",
+    "Validated sourcee29bc603: source/JVM40061239628 SUCCESS; emulator40061239623 full184/3fail/0errors/0skips, projections22 pass, both tablet PNG/evidence jobs success. Unified review tests not in failed list; previous non-scrollable capture-driver failure absent. Remaining failures rotation IME, spatial pin, transform field lifecycle; not a full regression pass.",
+    "Implemented staged existing-Style picker in docked Event inspector, separate session-saveable Style draft store using existing string-buffer mechanics, same owner normalization and all-owner canonical reconciliation/instance cleanup. Fourth immutable review group checks Style existence and canonical reference before/inside VM write, preserves Raw overrides and Style definitions. Dirty Style survives restore; explicit reset only discards Style proposal. Added3domaincases, expanded4-groupVM Undo/Redo, missing-Style rejection/store restore and dropdown/reset cases; legacy providers updated. Static review no blocking issue,35Pythonchecks/policy/diff passed; new Kotlin/Android execution Pending.",
+    "Source 63377555 confirmed FIXED source/JVM CI #40074615505 SUCCESS; Android Emulator #40074615531 full 187 tests / 4 failures / 0 errors / 0 skipped; strict 1440x900 and 1024x768 evidence jobs success.",
+    "Repair source prepared: tag native WorkspaceToolDirectory LazyColumn and reset its LazyListState on filtered query; shared regression helpers scroll actual virtualized list before selecting tool-BATCH or other tool while search IME is active.",
+    "IME regression helper prepared to read current Activity insets after responsive host recreation, cross-check focused popup root on early hidden state and keep strict failure if IME remains visible/unknown.",
+    "Source audit identified AssCodec.parseStyles/parseEvents blindly trimming all field values, including literal subtitle Text and unknown vendor fields, causing irreversible import-time loss of leading/trailing payload spaces.",
+    "Commit 6e698c53 updates the field-map policy: recognized typed fields retain prior normalization, while Text and opaque Event/Style extension columns retain raw contents.",
+    "Commits 30cc5770 + dd1ffe1d add domain regressions for whitespace-only Text, inline tags, commas and custom columns, and a real parse -> five-group Event review -> write -> parse integrity test covering untouched Events/Styles/unknown sections. Semantic comparison intentionally ignores only incidental section-edge blank lines.",
+    "UIGS Foundry deduplicated and recorded source-confirmed defect (validation pending) at inbox/bugs/2026-10-24-ass-codec-text-and-opaque-field-trimming.md; no Canonical promotion.",
+    "Queried exact-head c00c27e2 GitHub Actions: FIXED V1.1 Branch Validation 40080008476 FAILURE and Android Emulator Regression 40080008481 FAILURE, both blocked at app:compileDebugAndroidTestKotlin before full suite execution; no ASS round-trip pass/fail evidence.",
+    "Read job 120831406804: EditorRegressionInstrumentedTest.kt:2058 Kotlin compilation error 'Check for instance is always true' at error !is ComposeTimeoutException inside catch(Exception). Fixed at 54489d43 by catch(Throwable) plus restrictive allowed-transition predicate; unknown/visible IME and unrelated errors still fail.",
+    "Added real Android save-path acceptance test in a457cb9f: load ASS with custom-format vendor columns/unknown section and sibling subtitle; five-group Event receipt through ViewModel apply and Undo/Redo; save to existing SafeSaveTestProvider via production saveTo/SafeSubtitleSave with content provider readback; reopen bytes and verify text whitespace, inline tags, timing, style, margins, metadata and untouched raw extension data. Test source submitted; execution pending.",
+    "Updated and deduplicated existing UIGS Foundry ASS codec data integrity Bug at fd9aa985: documented exact failing compile log and new Android integration evidence plan, without creating another Candidate or changing Canonical.",
+    "Read prior checkpoint 23ab5a1d exact-head GitHub Actions: FIXED source/JVM runs 40081217144 and 40081211397 SUCCESS; Emulator 40081217091 completed FAILURE with full suite 188 tests / 4 failures / 0 errors / 0 skipped. New five-group save-back/readback test not listed in failures. Native screenshot evidence jobs for 1440x900 and 1024x768 successful. Exact failure list rotation event-row vanished, SPATIAL resident pin not displayed, BATCH root IME focus lost, Transform geometry-shear-x node absent; do not claim suite green.",
+    "Source audit of EditorViewModel.saveTo found unguarded success callback: captured snapshot was saved, but clearPendingRecovery()+dirty=false could overwrite later edits or a newly opened project. Existing documentRevision and workspaceSessionId authority reused, no second revision store introduced.",
+    "Product patch f914c466: save completion checks snapshot session, revision, document and encoding. If still current, retain verified-save success; if newer same-session edits exist, keep dirty/recovery with explicit earlier-version status. Different project is not retargeted. Re-journal if a race appears between initial recovery clear and final state publication.",
+    "Debug-only SafeSaveTestProvider deterministic before-second-read hook 364b63c3, reset after each test; no production provider behavior changed.",
+    "Two Android integration tests: d3eaf141 simulates new edit after captured byte write and asserts older disk bytes/newer dirty editor; a66c8bcf switches workspaces at readback and asserts old completion leaves new project destination/state unchanged. Existing safe save/rollback tests retained; current exact-head Android compilation/execution pending.",
+    "UIGS-Foundry dedup checked experimental REL.GENERATION_SAFE_ASYNC_PUBLICATION and HSR stale-MKV writer. New source-specific ASS stale-save Bug saved at inbox/bugs/2026-10-24-ass-safe-save-stale-completion-dirty-state.md commit 61397d2b; no Canonical promotion.",
+    "Read exact prior branch SHA 184403cbc649c19926348d623477bd121fc0969a: FIXED V1.1 source/JVM run 40105502131 SUCCESS; Android emulator run 40105502278 FAILURE. Focused four projection groups each passed (9+3+7+3); instrumented main attempt 28 tests / 2 failures / 0 errors / 0 skipped, not a complete 188-test pass.",
+    "Read emulator evidence job 120909171303 and native job 120906320594: rotation inspectorDraftSurvivesToolSwitchAndRotation failed at EditorRegressionInstrumentedTest.kt:926: event-row-1 was present in earlier semantics but detached during performScrollTo() after tablet size/density reset. Second batchKaraokeRevealControlsStayPreviewOnlyUntilCommit appeared in failed list without explanatory exception body; do not infer cause.",
+    "Product patch 5037c4dddb924dda9d53df84ced96341bace24a6 assigns event-results-list semantics to owning real EventWorkspace LazyColumn, retaining list state, real event callbacks and tool data.",
+    "Test patch db4bd189a8d641ad1762c678f31ee7583bff5882 invokes performScrollToNode(hasTestTag(event-row-1)) on stable owning Event list and still verifies actual Event row displayed/clickable, Raw Event panel present and draft survives host rotation. No test disabled, no session/ASS mutation.",
+    "UIGS Foundry dedup found existing 2026-10-24 native Compose virtualized list/IME observation, appended this separate exact-head Event row case and candidate repair to it at 9765edafd9f2b49c013e1d0e18e33c23b864e6e4; Canonical unchanged.",
+    "Exact-head 8d1d77102ef04bd2409617c99ae6c7f1977907dd FIXED branch source/JVM 40115404478 SUCCESS; Android emulator 40115404368 FAILURE, projection suites 22/22 passed, main connected XML 63 tests/4 failures/0 errors/0 skipped; both strict tablet native PNG evidence jobs succeeded. Full project 188+ test pass not established.",
+    "Current four emulator failures: rotation draft inspector could not display fixed-tool-CAPABILITIES when openTool(EFFECTS) used the directory; SPATIAL pin action contentDescription 取消驻留 not displayed; Transform geometry-scale-x-1-value disposed during text replacement; independentDirectoryDismissalPreservesDirtyTextAndTaskContext reported failure without useful cause in compact evidence. Do not mark any resolved.",
+    "Read real FixedV11TaskRail source: 8 regular+global directory buttons were in same vertical scrolling Column; 64dp row height and 16dp gaps could push the full catalog outside shortened viewport. This is a source-grounded UX risk, not proven sole cause of rotation failure (compact top bar is another supported host).",
+    "Production change 8274fa3d0f55699b19b8e6a88a7765b7123bd734: separate scrollable seven regular shortcut controls from always-mounted bottom global directory control in tablet rail. Preserve original tool identity, active-selection semantics and callbacks.",
+    "Added FixedV11TaskRailInstrumentedTest at 29bda707555f7b5576928b1add140f0999bc1b73, import fix 6f7bb4f7fe73838f11f4a5a4f7d66554bf21dc46: constrained 56x340dp rail must expose clickable global directory and subtitle shortcut callbacks. Android execution pending.",
+    "Updated regression helper at ce46b8a23dc7d898c184feb0617377dce0028647 to exercise actual direct TEXT/EFFECTS task shortcuts for inspector draft switch scenarios, not an incidental full-catalog modal; other tool commands still traverse the true catalog and assert visibility. Existing rotation/draft and independent directory tests remain enabled.",
+    "UIGS Foundry dedup found relevant 2026-10-22 adaptive directory Candidate; appended short-rail pinned global discovery and exact validation boundary at be4972e6627bd65a7e1b35e737ef5deafb294a3f. No duplicate record, no Canonical promotion.",
+    "At head e7010ee93459a155a6dd6b5830635ae11b032e1d, FIXED V1.1 source/JVM workflow 40135667313 SUCCESS; emulator 40135667260 FAILURE, connected main attempt 191 tests / 26 failures / 0 errors / 0 skipped. Both 1440x900 and 1024x768 screenshot evidence jobs failed (expected complete R3 PNG found 0), not acceptable compositor evidence.",
+    "Parsed exact emulator evidence: 23 of 26 failed assertions state 'Semantic Node has no parent layout with a Scroll SemanticsAction', mostly from EditorRegressionInstrumentedTest.openTool at line 2110 after unconditional scroll on fixed-tool-CAPABILITIES, and one FixedV11PageChromeInstrumentedTest line 35. Remaining three: rotation returning to zero-height event-results-list, SPATIAL 取消驻留 invisible, transformTimingHandles effect-transform-range-0 not displayed. Do not claim them fixed.",
+    "Commits 544484d31a527b160961b9e0e35dbea68511cccb and cad07cb912245f4b9cfe65953257875481ff1230 correct the invalid scroll operation for globally pinned catalog; retain actual displayed/click and all tool selection, Event draft, and document checks. Searchable LazyColumn tool results and regular scrollable shortcuts keep appropriate scroll semantics.",
+    "Deduplicated UIGS Foundry existing adaptive directory Candidate, appended exact 191/26 root and correction at c73299840c9c81af33b30d576cf0d048ebf1e928, with precise 23/26 failure count; Canonical unchanged.",
+    "At exact head d5285374617bcc68e4c5c0bd08f80195731603ef, FIXED validation 40176279488 and 40176276209 FAILED at :app:compileDebugAndroidTestKotlin; emulator 40176279531 FAILED prebuild; this generation did NOT execute device tests or prove 23 previous invalid-scroll failures were resolved.",
+    "Read compile job 121117540901: FixedV11PageChromeInstrumentedTest.kt:36 unresolved reference assertIsDisplayed after prior test refactor. Added exact Compose test import at 6c04069ae01be0ee86a6bc9b8d7c732cce368b5b without removing assertion.",
+    "Analyzed prior run e7010ee9 / 40135667260 further: rotation return to Event list yielded owning event-results-list semantics bounds l=128,t=911,r=861,b=911 (zero height), despite two Event rows. Distinct from 23 global catalog invalid scroll action failures in same 191/26 receipt; prior parent LazyColumn tag did not alone make content actionable.",
+    "Production EventWorkspace source 578da44f4285af675ed9f6e423298c5664620b99: make LazyColumn within finite subtitle navigator Column explicitly Modifier.weight(1f) for all hosts (previously only R3; COMPACT used fillMaxSize), preserving exact row key/scroll state/edit routing. Device hypothesis, not declared resolved.",
+    "Regression f33ee69568580f9bf31cbb1a2601237cf5598565: rotation host recovery now asserts real event-results-list displayed and positive bounds height before existing performScrollToNode, row click, inspector draft/apply and session continuity assertions.",
+    "UIGS intake deduplicated existing 2026-10-24 Compose virtual list/IME responsive observation and appended run semantics plus candidate layout correction at 2de81edc8add256cd3fb4fce3858ffaa7082d4c5; no Canonical promotion.",
+    "At previous head ddcf1ac593fbd7e31402a47201b66b3d9bcacdaa, FIXED branch source/JVM 40190966030 SUCCESS; Android emulator 40190966056 FAILURE, full 191 tests / 5 failures / 0 errors / 0 skipped; former 23 invalid fixed catalog scroll assertions absent. Both 1024x768 and 1440x900 native screenshot evidence jobs FAILED (no complete R3 PNG), no visual signoff.",
+    "Five unresolved cases at ddcf1ac5: SPATIAL POSITION picker failed after a keyboard dismissal before result scroll, rotation inspector draft reentry event-results-list not displayed, resident pin 取消驻留 not displayed, transform exact range effect-transform-range-0 not displayed, geometry-scale-x-1-value detached during text input. These are independently tracked; no closure inferred.",
+    "SPATIAL POSITION instrumented regression c4cab9474b3d64f57dbf45b1e6dc9e727ff73159 keeps modal search IME alive and asks actual filtered tool-results-list LazyColumn to scroll to tool-POSITION before visibility+click; retains production editor/precision state assertions.",
+    "Production compact host repair c47d12f78bf87018e1db7e24dec6cbcfc5177519 gives fixed-content-flow a stable ScrollState and requests navigation toward the real bounded subtitle pane after layout's scroll maximum becomes positive when SUBTITLES mode is activated/reentered. The prior Event view positive-height/display/click/inspector draft test remains fully active. No changes to ASS session/document focus, drafts, or undo.",
+    "UIGS-Foundry intake deduplicated against existing native Compose virtualized list/IME rotation Observation. Recorded exact prior 191/5 and both failed PNG gates, production compact scroll candidate and SPATIAL POSITION test-driver correction at 97c5336bb17c80ed4d1ac8cf191c018f0e36d5d3; Canonical unchanged.",
+    "Read exact previous branch SHA 05819729879cb07cf28b3ce62dbb42598aeffa14: FIXED branch source/JVM 40221863427 SUCCESS; Android connected 40221863491 main XML 191 tests/6 failures/0 errors/0 skipped. Generic R3 native evidence checksum valid, both FIXED 1440x900 and 1024x768 native PNG gates FAILURE.",
+    "Exact six case failures: inspectorDraftSurvivesToolSwitchAndRotation (Event list not displayed); spatialWorkspaceExposesBoardAndNativeEditorWithoutMovingWorldNodes (取消驻留 not displayed); batchActionsRemainAboveVisibleKeyboardAcrossMainAndCanvas (5s IME wait); transformFieldsProjectExternalPreviewAndRestoreDrafts (geometry-scale-x-1-value detached on SetText); invalidEventFieldsExplainErrorsAndCannotCommitAcrossHosts (invalid metadata Layer apply remained enabled); UigsToolInstanceVisualCaptureInstrumentedTest.capturePinnedDuplicatedAndResizedPositionSurfaceLandscape (old SPATIAL tool-POSITION picker selector could not locate result). Previous transformTimingHandles failure not reported in this run, not full closure.",
+    "Confirmed source cause candidate: ModernEditorScreen.PositionPane used a LazyColumn across 18 individual geometry sub-item groups; active numeric field geometry-scale-x-1-value may detach during IME resize before Compose SetText. In contrast this section has finitely many controls and can be composed eagerly.",
+    "Production commit 689a7fb7227ee0fb8134cf831a53f7c83c8103f4 converts POSITION active section from LazyColumn to finite verticalScroll Column with 18 keyed composable blocks, while preserving section selection, authoritative ViewModel, preview leases, selection, input format and explicit commit behavior. Confirmed source no PositionPane LazyColumn; one scrollable Column and 18 keyed blocks.",
+    "Instrumented regression adaptation 89360901349d19ed3273337f41ba6654d0d5ba9b retains real extraction/edit/preview/dirty assertions and now scrolls actual numeric/extraction controls rather than issuing performScrollToNode on a no-longer-virtualized collection.",
+    "UIGS dedup checked geometry-scale-x-1-value, PositionPane, Compose IME lazy-item disposal against Foundry, appended to existing Compose/IME Observation at 0343359e35e474fc4cdef47c2b5525858f35387a; did not create duplicate Candidate or change Canonical."
+  ],
+  "next_units": [
+    "Validate exact-head Kotlin compile, JVM and native Android test suite after PositionPane finite-scroll change; verify if geometry input survives IME transition and preserve evidence gates, without treating source review as a passing test.",
+    "Diagnose remaining Event invalid Layer apply-enabled state, SPATIAL persistent pin, BATCH IME, FIXED rotation list and outstanding tool instance screenshot search, prioritizing production fixes and concrete on-device evidence.",
+    "Obtain real ASS/video/font asset load/edit/save/reopen/libass render and tablet/Figma pixel proof independently before merging Draft PR #149."
+  ],
+  "latest_durable_commit": "89360901349d19ed3273337f41ba6654d0d5ba9b (bounded POSITION geometry form production + native regression; task checkpoint follows)",
+  "external_validation": {
+    "android_ci": "Previous exact-head c00c27e2 FAILED at :app:compileDebugAndroidTestKotlin. Source repair 54489d43 and new Android safe-save test a457cb9f committed; current exact-head external compilation/JVM/emulator Pending External Validation.",
+    "android_emulator": "Previous 40080008481 FAILED prebuild before running instrumented suite, not a new emulator regression count. New exact-head emulator validation pending.",
+    "real_tablet": "Not started",
+    "figma_visual_parity": "New 1440x900/1024x768 strict compositor capture paths submitted but no new images yet. Column policy is source-tested only pending Kotlin execution. Material icons are reused from the app; exact Figma SVG assets could not be fetched (proxy timeout), so glyph parity remains unverified. Bilingual authoring is still absent.",
+    "ass_raw_roundtrip": "Source and tests committed. No exact-head Kotlin, JVM, Android instrumentation, real-file or device evidence yet; Pending External Validation."
+  },
+  "blockers": [
+    "New geometry source/UI test modifications pending exact-head CI. Earlier 191/6 emulator remains latest full-suite result.",
+    "FIXED V1.1 two native PNG captures failed in baseline; generic R3 checksum is not FIXED visual acceptance.",
+    "SPATIAL pin, BATCH IME, compact rotation list, Event invalid metadata and old POSITION screenshot-picker workflow remain unresolved."
+  ],
+  "updated_at": "2026-10-26",
+  "handoff_rules": [
+    "No automatic merge to main, no updates to original SPATIAL implementation.",
+    "One coherent increment per branch/PR; inspect CI for exact head only once.",
+    "Protect SaveableStateHolder/movableContentOf and EventWorkspace/EditorViewModel as single state owner."
+  ],
+  "intake_check": {
+    "status": "Dedupe complete / Existing Candidate append queued after source checkpoint",
+    "target": "11576865/UIGS-Foundry/inbox/candidates/2026-10-14-product-block-delivery-over-pr-fragmentation.md",
+    "result": "Found an existing exact Candidate for coherent product-block delivery versus micro-milestones. Append this user-feedback recurrence and integrated source response as source-only evidence after product checkpoint; no duplicate Candidate and no Canonical promotion."
+  },
+  "external_validation_states": {
+    "validated_source_commit": "63377555d867567d675241b00c9476c8f4a93ea9",
+    "compile_and_jvm": {
+      "run": 40074615505,
+      "status": "success"
+    },
+    "emulator": {
+      "run": 40074615531,
+      "status": "failure",
+      "tests": 187,
+      "failures": 4,
+      "errors": 0,
+      "skipped": 0
+    },
+    "native_captures": {
+      "1440x900": "strict gate success",
+      "1024x768": "strict gate success"
+    },
+    "tool_directory_ime_repair": "Pending External Validation; new source commit not polled after push",
+    "ass_raw_payload": {
+      "code_checkpoint": "a457cb9f133b73575a106d817aa8532829173a3b",
+      "parser_patch": "6e698c53be6f0982c6409d8f01fe8abea6a2a8dc",
+      "test_compile_repair": "54489d43a091a3f3ca501b6a01b0b88f6d614720",
+      "previous_runs": {
+        "source": 40080008476,
+        "emulator": 40080008481,
+        "result": "both failed at AndroidTest Kotlin compilation; no new runtime assertion result"
+      },
+      "state": "Pending External Validation",
+      "test_path": "app/src/androidTest/kotlin/io/github/assworkbench/app/SafeSaveInstrumentedTest.kt (new five-group readback test); core/domain/src/test/.../AssRawPayloadAndEventReviewRoundTripTest.kt"
+    },
+    "save_completion_revision": {
+      "source_patch": "f914c466c86381a95d2d2332a2cd839afa11b975",
+      "test_commits": [
+        "364b63c346e2edb19b8a04d240c21e342fc8d6ba",
+        "d3eaf1416dc09f06a0a0dd2754bfa02fd31c39dc",
+        "a66c8bcf4e699c02259e847ade5d18f68a756193"
+      ],
+      "state": "Pending External Validation",
+      "prior_emulator": {
+        "run": 40081217091,
+        "tests": 188,
+        "failures": 4
+      },
+      "foundry": "inbox/bugs/2026-10-24-ass-safe-save-stale-completion-dirty-state.md"
+    },
+    "event_navigation_responsive_host": {
+      "previous_commit": "184403cbc649c19926348d623477bd121fc0969a",
+      "source_ci": {
+        "run": 40105502131,
+        "state": "success"
+      },
+      "emulator": {
+        "run": 40105502278,
+        "state": "failure",
+        "main_attempt_tests": 28,
+        "main_attempt_failures": 2
+      },
+      "production_patch": "5037c4dddb924dda9d53df84ced96341bace24a6",
+      "test_patch": "db4bd189a8d641ad1762c678f31ee7583bff5882",
+      "status": "Pending External Validation",
+      "evidence_at_e7010ee9": {
+        "emulator": 40135667260,
+        "result": "191/26; Event list bounds left128 top911 right861 bottom911 (zero height)"
+      },
+      "production_weight_patch": "578da44f4285af675ed9f6e423298c5664620b99",
+      "nonzero_viewport_assertion": "f33ee69568580f9bf31cbb1a2601237cf5598565"
+    },
+    "pinned_tool_directory": {
+      "baseline_head": "8d1d77102ef04bd2409617c99ae6c7f1977907dd",
+      "baseline_source": {
+        "run": 40115404478,
+        "status": "success"
+      },
+      "baseline_emulator": {
+        "run": 40115404368,
+        "status": "failure",
+        "tests": 63,
+        "failures": 4,
+        "errors": 0,
+        "skipped": 0
+      },
+      "product_commit": "8274fa3d0f55699b19b8e6a88a7765b7123bd734",
+      "instrumentation_test": "29bda707555f7b5576928b1add140f0999bc1b73",
+      "test_import_fix": "6f7bb4f7fe73838f11f4a5a4f7d66554bf21dc46",
+      "test_navigation": "ce46b8a23dc7d898c184feb0617377dce0028647",
+      "status": "Pending External Validation",
+      "baseline_at_2026_10_25": {
+        "head": "e7010ee93459a155a6dd6b5830635ae11b032e1d",
+        "source": {
+          "run": 40135667313,
+          "status": "success"
+        },
+        "emulator": {
+          "run": 40135667260,
+          "status": "failure",
+          "tests": 191,
+          "failures": 26,
+          "scroll_owner_failures": 23,
+          "independent_failures": 3
+        },
+        "nativeCaptures": "Both failed: complete R3 PNG missing (found 0)"
+      },
+      "action_fixes": [
+        "544484d31a527b160961b9e0e35dbea68511cccb",
+        "cad07cb912245f4b9cfe65953257875481ff1230"
+      ],
+      "state": "Pending External Validation"
+    },
+    "android_test_compile_import": {
+      "blocked_head": "d5285374617bcc68e4c5c0bd08f80195731603ef",
+      "source_run": 40176279488,
+      "emulator_run": 40176279531,
+      "repair": "6c04069ae01be0ee86a6bc9b8d7c732cce368b5b",
+      "status": "Pending External Validation"
+    },
+    "compact_subtitle_reentry": {
+      "baseline_head": "ddcf1ac593fbd7e31402a47201b66b3d9bcacdaa",
+      "source": {
+        "run": 40190966030,
+        "result": "success"
+      },
+      "emulator": {
+        "run": 40190966056,
+        "result": "failure",
+        "tests": 191,
+        "failures": 5
+      },
+      "native_capture": {
+        "r1440x900": "failure/no complete PNG",
+        "r1024x768": "failure/no complete PNG"
+      },
+      "production_scroll_fix": "c47d12f78bf87018e1db7e24dec6cbcfc5177519",
+      "spatial_picker_regression": "c4cab9474b3d64f57dbf45b1e6dc9e727ff73159",
+      "status": "Pending External Validation"
+    },
+    "geometry_ime_input": {
+      "baseline_head": "05819729879cb07cf28b3ce62dbb42598aeffa14",
+      "source_run": {
+        "id": 40221863427,
+        "result": "success"
+      },
+      "emulator_run": {
+        "id": 40221863491,
+        "result": "failure",
+        "tests": 191,
+        "failures": 6,
+        "errors": 0,
+        "skipped": 0
+      },
+      "product_commit": "689a7fb7227ee0fb8134cf831a53f7c83c8103f4",
+      "instrumented_test_commit": "89360901349d19ed3273337f41ba6654d0d5ba9b",
+      "state": "Pending External Validation"
+    }
+  },
+  "uigs_intake": {
+    "status": "completed existing Observation append (deduplicated)",
+    "record": "11576865/UIGS-Foundry/inbox/observations/2026-10-24-ass-compose-virtual-list-ime-root-rotation-regression.md",
+    "foundry_commit": "0343359e35e474fc4cdef47c2b5525858f35387a",
+    "canonical_promotion": false
+  }
+}
