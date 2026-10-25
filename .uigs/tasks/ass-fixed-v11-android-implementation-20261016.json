@@ -1,7 +1,7 @@
 {
   "id": "ass-fixed-v11-android-implementation-20261016",
   "goal": "Implement the frozen FIXED Tablet V1.1 design as native Compose UI, progressively, preserving existing business model/drafts and leaving SPATIAL UI outside this scope.",
-  "status": "Source/JVM at ddcf1ac5 success; Android full 191/5 failure; compact scroll reentry production patch and SPATIAL POSITION IME-native regression repair committed, exact-head validation pending.",
+  "status": "Previous exact head 05819729 source/JVM SUCCESS, Android connected 191/6 FAILED and both FIXED native PNG gates failed; productive geometry PositionPane bounded eager form repair committed, exact-head compile/device validation pending.",
   "design_basis": {
     "figma_file": "https://www.figma.com/design/5yNY5dMnmpmaOnYxDlEhY5",
     "fixed_page": "85:2",
@@ -14,7 +14,7 @@
   "base_branch": "feat/r3-fixed-visual-layout-20261014",
   "base_pr": 148,
   "pull_request": "https://github.com/11576865/ASS-Workbench-Android/pull/149",
-  "current_bounded_work_unit": "2026-10-26: restore real compact subtitle list navigation across responsive host return by scrolling its owning fixed-content-flow to the bounded Event editor after measurement, and restore native SPATIAL POSITION tool catalog regression by selecting virtualized result while IME remains open.",
+  "current_bounded_work_unit": "2026-10-26: remove PositionPane's per-item LazyColumn disposal hazard for actively edited geometry numeric controls under IME viewport changes. Use bounded eager verticalScroll for the active section with stable compositional keys and preserve all preview/commit semantics.",
   "completed_units": [
     "Created implementation branch from existing R3 visual-layout work to avoid duplicating video/timeline infrastructure.",
     "Created FixedV11EventGrid.kt as real Material3 Compose UI with index/start/end/Style/text/QC.",
@@ -140,14 +140,20 @@
     "Five unresolved cases at ddcf1ac5: SPATIAL POSITION picker failed after a keyboard dismissal before result scroll, rotation inspector draft reentry event-results-list not displayed, resident pin 取消驻留 not displayed, transform exact range effect-transform-range-0 not displayed, geometry-scale-x-1-value detached during text input. These are independently tracked; no closure inferred.",
     "SPATIAL POSITION instrumented regression c4cab9474b3d64f57dbf45b1e6dc9e727ff73159 keeps modal search IME alive and asks actual filtered tool-results-list LazyColumn to scroll to tool-POSITION before visibility+click; retains production editor/precision state assertions.",
     "Production compact host repair c47d12f78bf87018e1db7e24dec6cbcfc5177519 gives fixed-content-flow a stable ScrollState and requests navigation toward the real bounded subtitle pane after layout's scroll maximum becomes positive when SUBTITLES mode is activated/reentered. The prior Event view positive-height/display/click/inspector draft test remains fully active. No changes to ASS session/document focus, drafts, or undo.",
-    "UIGS-Foundry intake deduplicated against existing native Compose virtualized list/IME rotation Observation. Recorded exact prior 191/5 and both failed PNG gates, production compact scroll candidate and SPATIAL POSITION test-driver correction at 97c5336bb17c80ed4d1ac8cf191c018f0e36d5d3; Canonical unchanged."
+    "UIGS-Foundry intake deduplicated against existing native Compose virtualized list/IME rotation Observation. Recorded exact prior 191/5 and both failed PNG gates, production compact scroll candidate and SPATIAL POSITION test-driver correction at 97c5336bb17c80ed4d1ac8cf191c018f0e36d5d3; Canonical unchanged.",
+    "Read exact previous branch SHA 05819729879cb07cf28b3ce62dbb42598aeffa14: FIXED branch source/JVM 40221863427 SUCCESS; Android connected 40221863491 main XML 191 tests/6 failures/0 errors/0 skipped. Generic R3 native evidence checksum valid, both FIXED 1440x900 and 1024x768 native PNG gates FAILURE.",
+    "Exact six case failures: inspectorDraftSurvivesToolSwitchAndRotation (Event list not displayed); spatialWorkspaceExposesBoardAndNativeEditorWithoutMovingWorldNodes (取消驻留 not displayed); batchActionsRemainAboveVisibleKeyboardAcrossMainAndCanvas (5s IME wait); transformFieldsProjectExternalPreviewAndRestoreDrafts (geometry-scale-x-1-value detached on SetText); invalidEventFieldsExplainErrorsAndCannotCommitAcrossHosts (invalid metadata Layer apply remained enabled); UigsToolInstanceVisualCaptureInstrumentedTest.capturePinnedDuplicatedAndResizedPositionSurfaceLandscape (old SPATIAL tool-POSITION picker selector could not locate result). Previous transformTimingHandles failure not reported in this run, not full closure.",
+    "Confirmed source cause candidate: ModernEditorScreen.PositionPane used a LazyColumn across 18 individual geometry sub-item groups; active numeric field geometry-scale-x-1-value may detach during IME resize before Compose SetText. In contrast this section has finitely many controls and can be composed eagerly.",
+    "Production commit 689a7fb7227ee0fb8134cf831a53f7c83c8103f4 converts POSITION active section from LazyColumn to finite verticalScroll Column with 18 keyed composable blocks, while preserving section selection, authoritative ViewModel, preview leases, selection, input format and explicit commit behavior. Confirmed source no PositionPane LazyColumn; one scrollable Column and 18 keyed blocks.",
+    "Instrumented regression adaptation 89360901349d19ed3273337f41ba6654d0d5ba9b retains real extraction/edit/preview/dirty assertions and now scrolls actual numeric/extraction controls rather than issuing performScrollToNode on a no-longer-virtualized collection.",
+    "UIGS dedup checked geometry-scale-x-1-value, PositionPane, Compose IME lazy-item disposal against Foundry, appended to existing Compose/IME Observation at 0343359e35e474fc4cdef47c2b5525858f35387a; did not create duplicate Candidate or change Canonical."
   ],
   "next_units": [
-    "Read one exact-head compile/JVM and Android emulator CI result after push. If compiler red, fix specific error; if emulator red, retain truthful actual test count and evidence. Full screenshot extraction may fail while the instrumentation run fails.",
-    "Diagnose and repair SPATIAL resident pin state/rendering and Transform effect range/geometry edit lifecycle from exact full-suite device evidence; avoid accessibility/test weakening.",
-    "Obtain representative real ASS file + media/libass renderer import/edit/save/reopen and hardware tablet native capture/Figma parity before PR #149 merge."
+    "Validate exact-head Kotlin compile, JVM and native Android test suite after PositionPane finite-scroll change; verify if geometry input survives IME transition and preserve evidence gates, without treating source review as a passing test.",
+    "Diagnose remaining Event invalid Layer apply-enabled state, SPATIAL persistent pin, BATCH IME, FIXED rotation list and outstanding tool instance screenshot search, prioritizing production fixes and concrete on-device evidence.",
+    "Obtain real ASS/video/font asset load/edit/save/reopen/libass render and tablet/Figma pixel proof independently before merging Draft PR #149."
   ],
-  "latest_durable_commit": "c47d12f78bf87018e1db7e24dec6cbcfc5177519 (compact navigator scroll fix and SPATIAL POSITION test-driver repair; task checkpoint follows)",
+  "latest_durable_commit": "89360901349d19ed3273337f41ba6654d0d5ba9b (bounded POSITION geometry form production + native regression; task checkpoint follows)",
   "external_validation": {
     "android_ci": "Previous exact-head c00c27e2 FAILED at :app:compileDebugAndroidTestKotlin. Source repair 54489d43 and new Android safe-save test a457cb9f committed; current exact-head external compilation/JVM/emulator Pending External Validation.",
     "android_emulator": "Previous 40080008481 FAILED prebuild before running instrumented suite, not a new emulator regression count. New exact-head emulator validation pending.",
@@ -156,9 +162,9 @@
     "ass_raw_roundtrip": "Source and tests committed. No exact-head Kotlin, JVM, Android instrumentation, real-file or device evidence yet; Pending External Validation."
   },
   "blockers": [
-    "Compact outer scroll-to-editor fix and SPATIAL POSITION picker test have not yet been verified by current device workflow.",
-    "Remaining prior emulator failures include SPATIAL resident pin, Transform timing and geometry editing, rotation navigation; do not claim current exact-head passed.",
-    "Real media, font/libass, proper Figma native visual acceptance and true device input remain pending."
+    "New geometry source/UI test modifications pending exact-head CI. Earlier 191/6 emulator remains latest full-suite result.",
+    "FIXED V1.1 two native PNG captures failed in baseline; generic R3 checksum is not FIXED visual acceptance.",
+    "SPATIAL pin, BATCH IME, compact rotation list, Event invalid metadata and old POSITION screenshot-picker workflow remain unresolved."
   ],
   "updated_at": "2026-10-26",
   "handoff_rules": [
@@ -306,12 +312,30 @@
       "production_scroll_fix": "c47d12f78bf87018e1db7e24dec6cbcfc5177519",
       "spatial_picker_regression": "c4cab9474b3d64f57dbf45b1e6dc9e727ff73159",
       "status": "Pending External Validation"
+    },
+    "geometry_ime_input": {
+      "baseline_head": "05819729879cb07cf28b3ce62dbb42598aeffa14",
+      "source_run": {
+        "id": 40221863427,
+        "result": "success"
+      },
+      "emulator_run": {
+        "id": 40221863491,
+        "result": "failure",
+        "tests": 191,
+        "failures": 6,
+        "errors": 0,
+        "skipped": 0
+      },
+      "product_commit": "689a7fb7227ee0fb8134cf831a53f7c83c8103f4",
+      "instrumented_test_commit": "89360901349d19ed3273337f41ba6654d0d5ba9b",
+      "state": "Pending External Validation"
     }
   },
   "uigs_intake": {
-    "status": "complete / deduplicated observation extended",
+    "status": "completed existing Observation append (deduplicated)",
     "record": "11576865/UIGS-Foundry/inbox/observations/2026-10-24-ass-compose-virtual-list-ime-root-rotation-regression.md",
-    "foundry_commit": "97c5336bb17c80ed4d1ac8cf191c018f0e36d5d3",
+    "foundry_commit": "0343359e35e474fc4cdef47c2b5525858f35387a",
     "canonical_promotion": false
   }
 }
