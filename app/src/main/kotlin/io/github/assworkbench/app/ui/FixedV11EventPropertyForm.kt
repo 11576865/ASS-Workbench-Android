@@ -1,5 +1,6 @@
 package io.github.assworkbench.app.ui
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.*
@@ -34,9 +35,14 @@ internal fun FixedV11EventPropertyForm(
     val timingConflict = timingState == RawEventDraftState.EXTERNAL_CONFLICT
     val metadataConflict = metadataState == RawEventDraftState.EXTERNAL_CONFLICT
     val layer = values.layer.toIntOrNull()
-    val validLayer = layer != null && layer in -999..999
+    val layerError = when {
+        layer == null -> "输入有效整数"
+        layer !in -999..999 -> "范围 -999～999"
+        else -> null
+    }
     Column(Modifier.fillMaxWidth().testTag("fixed-v11-event-properties"),
         verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("时间", style = MaterialTheme.typography.titleSmall)
         FixedV11PropertyField("Start", times.start, { timing.values = timing.values.copy(start = it) },
             "event-start-${event.id}", errorText = if (validation.startInvalid) "输入 ASS 时间或非负毫秒数" else null)
         FixedV11PropertyField("End", times.end, { timing.values = timing.values.copy(end = it) },
@@ -63,8 +69,31 @@ internal fun FixedV11EventPropertyForm(
             }
         }
         HorizontalDivider()
+        Text("字幕元数据", style = MaterialTheme.typography.titleSmall)
         FixedV11PropertyField("Layer", values.layer, { metadata.values = metadata.values.copy(layer = it) },
-            "event-layer-${event.id}", errorText = if (validLayer) null else "输入 -999～999 范围内的整数")
+            "event-layer-${event.id}", errorText = layerError)
+        FixedV11PropertyField("Actor", values.actor, { metadata.values = metadata.values.copy(actor = it) },
+            "event-actor-${event.id}")
+        FilterChip(selected = values.comment,
+            onClick = { metadata.values = metadata.values.copy(comment = !metadata.values.comment) },
+            label = { Text(if (values.comment) "Comment" else "Dialogue") },
+            modifier = Modifier.testTag("event-comment-${event.id}"))
+        if (metadataConflict) Text("元数据已在其他面板修改；草稿已保留。以草稿覆盖将替换当前 Layer、Actor 和 Comment。",
+            style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error,
+            modifier = Modifier.testTag("event-metadata-conflict-${event.id}"))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            TextButton(onClick = { metadata.reset(EventMetadataValues.from(event)) },
+                modifier = Modifier.testTag("event-reset-metadata-${event.id}")) {
+                Text(if (metadataConflict) "重新载入" else "还原元数据")
+            }
+            TextButton(enabled = layerError == null, onClick = {
+                if (layerError == null && layer != null) onApplyMetadata(layer, values.actor, values.comment)
+            }, modifier = Modifier.testTag("event-apply-metadata-${event.id}")) {
+                Text(if (metadataConflict) "以草稿覆盖" else "应用元数据")
+            }
+        }
+        HorizontalDivider()
+        Text("样式与边距", style = MaterialTheme.typography.titleSmall)
         // The Style NAME is an Event field; it is not a Style-inherited value.
         // Show the actual reference and never silently create/fallback a Style.
         val proposedStyle = styleDraft?.value?.text ?: event.style
@@ -136,26 +165,6 @@ internal fun FixedV11EventPropertyForm(
                     modifier = Modifier.testTag("event-margin-reset-${event.id}")) { Text("还原 Event 边距") }
             }
         }
-        FixedV11PropertyField("Actor", values.actor, { metadata.values = metadata.values.copy(actor = it) },
-            "event-actor-${event.id}")
-        FilterChip(selected = values.comment,
-            onClick = { metadata.values = metadata.values.copy(comment = !metadata.values.comment) },
-            label = { Text(if (values.comment) "Comment" else "Dialogue") },
-            modifier = Modifier.testTag("event-comment-${event.id}"))
-        if (metadataConflict) Text("元数据已在其他面板修改；草稿已保留。以草稿覆盖将替换当前 Layer、Actor 和 Comment。",
-            style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error,
-            modifier = Modifier.testTag("event-metadata-conflict-${event.id}"))
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-            TextButton(onClick = { metadata.reset(EventMetadataValues.from(event)) },
-                modifier = Modifier.testTag("event-reset-metadata-${event.id}")) {
-                Text(if (metadataConflict) "重新载入" else "还原元数据")
-            }
-            TextButton(enabled = validLayer, onClick = {
-                if (validLayer && layer != null) onApplyMetadata(layer, values.actor, values.comment)
-            }, modifier = Modifier.testTag("event-apply-metadata-${event.id}")) {
-                Text(if (metadataConflict) "以草稿覆盖" else "应用元数据")
-            }
-        }
         HorizontalDivider()
         val color = remember(document, event) {
             runCatching { AssEffectiveInspector.inspect(document, event).firstOrNull { it.name == "Primary" }?.let(::r3ValueEvidence) }.getOrNull()
@@ -187,7 +196,11 @@ private fun FixedV11PropertyField(label: String, value: String, onChange: (Strin
                 modifier = Modifier.fillMaxWidth().heightIn(min = 38.dp).testTag(tag)
                     .semantics { contentDescription = label; if (errorText != null) error(errorText) },
                 decorationBox = { field ->
-                    Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh, shape = MaterialTheme.shapes.small) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        shape = MaterialTheme.shapes.small,
+                        border = errorText?.let { BorderStroke(1.dp, MaterialTheme.colorScheme.error) },
+                    ) {
                         Box(Modifier.fillMaxWidth().heightIn(min = 38.dp).padding(horizontal = 10.dp, vertical = 8.dp),
                             contentAlignment = Alignment.CenterStart) { field() }
                     }

@@ -1,7 +1,7 @@
 {
   "id": "ass-fixed-v11-android-implementation-20261016",
   "goal": "Implement the frozen FIXED Tablet V1.1 design as native Compose UI, progressively, preserving existing business model/drafts and leaving SPATIAL UI outside this scope.",
-  "status": "Previous exact head 05819729 source/JVM SUCCESS, Android connected 191/6 FAILED and both FIXED native PNG gates failed; productive geometry PositionPane bounded eager form repair committed, exact-head compile/device validation pending.",
+  "status": "FIXED V1.1 Event inspector UI grouped and Layer errors aligned across hosts; new Android validation pending.",
   "design_basis": {
     "figma_file": "https://www.figma.com/design/5yNY5dMnmpmaOnYxDlEhY5",
     "fixed_page": "85:2",
@@ -14,7 +14,7 @@
   "base_branch": "feat/r3-fixed-visual-layout-20261014",
   "base_pr": 148,
   "pull_request": "https://github.com/11576865/ASS-Workbench-Android/pull/149",
-  "current_bounded_work_unit": "2026-10-26: remove PositionPane's per-item LazyColumn disposal hazard for actively edited geometry numeric controls under IME viewport changes. Use bounded eager verticalScroll for the active section with stable compositional keys and preserve all preview/commit semantics.",
+  "current_bounded_work_unit": "Group timing, Event metadata, Style and margins in the docked Compose inspector; keep metadata actions adjacent and distinguish malformed Layer input from out-of-range values.",
   "completed_units": [
     "Created implementation branch from existing R3 visual-layout work to avoid duplicating video/timeline infrastructure.",
     "Created FixedV11EventGrid.kt as real Material3 Compose UI with index/start/end/Style/text/QC.",
@@ -146,14 +146,15 @@
     "Confirmed source cause candidate: ModernEditorScreen.PositionPane used a LazyColumn across 18 individual geometry sub-item groups; active numeric field geometry-scale-x-1-value may detach during IME resize before Compose SetText. In contrast this section has finitely many controls and can be composed eagerly.",
     "Production commit 689a7fb7227ee0fb8134cf831a53f7c83c8103f4 converts POSITION active section from LazyColumn to finite verticalScroll Column with 18 keyed composable blocks, while preserving section selection, authoritative ViewModel, preview leases, selection, input format and explicit commit behavior. Confirmed source no PositionPane LazyColumn; one scrollable Column and 18 keyed blocks.",
     "Instrumented regression adaptation 89360901349d19ed3273337f41ba6654d0d5ba9b retains real extraction/edit/preview/dirty assertions and now scrolls actual numeric/extraction controls rather than issuing performScrollToNode on a no-longer-virtualized collection.",
-    "UIGS dedup checked geometry-scale-x-1-value, PositionPane, Compose IME lazy-item disposal against Foundry, appended to existing Compose/IME Observation at 0343359e35e474fc4cdef47c2b5525858f35387a; did not create duplicate Candidate or change Canonical."
+    "UIGS dedup checked geometry-scale-x-1-value, PositionPane, Compose IME lazy-item disposal against Foundry, appended to existing Compose/IME Observation at 0343359e35e474fc4cdef47c2b5525858f35387a; did not create duplicate Candidate or change Canonical.",
+    "Moved docked Style/margin controls after Event metadata actions, added group headings and native invalid-field outline; regression now checks Layer error/disabled action before and after dismissing IME."
   ],
   "next_units": [
     "Validate exact-head Kotlin compile, JVM and native Android test suite after PositionPane finite-scroll change; verify if geometry input survives IME transition and preserve evidence gates, without treating source review as a passing test.",
     "Diagnose remaining Event invalid Layer apply-enabled state, SPATIAL persistent pin, BATCH IME, FIXED rotation list and outstanding tool instance screenshot search, prioritizing production fixes and concrete on-device evidence.",
     "Obtain real ASS/video/font asset load/edit/save/reopen/libass render and tablet/Figma pixel proof independently before merging Draft PR #149."
   ],
-  "latest_durable_commit": "89360901349d19ed3273337f41ba6654d0d5ba9b (bounded POSITION geometry form production + native regression; task checkpoint follows)",
+  "latest_durable_commit": "Commit containing this task record and FIXED V1.1 Event inspector UI",
   "external_validation": {
     "android_ci": "Previous exact-head c00c27e2 FAILED at :app:compileDebugAndroidTestKotlin. Source repair 54489d43 and new Android safe-save test a457cb9f committed; current exact-head external compilation/JVM/emulator Pending External Validation.",
     "android_emulator": "Previous 40080008481 FAILED prebuild before running instrumented suite, not a new emulator regression count. New exact-head emulator validation pending.",
@@ -166,7 +167,7 @@
     "FIXED V1.1 two native PNG captures failed in baseline; generic R3 checksum is not FIXED visual acceptance.",
     "SPATIAL pin, BATCH IME, compact rotation list, Event invalid metadata and old POSITION screenshot-picker workflow remain unresolved."
   ],
-  "updated_at": "2026-10-26",
+  "updated_at": "2026-11-05",
   "handoff_rules": [
     "No automatic merge to main, no updates to original SPATIAL implementation.",
     "One coherent increment per branch/PR; inspect CI for exact head only once.",

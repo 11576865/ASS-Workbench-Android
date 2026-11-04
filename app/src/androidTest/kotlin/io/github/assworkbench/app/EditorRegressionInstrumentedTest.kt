@@ -128,6 +128,8 @@ class EditorRegressionInstrumentedTest {
             composeRule.runOnIdle { assertEquals(before, viewModel.state.value.document) }
             openTool("EVENT")
             composeRule.onNodeWithTag("event-layer-1").performScrollTo().performTextReplacement("oops")
+            composeRule.onNodeWithText("输入有效整数").assertExists()
+            composeRule.onNodeWithTag("event-apply-metadata-1").assertIsNotEnabled()
             hideKeyboard()
             composeRule.onNodeWithTag("event-apply-metadata-1").assertIsNotEnabled()
             composeRule.onNodeWithText("输入有效整数").assertExists()
