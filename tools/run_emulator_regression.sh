@@ -128,6 +128,37 @@ if [[ "$r3_status" -eq 0 ]]; then
     r3_status=1
   fi
 fi
+# Exact V1.1 tablet frames are separate from the legacy R3 1600x960 gate.
+# Keep the installed APKs until all three compositor images have been extracted.
+for v11_dimensions in "1440 900" "1024 768"; do
+  read -r v11_width v11_height <<< "$v11_dimensions"
+  v11_name="ASS.V11.FIXED.${v11_width}x${v11_height}.png"
+  v11_log="$report_session_dir/$v11_name.instrumentation.txt"
+  if timeout 10s adb shell wm size "${v11_height}x${v11_width}" &&
+      timeout 10s adb shell wm density 160 &&
+      timeout 10s adb shell settings put system user_rotation 1 &&
+      timeout 180s adb shell am instrument -w \
+        -e class 'io.github.assworkbench.app.UigsVisualCaptureInstrumentedTest#captureFixedV11TabletReference' \
+        -e v11StrictCapture true -e v11Width "$v11_width" -e v11Height "$v11_height" \
+        'io.github.assworkbench.app.test/androidx.test.runner.AndroidJUnitRunner' > "$v11_log" 2>&1 &&
+      python3 "$runner_tools_dir/verify_r3_instrumentation.py" "$v11_log" &&
+      timeout 15s adb exec-out run-as io.github.assworkbench.app cat "files/$v11_name" > "$report_session_dir/$v11_name" &&
+      python3 "$runner_tools_dir/verify_r3_png_capture.py" "$report_session_dir/$v11_name" \
+        --width "$v11_width" --height "$v11_height"; then
+    echo "V11_NATIVE_CAPTURE_VALID: file=$v11_name sha256=$(sha256sum "$report_session_dir/$v11_name" | cut -d' ' -f1) size=$(wc -c < "$report_session_dir/$v11_name")"
+    # Emit runner-owned bytes immediately after run-as extraction. Android logd
+    # can drop chunks before the later diagnostic tail and is not this transport.
+    if ! python3 "$runner_tools_dir/emit_native_capture_evidence.py" \
+        --capture "$report_session_dir/$v11_name" --width "$v11_width" --height "$v11_height"; then
+      echo "V11_NATIVE_CAPTURE_FAILED: evidence transport $v11_name"
+      r3_status=1
+    fi
+  else
+    echo "V11_NATIVE_CAPTURE_FAILED: $v11_name"
+    tail -n 85 "$v11_log" 2>/dev/null || true
+    r3_status=1
+  fi
+done
 # Direct adb install uses the prebuilt debug APK signature. Gradle may
 # regenerate an APK signed with a different ephemeral CI key on its next
 # invocation. Uninstall BOTH direct-capture packages before Gradle installs

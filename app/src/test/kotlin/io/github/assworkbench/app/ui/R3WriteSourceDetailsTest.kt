@@ -51,7 +51,7 @@ class R3WriteSourceDetailsTest {
     }
 
     @Test fun styleResetRetainsTruthfulEventStyleBaseline() {
-        val resetEvent = event.copy(text = "{\\\\rAlternate}当前已切换 Style")
+        val resetEvent = event.copy(text = "{\\rAlternate}当前已切换 Style")
         val resetDocument = document.copy(
             styles = document.styles + AssStyle(name = "Alternate", fontSize = 24.0),
             events = listOf(resetEvent),
@@ -59,7 +59,7 @@ class R3WriteSourceDetailsTest {
         val resetReceipt = receipt.copy(
             baseText = resetEvent.text,
             canonicalText = resetEvent.text,
-            draftText = "{\\\\rAlternate\\\\fs52}当前已切换 Style",
+            draftText = "{\\rAlternate\\fs52}当前已切换 Style",
         )
         val summary = r3WriteSourceSummary(resetDocument, resetEvent, resetReceipt)
         assertNotNull(summary)

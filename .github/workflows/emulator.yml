@@ -4,7 +4,9 @@ on:
   push:
     branches: [ main ]
   pull_request:
-    branches: [ main ]
+    # FIXED V1.1 stacked PR #149 targets R3, not main. This is a branch-only
+    # opt-in; the production main workflow remains unchanged until merge.
+    branches: [ main, feat/r3-fixed-visual-layout-20261014 ]
   workflow_dispatch:
 
 permissions:
@@ -168,3 +170,51 @@ jobs:
           timeout 90s gh api --allow-escape-sequences "repos/$GITHUB_REPOSITORY/actions/jobs/$source_job_id/logs" \
             > "$RUNNER_TEMP/emulator-source-job.log"
           python3 tools/extract_emulator_evidence.py "$RUNNER_TEMP/emulator-source-job.log"
+
+  native-visual-evidence:
+    # The editor job can exceed the connector's log response size. Each target
+    # bitmap gets its own bounded job, even when unrelated regressions fail.
+    name: native-visual-${{ matrix.width }}x${{ matrix.height }}
+    needs: editor-regression
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - width: 1440
+            height: 900
+          - width: 1024
+            height: 768
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Recover and validate full native screenshot
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_RUN_ID: ${{ github.run_id }}
+          SOURCE_RUN_ATTEMPT: ${{ github.run_attempt }}
+          SOURCE_SHA: ${{ github.sha }}
+          SOURCE_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          SOURCE_CONCLUSION: ${{ needs.editor-regression.result }}
+          CAPTURE_WIDTH: ${{ matrix.width }}
+          CAPTURE_HEIGHT: ${{ matrix.height }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Native screenshot source: repository=$GITHUB_REPOSITORY run=$SOURCE_RUN_ID attempt=$SOURCE_RUN_ATTEMPT tested_sha=$SOURCE_SHA head_sha=$SOURCE_HEAD_SHA regression=$SOURCE_CONCLUSION"
+          source_job_id=$(timeout 30s gh api --paginate \
+            "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN_ID/attempts/$SOURCE_RUN_ATTEMPT/jobs" \
+            --jq '.jobs[] | select(.name == "editor-regression") | .id')
+          if [[ ! "$source_job_id" =~ ^[0-9]+$ ]]; then
+            echo "NO SOURCE JOB: no screenshot evidence inferred"
+            exit 1
+          fi
+          timeout 90s gh api --allow-escape-sequences \
+            "repos/$GITHUB_REPOSITORY/actions/jobs/$source_job_id/logs" \
+            > "$RUNNER_TEMP/native-source-job.log"
+          python3 tools/emit_native_capture_evidence.py --source-log "$RUNNER_TEMP/native-source-job.log" \
+            --width "$CAPTURE_WIDTH" --height "$CAPTURE_HEIGHT"

@@ -80,6 +80,9 @@ internal fun R3ToolCatalogDialog(
                     modifier = Modifier.weight(1f).fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(28.dp),
                 ) {
+                    // Collapse empty groups before chunking. Otherwise a single
+                    // search hit in a later group remains below a row of blank
+                    // columns and may never enter LazyColumn's composed viewport.
                     val visibleGroups = r3CatalogGroups.map { group ->
                         group.copy(tools = group.tools.filter { tool ->
                             query.isBlank() || tool.title.contains(query, ignoreCase = true) ||
@@ -87,6 +90,12 @@ internal fun R3ToolCatalogDialog(
                                 tool.description.contains(query, ignoreCase = true) ||
                                 group.label.contains(query, ignoreCase = true)
                         })
+                    }.filter { it.tools.isNotEmpty() }
+                    if (visibleGroups.isEmpty()) {
+                        item(key = "r3-tool-empty") {
+                            Text("没有匹配的工具", modifier = Modifier.testTag("r3-tool-empty"),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
                     }
                     visibleGroups.chunked(4).forEachIndexed { rowIndex, rowGroups ->
                         item(key = "r3-group-row-$rowIndex") {

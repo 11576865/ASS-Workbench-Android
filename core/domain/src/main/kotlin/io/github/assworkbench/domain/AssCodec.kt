@@ -151,7 +151,11 @@ object AssCodec {
                 }
                 line.startsWith("Style:", ignoreCase = true) -> {
                     val values = splitCsvLimit(line.substringAfter(':'), format.size)
-                    val map = format.zip(values).associate { it.first.lowercase(Locale.ROOT) to it.second.trim() }
+                    val map = format.zip(values).associate { (field, rawValue) ->
+                        val key = field.lowercase(Locale.ROOT)
+                        // Preserve opaque vendor columns byte-for-byte; normalize only known Style fields.
+                        key to if (key in knownStyleFields) rawValue.trim() else rawValue
+                    }
                     result += AssStyle(
                         name = map["name"].orEmpty().ifBlank { "Default" },
                         fontName = map["fontname"].orEmpty().ifBlank { "Arial" },
@@ -203,7 +207,11 @@ object AssCodec {
                 line.startsWith("Dialogue:", ignoreCase = true) || line.startsWith("Comment:", ignoreCase = true) -> {
                     val comment = line.startsWith("Comment:", ignoreCase = true)
                     val values = splitEventFields(line.substringAfter(':'), format)
-                    val map = format.zip(values).associate { it.first.lowercase(Locale.ROOT) to it.second.trim() }
+                    val map = format.zip(values).associate { (field, rawValue) ->
+                        val key = field.lowercase(Locale.ROOT)
+                        // ASS Text is payload, not column padding. Unknown columns are opaque too.
+                        key to if (key == "text" || key !in knownEventFields) rawValue else rawValue.trim()
+                    }
                     val start = runCatching { SubTime.parseAss(map["start"].orEmpty()) }.getOrElse { SubTime.ZERO }
                     val end = runCatching { SubTime.parseAss(map["end"].orEmpty()) }.getOrElse { start }
                     result += AssEvent(

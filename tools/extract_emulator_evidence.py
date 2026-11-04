@@ -22,6 +22,9 @@ def extract(path: Path) -> int:
         for raw in source:
             clean = CONTROL.sub("", TERMINAL_SEQUENCE.sub("", raw.rstrip("\r\n")))
             line = TIMESTAMP.sub("", clean)
+            if line.startswith(("R3_NATIVE_CAPTURE_VALID:", "V11_NATIVE_CAPTURE_VALID:",
+                                "V11_NATIVE_CAPTURE_FAILED:")):
+                print("EVIDENCE " + line)
             if START.fullmatch(line):
                 if active:
                     print("EVIDENCE INCOMPLETE ATTEMPT SUMMARY: previous block never ended")

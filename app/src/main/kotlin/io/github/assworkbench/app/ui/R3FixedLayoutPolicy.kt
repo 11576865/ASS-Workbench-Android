@@ -15,6 +15,7 @@ internal data class R3FixedGeometry(
     val inspectorWidthDp: Float,
     val mediaHeightDp: Float,
     val timelineHeightDp: Float,
+    val textDockHeightDp: Float = 0f,
 )
 
 internal object R3FixedLayoutPolicy {
@@ -32,9 +33,15 @@ internal object R3FixedLayoutPolicy {
         heightDp: Float,
         mediaAspect: Float,
         preview: PreviewDensity,
+        timingPriority: Boolean = false,
+        textDockRequested: Boolean = false,
     ): R3FixedGeometry {
         val width = widthDp.coerceAtLeast(0f)
-        val height = heightDp.coerceAtLeast(0f)
+        val totalHeight = heightDp.coerceAtLeast(0f)
+        val textDock = if (textDockRequested)
+            (totalHeight * 0.30f).coerceIn(200f, 280f).coerceAtMost(totalHeight * 0.40f)
+            else 0f
+        val height = (totalHeight - textDock).coerceAtLeast(0f)
         val navigation = (width * navigationRatio).coerceIn(206f, 296f)
         val inspector = (width * inspectorRatio).coerceIn(328f, 460f)
         val mediaWidth = (width - navigation - inspector - 2f).coerceAtLeast(1f)
@@ -47,12 +54,17 @@ internal object R3FixedLayoutPolicy {
             PreviewDensity.HIDDEN -> 0f
             PreviewDensity.COMPACT -> min(mediaWithTransport, height * 0.36f)
             PreviewDensity.FULL -> min(mediaWithTransport, (height - minTimeline).coerceAtLeast(0f))
-        }.coerceIn(0f, height)
+        }
+        // V1.1 precise timing allocates more area to the SAME timeline.
+        // The media clock, Event identity, and raw draft remain unchanged.
+        val timingCap = if (timingPriority) height * 0.34f else height
+        val boundedMediaHeight = mediaHeight.coerceAtMost(timingCap).coerceIn(0f, height)
         return R3FixedGeometry(
             navigationWidthDp = navigation,
             inspectorWidthDp = inspector,
-            mediaHeightDp = mediaHeight,
-            timelineHeightDp = (height - mediaHeight).coerceAtLeast(0f),
+            mediaHeightDp = boundedMediaHeight,
+            timelineHeightDp = (height - boundedMediaHeight).coerceAtLeast(0f),
+            textDockHeightDp = textDock,
         )
     }
 }
